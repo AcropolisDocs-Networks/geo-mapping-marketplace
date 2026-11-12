@@ -450,7 +450,10 @@
         var d = defs[(l.metadata || {})["gm:layer"]];
         if (!d || !d.time) return;
         // 1.11.0: a cluster layer of a layer on the slider holds one cluster set per period; the slider picks the set
-        var f = (l.metadata || {})["gm:period"] ? ["==", ["get", "_per"], i] : (l.filter ? ["all", l.filter, tf] : tf);
+        var md = l.metadata || {}, f;
+        if (md["gm:period"] && md["gm:z"] != null) f = ["all", ["==", ["get", "_z"], md["gm:z"]], ["==", ["get", "_per"], i]];   // 1.12.0: a GeoJSON layer's sets
+        else if (md["gm:period"]) f = ["==", ["get", "_per"], i];
+        else f = l.filter ? ["all", l.filter, tf] : tf;
         maps.forEach(function (m) { if (m.getLayer(l.id)) m.setFilter(l.id, f); });
       });
     };

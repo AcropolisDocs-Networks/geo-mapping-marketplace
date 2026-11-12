@@ -612,7 +612,7 @@ def round_trip(before, after, *, fmt: str, field_map: dict | None = None, geom_t
             diag = math.hypot(maxx - minx, maxy - miny) or 1.0
             tol = diag / 1e4 if fmt in QUANTIZED else (1e-7 if (after.crs is not None and after.crs.is_geographic) else 1e-3)
         worst_d = 0.0
-        for g1, g2 in zip(tb.geometry, after.geometry):
+        for g1, g2 in zip(tb.geometry, after.geometry, strict=True):
             if g1 is None or g2 is None:
                 continue
             worst_d = max(worst_d, float(shapely.hausdorff_distance(g1, g2)))

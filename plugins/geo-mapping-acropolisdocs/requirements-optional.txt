@@ -10,3 +10,4 @@ scipy                  # 3D web page terrain tiles (with rasterio); faster clust
 playwright             # the last PNG route and web-map checks; then run `playwright install chromium` once
 psycopg[binary]>=3.1   # live read-only PostGIS connections (postgis_tables, postgis_fetch; 0.15.0)
 uharfbuzz              # outlined text shaped as the live text is: ligatures and contextual forms (1.0.0); without it, kerning and tnum only
+keyring                # 1.12.0: the OS keychain for map-credentials keychain (Windows Credential Manager, macOS Keychain); files stay the default

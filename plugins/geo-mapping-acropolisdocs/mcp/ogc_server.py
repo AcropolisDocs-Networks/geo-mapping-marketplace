@@ -307,6 +307,14 @@ def credentials_rotate(name: str, finish: bool = False, probe: bool = False, con
 
 @mcp.tool()
 @st.masked
+def credentials_keychain(name: str, to_file: bool = False) -> dict:
+    """Keep a registered credential in this computer's own keychain (Windows Credential Manager, macOS Keychain) instead of a file: the file is
+    checked, the value stored and read back, then the file is overwritten and deleted. to_file=true moves it back to a private file. Only when
+    the person asks. Needs the optional keyring package; says so plainly when no keychain is available. Never returns the value."""
+    return st.credentials_keychain(name, to_file)
+
+@mcp.tool()
+@st.masked
 def credentials_remove(name: str, delete_files: bool = False) -> dict:
     """Remove a credential from the registry and from every saved service profile that names it. The key files are listed for the person to delete;
     they are deleted here only when delete_files=true (the person asked)."""
@@ -367,6 +375,15 @@ def hist_fetch(op: str = "plan", as_of: str = "", bbox: str = "", admin_level: s
     (W,S,E,N) at admin_level (2 countries, 4 states and territories, 6 counties), with each feature's own licence kept. Returns the file, counts,
     per-feature licences and the map note, never the geometry."""
     return st.in_work_folder(work_folder, st.hist_fetch_tool, op, as_of, bbox, admin_level, tags, out)
+
+@mcp.tool()
+@st.masked
+def basemap_tiles(spec: str, work_folder: str, op: str = "plan", provider: str = "", style: str = "", zoom: int = 0, detail: str = "") -> dict:
+    """A tile basemap for a PRINT map, prepared on this computer, where the person's keys are (a secret-class key never leaves it). spec is the
+    MapSpec file inside work_folder. op plan: the zoom, the tile count against the cap and the provider's terms, nothing fetched. op render:
+    fetches the tiles (GET, the provider's rate, cached) and writes the composite to work_folder/.geo-mapping/basemaps, where the map build in
+    that folder reads it. Show the person the plan before render. Returns counts, the credit and the composite's path, never a key or address."""
+    return st.in_work_folder(work_folder, st.basemap_tiles_tool, op, spec, provider, style, zoom, detail)
 
 @mcp.tool()
 @st.masked

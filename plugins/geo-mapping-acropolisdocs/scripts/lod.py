@@ -57,7 +57,7 @@ def pyramid(gdf, zooms, *, merge_gap_m: float = 1.0, height_band_m: float = 3.0,
         px = px_3857(z)
         gap = max(float(merge_gap_m) * m_to_3857, px / 2)
         pieces, _owners = [], []                                   # each block before the size rule, and the footprints it holds
-        for key in sorted(set(zip(band.tolist(), c.tolist()))):
+        for key in sorted(set(zip(band.tolist(), c.tolist(), strict=True))):
             sel = np.where((band == key[0]) & (c == key[1]))[0]
             merged = shapely.union_all(shapely.buffer(geoms[sel], gap / 2, quad_segs=2))
             merged = shapely.buffer(merged, -gap / 2, quad_segs=2)
@@ -68,7 +68,7 @@ def pyramid(gdf, zooms, *, merge_gap_m: float = 1.0, height_band_m: float = 3.0,
             tree = shapely.STRtree(parts)
             pi, fi = tree.query(rp[sel], predicate="intersects")
             first = {}
-            for a_, b_ in zip(pi.tolist(), fi.tolist()):
+            for a_, b_ in zip(pi.tolist(), fi.tolist(), strict=True):
                 first.setdefault(a_, b_)                          # a footprint belongs to one block
             groups: dict = {}
             for a_, b_ in first.items():
@@ -97,7 +97,7 @@ def pyramid(gdf, zooms, *, merge_gap_m: float = 1.0, height_band_m: float = 3.0,
         si = np.where(small)[0]
         if len(si):
             qa, qb = tree.query(geo_arr[si], predicate="dwithin", distance=gap)
-            edges = sorted({(int(si[a_]), int(b_)) for a_, b_ in zip(qa.tolist(), qb.tolist()) if int(si[a_]) != int(b_)
+            edges = sorted({(int(si[a_]), int(b_)) for a_, b_ in zip(qa.tolist(), qb.tolist(), strict=True) if int(si[a_]) != int(b_)
                             and pieces[int(si[a_])][1] == pieces[int(b_)][1]},
                            key=lambda e: shapely.distance(geo_arr[e[0]], geo_arr[e[1]]))
             for a_, b_ in edges:

@@ -162,7 +162,7 @@ def _layout(s: str, key: str) -> tuple[list[tuple[str, float, float, float]], in
         b.add_str(s)
         b.guess_segment_properties()
         hb.shape(_hb(key), b, {"kern": True, "liga": True})
-        return [(order[i.codepoint], p.x_advance, p.x_offset, p.y_offset) for i, p in zip(b.glyph_infos, b.glyph_positions)], upm
+        return [(order[i.codepoint], p.x_advance, p.x_offset, p.y_offset) for i, p in zip(b.glyph_infos, b.glyph_positions, strict=True)], upm
     cmap = f.getBestCmap()
     hm = f["hmtx"]
     out = []

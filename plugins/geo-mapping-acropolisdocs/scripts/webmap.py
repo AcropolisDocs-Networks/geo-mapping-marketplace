@@ -1398,6 +1398,25 @@ def _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, c
                         if periods:
                             clusters[d["id"]].update(periods=True, period0=0)
                             notes.append(f"layer '{d['id']}': clustered on the time slider, one cluster set for each of its {periods['n']} periods")
+                elif bool(ctl["cluster"]) and pts and d.get("time") and not d["context"] and n > wml.CLUSTER_MIN_POINTS:
+                    # 1.12.0: a GeoJSON point layer on the time slider: MapLibre's own clustering cannot follow the slider, so the cluster sets
+                    # are made here, one per period and zoom, and travel as a small collection beside the layer
+                    lon = [f["geometry"]["coordinates"][0] for f in col["features"]]
+                    lat = [f["geometry"]["coordinates"][1] for f in col["features"]]
+                    tt = [int(f["properties"].get("_t", -1)) for f in col["features"]]
+                    n_per = max(tt) + 1 if tt else 0
+                    pz_ = wml.points_zoom(lon, lat, zmin_ml, zmax_ml)
+                    if n_per >= 1 and pz_ > zmin_ml:
+                        baked = wml.bake_period_clusters(lon, lat, tt, n_per, str((cfg["time"] or {}).get("mode") or "period") == "cumulative", range(zmin_ml, pz_))
+                        feats = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [round(float(g_.x), 6), round(float(g_.y), 6)]},
+                                  "properties": {"point_count": int(pc_), "point_count_abbreviated": str(pa_), "_per": int(pp_), "_z": int(z_)}}
+                                 for z_, gdf_ in sorted(baked.items())
+                                 for g_, pc_, pa_, pp_ in zip(gdf_.geometry, gdf_["point_count"], gdf_["point_count_abbreviated"], gdf_["_per"], strict=True)]
+                        key_ = f"{d['id']}__pc"
+                        collections[key_] = {"type": "FeatureCollection", "features": feats}
+                        clusters[d["id"]] = {"points_zoom": pz_, "fill": cl_fill, "stroke": t["legend_bg"], "text": cl_text, "geojson": key_, "zmin": zmin_ml,
+                                             "period0": 0}
+                        notes.append(f"layer '{d['id']}': clustered on the time slider, one cluster set for each of its {n_per} periods ({len(feats):,} clusters)")
                 elif cluster_on:
                     lon = [f["geometry"]["coordinates"][0] for f in col["features"]]
                     lat = [f["geometry"]["coordinates"][1] for f in col["features"]]

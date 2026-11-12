@@ -536,7 +536,7 @@ def sld(style: dict, layer_name: str) -> str:
         cats = [str(c) for c in style["categories"]]
         other = bool(style.get("other"))
         listed = cats[:-1] if other else cats
-        for i, (cat, lab, col) in enumerate(zip(listed, style["labels"], style["colors"])):
+        for i, (cat, lab, col) in enumerate(zip(listed, style["labels"], style["colors"], strict=True)):
             r = rule(f"class {i + 1}", str(lab))
             flt = E.SubElement(r, _ogc("Filter"))
             _cmp(flt, "PropertyIsEqualTo", f, cat)
@@ -602,7 +602,7 @@ def _float_field(gpkg, table: str, field: str | None) -> bool:
     try:
         import pyogrio
         info = pyogrio.read_info(gpkg, layer=table)
-        types = dict(zip(info["fields"], info["dtypes"]))
+        types = dict(zip(info["fields"], info["dtypes"], strict=True))
         return str(types.get(field, "")).startswith("float")
     except Exception:  # noqa: BLE001
         return False
@@ -683,7 +683,7 @@ def read_styles(gpkg) -> list[dict]:
         cur = con.execute("SELECT f_table_catalog, f_table_schema, f_table_name, f_geometry_column, styleName, styleQML, styleSLD, useAsDefault "
                           "FROM layer_styles ORDER BY id")
         cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
+        return [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
     except sqlite3.OperationalError:
         return []
     finally:

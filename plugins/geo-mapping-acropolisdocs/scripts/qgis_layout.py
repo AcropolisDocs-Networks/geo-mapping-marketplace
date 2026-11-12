@@ -32,6 +32,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import numpy as np  # noqa: E402
+
 import gmap_common as gc  # noqa: E402
 import geo_locale as gl  # noqa: E402
 
@@ -121,7 +123,7 @@ def _label_rows(svg: str, frame) -> tuple[list[dict], int]:
     ns = "{http://www.w3.org/2000/svg}"
     rows: list[dict] = []
     halos: dict = {}
-    skipped = len(root.findall(f".//{ns}textPath")) + len([p for p in root.iter(f"{ns}g") if "gm-script" in (p.get("class") or "")])
+    skipped = len(root.findall(f".//{ns}textPath"))        # outlined labels (gm-script) travel as shapes: _outline_rows
     for el in root.iter(f"{ns}text"):
         if el.find(f"{ns}textPath") is not None:
             continue
@@ -150,6 +152,91 @@ def _label_rows(svg: str, frame) -> tuple[list[dict], int]:
                      "hali": {"start": "Left", "middle": "Center", "end": "Right"}.get(el.get("text-anchor") or "start", "Left"),
                      "rotation": -float(m.group(1)) if m else 0.0, "weight": int(float(el.get("font-weight") or 400)), "x": float(mx), "y": float(my),
                      "italic": int(italic), "spacing_pt": round(float(el.get("letter-spacing") or 0) / PT, 3)})
+    return rows, skipped
+
+
+def _path_polygon(d: str):
+    """An SVG path (the outline of a label set in a script's own font) as a shapely geometry in the path's own coordinates: curves are
+    flattened, and rings are combined by the even-odd rule, so a letter's counters stay open."""
+    import shapely
+    from fontTools.pens.recordingPen import RecordingPen
+    from fontTools.svgLib.path import parse_path
+    pen = RecordingPen()
+    parse_path(d, pen)
+    rings, cur = [], []
+
+    def bez(p0, ctrl, n=8):
+        pts = [p0] + list(ctrl)
+        out = []
+        for i in range(1, n + 1):
+            t = i / n
+            q = pts
+            while len(q) > 1:
+                q = [((1 - t) * a[0] + t * b[0], (1 - t) * a[1] + t * b[1]) for a, b in zip(q[:-1], q[1:], strict=True)]
+            out.append(q[0])
+        return out
+
+    for op, args in pen.value:
+        if op == "moveTo":
+            if len(cur) > 2:
+                rings.append(cur)
+            cur = [args[0]]
+        elif op == "lineTo":
+            cur.append(args[0])
+        elif op == "curveTo":
+            cur += bez(cur[-1], args)
+        elif op == "qCurveTo":
+            pts = list(args)
+            for i in range(len(pts) - 1):                       # implied on-curve points between consecutive off-curve ones
+                c = pts[i]
+                end = pts[i + 1] if i == len(pts) - 2 else ((pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2)
+                cur += bez(cur[-1], [c, end])
+        elif op in ("closePath", "endPath"):
+            if len(cur) > 2:
+                rings.append(cur)
+            cur = []
+    if len(cur) > 2:
+        rings.append(cur)
+    geom = None
+    for r in rings:
+        p = shapely.make_valid(shapely.Polygon(r))
+        if p.is_empty:
+            continue
+        geom = p if geom is None else geom.symmetric_difference(p)
+    return geom
+
+
+def _outline_rows(svg: str, frame) -> tuple[list[dict], int]:
+    """1.12.0: the labels the SVG path draws as outlines (a script set in its own Noto face) as polygons in map coordinates, with the fill
+    and the halo of each, so QGIS draws the same letter shapes without the font. -> (rows, labels left out: a turned or slanted outline)."""
+    import shapely
+    from lxml import etree
+    root = etree.fromstring(f'<g xmlns="http://www.w3.org/2000/svg">{svg}</g>'.encode("utf-8"), etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=True))
+    ns = "{http://www.w3.org/2000/svg}"
+    rows: list[dict] = []
+    skipped = 0
+    halo = None
+    for el in root.iter():
+        cls = el.get("class") or ""
+        if el.tag == f"{ns}path" and "gm-outlined-halo" in cls:
+            halo = (el.get("d"), el.get("stroke") or "", float(el.get("stroke-width") or 0))
+            continue
+        if el.tag != f"{ns}g" or "gm-script" not in cls:
+            continue
+        p = el.find(f"{ns}path")
+        if p is None or el.get("transform"):
+            skipped += 1
+            halo = None
+            continue
+        g = _path_polygon(p.get("d") or "")
+        if g is None or g.is_empty:
+            halo = None
+            continue
+        gm = shapely.transform(g, lambda c: np.column_stack(frame.to_display(c[:, 0], c[:, 1])))
+        h = halo if halo and halo[0] == p.get("d") else None
+        rows.append({"text": el.get("aria-label") or "", "color": p.get("fill") or "black", "halo": h[1] if h else "", "halo_mm": round(h[2] / 2, 3) if h else 0.0,
+                     "geometry": gm})
+        halo = None
     return rows, skipped
 
 
@@ -239,7 +326,7 @@ def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | N
                    "shape": str(l.symbol.get("shape") or "circle"), "size_mm": round(float(l.symbol.get("size", 3)) * 0.3528, 4)}
         if l.cls is not None and "_cls" in cols:
             shapes = l.class_shapes or [L["shape"]] * len(l.colors)
-            L["classes"] = [{"label": lab, "color": col, "shape": shp} for lab, col, shp in zip(l.cls.labels, l.colors, shapes)]
+            L["classes"] = [{"label": lab, "color": col, "shape": shp} for lab, col, shp in zip(l.cls.labels, l.colors, shapes, strict=True)]
             if int((np.asarray(l.cls.assigned) < 0).sum()):
                 L["nodata"] = {"label": "No data", "color": t["no_data"], "shape": L["shape"]}
             L["fill"] = None
@@ -415,8 +502,13 @@ def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | N
             placed_labels = {"table": "placed_labels", "count": len(rows)}
             for L in layers_json:
                 L.pop("label", None)                       # QGIS' own placement is not used when the plugin's placements travel
-        if skipped:
-            notes.append(f"{skipped} label(s) drawn as outlines or along a curve by the SVG path are not in this layout")
+        orows, oskip = _outline_rows(lab_svg + names_svg, frame)
+        if orows:                                          # 1.12.0: labels in a script's own face travel as their letter shapes
+            og_ = gpd.GeoDataFrame({k: [r_[k] for r_ in orows] for k in ("text", "color", "halo", "halo_mm")}, geometry=[r_["geometry"] for r_ in orows], crs=crs_obj)
+            og_.to_file(gp, layer="label_outlines", driver="GPKG")
+            placed_labels = {**(placed_labels or {}), "outlines": {"table": "label_outlines", "count": len(orows)}}
+        if skipped + oskip:
+            notes.append(f"{skipped + oskip} label(s) the SVG path turns or slants as outlines are not in this layout")
     except Exception as ex:  # noqa: BLE001 - QGIS places the labels itself then, as before 1.11.0
         notes.append(f"the plugin's label placements could not be carried over ({type(ex).__name__}); QGIS places the labels itself")
     for k, (c, r, cov) in placed.items():

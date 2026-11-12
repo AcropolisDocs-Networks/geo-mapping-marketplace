@@ -1342,7 +1342,7 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
         metric = lo.covered_fraction(fr, oc, rects_)
         res = {"frame": fr, "occ": oc, "info": inf, "items": its, "placed": pl, "err": err, "cover": metric, "reserve": reserve, "pan": tuple(pan), "base": base}
         if fit_mode not in ("shrink", "fixed"):
-            counted = [r for k, r in zip(pl.keys(), rects_) if not (k == "inset" and auto_locator)]
+            counted = [r for k, r in zip(pl.keys(), rects_, strict=True) if not (k == "inset" and auto_locator)]
             res["counted"] = counted
             res["room"] = lo.pan_room(base, _bbox_mm(base), pad_pct)
             key = tuple(round(v, 4) for v in reserve)
@@ -1970,7 +1970,7 @@ def select_places(gdf, cfg: dict, tier: dict):
     else:
         g = g[pd.to_numeric(g["pop_max"], errors="coerce").fillna(0) >= cfg["min_pop"]]
     g = g.copy()
-    g["_tier"] = [place_tier(a, f, p) for a, f, p in zip(g.get("adm0cap", [0] * len(g)), g.get("featurecla", [""] * len(g)), g["pop_max"])]
+    g["_tier"] = [place_tier(a, f, p) for a, f, p in zip(g.get("adm0cap", [0] * len(g)), g.get("featurecla", [""] * len(g)), g["pop_max"], strict=True)]
     if cfg["places"] == "capitals":
         g = g[g["_tier"] == "capital"]
     elif cfg["places"] == "major":
@@ -1978,7 +1978,7 @@ def select_places(gdf, cfg: dict, tier: dict):
     if cfg["exclude"]:
         g = g[[not mp.name_excluded(v, cfg["exclude"]) for v in g["name"]]]
     pop = pd.to_numeric(g["pop_max"], errors="coerce").fillna(0)
-    g["_prio"] = [NAME_TIER_PRIORITY[t] * 1e9 + p for t, p in zip(g["_tier"], pop)]
+    g["_prio"] = [NAME_TIER_PRIORITY[t] * 1e9 + p for t, p in zip(g["_tier"], pop, strict=True)]
     g = g.sort_values("_prio", ascending=False)
     if cfg["max"] is not None:
         g = g.head(int(cfg["max"]))
@@ -2047,6 +2047,20 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
     # ---- places
     pstats = {"candidates": 0, "placed": 0, "dropped_collision": 0, "dropped_size": 0, "dropped_outside": 0, "under_symbol": 0, "tier1": 0, "tier1_dropped": 0}
     places = load("places") if cfg["places"] != "none" else None
+    vgr = getattr(plan, "vector_ground", None) or {}
+    if cfg["places"] != "none" and vgr.get("places") is not None and len(vgr["places"]):
+        # 1.12.0: on a vector-tile ground the file's own places are named, at the detail the file was read at (the bundled gazetteer stops
+        # at Natural Earth's towns); past a partial extract's edge the bundled places still name the rest
+        fp = mp.window_reproject(vgr["places"], window, plan.crs)
+        if vgr.get("partial") and places is not None and len(places):
+            import geopandas as _gpd
+            import pandas as _pd
+            from shapely.geometry import box as _b
+            hole = _gpd.GeoSeries([shapely.segmentize(_b(*vgr["partial"]["box"]), 0.05)], crs="EPSG:4326").to_crs(plan.crs).iloc[0]
+            rest = places[~places.geometry.within(hole)]
+            fp = _gpd.GeoDataFrame(_pd.concat([fp, rest], ignore_index=True), geometry="geometry", crs=plan.crs)
+        places = fp
+        stats["places_from"] = vgr.get("file")
     if places is not None and len(places):
         sel = select_places(places, cfg, tier)
         sel_names, sel_alt, sel_left = mp.choose_place_names(sel, cfg) if len(sel) else ([], [], set())
@@ -2131,6 +2145,22 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                               "draw that layer as outline polygons, or label the places with a labels: entry")
     stats["places"] = pstats
 
+    # ---- road names (1.12.0): on a vector-tile ground at 1:150,000 and larger, the names of its larger roads, set along them in a muted
+    #      colour after the places (so a road name gives way to a place name), at most 40 of them, the longest roads first
+    rn = vgr.get("road_names")
+    if rn is not None and len(rn) and cfg["places"] != "none":
+        import types
+        rn = rn.head(40)
+        rgeoms, _rk = to_sheet(rn, frame, False)
+        shim = types.SimpleNamespace(tokens={**t, "label": admin_label_color(t)[0]})
+        lyr = types.SimpleNamespace(gdf=rn, id="context-road-names")
+        rsize = max(floor, pt - 1.0)
+        r_svg, r_rects, r_st = mex.line_label_markup(shim, lyr, {"field": "name", "once_per_name": True}, frame, taken, rsize, rgeoms)
+        out.append(r_svg)
+        taken += r_rects
+        stats["roads"] = {"candidates": int(len(rn)), "placed": r_st["placed"], "dropped_collision": r_st["collision"],
+                          "dropped_size": r_st["too_short"] + r_st["too_bent"]}
+
     # ---- water
     wstats = {"candidates": 0, "placed": 0, "dropped_collision": 0, "dropped_size": 0, "dropped_outside": 0}
     if cfg["water"]:
@@ -2169,6 +2199,17 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                     p = ln.interpolate(0.5, normalized=True)
                     cands.append(le.Candidate(str(rivers["name"].iloc[i]), "area", float(p.x), float(p.y), 5e5 - float(rivers["scalerank"].iloc[i]) * 1e4 + ln.length,
                                               avail_w=ln.length * 0.9, style={"tier": "water", "kind": "river"}))
+        if cands and vgr and not vgr.get("partial"):
+            # 1.12.0: on a vector-tile ground a bundled water name is kept only where the file itself draws that water (the bundled lake or
+            # river may be generalised away from it at this scale, and its name would sit on land)
+            wparts = [g_ for b_ in plan.basemap if b_.get("kind") == "lake" and b_.get("gdf") is not None and len(b_["gdf"]) for g_ in to_sheet(b_["gdf"], frame, True)[0] if g_ is not None]
+            if vgr.get("rivers") is not None:
+                wparts += [g_.buffer(3.0) for g_ in to_sheet(vgr["rivers"], frame, False)[0] if g_ is not None]
+            wsheet = shapely.union_all(wparts) if wparts else None
+            n0 = len(cands)
+            cands = [c for c in cands if wsheet is not None and wsheet.intersects(shapely.Point(c.x, c.y).buffer(1.5))]
+            if n0 - len(cands):
+                wstats["not_on_the_files_water"] = n0 - len(cands)
         if cands:
             res = le.place(cands, map_rect, taken, wsize, 400, floor)
             wstats.update(res.as_dict() | {"candidates": len(cands)})
@@ -2210,7 +2251,7 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                         inside = free
                 p = shapely.point_on_surface(inside)
                 minx, _, maxx, _ = inside.bounds
-                cands.append(le.Candidate(str(adm[name_col].iloc[i]).upper(), "area", float(p.x), float(p.y), share, avail_w=maxx - minx,
+                cands.append(le.Candidate(mp.upper_name(str(adm[name_col].iloc[i]) if in_us else mp.admin_unit_name(adm.iloc[i], cfg, name_col)), "area", float(p.x), float(p.y), share, avail_w=maxx - minx,
                                           weight=500, tracking=track, style={"tier": "admin"}))
             if len(cands) < 2 and tier["tier"] in ("local", "metro"):
                 cands = []                                    # a city map inside one state does not say which state it is in; the title and the locator do
@@ -2587,7 +2628,8 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
         if st is not None:
             sb_ = st.geometry.bounds
             if wpoly.area / max(st.geometry.area, 1e-9) < INSET_STATE_SHARE:
-                state = {"name": str(st.get(name_col, "")), "geometry": st.geometry, "bounds": tuple(float(v) for v in sb_),
+                state = {"name": (mp.admin_unit_name(st, mp.names_config(plan.spec), name_col) if ctx == "admin1" else str(st.get(name_col, ""))),
+                         "geometry": st.geometry, "bounds": tuple(float(v) for v in sb_),
                          "iso": str(st.get("iso_a2", "US") if ctx == "admin1" else "US"), "col": name_col, "value": str(st.get(name_col, ""))}
         if state is None and ctx == "admin1":
             # 1.5.0: larger than one unit but inside one country: the country locator (the country with its neighbours, the country outlined)
@@ -2672,7 +2714,7 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
         sgeom, _ = to_sheet([state["geometry"]], fr, True)
         if sgeom[0] is not None:
             p = shapely.point_on_surface(sgeom[0].intersection(sbox(0, 0, w, h)))
-            label = {"text": state["name"].upper(), "x": float(p.x), "y": float(p.y)}
+            label = {"text": mp.upper_name(state["name"]), "x": float(p.x), "y": float(p.y)}
     out = {"w": w, "h": h, "paths": paths, "focus": focus, "water": water, "label": label, "state": state["name"] if state else None,
            "context": ctx, "asked": asked,
            "frame": fr, "crs": crs, "main_crs": plan.crs, "main_visible": main_vis,
@@ -2774,7 +2816,7 @@ def _inside_outline(paths, rects) -> list[bool]:
         for part in re.split(r"(?=M)", d):
             nums = [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", part)]
             if len(nums) >= 6:
-                rings.append(shapely.Polygon(list(zip(nums[0::2], nums[1::2]))))
+                rings.append(shapely.Polygon(list(zip(nums[0::2], nums[1::2], strict=True))))
     if not rings:
         return [False] * len(rects)
     rings = [r if r.is_valid else shapely.make_valid(r) for r in rings]      # 1.5.0: a simplified admin-1 outline can self-touch on the sheet
@@ -2847,7 +2889,7 @@ def draw_inset(inset: dict, x: float, y: float, t: dict, visible: tuple | None =
                 continue
             ok.append((ly, r))
         inside = _inside_outline(inset.get("focus"), [r for _, r in ok])      # M16: on a tall frame the box covers the middle of the state;
-        pick = next((c for c, i in zip(ok, inside) if i), ok[0] if ok else None)    # a place inside the state beats one on its border
+        pick = next((c for c, i in zip(ok, inside, strict=True) if i), ok[0] if ok else None)    # a place inside the state beats one on its border
         if pick:
             out.append(sd.text(lab["x"], pick[0], lab["text"], pt, t["label"], weight=500, anchor="middle", halo=t["land"], halo_w=0.45, tracking=track,
                                extra=' data-role="inset-state"'))

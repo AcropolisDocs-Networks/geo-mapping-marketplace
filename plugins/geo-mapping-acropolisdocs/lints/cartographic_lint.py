@@ -147,7 +147,7 @@ def check_002(plan) -> list[dict]:
         body = e[:-1] if len(e) >= 3 and e[-1] == e[-2] else e
         if any(b <= a for a, b in zip(body, body[1:])):
             out.append(finding("MAP-CART-002", "BLOCK", f"layer '{l.id}': the class breaks are not unique and ascending", e))
-        empty = [lab for lab, n in zip(c.labels, c.counts) if n == 0]
+        empty = [lab for lab, n in zip(c.labels, c.counts, strict=True) if n == 0]
         if empty and not getattr(c, "fixed", False):          # an atlas page may hold nothing in a class the other pages need
             out.append(finding("MAP-CART-002", "WARN", f"layer '{l.id}': empty class(es) {', '.join(empty)}; use fewer classes or another method", empty))
     return out

@@ -107,7 +107,7 @@ def ap_title_case(s: str) -> str:
 
 def is_title_case(s: str) -> bool:
     want, got = ap_title_case(s).split(), s.split()
-    return all(a == b or (a.lower() in LOOSE and a.lower() == b.lower()) for a, b in zip(want, got))
+    return all(a == b or (a.lower() in LOOSE and a.lower() == b.lower()) for a, b in zip(want, got, strict=True))
 
 
 def sentence_case_off(s: str) -> bool:

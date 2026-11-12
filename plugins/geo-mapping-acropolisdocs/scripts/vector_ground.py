@@ -29,6 +29,9 @@ What is taken from the file, and what it becomes on the map (the colours are the
     rivers        river and canal centre lines (streams and ditches are left out)
     roads         two classes: 'major' (motorways and trunk roads) and 'secondary' (primary and secondary roads); with the file's
                   smaller roads as a third class, 'minor', on maps at 1:150,000 and larger
+    road names    (1.12.0) the names of the major and secondary roads, set along them, on maps at 1:150,000 and larger
+    places        (1.12.0) the file's cities, towns and villages as the map's place names (the bundled gazetteer names nothing then)
+    buildings     (1.12.0) building footprints, on maps at 1:25,000 and larger
     ferries       ferry routes, dashed
     urban         built-up land (residential, commercial, industrial, retail)
     boundaries    country lines, and first-level lines (states, provinces) as a second class; maritime lines are left out
@@ -52,6 +55,19 @@ MERC_LAT = 85.0511287798
 ZOOM0_DENOMINATOR = 279_541_132.0
 MAX_TILES = 400                               # the window is read at a lower zoom when it would span more tiles than this
 MINOR_ROADS_MAX_DENOMINATOR = 150_000
+BUILDINGS_MAX_DENOMINATOR = 25_000            # 1.12.0: building footprints are drawn on maps at 1:25,000 and larger
+ROAD_NAMES_MAX_DENOMINATOR = 150_000          # ...and road names on maps at 1:150,000 and larger
+PLACE_POP = {"city": 200_000, "town": 20_000, "village": 2_000, "hamlet": 300, "suburb": 5_000, "neighbourhood": 1_000, "locality": 20_000,
+             "capital": 1_000_000, "state_capital": 300_000}       # a population for a place the file gives none for, by its kind
+# schema -> (layer, the attribute that says what kind of place it is, the kinds kept, name attributes in order, population, capital test)
+PLACES = {
+    "protomaps": ("places", ("kind_detail", "pmap:kind_detail", "kind"), ("city", "town", "village", "locality", "capital", "state_capital"), ("name",),
+                  "population", lambda r: str(r.get("capital") or "") in ("yes", "2") or str(r.get("kind_detail") or "") == "capital"),
+    "openmaptiles": ("place", ("class",), ("city", "town", "village"), ("name", "name:latin", "name_en"), None, lambda r: str(r.get("capital") or "") in ("2", "2.0")),
+    "shortbread": ("place_labels", ("kind",), ("capital", "state_capital", "city", "town", "village"), ("name",), "population", lambda r: str(r.get("kind")) == "capital"),
+}
+BUILDINGS = {"protomaps": "buildings", "openmaptiles": "building", "shortbread": "buildings"}
+ROAD_NAME_FIELDS = ("name", "ref")
 URBAN_KINDS = ("residential", "commercial", "industrial", "retail", "urban_area", "urban", "suburb", "neighbourhood")
 RIVER_KINDS = ("river", "canal")
 
@@ -332,7 +348,86 @@ def read(path, window, denominator: float, *, zoom: int | None = None) -> dict:
     out["roads"] = roads
     out["urban"] = polys(s["urban"])
     out["boundaries"] = classed(s["boundaries"])
+    # 1.12.0: the file's own place names, its building footprints on large-scale maps, and the names of its larger roads
+    out["places"] = _places(path, info["schema"], z, bbox, have)
+    out["buildings"] = polys([(BUILDINGS[info["schema"]], None, None)]) if denominator <= BUILDINGS_MAX_DENOMINATOR else None
+    out["road_names"] = _road_names(path, s["roads"], z, bbox, have, win) if denominator <= ROAD_NAMES_MAX_DENOMINATOR else None
     return out
+
+
+def _places(path, schema: str, z: int, bbox, have):
+    """The file's places as a gazetteer table (lon/lat points): name, pop_max, scalerank (from the population), adm0cap. One row per place:
+    a place near a tile edge is in two tiles."""
+    import geopandas as gpd
+    layer, kind_attrs, kinds, name_attrs, pop_attr, is_cap = PLACES[schema]
+    df = _read(path, layer, z, bbox, have)
+    if df is None:
+        return None
+    kc = _col(df, kind_attrs)
+    if kc is None:
+        return None
+    df = df[kc.isin(kinds).values].copy()
+    kc = kc[kc.isin(kinds).values]
+    if not len(df):
+        return None
+    rows = []
+    seen = set()
+    geoms = df.geometry.values
+    for i in range(len(df)):
+        r = df.iloc[i]
+        name = next((str(r[a]) for a in name_attrs if a in df.columns and isinstance(r[a], str) and r[a].strip()), None)
+        g = geoms[i]
+        pt = g.geoms[0] if hasattr(g, "geoms") and len(g.geoms) else g
+        if not name or pt.is_empty or pt.geom_type != "Point":
+            continue
+        key = (name, round(pt.x / 200.0), round(pt.y / 200.0))
+        if key in seen:
+            continue
+        seen.add(key)
+        kind = str(kc.iloc[i])
+        try:
+            pop = float(r[pop_attr]) if pop_attr and pop_attr in df.columns and r[pop_attr] == r[pop_attr] and r[pop_attr] is not None else 0.0
+        except (TypeError, ValueError):
+            pop = 0.0
+        pop = pop if pop > 0 else float(PLACE_POP.get(kind, 2_000))
+        cap = bool(is_cap(r))
+        rank = next((k for k, lim in enumerate((5e6, 2e6, 1e6, 5e5, 2e5, 1e5, 5e4, 2e4, 1e4, 5e3)) if pop >= lim), 10)
+        rows.append({"name": name, "pop_max": pop, "scalerank": 0 if cap else rank, "adm0cap": 1 if cap else 0, "featurecla": kind, "geometry": pt})
+    if not rows:
+        return None
+    g = gpd.GeoDataFrame(rows, geometry="geometry", crs=WEB_MERCATOR).to_crs("EPSG:4326")
+    return g.sort_values("pop_max", ascending=False, kind="stable").reset_index(drop=True)
+
+
+def _road_names(path, roads_def, z: int, bbox, have, win):
+    """The named major and secondary roads of the file: one line geometry per name (its tile pieces merged), with the name and the class."""
+    import geopandas as gpd
+    import shapely
+    layer, attr, table = roads_def
+    df = _read(path, layer, z, bbox, have)
+    if df is None or table is None:
+        return None
+    c = _col(df, attr)
+    field = next((f for f in ROAD_NAME_FIELDS if f in df.columns), None)
+    if c is None or field is None:
+        return None
+    keep = c.map(table).isin(("major", "secondary")).values
+    df, c = df[keep], c[keep]
+    names = df[field]
+    ok = [isinstance(v, str) and bool(v.strip()) for v in names]
+    df, c = df[ok], c[ok]
+    if not len(df):
+        return None
+    rows = []
+    for name, part in df.groupby(df[field].astype(str).str.strip()):
+        m = _merge(_parts(part, (1,)), win, True)
+        if m is not None and m.length > 0:
+            cls = "major" if (c.loc[part.index].map(table) == "major").any() else "secondary"
+            rows.append({"name": name, "class": cls, "length": float(shapely.length(m)), "geometry": m})
+    if not rows:
+        return None
+    g = gpd.GeoDataFrame(rows, geometry="geometry", crs=WEB_MERCATOR)
+    return g.sort_values("length", ascending=False, kind="stable").head(80).reset_index(drop=True)
 
 
 def main(argv=None) -> int:

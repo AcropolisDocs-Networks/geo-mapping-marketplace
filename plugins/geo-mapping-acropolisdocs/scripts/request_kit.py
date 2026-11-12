@@ -5,6 +5,11 @@
     request_kit.py adopt  --text-file F | --text '...'     read a pasted curl command or address (as text, never run) and say what it does
     request_kit.py verify FOLDER [--kit kit-request.json]   check what came back against its manifest.yaml
     request_kit.py ingest FOLDER --name N [--profile P]     verify, merge to one GeoPackage, write a capture record (route: user-run)
+    request_kit.py adopt  --text '...' --build              1.12.0: the pasted command as a whole kit in one step (py, sh, ps1)
+    request_kit.py refresh CAPTURE                          1.12.0: the kit of a user-run capture again, to fetch the same request afresh
+
+All three kits resume (1.12.0): a run that stops (a time budget, a service that keeps failing) carries on after its last whole page when the
+same command is run again with the same folder.
 
 The kit holds no credential: it reads GEO_USER and GEO_PASS from the environment of the person who runs it, sends them only over https, keeps TLS
 verification on and never follows a redirect. It only reads (GET). The service address is inside the kit, which stays on the person's machine; the
@@ -409,7 +414,7 @@ def understand(url: str) -> dict:
     return r
 
 
-def adopt(text: str, *, show_host: bool = False) -> dict:
+def adopt(text: str, *, show_host: bool = False, build_kit: bool = False, formats=None, outroot: Path | None = None) -> dict:
     """Understand a pasted curl command or address, never run it. Secrets are removed everywhere; the host is withheld unless asked for.
     Returns {ok, understood, request, redacted, cautions, findings, next_steps}; `request` feeds build()."""
     fs: list[dict] = []
@@ -484,7 +489,13 @@ def adopt(text: str, *, show_host: bool = False) -> dict:
         bits.append("fields " + ", ".join(oh.untrusted(p, 30) for p in read["properties"][:12]))
     understood = f"Understood as a read of {host}: " + "; ".join(bits) + (f" (pages of {read['page_size']})" if read["page_size"] else "") + "."
     safe_req = {k: (redact.scrub(v)[0] if isinstance(v, str) else v) for k, v in kr.items() if k != "endpoint"}
-    return {"ok": not blocked(fs), "kind": "fetch", "understood": understood, "request": kr, "request_public": safe_req, "cautions": cautions, "findings": fs,
+    built = None
+    if build_kit and not blocked(fs):                    # 1.12.0: the approved command as a whole kit, in one step
+        fmts = list(formats or (("py", "sh", "ps1") if kr["protocol"] == "wfs" else ("py",)))
+        built = build(dict(kr), formats=fmts, outroot=outroot, show_host=show_host)
+        fs += [f for f in built.get("findings", []) if f not in fs]
+    return {"ok": not blocked(fs) and (built is None or built["ok"]), "kit": ({k: built.get(k) for k in ("kit_dir", "kit_id", "files", "card", "ogr2ogr")} if built and built.get("ok") else None),
+            "kind": "fetch", "understood": understood, "request": kr, "request_public": safe_req, "cautions": cautions, "findings": fs,
             "redacted": redact.scrub_command(safe_text)[0] if show_host else re.sub(r"https?://[^\s'\"]+", lambda m: "<service address withheld>", redact.scrub_command(safe_text)[0]),
             "next_steps": ["Build a kit from this request (request_kit.py build --from-adopted FILE), run it where the service is reachable, then send back the output folder.",
                            "Or, if you have GDAL, the same fetch is one ogr2ogr command (the kit folder contains it)."],
@@ -663,7 +674,7 @@ def verify(folder, *, kit_request_path: str | None = None, explain: str | None =
 # ============================================================================================================================ ingest
 def ingest(folder, *, name: str, profile: dict | None = None, kit_request_path: str | None = None, accept_incomplete: str | None = None, fmt: str = "gpkg",
            outroot: Path | None = None, license_text: str | None = None, confidential: bool = True, audience: str | None = None,
-           route: str = "user-run", run_info: dict | None = None) -> dict:
+           route: str = "user-run", run_info: dict | None = None, refresh_of: str | None = None) -> dict:
     """Verify a returned folder, merge it into one file and write a capture record: route user-run (attested by the user) or device-run (an approved run the
     plugin started on the person's computer, attested by the plugin; run_info carries the approval). Never marked as verified at the source."""
     import service_lint as sl
@@ -710,7 +721,9 @@ def ingest(folder, *, name: str, profile: dict | None = None, kit_request_path: 
                     "sort_by": mreq.get("sort_by"), "page_size": mreq.get("page_size"), "max_features": kreq.get("max_features")},
         "hits_expected": res.get("hits_expected"), "received": len(g) if g is not None else 0, "truncated": truncated, "accepted_incomplete": accept_incomplete or (res.get("shortfall_note") or None) if truncated else None,
         "server_limit": None, "duplicates": v["stats"].get("duplicates", 0), "resumed_pages": 0,
-        "pages": [{"n": i + 1, "count": c, "sha256": hashlib.sha256(Path(p).read_bytes()).hexdigest(), "url": None} for i, (p, c) in enumerate(zip(v["page_paths"], v["stats"].get("per_page", [])))],
+        # 1.12.0: the kit that made it (its request stays in the working folder's kits/, with the service address) and the capture it replaces
+        "kit_id": m.get("kit_id") or kreq.get("kit_id"), "refresh_of": refresh_of, "name": name,
+        "pages": [{"n": i + 1, "count": c, "sha256": hashlib.sha256(Path(p).read_bytes()).hexdigest(), "url": None} for i, (p, c) in enumerate(zip(v["page_paths"], v["stats"].get("per_page", []), strict=True))],
         "calls": [], "result": ({"path": str(result_path), "format": fmt, "sha256": hashlib.sha256(Path(result_path).read_bytes()).hexdigest(), "features": int(len(g)), "bbox": v["stats"].get("bbox"), "crs": "EPSG:4326",
                                  "fields": [c for c in g.columns if c != "geometry"]} if result_path else None),
         "crs_check": v["stats"].get("crs_check"), "license": lic, "mode": "capture", "confidential": bool(confidential),
@@ -731,6 +744,34 @@ def ingest(folder, *, name: str, profile: dict | None = None, kit_request_path: 
     rp.write_text(json.dumps(record, indent=2, default=str))
     ok = not blocked(fs)
     return {"ok": ok, "record_path": str(rp), "result_path": str(result_path) if result_path else None, "record": record, "findings": fs, "stats": v["stats"]}
+
+
+def refresh(capture, *, formats=("py",), outroot: Path | None = None, kits_root: Path | None = None, captures_root: Path | None = None) -> dict:
+    """1.12.0: the kit of a user-run capture, written again from the request kept beside the first kit, so the person can run the same read
+    afresh. The plugin still fetches nothing. -> {ok, kit_dir, kit_id, card, then} where `then` is the ingest command that records the new
+    folder as the refresh of this capture."""
+    p = Path(str(capture))
+    cdir = p if p.is_dir() else (Path(captures_root) if captures_root else gc.workdir() / "captures") / str(capture)
+    rp = cdir / "capture.json"
+    if not rp.is_file():
+        return {"ok": False, "findings": [finding("MAP-SVC-001", "BLOCK", f"there is no capture '{oh.untrusted(str(capture), 80)}' here")]}
+    rec = json.loads(rp.read_text())
+    if rec.get("route") != "user-run":
+        return {"ok": False, "findings": [finding("MAP-SVC-003", "BLOCK", f"capture {rec.get('id')} was fetched by the plugin ({rec.get('route')}); refresh it with service-refresh")]}
+    kid = rec.get("kit_id")
+    kreq_p = ((Path(kits_root) if kits_root else gc.workdir() / "kits") / str(kid) / "kit-request.json") if kid else None
+    if not kreq_p or not kreq_p.is_file():
+        return {"ok": False, "findings": [finding("MAP-SVC-003", "BLOCK", "the request of the kit that made this capture is not in the working folder's kits/ any more "
+                                                  "(or the capture is older than 1.12.0); build the kit again from the profile and layer")]}
+    kr = json.loads(kreq_p.read_text())
+    r = build(kr, formats=list(formats), outroot=outroot or kreq_p.parent.parent)
+    if not r["ok"]:
+        return r
+    name = rec.get("name") or slug(str((rec.get("request") or {}).get("layer") or "layer").split(":")[-1])
+    return {"ok": True, "kit_dir": r["kit_dir"], "kit_id": r["kit_id"], "files": r["files"], "card": r["card"], "capture": rec.get("id"),
+            "last_fetched": rec.get("finished_at") or rec.get("recorded_at"), "findings": r["findings"],
+            "then": f"request_kit.py ingest OUTPUT_FOLDER --name {name} --refresh-of {rec.get('id')}",
+            "notice": "Run the kit where the service is reachable, then ingest the folder it writes. Nothing was fetched here."}
 
 
 def summary(r: dict) -> dict:
@@ -768,6 +809,13 @@ def main(argv=None) -> int:
     a_.add_argument("--text-file")
     a_.add_argument("--show-host", action="store_true")
     a_.add_argument("--out", help="write the (secret-free) request here for build --from-adopted")
+    a_.add_argument("--build", action="store_true", help="1.12.0: also write the kit for this request, in one step (after the person approved what it reads)")
+    a_.add_argument("--format", default=None, help="with --build: py, sh, ps1 (default: all three for WFS, py otherwise)")
+    a_.add_argument("--kit-out", help="with --build: where the kit folder goes (default: the working folder's kits/)")
+    rf = sub.add_parser("refresh", help="1.12.0: the kit of a user-run capture again, to fetch the same request afresh")
+    rf.add_argument("capture", help="the capture id (userrun-...) or its folder")
+    rf.add_argument("--format", default="py")
+    rf.add_argument("--out")
     v_ = sub.add_parser("verify")
     v_.add_argument("folder")
     v_.add_argument("--kit")
@@ -782,6 +830,7 @@ def main(argv=None) -> int:
     i_.add_argument("--license")
     i_.add_argument("--not-confidential", action="store_true")
     i_.add_argument("--audience")
+    i_.add_argument("--refresh-of", help="1.12.0: the capture this folder refreshes (request_kit.py refresh prints the command)")
     a = ap.parse_args(argv)
     try:
         if a.op == "build" and a.cds:                       # 1.3.0 (R1-CDS): the CDS request kit holds no key; the client reads the person's own
@@ -813,11 +862,16 @@ def main(argv=None) -> int:
             return 0 if r["ok"] else 3
         if a.op == "adopt":
             text = Path(a.text_file).read_text() if a.text_file else (a.text if a.text is not None else sys.stdin.read())
-            r = adopt(text, show_host=a.show_host)
+            r = adopt(text, show_host=a.show_host, build_kit=a.build, formats=[x.strip() for x in a.format.split(",") if x.strip()] if a.format else None,
+                      outroot=Path(a.kit_out) if a.kit_out else None)
             if a.out and r.get("request"):
                 Path(a.out).write_text(json.dumps(r["request"], indent=2))
                 r["request_file"] = a.out
             r.pop("request", None)
+            print(json.dumps(r, indent=2))
+            return 0 if r["ok"] else 3
+        if a.op == "refresh":
+            r = refresh(a.capture, formats=[x.strip() for x in a.format.split(",") if x.strip()], outroot=Path(a.out) if a.out else None)
             print(json.dumps(r, indent=2))
             return 0 if r["ok"] else 3
         if a.op == "verify":
@@ -827,7 +881,8 @@ def main(argv=None) -> int:
             print(json.dumps(r, indent=2, default=str))
             return 0 if r["ok"] else 3
         prof = sr.load(a.profile) if a.profile else None
-        r = ingest(a.folder, name=a.name, profile=prof, kit_request_path=a.kit, accept_incomplete=a.accept_incomplete, fmt=a.format, license_text=a.license, confidential=not a.not_confidential, audience=a.audience)
+        r = ingest(a.folder, name=a.name, profile=prof, kit_request_path=a.kit, accept_incomplete=a.accept_incomplete, fmt=a.format, license_text=a.license, confidential=not a.not_confidential, audience=a.audience,
+                   refresh_of=a.refresh_of)
         print(json.dumps(summary(r), indent=2, default=str))
         return 0 if r["ok"] else 3
     except FileNotFoundError as e:

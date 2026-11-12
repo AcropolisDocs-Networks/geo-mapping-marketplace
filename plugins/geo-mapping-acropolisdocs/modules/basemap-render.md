@@ -34,6 +34,9 @@ In the MapSpec: `basemap: {provider: carto-positron, style: light_all, mode: sta
    on the person's computer and added to each tile request at send time; the tile address, the plan and the composite record never carry it. A
    `secret`-class key never leaves that request. On the command line only, `GEO_MAPPING_KEY_<PROVIDER>` in the person's own environment is also read.
    Never ask for a key in chat and never write one into a file. If none is registered, `plan` says how to add one and the build keeps the bundled basemap.
+   **When the session does not run on the person's computer** (a cloud or Cowork session with their folder connected), the key is not here: use the
+   data server's `basemap_tiles` tool (1.12.0) with `work_folder=` their project folder and `spec=` the MapSpec in it, `op=plan` then `op=render`. It
+   runs these same two steps on their computer and writes the composite into that folder, where the build reads it.
 4. **Render.** `render` fetches one tile at a time with a pause between requests, keeps a cache under the working folder (read before the network), and joins the tiles. A few missing tiles are blank with a warning; more than one in ten stops the render and writes nothing.
 5. **Build.** Build the map as usual. It is drawn in Web Mercator, the picture is embedded in the file (no outside links), and the credit line and provenance record carry the provider's attribution.
 6. **Re-render** when the extent, provider or style changes. The build tells the person when the picture no longer matches and falls back to the bundled basemap.

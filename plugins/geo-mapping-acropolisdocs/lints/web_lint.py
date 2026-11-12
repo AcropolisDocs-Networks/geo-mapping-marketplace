@@ -655,7 +655,7 @@ def check_3d(text: str) -> list[dict]:
         hs = [(f.get("properties") or {}).get("_h") for f in feats]
         bs = [(f.get("properties") or {}).get("_b") for f in feats]
         bad = sum(1 for h in hs if not isinstance(h, (int, float)) or isinstance(h, bool))
-        neg = sum(1 for h, b in zip(hs, bs) if isinstance(h, (int, float)) and (h < 0 or (d["d3"] == "extrude" and isinstance(b, (int, float)) and b > h)))
+        neg = sum(1 for h, b in zip(hs, bs, strict=True) if isinstance(h, (int, float)) and (h < 0 or (d["d3"] == "extrude" and isinstance(b, (int, float)) and b > h)))
         big = sum(1 for h in hs if isinstance(h, (int, float)) and h > HEIGHT_MAX_M)
         if bad:
             out.append(finding("MAP-WEB-024", "WARN", f"layer '{d['id']}': {bad} feature(s) have no numeric height on the page, so they are drawn flat", bad))

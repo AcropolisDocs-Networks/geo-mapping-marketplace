@@ -99,7 +99,7 @@ def _ellipsoid(c) -> str | None:
 
 def _extent(parent, tag: str, box) -> None:
     el = _sub(parent, tag)
-    for k, v in zip(("xmin", "ymin", "xmax", "ymax"), box):
+    for k, v in zip(("xmin", "ymin", "xmax", "ymax"), box, strict=True):
         _sub(el, k, repr(float(v)))
 
 

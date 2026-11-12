@@ -99,7 +99,7 @@ def profile(dem_path, a_lonlat, b_lonlat, samples: int = 200) -> dict:
     zz = z[ok]
     diffs = np.diff(zz) if zz.size > 1 else np.array([])
     return {"a": list(a), "b": list(b), "length_m": D, "samples": int(len(pts)), "nodata_samples": int((~ok).sum()), "spacing_m": float(D / (len(pts) - 1)),
-            "points": [(float(x), (float(y) if np.isfinite(y) else None)) for x, y in zip(d, z)],
+            "points": [(float(x), (float(y) if np.isfinite(y) else None)) for x, y in zip(d, z, strict=True)],
             "min_m": float(zz.min()) if zz.size else None, "max_m": float(zz.max()) if zz.size else None,
             "start_m": float(z[0]) if np.isfinite(z[0]) else None, "end_m": float(z[-1]) if np.isfinite(z[-1]) else None,
             "gain_m": float(diffs[diffs > 0].sum()) if diffs.size else 0.0, "loss_m": float(-diffs[diffs < 0].sum()) if diffs.size else 0.0,
@@ -197,7 +197,7 @@ def line_of_sight(dem_path, a_lonlat, b_lonlat, h_a_m: float = 0.0, h_b_m: float
                     "fresnel_rule": f"at least {FRESNEL_CLEARANCE:.0%} of the first Fresnel zone clear at every point",
                     "fresnel_f1_mid_m": fresnel_radius_m(D / 2.0, D / 2.0, freq_ghz),
                     "required_h_a_fresnel_m": _required_height(d, z, D, h_b_m, k_factor, freq_ghz, FRESNEL_CLEARANCE, h_a_m)})
-    out["profile"] = [(float(x), float(y), float(c)) for x, y, c in zip(d, z, e["clear"])]
+    out["profile"] = [(float(x), float(y), float(c)) for x, y, c in zip(d, z, e["clear"], strict=True)]
     out["caveat"] = ("bare-earth DEM: buildings, trees and other clutter are not in it, so a clear verdict is optimistic; "
                      f"the DEM is about {res:.0f} m per cell, so a ridge narrower than that can be missed")
     return out

@@ -198,7 +198,7 @@ def hill_glyphs(plan, frame, cfg: dict, t: dict, avoid: list, land=None) -> tupl
     with rasterio.open(dem) as ds:
         tr = Transformer.from_crs(plan.crs, ds.crs, always_xy=True)
         ex, ey = tr.transform(dx, dy)
-        vals = np.array([np.nan if np.ma.is_masked(v[0]) else float(v[0]) for v in ds.sample(zip(ex, ey), masked=True)], dtype="float64")
+        vals = np.array([np.nan if np.ma.is_masked(v[0]) else float(v[0]) for v in ds.sample(zip(ex, ey, strict=True), masked=True)], dtype="float64")
         nod = ds.nodata
     if nod is not None:
         vals[vals == nod] = np.nan

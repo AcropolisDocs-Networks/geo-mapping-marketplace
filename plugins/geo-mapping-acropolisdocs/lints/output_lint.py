@@ -599,7 +599,7 @@ def check_bleed_pdf(path: str, size_mm: tuple[float, float], bleed_mm: float, cr
     if abs(tw - size_mm[0]) > PDF_PAGE_TOLERANCE_MM or abs(th - size_mm[1]) > PDF_PAGE_TOLERANCE_MM:
         out.append(finding("MAP-OUT-015", "BLOCK", f"{p.name}: the TrimBox is {tw:.1f} x {th:.1f} mm, not the {size_mm[0]:.1f} x {size_mm[1]:.1f} mm sheet", [tw, th]))
     want = (trim[0] - bleed_mm, trim[1] - bleed_mm, trim[2] + bleed_mm, trim[3] + bleed_mm)
-    if any(abs(a_ - b_) > BLEED_TOLERANCE_MM for a_, b_ in zip(bleed, want)):
+    if any(abs(a_ - b_) > BLEED_TOLERANCE_MM for a_, b_ in zip(bleed, want, strict=True)):
         out.append(finding("MAP-OUT-015", "BLOCK", f"{p.name}: the BleedBox is not the sheet plus {bleed_mm:g} mm on every side", [round(v, 2) for v in bleed]))
     if media[0] > bleed[0] + 1e-3 or media[1] > bleed[1] + 1e-3 or media[2] < bleed[2] - 1e-3 or media[3] < bleed[3] - 1e-3:
         out.append(finding("MAP-OUT-015", "BLOCK", f"{p.name}: the BleedBox lies outside the page (MediaBox)", None))

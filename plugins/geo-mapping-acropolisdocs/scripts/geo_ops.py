@@ -1124,7 +1124,7 @@ def op_grid(gdf, p: dict, ctx: Ctx) -> OpResult:
     table = table[table["count"] >= min_count]
     cells_ix = table.index.values
     cx, cy = cells_ix % nx, cells_ix // nx
-    geoms = [shapely.box(minx + i * sm, miny + j * sm, minx + (i + 1) * sm, miny + (j + 1) * sm) for i, j in zip(cx, cy)]
+    geoms = [shapely.box(minx + i * sm, miny + j * sm, minx + (i + 1) * sm, miny + (j + 1) * sm) for i, j in zip(cx, cy, strict=True)]
     out = gpd.GeoDataFrame({"cell": cells_ix.astype(int), "col": cx.astype(int), "row": cy.astype(int), **{c: table[c].values for c in table.columns}}, geometry=geoms, crs=crs)
     out = _back(out, gdf.crs).reset_index(drop=True)
     note = (f"Square grid of {_fmt(sv)} {su} cells laid in {crs} ({why}) over {'the layer' if extent == 'layer' else 'the given box'}: "

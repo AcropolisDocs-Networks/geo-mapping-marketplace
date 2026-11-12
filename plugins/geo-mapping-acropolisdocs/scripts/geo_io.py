@@ -641,7 +641,7 @@ def _read_csv(p: Path, layer, crs_assume, lat_col, lon_col, wkt_col, encoding, m
             if CRS.from_user_input(crs_text).is_geographic:
                 raise GeoIOError(f"columns '{cols['lon']}' and '{cols['lat']}' hold projected coordinates (values beyond 180/90 degrees), but {crs_text} is a degree CRS; name the projected CRS they were written in")
         geom = shapely.points(lon.to_numpy(dtype="float64"), lat.to_numpy(dtype="float64"))
-        geom = [None if (a != a or b != b) else g for g, a, b in zip(geom, lat, lon)]
+        geom = [None if (a != a or b != b) else g for g, a, b in zip(geom, lat, lon, strict=True)]
         if bad:
             notes.append(Note("MAP-DATA-003", "WARN", f"{bad} row(s) have no usable coordinates; their geometry is empty"))
         gdf = gpd.GeoDataFrame(df, geometry=gpd.array.from_shapely(geom), crs=None)

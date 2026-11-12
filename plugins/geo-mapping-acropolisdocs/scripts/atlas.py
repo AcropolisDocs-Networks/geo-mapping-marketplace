@@ -86,6 +86,7 @@ def norm_options(opt: dict) -> dict:
             "shared_classes": o.get("shared_classes") is not False, "index_page": o.get("index_page") is not False,
             "title": o.get("title") or ("{title}" if by == "time" else "{title}, {value}"),
             "by": by, "cumulative": cum, "unit": str(o.get("unit") or "auto"), "planned": planned, "labels": dict(o.get("labels") or {}),
+            "tiles": _flag(o.get("tiles"), False),             # 1.12.0: keep the MapSpec's tile basemap, prepared per page extent
             "animate": _list(o.get("animate")), "animate_sizes": _list(o.get("animate_sizes")) or ["square", "slide"],
             "hold": float(o.get("hold") or 1.0), "last_hold": float(o.get("last_hold") or 3.0),
             "contact_sheet": _flag(o.get("contact_sheet"), False)}
@@ -153,8 +154,9 @@ def discover(spec_path, opt: dict) -> dict:
     counts = {v: int((g[o["field"]].astype(str).str.strip() == v).sum()) for v in values}
     shared = _shared(o, lay, fs)
     tiles = (plan.spec.get("basemap") or {}).get("provider") not in (None, "none", "bundled")
-    if tiles:
-        fs.append(finding("MAP-ATL-004", "INFO", "a tile basemap is prepared for one extent, so an atlas draws the bundled basemap instead"))
+    if tiles and not o.get("tiles"):
+        fs.append(finding("MAP-ATL-004", "INFO", "a tile basemap is prepared for one extent, so an atlas draws the bundled basemap instead; "
+                          "tiles=true keeps it (one composite per page extent, inside the provider's tile caps)"))
     return {"options": o, "layer": lay.id, "role": lay.role, "field": o["field"], "values": values, "counts": counts, "shared": shared, "findings": fs, "tiles": tiles,
             "base_title": text_lint.title_text(plan.spec), "base_id": str(plan.spec["id"]), "gdf": g}
 
@@ -219,16 +221,17 @@ def _discover_time(plan, lay, o: dict) -> dict:
         if gaps:
             fs.append(finding("MAP-ATL-009", "INFO", f"{len(gaps)} {per.word}(s) between the first and the last have no features and get no page: {', '.join(gaps[:8])}", gaps))
     raw = g[fld].astype(str).tolist()
-    at = {v: sorted({r for r, k in zip(raw, per.keys) if k == v}) for v in values}
-    upto = {v: sorted({r for r, k in zip(raw, per.keys) if k is not None and k <= v}) for v in values}
+    at = {v: sorted({r for r, k in zip(raw, per.keys, strict=True) if k == v}) for v in values}
+    upto = {v: sorted({r for r, k in zip(raw, per.keys, strict=True) if k is not None and k <= v}) for v in values}
     counts = {v: sum(1 for k in per.keys if k == v) for v in values}
     shared = _shared(o, lay, fs)
     if o["cumulative"] and lay.cls is not None:
         fs.append(finding("MAP-ATL-009", "INFO", f"cumulative pages draw '{lay.id}' as planned, earlier and this {per.word}; its classes are not drawn"))
         shared = None
     tiles = (plan.spec.get("basemap") or {}).get("provider") not in (None, "none", "bundled")
-    if tiles:
-        fs.append(finding("MAP-ATL-004", "INFO", "a tile basemap is prepared for one extent, so an atlas draws the bundled basemap instead"))
+    if tiles and not o.get("tiles"):
+        fs.append(finding("MAP-ATL-004", "INFO", "a tile basemap is prepared for one extent, so an atlas draws the bundled basemap instead; "
+                          "tiles=true keeps it (one composite per page extent, inside the provider's tile caps)"))
     bb = np.array([l.gdf.to_crs("EPSG:4326").total_bounds for l in plan.layers
                    if l.role not in ("context", "labels", "hillshade", "contour") and l.kind != "raster" and len(l.gdf)])
     bbox = [float(bb[:, 0].min()), float(bb[:, 1].min()), float(bb[:, 2].max()), float(bb[:, 3].max())] if len(bb) else None
@@ -305,8 +308,13 @@ def make_specs(spec_path, disc: dict, out_dir: Path) -> list[dict]:
         title["on"] = True
         title["text"] = o["title"].format(title=disc["base_title"], value=v, field=o["field"])
         s.setdefault("elements", {})["title"] = title
-        if disc["tiles"]:
+        if disc["tiles"] and not o.get("tiles"):
             s["basemap"] = {"provider": "bundled"}
+        elif disc["tiles"]:
+            # 1.12.0: the page keeps the tile basemap. Pages that show the same extent (a time atlas, a filter atlas) share one composite;
+            # a focus atlas zooms each page, so each has its own
+            own_extent = o.get("by") != "time" and o.get("mode") == "focus"
+            s["basemap"] = {**(s.get("basemap") or {}), "prepared_as": s["id"] if own_extent else f"{disc['base_id']}-atlas"}
         p = out_dir / f"{sl}.yaml"
         p.write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True))
         maps.append({"value": v, "slug": sl, "id": s["id"], "spec": str(p), "title": title["text"], "features": disc["counts"][v]})
@@ -408,8 +416,13 @@ def _time_specs(base_spec: dict, spec_path: Path, disc: dict, out_dir: Path) -> 
         title["frame_label"] = lab
         title["frame_label_reserve"] = longest
         s.setdefault("elements", {})["title"] = title
-        if disc["tiles"]:
+        if disc["tiles"] and not o.get("tiles"):
             s["basemap"] = {"provider": "bundled"}
+        elif disc["tiles"]:
+            # 1.12.0: the page keeps the tile basemap. Pages that show the same extent (a time atlas, a filter atlas) share one composite;
+            # a focus atlas zooms each page, so each has its own
+            own_extent = o.get("by") != "time" and o.get("mode") == "focus"
+            s["basemap"] = {**(s.get("basemap") or {}), "prepared_as": s["id"] if own_extent else f"{disc['base_id']}-atlas"}
         p = out_dir / f"{sl}.yaml"
         p.write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True))
         feats = tm_["cumulative_counts"][v] if o["cumulative"] else disc["counts"][v]
@@ -429,7 +442,7 @@ def compare_classes(results: list[dict]) -> list[dict]:
         if not plan:
             continue
         sig = []
-        for l, ml in zip(plan.layers, meth.get("layers") or []):
+        for l, ml in zip(plan.layers, meth.get("layers") or [], strict=True):
             c = ml.get("classification")
             if c is not None:
                 sig.append((l.id, tuple(c.get("breaks") or ()), c.get("classes"), tuple(l.colors or ())))
@@ -714,6 +727,64 @@ def stage_animate(c) -> dict:
     meta_p.write_text(json.dumps(meta, indent=2))
     kinds = ", ".join(Path(f["path"]).name for f in r["files"])
     return {"ok": not r["blocked"], "summary": f"{len(r['files'])} animation file(s): {kinds}" + (f"; {r['notes'][0]}" if r["notes"] else ""), "findings": r["findings"]}
+
+
+# ---------------------------------------------------------------------------------------------------------------- tile basemaps (1.12.0)
+def tile_groups(maps: list[dict]) -> dict:
+    """{composite key: first page spec that uses it} for pages that keep a tile basemap (`basemap.prepared_as`)."""
+    out: dict = {}
+    for m in maps:
+        key = (gc.load_mapspec(Path(m["spec"])).get("basemap") or {}).get("prepared_as")
+        if key and key not in out:
+            out[key] = m["spec"]
+    return out
+
+
+def prepare_tiles(maps: list[dict], *, tier: str = "T1", http=None, env=None, sleep=None) -> dict:
+    """The tile composites an atlas's pages need: one per distinct page extent, each inside the provider's cap for one map, and all of them
+    together inside basemap_render.HARD_CAP tiles (an atlas is one deliverable, not a way round the cap). When the total would pass it, or a
+    composite cannot be made, the pages are rewritten to the bundled basemap and a finding says why. -> {composites, tiles, fetched, findings}."""
+    import time
+    import yaml
+    import basemap_render as br
+    groups = tile_groups(maps)
+    fs: list[dict] = []
+    if not groups:
+        return {"composites": 0, "tiles": 0, "fetched": 0, "findings": fs}
+
+    def to_bundled(why: str, sev: str = "WARN"):
+        for m in maps:
+            s = gc.load_mapspec(Path(m["spec"]))
+            if (s.get("basemap") or {}).get("prepared_as"):
+                s["basemap"] = {"provider": "bundled"}
+                Path(m["spec"]).write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True))
+        fs.append(finding("MAP-ATL-004", sev, f"the atlas draws the bundled basemap: {why}"))
+
+    plans = {}
+    for key, spec in groups.items():
+        p = br.plan_render(spec, tier=tier, env=env)
+        if not p["ok"]:
+            why = next((f["message"] for f in p["findings"] if f["severity"] == "BLOCK"), "the tiles cannot be planned")
+            to_bundled(why)
+            return {"composites": 0, "tiles": 0, "fetched": 0, "findings": fs}
+        plans[key] = p
+    total = sum(len(p["plan"]["tiles"]) for p in plans.values())
+    if total > br.HARD_CAP:
+        to_bundled(f"its {len(plans)} page extents need {total} tiles together, more than the {br.HARD_CAP} one deliverable may take; "
+                   "use fewer pages, mode=filter (one extent for all pages) or your own tile file")
+        return {"composites": 0, "tiles": total, "fetched": 0, "findings": fs}
+    fetched = 0
+    for key, spec in groups.items():
+        r = br.render(spec, tier=tier, http=http, env=env, outroot=br.out_dir(key), **({"sleep": sleep} if sleep else {"sleep": time.sleep}))
+        if not r["ok"]:
+            why = next((f["message"] for f in r["findings"] if f["severity"] == "BLOCK"), "a composite could not be made")
+            to_bundled(why)
+            return {"composites": 0, "tiles": total, "fetched": fetched, "findings": fs}
+        fetched += int(r["record"].get("fetched") or 0)
+        fs += [f for f in r["findings"] if f["severity"] == "WARN"]
+    fs.append(finding("MAP-ATL-004", "INFO", f"tile basemap kept: {len(groups)} composite(s) for {sum(1 for m in maps)} page(s), {total} tile(s), "
+                      f"{fetched} fetched now and the rest read from the cache"))
+    return {"composites": len(groups), "tiles": total, "fetched": fetched, "findings": fs}
 
 
 # ---------------------------------------------------------------------------------------------------------------- the whole run (the pipeline calls the pieces; this is the CLI path)

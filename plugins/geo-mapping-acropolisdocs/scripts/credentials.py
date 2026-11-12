@@ -16,6 +16,8 @@ or a printed command. Whatever this module learns about a credential file is a h
     credentials.py check NAME [--probe --confirm-probe HOST]
     credentials.py rotate NAME [--finish] [--probe --confirm-probe HOST]
     credentials.py remove NAME [--delete-files]
+    credentials.py keychain NAME [--to-file]            1.12.0: keep it in the OS keychain (Windows Credential Manager, macOS Keychain) instead
+                                                        of a file, or move it back; needs the optional `keyring` package
     credentials.py audit [FOLDER]                        secret patterns (and, where the credential folder is here, exact values) by file and line
     credentials.py scan PATH... [--allow FILE]           the release-gate secret scan (MAP-CRED-010)
     every command takes --dir FOLDER (the credential folder, for the connected-folder fallback) and --json
@@ -649,11 +651,55 @@ def inject_problem(text) -> str:
 
 
 # ---------------------------------------------------------------------------------------------------------------- the store
+# ---------------------------------------------------------------------------------------------------------------- OS keychain (1.12.0)
+KEYCHAIN_SERVICE = "geo-mapping credentials"
+_KC_PATHS: dict = {}                  # marker path of a keychain-held credential -> (keychain, name); see Store.path_of
+
+
+class OSKeychain:
+    """The operating system's own credential store, through the optional `keyring` package: Windows Credential Manager, the macOS Keychain,
+    the Secret Service on Linux. A credential moved there has no file: the value is read in this process at request time, as a file is, and
+    is masked the same way. Nothing here returns or prints a value except get(), to the caller that sends it."""
+
+    def why_not(self) -> str | None:
+        """None when a real keychain is usable here, else the reason in plain words."""
+        try:
+            import keyring
+        except ImportError:
+            return "the keyring package is not installed (python3 -m pip install keyring)"
+        try:
+            kr = keyring.get_keyring()
+        except Exception as ex:  # noqa: BLE001
+            return f"the keychain could not be opened ({type(ex).__name__})"
+        mod = type(kr).__module__
+        if mod.endswith((".fail", ".null")) or getattr(kr, "priority", 1) <= 0:
+            return "this computer offers no keychain to this process (no desktop session, or no backend)"
+        return None
+
+    def get(self, name: str) -> str | None:
+        import keyring
+        try:
+            return keyring.get_password(KEYCHAIN_SERVICE, name)
+        except Exception:  # noqa: BLE001 - a locked or missing keychain reads as "not there"
+            return None
+
+    def set(self, name: str, value: str) -> None:
+        import keyring
+        keyring.set_password(KEYCHAIN_SERVICE, name, value)
+
+    def delete(self, name: str) -> None:
+        import keyring
+        with contextlib.suppress(Exception):
+            keyring.delete_password(KEYCHAIN_SERVICE, name)
+
+
 class Store:
     """The credential folder and its registry. `root` is the folder (default: from the person's home); `plat` the platform seam; `guard_dirs`
     folders the credential must not sit in, as (label, path) pairs, beside the plugin and the working folder."""
 
-    def __init__(self, root: Path | str | None = None, *, home: Path | None = None, plat: Platform | None = None, guard_dirs=(), entries: list[dict] | None = None):
+    def __init__(self, root: Path | str | None = None, *, home: Path | None = None, plat: Platform | None = None, guard_dirs=(), entries: list[dict] | None = None,
+                 keychain=None):
+        self.kc = keychain or OSKeychain()               # 1.12.0: where a credential with `store: keychain` is kept
         self.home = Path(home) if home else user_home()
         self.root = Path(root).expanduser() if root else default_dir(self.home)
         self.plat = plat or Platform()
@@ -710,7 +756,18 @@ class Store:
         if not f:
             return None
         p = Path(f)
-        return p if p.is_absolute() else self.root / p
+        p = p if p.is_absolute() else self.root / p
+        if which == "file" and e.get("store") == "keychain" and e.get("keychain_name"):
+            # 1.12.0: the credential is in the OS keychain. Its file name is kept as a marker (no such file exists): reading the marker reads
+            # the keychain, and the file checks answer for the keychain instead of a file.
+            _KC_PATHS[str(p)] = (self.kc, str(e["keychain_name"]))
+        return p
+
+    def has_value(self, e: dict, path: Path | None) -> bool:
+        if path is None:
+            return False
+        kc = _KC_PATHS.get(str(path)) if e.get("store") == "keychain" else None
+        return (kc[0].get(kc[1]) is not None) if kc else path.is_file()
 
     def mark_rejected(self, name: str, why: str, url: str | None = None, via: str | None = None) -> None:
         """1.0.2: also which request the service refused (its address as shown, with *** for the key) and through which profile, so the
@@ -739,6 +796,17 @@ class Store:
         a = {"exists": False, "regular": False, "private": False, "folder_private": False, "shaped": False, "shape_matches": None, "synced": None,
              "inside": [], "mount_synthetic": False, "privacy_how": None, "problems": [], "error": None}
         p = Path(path)
+        kc = _KC_PATHS.get(str(p))
+        if kc is not None:                               # 1.12.0: held by the OS keychain, which keeps it private to this account
+            v = kc[0].get(kc[1])
+            a.update(exists=v is not None, regular=v is not None, private=True, folder_private=True, privacy_how="OS keychain")
+            if v is not None:
+                a["shaped"] = _shaped(v, kind)
+                if a["shaped"] and shape:
+                    with contextlib.suppress(re.error):
+                        a["shape_matches"] = bool(re.fullmatch(shape, v.partition(":")[2] if kind == "userkey" else v))
+            del v
+            return a
         a["inside"] = [lbl for lbl, d in self.guards() if _under(p, d) or _under(p.parent, d)]
         a["synced"] = synced_by(p.parent, self.home, self.plat)
         mp, fstype = (None, None) if self.plat.windows else mount_of(p, self.plat.mounts())
@@ -864,6 +932,12 @@ def _win_hint(name: str, path: Path) -> str:
 
 
 def _read_value(p: Path) -> str:
+    kc = _KC_PATHS.get(str(p))
+    if kc is not None:                                   # 1.12.0: a credential held by the OS keychain
+        v = kc[0].get(kc[1])
+        if v is None:
+            raise FileNotFoundError("the credential is not in the keychain")
+        return v.strip()
     t = Path(p).read_bytes()
     if len(t) > 8192:
         raise OSError("the credential file is larger than a key")
@@ -1296,7 +1370,7 @@ def add(store: Store, name: str, *, cls: str | None = None, restricted: bool = F
 
 def _row(store: Store, name: str, e: dict, now: dt.date) -> dict:
     path = store.path_of(e)
-    exists = bool(path and path.is_file())
+    exists = store.has_value(e, path)
     st_ = e.get("status") or "unchecked"
     if not exists:
         st_ = "missing"
@@ -1308,6 +1382,7 @@ def _row(store: Store, name: str, e: dict, now: dt.date) -> dict:
     privacy = None if a is None else ("yes" if a["private"] and a["folder_private"] else "not verifiable here" if a["private"] is None and a["mount_synthetic"] else "no")
     return {"name": name, "host": e.get("host"), "kind": e.get("kind"), "class": e.get("class", "secret"), "status": st_, "last_checked": e.get("last_checked"),
             "review_after": e.get("review_after"), "expires": e.get("expires"), "age_days": (now - created).days if created else None, "private": privacy,
+            "kept_in": "OS keychain" if e.get("store") == "keychain" else "file",
             "filled": bool(a and a["shaped"]), "old_file_pending": (e.get("previous_file") if prev and prev.is_file() else None),
             "next_file_pending": e.get("next_file"), "restricted": e.get("restricted") if e.get("class") == "browser" else None,
             "findings": _review_warnings(name, e, now) + ([finding("MAP-CRED-009", "WARN", f"'{name}' was rejected and has not been rotated; get a new key and run map-credentials rotate {name}", name)]
@@ -1487,6 +1562,9 @@ def rotate(store: Store, name: str, *, finish: bool = False, probe: bool = False
     e = store.get(name)
     if e is None:
         return {"ok": False, "findings": [not_registered(name, store)]}
+    if e.get("store") == "keychain":
+        return {"ok": False, "findings": [finding("MAP-CRED-001", "BLOCK", f"'{name}' is kept in the OS keychain. To replace it: map-credentials keychain {name} --to-file, "
+                                                  f"rotate it as a file, then map-credentials keychain {name} again")]}
     if not finish:
         cur = e.get("file")
         taken = {cur, e.get("previous_file")}
@@ -1528,6 +1606,89 @@ def rotate(store: Store, name: str, *, finish: bool = False, probe: bool = False
                      f"If the old key may have leaked, run /{_prefix()}:map-credentials audit to look for it in your working folder."]}
 
 
+def keychain(store: Store, name: str, *, to_file: bool = False) -> dict:
+    """1.12.0: move a registered credential from its file into the operating system's keychain (Windows Credential Manager, macOS Keychain,
+    Secret Service), or back with to_file. Into the keychain: the file must pass every check first; the value is stored, read back and
+    compared, and only then is the file overwritten and deleted. Back to a file: a private file is written, read back and compared, and only
+    then is the keychain entry deleted. The value is never returned, printed or logged."""
+    e = store.get(name)
+    if e is None:
+        return {"ok": False, "findings": [not_registered(name, store)]}
+    why = store.kc.why_not()
+    if why:
+        return {"ok": False, "findings": [finding("MAP-CRED-012", "BLOCK", f"the OS keychain cannot be used here: {why}. '{name}' stays as it is")]}
+    kind = e.get("kind", "apikey")
+    if not to_file:
+        if e.get("store") == "keychain":
+            return {"ok": True, "name": name, "kept_in": "OS keychain", "findings": [finding("MAP-CRED-012", "INFO", f"'{name}' is already in the OS keychain")]}
+        if e.get("next_file"):
+            return {"ok": False, "findings": [finding("MAP-CRED-001", "BLOCK", f"a rotation of '{name}' is open; finish it first (map-credentials rotate {name} --finish)")]}
+        path = store.path_of(e)
+        a = store.check_file(path, kind, e.get("shape"), e.get("host"))
+        fs = store.file_findings(name, path, a, kind)
+        if blocks(fs):
+            return {"ok": False, "findings": fs}
+        v = _read_value(path)
+        note_value(v)
+        kname = f"{name}@{(e.get('host') or '').lower()}"
+        try:
+            store.kc.set(kname, v)
+            back = store.kc.get(kname)
+        except Exception as ex:  # noqa: BLE001 - the keychain refused: nothing changed
+            return {"ok": False, "findings": [finding("MAP-CRED-012", "BLOCK", f"the keychain did not take '{name}' ({type(ex).__name__}); the file is unchanged")]}
+        if back != v:
+            store.kc.delete(kname)
+            return {"ok": False, "findings": [finding("MAP-CRED-012", "BLOCK", f"the keychain did not give '{name}' back as stored; the file is unchanged")]}
+        wiped = False
+        try:
+            n = path.stat().st_size
+            with open(path, "r+b") as f:
+                f.write(b"\0" * n)
+                f.flush()
+                os.fsync(f.fileno())
+            path.unlink()
+            wiped = True
+        except OSError:
+            pass
+        del v, back
+        store.update(name, store="keychain", keychain_name=kname)
+        out = {"ok": True, "name": name, "kept_in": "OS keychain", "file_deleted": wiped,
+               "findings": [] if wiped else [finding("MAP-CRED-002", "WARN", f"the old file {_shown(path, store.home)} could not be deleted; delete it yourself")]}
+        out["next"] = f"map-credentials check {name} confirms it reads back; map-credentials keychain {name} --to-file moves it back to a file"
+        return out
+    if e.get("store") != "keychain":
+        return {"ok": True, "name": name, "kept_in": "file", "findings": [finding("MAP-CRED-012", "INFO", f"'{name}' is already a file")]}
+    kname = str(e.get("keychain_name") or "")
+    v = store.kc.get(kname)
+    if v is None:
+        return {"ok": False, "findings": [finding("MAP-CRED-002", "BLOCK", f"'{name}' is not in the keychain any more; add it again (map-credentials add {name})")]}
+    note_value(v)
+    _KC_PATHS.pop(str(store.path_of(e)), None)
+    p = Path(e["file"])
+    path = p if p.is_absolute() else store.root / p
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(v + "\n")
+    except FileExistsError:
+        return {"ok": False, "findings": [finding("MAP-CRED-002", "BLOCK", f"{_shown(path, store.home)} is already there; move it away first")]}
+    except OSError as ex:
+        return {"ok": False, "findings": [finding("MAP-CRED-002", "BLOCK", f"the file could not be written ({type(ex).__name__}); '{name}' stays in the keychain")]}
+    _try(lambda: store.fix_privacy(path.parent, True), False)
+    _try(lambda: store.fix_privacy(path), False)
+    want = v.strip()
+    ok = _try(lambda: Path(path).read_bytes().decode("utf-8-sig").strip() == want, False)
+    if not ok:
+        with contextlib.suppress(OSError):
+            path.unlink()
+        return {"ok": False, "findings": [finding("MAP-CRED-002", "BLOCK", f"the file did not read back as written; '{name}' stays in the keychain")]}
+    store.kc.delete(kname)
+    store.update(name, store="file", keychain_name=None)
+    a = store.check_file(path, kind, e.get("shape"), e.get("host"))
+    return {"ok": True, "name": name, "kept_in": "file", "file": _shown(path, store.home), "findings": [x for x in store.file_findings(name, path, a, kind) if x["severity"] != "INFO"]}
+
+
 def remove(store: Store, name: str, *, delete_files: bool = False, services_dir: Path | None = None) -> dict:
     """Drop the registry entry and every profile reference to cred:NAME; list the files for the person to delete (deleted only when asked)."""
     import yaml
@@ -1549,6 +1710,8 @@ def remove(store: Store, name: str, *, delete_files: bool = False, services_dir:
             y["auth"] = au
             p.write_text(yaml.safe_dump(y, sort_keys=False), encoding="utf-8")
             profiles.append(y.get("profile") or p.stem)
+    if e.get("store") == "keychain" and e.get("keychain_name"):
+        store.kc.delete(str(e["keychain_name"]))         # the keychain entry goes with the registry entry
     files = [store.path_of(e, k) for k in ("file", "next_file", "previous_file")]
     files = [f for f in files if f and f.exists()]
     deleted, left = [], []
@@ -1869,6 +2032,9 @@ def main(argv=None) -> int:
     p = sub.add_parser("remove")
     p.add_argument("name")
     p.add_argument("--delete-files", action="store_true")
+    p = sub.add_parser("keychain", help="1.12.0: move a credential into the OS keychain, or back to a file")
+    p.add_argument("name")
+    p.add_argument("--to-file", action="store_true")
     p = sub.add_parser("audit")
     p.add_argument("folder", nargs="?")
     p = sub.add_parser("scan")
@@ -1897,6 +2063,8 @@ def main(argv=None) -> int:
                 res = rotate(store, a.name, finish=a.finish, probe=a.probe, probe_host=a.confirm_probe)
             elif a.op == "remove":
                 res = remove(store, a.name, delete_files=a.delete_files)
+            elif a.op == "keychain":
+                res = keychain(store, a.name, to_file=a.to_file)
             else:
                 res = audit(store, Path(a.folder) if a.folder else None)
         except CredentialError as ex:

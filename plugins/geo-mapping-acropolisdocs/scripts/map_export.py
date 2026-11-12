@@ -237,13 +237,17 @@ def strip_inkscape(svg: str) -> str:
 class _Face:
     """Inter at one weight, for drawing glyph outlines: the glyph set, advances, the `kern` pairs of GPOS and the `tnum` digits of GSUB."""
 
-    def __init__(self, weight: int):
+    def __init__(self, weight: int, path=None):
         from fontTools.ttLib import TTFont
         from fontTools.varLib import instancer
         import textmeasure as tm
-        f = TTFont(str(tm.font_file()))
+        f = TTFont(str(path or tm.font_file()))             # 1.12.0: a style pack's own face (outline_text_svg), Inter otherwise
         if "fvar" in f:
-            f = instancer.instantiateVariableFont(f, {"wght": weight}, inplace=False)
+            axes = {a.axisTag: a for a in f["fvar"].axes}
+            loc = {tag: a.defaultValue for tag, a in axes.items() if tag != "wght"}      # an optical-size or other axis stays at its default
+            if "wght" in axes:
+                loc["wght"] = max(axes["wght"].minValue, min(axes["wght"].maxValue, float(weight)))
+            f = instancer.instantiateVariableFont(f, loc, inplace=False)
         self.font = f
         self.upm = f["head"].unitsPerEm
         self.cmap = f.getBestCmap()
@@ -277,7 +281,7 @@ class _Face:
                 continue
             cov = st.Coverage.glyphs
             if st.Format == 1:
-                for g1, ps in zip(cov, st.PairSet):
+                for g1, ps in zip(cov, st.PairSet, strict=True):
                     for rec in ps.PairValueRecord:
                         v = getattr(rec.Value1, "XAdvance", 0) if rec.Value1 else 0
                         if v:
@@ -311,11 +315,13 @@ class _Face:
 _FACES: dict = {}
 
 
-def _face(weight: int) -> _Face:
+def _face(weight: int, path=None) -> _Face:
     w = min((400, 500, 600, 700), key=lambda v: abs(v - int(weight)))
-    if w not in _FACES:
-        _FACES[w] = _Face(w)
-    return _FACES[w]
+    key = (str(path) if path else None, w)
+    if key not in _FACES:
+        _FACES[key] = _Face(w, path)
+        _FACES[key].key = key
+    return _FACES[key]
 
 
 _HB: dict = {}
@@ -323,6 +329,7 @@ _HB: dict = {}
 
 def _hb_font(fc: "_Face", weight: int):
     """1.0.0 (TODO M16): a HarfBuzz font for the instanced face, when uharfbuzz is installed (optional); None otherwise."""
+    weight = (getattr(fc, "key", (None, weight))[0], weight)
     if weight in _HB:
         return _HB[weight]
     try:
@@ -353,16 +360,16 @@ def _shape(fc: "_Face", weight: int, s: str, tnum: bool):
     b.guess_segment_properties()
     hb.shape(f, b, {"kern": True, "liga": True, "calt": True, "tnum": bool(tnum)})
     order = fc.font.getGlyphOrder()
-    return [(order[i.codepoint], p.x_advance, p.x_offset, p.y_offset) for i, p in zip(b.glyph_infos, b.glyph_positions)]
+    return [(order[i.codepoint], p.x_advance, p.x_offset, p.y_offset) for i, p in zip(b.glyph_infos, b.glyph_positions, strict=True)]
 
 
 def text_path(s: str, x: float, y: float, size_mm: float, weight: int = 400, anchor: str = "start", tnum: bool = False,
-              tracking_mm: float = 0.0) -> tuple[str, float]:
+              tracking_mm: float = 0.0, face_file=None) -> tuple[str, float]:
     """(path data, advance in mm) for `s` set in Inter at `size_mm`, its baseline starting at (x, y) as SVG's text-anchor places it, kerned;
     shaped by HarfBuzz (ligatures and contextual forms too) when uharfbuzz is installed."""
     from fontTools.pens.svgPathPen import SVGPathPen
     from fontTools.pens.transformPen import TransformPen
-    fc = _face(weight)
+    fc = _face(weight, face_file)
     k = size_mm / fc.upm
     shaped = _shape(fc, min((400, 500, 600, 700), key=lambda v: abs(v - int(weight))), s, tnum)
     if shaped is not None:
@@ -382,15 +389,18 @@ def text_path(s: str, x: float, y: float, size_mm: float, weight: int = 400, anc
     x0 = x - (total / 2 if anchor == "middle" else total if anchor == "end" else 0.0)
     pen = SVGPathPen(fc.glyphs, ntos=lambda v: (f"{v:.3f}".rstrip("0").rstrip(".") or "0"))
     cx = x0
-    for g, a, (dx, dy) in zip(names, adv, offs):
+    for g, a, (dx, dy) in zip(names, adv, offs, strict=True):
         if g in fc.glyphs:
             fc.glyphs[g].draw(TransformPen(pen, (k, 0, 0, -k, cx + dx, y - dy)))
         cx += a
     return pen.getCommands(), total
 
 
-def outline_text_svg(svg: str) -> tuple[str, dict]:
-    """Every <text> drawn as Inter glyph outlines: a <path> with the text's own paint, transform, id and data attributes. A text's fill pass
+def outline_text_svg(svg: str, style=None) -> tuple[str, dict]:
+    """1.12.0: under a style pack that brings its own faces (`style`, a map_style.Style) each text is outlined in the face it is set in: the
+    title face on `.gm-r-title`, the label face on `.gm-r-label`, the body face elsewhere; a role the pack leaves to the brand stays Inter.
+
+    Every <text> drawn as Inter glyph outlines: a <path> with the text's own paint, transform, id and data attributes. A text's fill pass
     becomes a group whose accessible name and <title> are the words; its halo pass (a stroked copy under it) is a path hidden from screen
     readers. The words are also listed in the root <metadata> (geo:outlined_text), and the @font-face is dropped: nothing needs Inter.
     Returns (svg, {texts, halos, chars})."""
@@ -400,6 +410,17 @@ def outline_text_svg(svg: str) -> tuple[str, dict]:
     stats = {"texts": 0, "halos": 0, "chars": 0}
     words: list[str] = []
     keep = ("fill", "fill-opacity", "stroke", "stroke-width", "stroke-linejoin", "stroke-opacity", "opacity", "transform", "id", "visibility")
+    def face_for(classes: str):
+        if style is None or getattr(style, "fonts", "brand") == "brand":
+            return None
+        role = "title" if "gm-r-title" in classes else "label" if "gm-r-label" in classes else "body"
+        f = (style.type or {}).get(role) or (style.type or {}).get("body")
+        if not f or f.get("brand") or not f.get("file"):
+            return None
+        p = Path(style.dir) / f["file"]
+        return p if p.is_file() else None
+
+    stats["faces"] = set()
     for el in list(root.iter(SVG + "text")):
         s = "".join(el.itertext())
         a = el.attrib
@@ -407,8 +428,10 @@ def outline_text_svg(svg: str) -> tuple[str, dict]:
             el.getparent().remove(el)
             continue
         size = float(a.get("font-size") or 3.0)
+        ff = face_for(a.get("class") or "")
+        stats["faces"].add(ff.name if ff else "Inter")
         d, _w = text_path(s, float(a.get("x") or 0), float(a.get("y") or 0), size, int(float(a.get("font-weight") or 400)),
-                          a.get("text-anchor") or "start", "gm-num" in (a.get("class") or ""), float(a.get("letter-spacing") or 0))
+                          a.get("text-anchor") or "start", "gm-num" in (a.get("class") or ""), float(a.get("letter-spacing") or 0), face_file=ff)
         path = etree.Element(SVG + "path")
         path.set("d", d or "M0 0")
         for k_ in keep:
@@ -449,6 +472,7 @@ def outline_text_svg(svg: str) -> tuple[str, dict]:
         ot = etree.SubElement(desc, GEO + "outlined_text")
         ot.text = "\n".join(words)
     root.set("data-text-outlined", "true")
+    stats["faces"] = sorted(stats["faces"])
     return etree.tostring(root, encoding="unicode"), stats
 
 
@@ -607,7 +631,7 @@ def _variant_stem(stem: str, tag: str) -> str:
 
 
 def export(svg: str, out_dir: Path, stem: str, formats: list[str], *, props: dict, title: str, alt: str, dpi: float, subject: str = "",
-           options: dict | None = None) -> dict:
+           options: dict | None = None, style=None) -> dict:
     """Write the requested formats next to each other. Returns {files: [...], dpi, size_mm, options, variants}.
 
     `options` (options_from): a transparent PNG, a PDF with bleed (and crop marks), PDF/A-2b, the SVG as Inkscape layers and an outlined-text SVG.
@@ -657,7 +681,7 @@ def export(svg: str, out_dir: Path, stem: str, formats: list[str], *, props: dic
         if str(p) not in res["files"]:
             res["files"].append(str(p))
     if opt["outline_text"]:
-        osvg, stats = outline_text_svg(svg)
+        osvg, stats = outline_text_svg(svg, style)
         p = out_dir / f"{_variant_stem(stem, 'outlined')}.svg"
         p.write_text(osvg, encoding="utf-8")
         res["variants"]["outlined"] = {"file": str(p), **stats}

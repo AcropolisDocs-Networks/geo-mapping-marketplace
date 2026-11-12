@@ -171,7 +171,25 @@ def main(argv: list[str]) -> int:
 
         # ---- the plugin's own label placements (1.11.0): a point per label, drawn at its point with its own size, colours, side and angle
         PL = spec.get("placed_labels")
-        if PL:
+        OL = (PL or {}).get("outlines")
+        if OL:                                             # 1.12.0: labels in a script's own face, as their letter shapes (no font needed)
+            ol = QgsVectorLayer(f"{gpkg}|layername={OL['table']}", "Labels (outlined)", "ogr")
+            if ol.isValid():
+                from qgis.core import QgsSimpleFillSymbolLayer
+                sym = QgsFillSymbol.createSimple({"color": spec["colors"]["label"], "outline_style": "no"})
+                top = sym.symbolLayer(0)
+                top.setDataDefinedProperty(top.PropertyFillColor, QgsProperty.fromField("color"))
+                under = QgsSimpleFillSymbolLayer()
+                under.setStrokeWidthUnit(_unit("Millimeters"))
+                under.setDataDefinedProperty(under.PropertyFillColor, QgsProperty.fromExpression('if(length("halo") > 0, "halo", \'0,0,0,0\')'))
+                under.setDataDefinedProperty(under.PropertyStrokeColor, QgsProperty.fromExpression('if(length("halo") > 0, "halo", \'0,0,0,0\')'))
+                under.setDataDefinedProperty(under.PropertyStrokeWidth, QgsProperty.fromExpression('"halo_mm" * 2'))
+                sym.insertSymbolLayer(0, under)
+                ol.setRenderer(QgsSingleSymbolRenderer(sym))
+                project.addMapLayer(ol)
+                qlayers["__outlines"] = ol
+                result["items"].append("label_outlines")
+        if PL and PL.get("table"):
             ll = QgsVectorLayer(f"{gpkg}|layername={PL['table']}", "Labels", "ogr")
             if not ll.isValid():
                 result["warnings"].append("the placed labels could not be read; the map has no labels")
@@ -258,7 +276,7 @@ def main(argv: list[str]) -> int:
         layout.addLayoutItem(mp_)
         place(mp_, mr["x"], mr["y"], mr["w"], mr["h"])
         mp_.setCrs(crs)
-        mp_.setLayers(([qlayers["__labels"]] if "__labels" in qlayers else []) + [qlayers[i] for i in reversed(spec["draw_order"]) if i in qlayers])
+        mp_.setLayers(([qlayers["__labels"]] if "__labels" in qlayers else []) + ([qlayers["__outlines"]] if "__outlines" in qlayers else []) + [qlayers[i] for i in reversed(spec["draw_order"]) if i in qlayers])
         mp_.setKeepLayerSet(True)
         ex = spec["extent"]
         mp_.zoomToExtent(QgsRectangle(ex[0], ex[1], ex[2], ex[3]))

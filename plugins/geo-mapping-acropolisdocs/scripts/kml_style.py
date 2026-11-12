@@ -213,7 +213,7 @@ def legend_section(style: dict) -> dict:
     wd = style.get("widths") if kind == "line" else None
     items = [{"label": lab, "color": col, "stroke": style.get("stroke"), "shape": sd.class_shape(style, i),
               "width": (wd[i] if wd and i < len(wd) else style.get("width")),
-              "opacity": style.get("opacity", 1.0)} for i, (col, lab) in enumerate(zip(cols, labs)) if col or kind == "polygon"]
+              "opacity": style.get("opacity", 1.0)} for i, (col, lab) in enumerate(zip(cols, labs, strict=True)) if col or kind == "polygon"]
     if style.get("mode") != "single" and style.get("nodata"):
         items.append({"label": style.get("nodata_label", sd.NODATA_LABEL), "color": style["nodata_color"], "stroke": style.get("stroke"),
                       "shape": style.get("shape", "circle"), "width": style.get("width"), "opacity": style.get("opacity", 1.0)})

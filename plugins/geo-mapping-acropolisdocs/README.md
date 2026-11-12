@@ -1,4 +1,4 @@
-# geo-mapping-acropolisdocs 1.11.0
+# geo-mapping-acropolisdocs 1.12.0
 
 Cartographic maps from a request or your own geodata: print maps (SVG, PDF, PNG), interactive web maps (one self-contained HTML page), data
 conversion and analysis, public data services, travel-time areas and terrain, each checked before it is handed over and each with its sources.
@@ -58,7 +58,6 @@ or a folder named in `GEO_MAPPING_BRANDS`), so a plugin update never removes it.
 | Style packs (antique, blueprint, editorial, monochrome, sketch) | `styles/` |
 | The shipped brand pack | `brands/` |
 | Your brands: list, add, make, set the default | `/geo-mapping-acropolisdocs:brand`, skill `geo-set-brand` |
-
 ## Python packages
 
 `requirements.txt` lists what the maps need (a floor only where an older release misbehaves); it includes `mcp/requirements.txt`, the data

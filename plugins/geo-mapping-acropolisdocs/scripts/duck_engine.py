@@ -345,7 +345,7 @@ def read_csv_text(path, sep: str):
     if len(raw) != len(names) or len(set(raw)) != len(raw):
         raise EngineError("the header has repeated or unread names")
     data = {}
-    for raw_name, col in zip(raw, tab.columns):
+    for raw_name, col in zip(raw, tab.columns, strict=True):
         vals = np.array(col.to_pylist(), dtype=object)
         vals[np.equal(vals, None)] = np.nan
         data[raw_name] = vals

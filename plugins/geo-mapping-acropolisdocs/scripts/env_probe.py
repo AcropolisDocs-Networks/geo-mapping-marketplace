@@ -205,7 +205,7 @@ def main(argv=None) -> int:
     env = {
         "schema_version": 1,
         "generated_at": iso(utcnow()),
-        "plugin": {"name": own, "version": manifest.get("version"), "brand_selection": manifest["brand_selection"],
+        "plugin": {"name": own, "version": manifest.get("version"), "brand_selection": manifest.get("brand_selection", "selectable"),
                    "brands_bundled": manifest["brands_bundled"], "default_content_brand": manifest["default_content_brand"]},
         "python": {"version": platform.python_version(), "implementation": platform.python_implementation()},
         "platform": {"system": platform.system(), "machine": platform.machine()},

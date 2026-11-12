@@ -295,7 +295,7 @@ def column_html(story: dict, *, title: str, subtitle: str, message: str, logo: s
 def print_html(story: dict, pics: list, *, title: str, message: str) -> str:
     """The print view: every chapter with its static picture and its words (the live map is not printed on a story page)."""
     rows = []
-    for i, (ch, pic) in enumerate(zip(story["chapters"], pics)):
+    for i, (ch, pic) in enumerate(zip(story["chapters"], pics, strict=True)):
         img = f'<img alt="{esc(ch["title"])}: the map for this chapter" src="{pic}">' if pic else ""
         rows.append(f'<article class="gm-pch"><h2>{i + 1}. {esc(ch["title"])}</h2>{img}{paragraphs(ch["text"])}</article>')
     return f'<section id="gm-story-print" aria-label="The story, for print"><h1>{esc(title)}</h1><p>{esc(message)}</p>{"".join(rows)}</section>'

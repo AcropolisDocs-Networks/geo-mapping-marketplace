@@ -82,7 +82,7 @@ def user_default(manifest: dict) -> tuple[str | None, str | None]:
     Order: the file written by geo-set-brand, then the plugin user-config option exposed as
     CLAUDE_PLUGIN_OPTION_DEFAULT_BRAND. Whether the host exposes user config is decided by spike P5.
     """
-    if manifest["brand_selection"] != "selectable":
+    if manifest.get("brand_selection", "selectable") != "selectable":
         return None, None
     f = gc.workdir() / "user-defaults.yaml"
     if f.is_file():

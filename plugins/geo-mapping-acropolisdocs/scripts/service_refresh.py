@@ -128,7 +128,7 @@ def drift(old_rec: dict, new_rec: dict, old, new, *, key: str | None = None, thr
     extent = {"old": ob, "new": nb, "shift_pct": None}
     if ob and nb:
         span = max(ob[2] - ob[0], ob[3] - ob[1], 1e-9)
-        shift = max(abs(a - b) for a, b in zip(ob, nb)) / span * 100
+        shift = max(abs(a - b) for a, b in zip(ob, nb, strict=True)) / span * 100
         extent["shift_pct"] = round(shift, 2)
         if shift >= EXTENT_PCT:
             fs.append(finding("MAP-SVC-011", "WARN", f"the extent of the data moved by {shift:.0f}% of its size; a map fitted to the layers will look different", extent))

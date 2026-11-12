@@ -121,6 +121,48 @@ def place_names_table():
     return pd.read_parquet(p)
 
 
+def upper_name(text: str) -> str:
+    """A name in capitals as its script writes them: Greek capitals carry no accent (ΑΤΤΙΚΗ, not ΑΤΤΙΚΉ)."""
+    import unicodedata
+    u = str(text).upper()
+    if any("\u0370" <= ch <= "\u03ff" or "\u1f00" <= ch <= "\u1fff" for ch in u):
+        u = unicodedata.normalize("NFC", "".join(ch for ch in unicodedata.normalize("NFD", u) if unicodedata.combining(ch) == 0 or ch == "\u0308"))
+    return u
+
+
+def admin_unit_name(row, cfg: dict, col: str = "name") -> str:
+    """1.12.0: the name of a first-level unit (a state, a region) by `names.language`, as the place names are chosen: `en` the English name
+    (Attica); a language code that language's name; `auto` the unit's own name in the country's language where that is written in Greek or
+    Cyrillic (Αττική), the local spelling where it is Latin, English otherwise; `local` the country's language always. A name this plugin
+    has no font or shaper for, or a table without the language columns (the US states), gives the table's own name."""
+    import geo_locale as gl
+    import script_text as st
+
+    def val(k):
+        v = row.get(k) if hasattr(row, "get") else None
+        return str(v) if isinstance(v, str) and v.strip() and v.strip().lower() not in ("nan", "none") else None
+
+    own = val(col) or ""
+    lang_cfg = str((cfg or {}).get("language") or "auto")
+    en = val("name_en") or own
+    if lang_cfg == "en":
+        return en
+    iso = val("iso_a2")
+    clang = (gl.country(iso) or {}).get("lang") if iso else None
+    want = clang if lang_cfg in ("auto", "local") else lang_cfg.lower().split("-")[0]
+    local = val(f"name_{want}") if want else None
+    script = st.LANG_SCRIPT.get(want or "", "Latn")
+    if lang_cfg in ("auto", "local") and script == "Latn":
+        return val("name_local") or own or en                 # the unit's own spelling (Vilniaus, Bayern)
+    if not local:
+        return en if lang_cfg not in ("auto", "local") or script != "Latn" else own
+    if lang_cfg == "auto" and script not in LATIN_GREEK_CYRILLIC:
+        return en
+    st.use_lang(want)
+    _k, miss = st.plan_for(local)
+    return en if miss else local
+
+
 def choose_place_names(g, cfg: dict) -> tuple[list[str], list[str | None], set]:
     """1.5.0 (R3-SCRIPT): (the name to draw, the second line or None, the scripts left out) for each place row, by `names.language`:
     auto: the local name where the place's country writes in Latin, Greek or Cyrillic (Athína is Αθήνα, Munich is München), English otherwise;
@@ -798,7 +840,7 @@ def apply_layer_ops(layer: dict, gdf, ctx_layers: dict | None, measure_crs: str 
     except geo_ops.OpsError as ex:
         raise PlanError(f"layer '{lid}': {ex}", gc.EXIT_USAGE)
     steps = []
-    for spec, prov in zip(ops, ctx.provenance):
+    for spec, prov in zip(ops, ctx.provenance, strict=True):
         name = prov.get("op") or str(spec.get("op")).lower()
         eq = geo_ops.equivalent(name, dict(spec), prov)["geopandas"]
         where = f" in {prov['measure_crs']}" if prov.get("measure_crs") and name not in ("hexbin",) else ""
@@ -1495,6 +1537,10 @@ def _context_from_tiles(plan: Plan, cfg: dict, preset: str, kinds: list) -> None
         op *= over
     added: list[LayerPlan] = []
     what: list[str] = []
+    if vg_.get("buildings") is not None and ("urban" in kinds or "roads" in kinds):      # 1.12.0: footprints on maps at 1:25,000 and larger
+        added.append(_context_layer(plan, "context-buildings", "urban", vg_["buildings"], e, geom_kind_="polygon", fill=t["neutral_ramp"][min(2, len(t["neutral_ramp"]) - 1)],
+                                    stroke="none", width_mm=0.0, fill_opacity=0.7 * op, title="Buildings"))
+        what.append("buildings")
     if "urban" in kinds and vg_.get("urban") is not None:
         added.append(_context_layer(plan, "context-urban", "urban", vg_["urban"], e, geom_kind_="polygon", fill=t["neutral_ramp"][1], stroke="none",
                                     width_mm=0.0, fill_opacity=0.45 * op, title="Urban areas"))
@@ -1812,7 +1858,7 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
         plan.palette_reports[l.id] = cf.palette_report(colors, t["background"])
         l.notes += res.notes
         if l.class_shapes:
-            cats = [{"label": lab, "fill": col, "shape": shp} for lab, col, shp in zip(res.labels, colors, l.class_shapes)]
+            cats = [{"label": lab, "fill": col, "shape": shp} for lab, col, shp in zip(res.labels, colors, l.class_shapes, strict=True)]
             if res.nodata:                       # a symbol drawn with no class must still be in the legend (MAP-CART-005)
                 cats.append({"label": lg.NO_DATA_LABEL, "fill": t["no_data"], "shape": str(l.symbol.get("shape") or "circle"), "nodata": True})
             l.legend_block = lg.status_block(titled(ly, l), t, cats)
@@ -1908,7 +1954,7 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
         # 0.20.0: value by alpha: the sparse cells fade toward the ground, the dense ones stand out; the legend swatches fade the same way
         l.class_opacity = map_look.class_alphas(l.cls.k)
         if l.legend_block and l.legend_block.get("items"):
-            for it, a_ in zip(l.legend_block["items"], l.class_opacity):
+            for it, a_ in zip(l.legend_block["items"], l.class_opacity, strict=True):
                 if a_ < 1:
                     it["opacity"] = a_
     import symbology
@@ -2027,7 +2073,7 @@ def prepared_tiles(spec: dict, use_tiles: bool, wgs, base: Path | None = None) -
         except ImportError:
             return None, [f"basemap provider '{prov}': warping tiles to {crs_req} needs the rasterio package; drawing the bundled basemap instead"]
     import basemap_render as br
-    rec = br.load_prepared(spec.get("id", ""))
+    rec = br.load_prepared(bm.get("prepared_as") or spec.get("id", ""))     # 1.12.0: an atlas page reads the composite its extent shares
     hint = f"run basemap_render.py render --spec <map>.yaml to prepare the '{prov}' tiles"
     if rec is None:
         return None, [f"basemap provider '{prov}' has no prepared tiles yet ({hint}); drawing the bundled basemap instead"]
@@ -2096,13 +2142,21 @@ def load_vector_ground(plan: Plan, path: Path) -> bool:
     fr = lo.Frame.fit(rect, plan.extent, float((plan.spec.get("extent") or {}).get("padding_pct", 5)))
     seen = _wgs84_of_box(plan, fr.visible)
     window = _wgs84_of_box(plan, plan_visible_pad(plan))
+    partial = None
     try:
         info = vg.inspect(path)
         b = info["bounds"]
         eps = 1e-6
         if not (b[0] <= seen[0] + eps and b[1] <= seen[1] + eps and b[2] >= seen[2] - eps and b[3] >= seen[3] - eps):
-            raise vg.VectorGroundError(f"{name} covers {b[0]:.2f},{b[1]:.2f} to {b[2]:.2f},{b[3]:.2f} (lon/lat), which is not the whole map window "
-                                       f"({seen[0]:.2f},{seen[1]:.2f} to {seen[2]:.2f},{seen[3]:.2f}); use a larger extract or a narrower map")
+            # 1.12.0: an extract that covers part of the window is still drawn: the file inside its own box, the bundled ground past its edge.
+            # Under a fifth of the window it is not worth a seam; the bundled ground is drawn alone.
+            ix = (max(b[0], seen[0]), max(b[1], seen[1]), min(b[2], seen[2]), min(b[3], seen[3]))
+            share = (max(0.0, ix[2] - ix[0]) * max(0.0, ix[3] - ix[1])) / max(1e-12, (seen[2] - seen[0]) * (seen[3] - seen[1]))
+            if share < 0.2:
+                raise vg.VectorGroundError(f"{name} covers {b[0]:.2f},{b[1]:.2f} to {b[2]:.2f},{b[3]:.2f} (lon/lat), which is not the whole map window "
+                                           f"({seen[0]:.2f},{seen[1]:.2f} to {seen[2]:.2f},{seen[3]:.2f}) nor a fifth of it; use a larger extract or a narrower map")
+            partial = {"share": share, "box": [float(v) for v in b]}
+            window = (max(b[0], window[0]), max(b[1], window[1]), min(b[2], window[2]), min(b[3], window[3]))
         g = vg.read(path, window, den)
     except vg.VectorGroundError as ex:
         plan.notes.append(f"basemap file: {ex}; drawing the bundled basemap instead")
@@ -2125,6 +2179,20 @@ def load_vector_ground(plan: Plan, path: Path) -> bool:
         s = gpd.GeoSeries([geom], crs=g["crs"]).to_crs(plan.crs)
         return gpd.GeoDataFrame({**{k: [v] for k, v in cols.items()}, "geometry": list(s.values)}, crs=plan.crs)
 
+    if partial:
+        # the bundled ground first, cut away inside the file's box; the file's own ground is drawn over that hole
+        import shapely
+        from shapely.geometry import box as _sbox
+        hole = gpd.GeoSeries([shapely.segmentize(_sbox(*partial["box"]), 0.05)], crs="EPSG:4326").to_crs(plan.crs).iloc[0]
+        _load_basemap(plan, None, True, None)
+        for item in plan.basemap:
+            gd = item.get("gdf")
+            if gd is not None and len(gd):
+                gd = gd.copy()
+                gd["geometry"] = shapely.make_valid(shapely.difference(np.asarray(gd.geometry.values, dtype=object), hole))
+                item["gdf"] = gd[~gd.geometry.is_empty]
+        plan.findings.append({"id": "MAP-CART-037", "severity": "INFO", "message": f"The vector basemap file covers {partial['share']:.0%} of the map window; "
+                              "past its edge the bundled ground is drawn, so the detail changes along that edge.", "detail": {"file": name, "share": round(partial["share"], 3)}})
     plan.basemap.append({"kind": "land", "gdf": gdf_of(g["land"]), "entry": e})
     for cls, geom in (g["boundaries"] or {}).items():
         plan.basemap.append({"kind": "boundary", "class": cls, "gdf": gdf_of(geom), "entry": e})
@@ -2134,11 +2202,18 @@ def load_vector_ground(plan: Plan, path: Path) -> bool:
                           "rivers": gdf_of(g["rivers"]) if g["rivers"] is not None else None,
                           "urban": gdf_of(g["urban"]) if g["urban"] is not None else None,
                           "ferries": gdf_of(g["ferries"]) if g["ferries"] is not None else None,
-                          "roads": {k: gdf_of(v) for k, v in (g["roads"] or {}).items()}}
-    res = f"vector tiles ({name}, zoom {g['zoom']})"
+                          "roads": {k: gdf_of(v) for k, v in (g["roads"] or {}).items()},
+                          "buildings": gdf_of(g["buildings"]) if g.get("buildings") is not None else None,
+                          "places": g.get("places"),                                   # lon/lat points, the gazetteer's columns (draw_names)
+                          "road_names": g["road_names"].to_crs(plan.crs) if g.get("road_names") is not None else None,
+                          "partial": partial}
+    res = f"vector tiles ({name}, zoom {g['zoom']})" + (" and the bundled ground past its edge" if partial else "")
     plan.crs_info["ground_resolution"] = {"land": res, "water": res}
     plan.crs_info["vector_ground"] = {"file": name, "schema": g["schema"], "zoom": g["zoom"], "format": g["format"]}
+    extras = [w for w, k in (("its place names", "places"), ("its road names", "road_names"), ("its buildings", "buildings")) if g.get(k) is not None]
     plan.notes.append(f"ground: {name} ({g['schema']} schema), read at zoom {g['zoom']} for 1:{den:,.0f}, drawn in the brand's map colours"
+                      + (f", with {', '.join(extras)}" if extras else "")
+                      + (f"; it covers {partial['share']:.0%} of the window, the bundled ground is drawn past its edge" if partial else "")
                       + ("; " + "; ".join(g["notes"]) if g["notes"] else ""))
     return True
 

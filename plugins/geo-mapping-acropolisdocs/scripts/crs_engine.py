@@ -197,7 +197,7 @@ def _lonlat_box(c, minx, miny, maxx, maxy):
     xs = [minx, maxx, minx, maxx, (minx + maxx) / 2, minx, maxx, (minx + maxx) / 2, (minx + maxx) / 2]
     ys = [miny, miny, maxy, maxy, (miny + maxy) / 2, (miny + maxy) / 2, (miny + maxy) / 2, miny, maxy]
     lon, lat = t.transform(xs, ys)
-    pts = [(a, b) for a, b in zip(lon, lat) if math.isfinite(a) and math.isfinite(b)]
+    pts = [(a, b) for a, b in zip(lon, lat, strict=True) if math.isfinite(a) and math.isfinite(b)]
     if len(pts) < 2:
         return None
     return (min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts))

@@ -131,7 +131,7 @@ def _join_by(tokens: np.ndarray, owner: np.ndarray, n: int) -> list[str]:
     toks = tokens.tolist()
     starts = np.flatnonzero(np.r_[True, owner[1:] != owner[:-1]])
     ends = np.r_[starts[1:], len(owner)]
-    for o, s, e in zip(owner[starts].tolist(), starts.tolist(), ends.tolist()):
+    for o, s, e in zip(owner[starts].tolist(), starts.tolist(), ends.tolist(), strict=True):
         out[o] = "".join(toks[s:e])
     return out
 

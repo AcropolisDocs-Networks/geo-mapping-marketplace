@@ -71,7 +71,7 @@ def is_grey(h: str, sat_threshold: float = 0.12) -> bool:
 
 def mix(a: str, b: str, t: float) -> str:
     ra, rb = hex_to_rgb(a), hex_to_rgb(b)
-    return rgb_to_hex(tuple(x + (y - x) * t for x, y in zip(ra, rb)))
+    return rgb_to_hex(tuple(x + (y - x) * t for x, y in zip(ra, rb, strict=True)))
 
 
 def lab(h: str, cvd: str | None = None) -> tuple[float, float, float]:
@@ -93,7 +93,7 @@ def lab(h: str, cvd: str | None = None) -> tuple[float, float, float]:
 
 def delta_e(a: str, b: str, cvd: str | None = None) -> float:
     la, lb = lab(a, cvd), lab(b, cvd)
-    return math.sqrt(sum((x - y) ** 2 for x, y in zip(la, lb)))
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(la, lb, strict=True)))
 
 
 def cvd_min_delta_e(a: str, b: str) -> float:

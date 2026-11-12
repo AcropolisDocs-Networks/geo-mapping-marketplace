@@ -219,7 +219,7 @@ def join(gdf, table, left: str, right: str, *, columns: list[str] | None = None,
     if pad:
         before = rk
         rk = [k.zfill(int(pad)) if (k and k.isdigit() and len(k) < int(pad)) else k for k in rk]
-        n = sum(1 for a, b in zip(before, rk) if a != b)
+        n = sum(1 for a, b in zip(before, rk, strict=True) if a != b)
         if n:
             repairs.append(f"{n} key(s) in {table_name} were zero-padded to {int(pad)} digits")
     raw_floaty = sum(1 for v in table[right] if isinstance(v, str) and _FLOAT_INT.match(v.strip())) + sum(1 for v in table[right] if isinstance(v, float) and v == int(v))

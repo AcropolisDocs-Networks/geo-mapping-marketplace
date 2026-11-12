@@ -149,7 +149,7 @@ def draw(r: dict, *, brand: str | None = None, title: str | None = None, names=(
         return py1 - (np.asarray(v, dtype=float) - ylo) / (yhi - ylo) * (py1 - py0)
 
     def poly(xs, ys):
-        return "M" + "L".join(f"{sd.num(a)} {sd.num(b)}" for a, b in zip(xs, ys))
+        return "M" + "L".join(f"{sd.num(a)} {sd.num(b)}" for a, b in zip(xs, ys, strict=True))
     out.append('<g class="gm-chart-grid">')
     v = ylo
     while v <= yhi + 1e-9:
@@ -174,7 +174,7 @@ def draw(r: dict, *, brand: str | None = None, title: str | None = None, names=(
     out.append(f'<path d="{ground}" fill="{t["neutral_ramp"][1]}" stroke="{t["label"]}" stroke-width="0.35" stroke-linejoin="round" data-role="ground"/>')
     if s["f1"] is not None:                                   # the first Fresnel zone around the ray, over the ground so its intrusion shows
         up, lo = ray + s["f1"], ray - s["f1"]
-        dd = poly(X(d), Y(up)) + "L" + "L".join(f"{sd.num(a)} {sd.num(b)}" for a, b in zip(X(d[::-1]), Y(lo[::-1]))) + "Z"
+        dd = poly(X(d), Y(up)) + "L" + "L".join(f"{sd.num(a)} {sd.num(b)}" for a, b in zip(X(d[::-1]), Y(lo[::-1]), strict=True)) + "Z"
         out.append(f'<path d="{dd}" fill="{seq[0]}" fill-opacity="0.22" stroke="{seq[2]}" stroke-width="0.25" stroke-dasharray="1.2 0.8" data-role="fresnel"/>')
     out.append(f'<path d="{poly(X(d), Y(ray))}" fill="none" stroke="{t["emphasis"]}" stroke-width="0.6" data-role="ray"/>')
     out.append("</g>")

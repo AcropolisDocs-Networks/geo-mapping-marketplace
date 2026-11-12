@@ -57,7 +57,7 @@ def after_classes(plan, l) -> None:
         l.colors = [col] * l.cls.k
         l.palette_kind = "graduated"
         sym["_widths"] = widths
-        items = [{"label": lab, "stroke": col, "width_mm": w, "count": n} for lab, w, n in zip(l.cls.labels, widths, l.cls.counts)]
+        items = [{"label": lab, "stroke": col, "width_mm": w, "count": n} for lab, w, n in zip(l.cls.labels, widths, l.cls.counts, strict=True)]
         if l.cls.nodata:
             items.append({"label": "No data", "stroke": t["no_data"], "width_mm": widths[0], "nodata": True, "count": l.cls.nodata})
         l.legend_block = {"layer": l.id, "title": l.title, "kind": "lines", "items": items, "graduated": True, "note": lgc.get("note")}

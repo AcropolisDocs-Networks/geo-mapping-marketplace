@@ -1,4 +1,4 @@
-# `pip install -r requirements.txt` installs every row except the optional extras (mapclassify, contextily, cartopy, rasterio, contourpy, h3, duckdb, imageio-ffmpeg, scipy, playwright, psycopg, uharfbuzz), which are in requirements-optional.txt.
+# `pip install -r requirements.txt` installs every row except the optional extras (mapclassify, contextily, cartopy, rasterio, contourpy, h3, duckdb, imageio-ffmpeg, scipy, playwright, psycopg, uharfbuzz, keyring), which are in requirements-optional.txt.
 # Not pip packages, so not rows: `qgis` (PyQGIS) is imported only by qgis_build_layout.py and qgis_project.py's optional check, which run inside
 # QGIS's own Python (qgis_process), never the plugin's; tests/test_dependencies.py lists it as provided by QGIS.
 # GTFS (0.10.0) needs no row of its own: gtfs.py uses the standard library with geopandas and shapely, and decodes GTFS-Realtime itself.
@@ -25,6 +25,7 @@
 - {name: pypdfium2,  import: pypdfium2,  pip: pypdfium2,  level: SOFT, why: "draws the PDF page to pixels for the PNG (then pdftoppm, then Chromium); same page rasterizer as acropolisdocs"}
 - {name: fonttools,  import: fontTools,  pip: fonttools,  level: SOFT, why: "exact Inter text measurement for labels, legends and titles (without it widths are estimated)"}
 - {name: brotli,     import: brotli,     pip: brotli,     level: SOFT, why: "reads the bundled Inter woff2 for text measurement"}
+- {name: keyring,    import: keyring,    pip: keyring,    level: SOFT, why: "the OS keychain for map-credentials keychain (Windows Credential Manager, macOS Keychain); credentials stay files without it"}
 - {name: pydyf,      import: pydyf,      pip: pydyf,      level: SOFT, why: "the PDF fast path in scripts/pdf_stack.py writes WeasyPrint's content streams directly (installed with weasyprint, imported directly)"}
 - {name: playwright, import: playwright, pip: playwright, level: SOFT, why: "the last PNG route (Chromium) and the in-browser web-map checks; after pip, `playwright install chromium` fetches the browser once"}
 - {name: topojson,   import: topojson,   pip: topojson,   level: SOFT, why: "TopoJSON write (GDAL reads it but cannot write it)"}

@@ -328,7 +328,7 @@ def _metric_points(lonlats: dict):
     lon0, lat0 = statistics.median(lons), statistics.median(lats)
     tf = Transformer.from_crs(WGS84, f"+proj=aeqd +lat_0={lat0} +lon_0={lon0} +datum=WGS84 +units=m", always_xy=True)
     xs, ys = tf.transform(lons, lats)
-    return {k: (x, y) for k, x, y in zip(lonlats, xs, ys)}, tf
+    return {k: (x, y) for k, x, y in zip(lonlats, xs, ys, strict=True)}, tf
 
 
 class Timetable:

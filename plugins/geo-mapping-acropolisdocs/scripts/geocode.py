@@ -355,11 +355,11 @@ def geocode_table(df, address, provider: str = "census", purpose: str | None = N
         hit = hits.get(rid) or {"quality": "no_match", "matched_address": None, "lon": None, "lat": None}
         lon.append(hit["lon"]); lat.append(hit["lat"]); qual.append(hit["quality"]); matched.append(hit["matched_address"])
     out["lon"], out["lat"], out["match_quality"], out["matched_address"], out["geocoder"] = lon, lat, qual, matched, provider
-    geom = [shapely.Point(x, y) if x is not None and y is not None else None for x, y in zip(lon, lat)]
+    geom = [shapely.Point(x, y) if x is not None and y is not None else None for x, y in zip(lon, lat, strict=True)]
     gdf = gpd.GeoDataFrame(out, geometry=geom, crs="EPSG:4326")
     n, m = len(df), sum(1 for q in qual if q not in ("no_match", "tie"))
     ties = sum(1 for q in qual if q == "tie")
-    unmatched = [rid for rid, q in zip(ids, qual) if q in ("no_match", "tie")]
+    unmatched = [rid for rid, q in zip(ids, qual, strict=True) if q in ("no_match", "tie")]
     report = {"geocode_version": 1, "provider": provider, "endpoint": endpoint, "purpose": purpose, "country": country, "address_columns": cols, "roles": {k: v for k, v in roles.items() if k != "extra"},
               "rows": n, "matched": m, "match_rate": round(m / n, 4) if n else None, "ties": ties, "unmatched": unmatched[:200], "unmatched_total": len(unmatched),
               "quality_counts": {q: qual.count(q) for q in sorted(set(qual))}, "attribution": attribution, "terms": terms, "terms_acknowledged": bool(terms_acknowledged),

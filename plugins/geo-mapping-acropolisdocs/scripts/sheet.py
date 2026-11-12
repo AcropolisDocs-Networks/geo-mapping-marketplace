@@ -332,7 +332,7 @@ def compose(sheet: dict, panels: list[dict], tpl: dict, *, contact: bool = False
     if mode == "each" and sh.get("scale") == "each" and "scale_bar" in off:
         off.remove("scale_bar")
     rend = []
-    for k, (plan, fr) in enumerate(zip(plans, frames)):
+    for k, (plan, fr) in enumerate(zip(plans, frames, strict=True)):
         shared_legend = k == 0 and sh.get("legend") in ("one", "shared") and grid.band is not None
         plan.tpl = bare_template(tpl, grid.pw, grid.ph, legend_w=(grid.band.w - 2 if grid.band_side == "right" else grid.band.w * 0.5) if shared_legend else None)
         plan.tpl_name = tpl.get("name", plan.tpl_name)
@@ -355,7 +355,7 @@ def compose(sheet: dict, panels: list[dict], tpl: dict, *, contact: bool = False
     drop = tuple(g for g in atlas.SHEET_DROP if not (g == "gm-legend" and sh.get("legend") == "each" and not contact)
                  and not (g == "gm-scalebar" and "scale_bar" not in off))
     rects_rep = []
-    for k, (r, rr, cap) in enumerate(zip(rend, grid.panels, grid.captions)):
+    for k, (r, rr, cap) in enumerate(zip(rend, grid.panels, grid.captions, strict=True)):
         inner = _tile(r.svg, (0.0, 0.0, grid.pw, grid.ph), f"p{k + 1}-", drop)
         out.append(f'<svg x="{sd.num(rr.x0)}" y="{sd.num(rr.y0)}" width="{sd.num(rr.w)}" height="{sd.num(rr.h)}" viewBox="0 0 {sd.num(grid.pw)} {sd.num(grid.ph)}" '
                    f'class="gm-panel" data-panel="{k + 1}">{inner}</svg>')
@@ -488,7 +488,7 @@ def build(sheet_path: str, out_dir: str, formats: list[str] | None = None, *, br
     if len(first) != len(pspecs):
         return done()
     crs0 = first[0].crs
-    for ps, plan in zip(pspecs[1:], first[1:]):
+    for ps, plan in zip(pspecs[1:], first[1:], strict=True):
         named = ((ps["data"].get("crs") or {}).get("display"))
         if named and plan.crs != crs0:
             fs.append(finding("MAP-PNL-003", "BLOCK", f"panel {ps['index'] + 1} names the display CRS {named}, but the sheet's panels take the first panel's, {crs0}"))
@@ -548,7 +548,7 @@ def build(sheet_path: str, out_dir: str, formats: list[str] | None = None, *, br
         for plan in plans:
             plan.extent = ext
     try:
-        comp = compose(sheet, [{"plan": p, "caption": ps["caption"]} for p, ps in zip(plans, pspecs)], tpl)
+        comp = compose(sheet, [{"plan": p, "caption": ps["caption"]} for p, ps in zip(plans, pspecs, strict=True)], tpl)
     except SheetError as ex:
         fs.append(finding(ex.fid, "BLOCK", str(ex)))
         return done()

@@ -186,13 +186,13 @@ def site_points(df, id_col: str = "site_id"):
             out[c] = first[c].values
     if "band" in t.columns:
         out["bands"] = grp["band"].agg(lambda s: ", ".join(tg.canonical_order(s.dropna().astype(str), "band"))).values
-    geoms = [shapely.Point(float(x), float(y)) for x, y in zip(out["lon"], out["lat"])]
+    geoms = [shapely.Point(float(x), float(y)) for x, y in zip(out["lon"], out["lat"], strict=True)]
     return gpd.GeoDataFrame(out.drop(columns=["lon", "lat"]), geometry=geoms, crs=WGS84)
 
 
 def _site_lookup(sites, id_col: str = "site_id") -> dict:
     g = sites.to_crs(WGS84) if not sites.crs.equals(WGS84) else sites
-    return {_clean_id(k): geom for k, geom in zip(g[id_col], g.geometry) if _clean_id(k) is not None and geom is not None and not geom.is_empty}
+    return {_clean_id(k): geom for k, geom in zip(g[id_col], g.geometry, strict=True) if _clean_id(k) is not None and geom is not None and not geom.is_empty}
 
 
 # --------------------------------------------------------------------------------------------------------------------- 1 spacing
@@ -341,7 +341,7 @@ def _lines_between(sites, pairs, a_col: str, b_col: str, id_col: str, what: str,
     a = pairs[a_col].map(_clean_id)
     b = pairs[b_col].map(_clean_id)
     ok_a, ok_b = a.map(lambda v: v in lut), b.map(lambda v: v in lut)
-    missing = sorted({v for v, ok in zip(a, ok_a) if not ok and v is not None} | {v for v, ok in zip(b, ok_b) if not ok and v is not None})
+    missing = sorted({v for v, ok in zip(a, ok_a) if not ok and v is not None} | {v for v, ok in zip(b, ok_b, strict=True) if not ok and v is not None})
     blank = int((a.isna() | b.isna()).sum())
     keep = ok_a & ok_b
     fs = []
@@ -352,7 +352,7 @@ def _lines_between(sites, pairs, a_col: str, b_col: str, id_col: str, what: str,
         fs.append(finding(fid, "WARN", f"{blank} row(s) have a blank id and are not drawn"))
     rows = pairs[keep].copy()
     rows[a_col], rows[b_col] = a[keep].values, b[keep].values
-    geoms = [shapely.LineString([lut[x], lut[y]]) for x, y in zip(rows[a_col], rows[b_col])]
+    geoms = [shapely.LineString([lut[x], lut[y]]) for x, y in zip(rows[a_col], rows[b_col], strict=True)]
     g = gpd.GeoDataFrame(rows.reset_index(drop=True), geometry=geoms, crs=WGS84)
     return g, missing, int((~keep).sum()), fs
 
@@ -458,7 +458,7 @@ def neighbor_relations(sites, neighbors, cells=None, id_col: str = "site_id") ->
     for c in nb.columns:
         if c not in (s_col, t_col, att_col, suc_col) and c not in t.columns:
             t[c] = nb[c].values
-    missing = sorted({v for v, s in zip(t["source_cell"], t["source_site"]) if v is not None and pd.isna(s)} | {v for v, s in zip(t["target_cell"], t["target_site"]) if v is not None and pd.isna(s)})
+    missing = sorted({v for v, s in zip(t["source_cell"], t["source_site"]) if v is not None and pd.isna(s)} | {v for v, s in zip(t["target_cell"], t["target_site"], strict=True) if v is not None and pd.isna(s)})
     fs = []
     if missing:
         n_rows = int((t["source_site"].isna() | t["target_site"].isna()).sum())

@@ -92,7 +92,7 @@ def as_of_mask(starts, ends, as_of: str) -> tuple[list[bool], int]:
     if day is None:
         raise HistError(f"as-of '{as_of}' is not a date (YYYY, YYYY-MM or YYYY-MM-DD)", "MAP-HIST-003", gc.EXIT_USAGE)
     keep, no_start = [], 0
-    for s, e in zip(starts, ends):
+    for s, e in zip(starts, ends, strict=True):
         s0, e0 = start_of(s), end_of(e)
         if s0 is None:
             keep.append(False)

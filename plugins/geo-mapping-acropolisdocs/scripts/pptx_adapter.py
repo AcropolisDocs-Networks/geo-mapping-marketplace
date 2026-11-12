@@ -2,7 +2,8 @@
 """pptx_adapter: a map for a slide, in pieces a person can edit (spec 7.3 map-pptx-adapter).
 
     pptx_adapter.py parts MAP.yaml --out DIR [--template 16x9-slide] [--dpi 200]
-    pptx_adapter.py slide MAP.yaml --out MAP.pptx [--deck DECK.pptx --layout "Blank"]
+    pptx_adapter.py slide MAP.yaml --out MAP.pptx [--deck DECK.pptx --layout "Blank"] [--check]
+    pptx_adapter.py check MAP.pptx                      1.12.0: draw the slide with LibreOffice and compare it with the map and its legend
 
 `parts` writes a folder: map.png and map.svg (the map only, cropped to its frame), text.json (title, subtitle, the message, each legend entry with its color and shape, the
 source and trademark lines) and notes.md. Title, legend and notes are NOT in the picture, so they stay text.
@@ -25,6 +26,8 @@ Findings
   MAP-PPT-002 INFO   Inter is not embedded in a .pptx
   MAP-PPT-003 INFO   the deck's slide shape differs from 16:9; the map was fitted inside it
   MAP-PPT-004 BLOCK  --deck cannot be read, or the output would overwrite the deck or an existing file
+  MAP-PPT-005 WARN   (1.12.0, `check` or `slide --check`) drawn by LibreOffice, the map on the slide differs from the picture in the file
+  MAP-PPT-006 WARN   (1.12.0) on the drawn slide a legend key is not in its class colour
 """
 from __future__ import annotations
 
@@ -526,11 +529,114 @@ def write_slide(spec_path, out_pptx, *, deck: str | None = None, layout: str | N
     return {"file": str(out_pptx), "findings": fs, "slides": len(prs.slides), "deck": bool(deck), "legend_fallbacks": list(text.get("fallbacks") or [])}
 
 
+# ---------------------------------------------------------------------------------------------------------------- the drawn slide (1.12.0)
+PICTURE_TOLERANCE = 14.0                # mean absolute difference per channel (of 255) between the drawn map and the picture in the file
+SWATCH_TOLERANCE = 28                   # the most a legend key's drawn colour may differ from its class colour in any channel
+
+
+def render_slide(pptx_path, page: int, dpi: float = 110.0, timeout: int = 180):
+    """The slide as LibreOffice draws it (an RGB image), or (None, why) when LibreOffice or pdftoppm is not here. Nothing leaves the computer."""
+    import subprocess
+    from PIL import Image
+    office = shutil.which("soffice") or shutil.which("libreoffice")
+    ppm = shutil.which("pdftoppm")
+    if not office or not ppm:
+        return None, "LibreOffice (soffice) and pdftoppm are needed to draw the slide; one of them is not installed here"
+    tmp = Path(tempfile.mkdtemp(prefix="gmap-slide-check-"))
+    try:
+        r = subprocess.run([office, f"-env:UserInstallation=file://{tmp / 'profile'}", "--headless", "--convert-to", "pdf", "--outdir", str(tmp), str(pptx_path)],
+                           capture_output=True, text=True, timeout=timeout)
+        pdf = tmp / (Path(pptx_path).stem + ".pdf")
+        if not pdf.is_file():
+            return None, f"LibreOffice did not draw the slide ({(r.stderr or r.stdout).strip()[-160:] or 'no output'})"
+        subprocess.run([ppm, "-r", str(dpi), "-f", str(page), "-l", str(page), "-png", str(pdf), str(tmp / "s")], capture_output=True, timeout=timeout)
+        png = next(iter(sorted(tmp.glob("s*.png"))), None)
+        if png is None:
+            return None, "the drawn slide could not be read as a picture"
+        im = Image.open(png).convert("RGB")
+        im.load()
+        return im, None
+    except (OSError, subprocess.SubprocessError) as ex:
+        return None, f"the slide could not be drawn ({type(ex).__name__})"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def check_slide(pptx_path, slide_index: int = -1, dpi: float = 110.0) -> dict:
+    """1.12.0: an automated look at the slide. LibreOffice draws it; the place of the map picture on the drawn slide is compared with the picture
+    inside the file (MAP-PPT-005), and each solid legend key with its class colour (MAP-PPT-006). -> {ok, checked, findings, picture_difference,
+    keys_checked}. Without LibreOffice the slide is not checked and the answer says so."""
+    import io
+    import numpy as np
+    from PIL import Image
+    from pptx import Presentation
+    from pptx.enum.dml import MSO_FILL
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+    prs = Presentation(str(pptx_path))
+    n = len(prs.slides)
+    idx = slide_index if slide_index >= 0 else n + slide_index
+    slide = prs.slides[idx]
+    im, why = render_slide(pptx_path, idx + 1, dpi)
+    if im is None:
+        return {"ok": True, "checked": False, "findings": [finding("MAP-PPT-005", "INFO", f"the slide was not drawn and compared: {why}")]}
+    a = np.asarray(im).astype(float)
+    kx, ky = a.shape[1] / prs.slide_width, a.shape[0] / prs.slide_height
+    fs: list[dict] = []
+
+    def box(sh, inner: float = 0.0):
+        x0, y0, x1, y1 = sh.left * kx, sh.top * ky, (sh.left + sh.width) * kx, (sh.top + sh.height) * ky
+        dx, dy = (x1 - x0) * inner, (y1 - y0) * inner
+        return int(round(x0 + dx)), int(round(y0 + dy)), int(round(x1 - dx)), int(round(y1 - dy))
+
+    pic = next((s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.PICTURE and s.name == "Map"), None)
+    diff = None
+    if pic is None:
+        fs.append(finding("MAP-PPT-005", "WARN", "the slide has no picture named 'Map'; the map may have been replaced or renamed"))
+    else:
+        x0, y0, x1, y1 = box(pic)
+        crop = a[max(0, y0):y1, max(0, x0):x1]
+        if crop.shape[0] < 20 or crop.shape[1] < 20 or x0 < -2 or y0 < -2 or x1 > a.shape[1] + 2 or y1 > a.shape[0] + 2:
+            fs.append(finding("MAP-PPT-005", "WARN", "the map picture lies partly off the slide"))
+        else:
+            src = Image.open(io.BytesIO(pic.image.blob)).convert("RGB").resize((crop.shape[1], crop.shape[0]), Image.LANCZOS)
+            diff = float(np.abs(crop - np.asarray(src).astype(float)).mean())
+            if diff > PICTURE_TOLERANCE:
+                fs.append(finding("MAP-PPT-005", "WARN", f"on the drawn slide the map differs from the picture the plugin made (mean difference {diff:.0f} of 255): "
+                                  "it may be stretched, cropped or covered by another shape", {"difference": round(diff, 1)}))
+    keys = bad = 0
+    for sh in slide.shapes:
+        if sh.shape_type != MSO_SHAPE_TYPE.AUTO_SHAPE or sh.has_text_frame and sh.text_frame.text.strip():
+            continue
+        try:
+            if sh.fill.type != MSO_FILL.SOLID:
+                continue
+            rgb = sh.fill.fore_color.rgb
+        except (AttributeError, TypeError):
+            continue
+        if "alpha" in sh.fill._xPr.xml:                     # a see-through key (nested circles) shows what is under it
+            continue
+        x0, y0, x1, y1 = box(sh, 0.3)
+        if x1 - x0 < 2 or y1 - y0 < 2:
+            continue
+        got = np.median(a[y0:y1, x0:x1].reshape(-1, 3), axis=0)
+        keys += 1
+        if np.abs(got - np.array([rgb[0], rgb[1], rgb[2]], dtype=float)).max() > SWATCH_TOLERANCE:
+            bad += 1
+            fs.append(finding("MAP-PPT-006", "WARN", f"the legend key '{sh.name}' is not drawn in its class colour on the slide (another shape may cover it)",
+                              {"shape": sh.name, "drawn": [int(v) for v in got]}))
+    if not fs:
+        fs.append(finding("MAP-PPT-005", "INFO", f"the slide was drawn and compared: the map matches the picture in the file (mean difference {diff:.1f} of 255) and "
+                          f"{keys} legend key(s) show their class colours"))
+    return {"ok": not any(f["severity"] == "WARN" for f in fs), "checked": True, "findings": fs, "picture_difference": None if diff is None else round(diff, 2),
+            "keys_checked": keys, "keys_wrong": bad, "slide": idx + 1}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("op", choices=["parts", "slide"])
+    ap.add_argument("op", choices=["parts", "slide", "check"])
+    ap.add_argument("--check", action="store_true", help="1.12.0: after writing the slide, draw it with LibreOffice and compare it with the map and its legend")
     ap.add_argument("spec")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out")
     ap.add_argument("--template", default=DEFAULT_TEMPLATE)
     ap.add_argument("--brand")
     ap.add_argument("--dpi", type=float, default=200.0)
@@ -538,12 +644,22 @@ def main(argv=None) -> int:
     ap.add_argument("--layout")
     ap.add_argument("--overwrite", action="store_true")
     a = ap.parse_args(argv)
+    if a.op != "check" and not a.out:
+        ap.error("--out is required")
     try:
+        if a.op == "check":                              # `spec` is the .pptx here
+            r = check_slide(a.spec)
+            print(json.dumps(r, indent=2, default=str))
+            return 0 if r["ok"] else 3
         if a.op == "parts":
             r = write_parts(a.spec, a.out, a.template, a.brand, a.dpi)
             print(json.dumps({"dir": r["dir"], "files": r["files"], "findings": r["findings"]}, indent=2, default=str))
         else:
             r = write_slide(a.spec, a.out, deck=a.deck, layout=a.layout, template=a.template, brand=a.brand, dpi=a.dpi, overwrite=a.overwrite)
+            if a.check:
+                c = check_slide(r["file"])
+                r["findings"] = list(r["findings"]) + c["findings"]
+                r["slide_check"] = {k: c.get(k) for k in ("checked", "picture_difference", "keys_checked", "keys_wrong")}
             print(json.dumps(r, indent=2, default=str))
         return 0
     except AdapterError as ex:

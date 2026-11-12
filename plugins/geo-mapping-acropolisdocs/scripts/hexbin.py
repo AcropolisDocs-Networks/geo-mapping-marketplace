@@ -126,7 +126,7 @@ def aggregate(gdf, resolution="auto", value_field: str | None = None, agg: str =
         pts = g.geometry.representative_point()
         note_pts = f" The {', '.join(sorted(kinds)).lower()} features were binned by a point inside each."
     ok = pts.notna() & ~pts.is_empty
-    cells = [h3.latlng_to_cell(float(y), float(x), res) for x, y in zip(pts[ok].x, pts[ok].y)]
+    cells = [h3.latlng_to_cell(float(y), float(x), res) for x, y in zip(pts[ok].x, pts[ok].y, strict=True)]
     df = pd.DataFrame({"h3": cells}, index=g.index[ok])
     if value_field:
         df[value_field] = pd.to_numeric(g.loc[ok, value_field], errors="coerce")
@@ -193,7 +193,7 @@ def from_polygons(gdf, resolution="auto", value: str | None = None):
         poly = gpd.GeoSeries([geom], crs=WGS84).to_crs(ea).values[0]
         parea = poly.area
         inter = cell_polys.intersection(poly).area.values
-        for c, a in zip(ids, inter):
+        for c, a in zip(ids, inter, strict=True):
             if a > 0 and parea > 0:
                 rows.append((c, idx, a / parea))
     df = pd.DataFrame(rows, columns=["h3", "src", "share"])

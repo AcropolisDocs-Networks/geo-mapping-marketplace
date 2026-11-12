@@ -160,9 +160,6 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     except mx.ExportError as ex:
         raise mp.PlanError(str(ex), gc.EXIT_USAGE)
     formats = static + (["svg"] if (opts["inkscape"] or opts["outline_text"]) and "svg" not in static else [])
-    st_ = getattr(plan, "style", None)
-    if opts["outline_text"] and st_ is not None and st_.fonts != "brand":
-        plan.notes.append(f"outlined text: the outlined SVG draws its words in Inter; the {st_.id} pack's faces are kept in the main SVG and the PDF")
     result = {"id": plan.spec["id"], "brand": plan.brand, "template": plan.tpl_name, "crs": plan.crs, "findings": [],
               "blocked": False, "files": [], "report": rendered.report, "stem": rendered.filename_stem, "notes": plan.notes, "dpi": dpi}
 
@@ -207,7 +204,8 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
         import map_brand
         props = {f: map_brand.props_for(plan.brand, plan.manifest, f) for f in ("pdf", "png")}
         ex = mx.export(rendered.svg, out, rendered.filename_stem, [f for f in formats if f in ("pdf", "png")], props=props,
-                       title=rendered.title, alt=rendered.alt_text, dpi=dpi, subject=plan.spec["message"], options={**opts, "inkscape": False})
+                       title=rendered.title, alt=rendered.alt_text, dpi=dpi, subject=plan.spec["message"], options={**opts, "inkscape": False},
+                       style=getattr(plan, "style", None))
         for fp in ex["files"]:
             written.append(Path(fp))
             if fp.endswith(".pdf"):

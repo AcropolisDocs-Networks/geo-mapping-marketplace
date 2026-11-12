@@ -7,14 +7,15 @@ page as a PMTiles archive (tiles_out.write_pmtiles, GDAL's own writer), base64 i
 PMTiles source over that in-memory buffer (`maplibregl.addProtocol('pmtiles', ...)`). Smaller layers stay GeoJSON sources.
 
 Clusters on the time slider (1.11.0). A tiled point layer on the slider gets one cluster set per period (bake_period_clusters), each cluster
-tagged with its period; the page shows the set of the period the slider is on. A GeoJSON layer on the slider is still not clustered.
+tagged with its period; the page shows the set of the period the slider is on. A GeoJSON layer on the slider (1.12.0) gets the same sets
+as a small collection of its own (`<layer>__pc`: a cluster carries its period and its zoom).
 
 Clusters. A point layer with more than CLUSTER_MIN_POINTS points is clustered while the control `cluster` is on. A GeoJSON layer uses
 MapLibre's own clustering. A tiled layer cannot be clustered in the browser, so its clusters are made here the way MapLibre's clustering
 (supercluster) makes them: from the zoom below the points down, every item not yet taken gathers the items within 50 pixels, the cluster sits
 at their weighted mean, and each zoom is built from the one above, so clusters nest. One source layer per zoom carries them, with
-`point_count`; the points themselves start at the zoom where most of them stand apart (`points_zoom`). A GeoJSON layer with a time field is not
-clustered: the time slider filters its points (a tiled one is, per period: see above).
+`point_count`; the points themselves start at the zoom where most of them stand apart (`points_zoom`). A layer with a time field is clustered per
+period (see above), since MapLibre's own clustering cannot follow the slider.
 
 Zoom numbers. The page's own zoom numbers (the configuration, the shared address, the names' `min_zoom`) are those of 256-pixel tiles, as
 Leaflet counts. MapLibre counts 512-pixel tiles, so its zoom is the page's minus one; the style below is written in MapLibre's numbers.
@@ -483,6 +484,11 @@ def data_layers(d: dict, src: str, source_layer: str | None, t: dict, *, visible
                           "circle-stroke-color": s["stroke"], "circle-stroke-width": _num(s.get("pointWeight", 1)), "circle-stroke-opacity": 1}}
         if pt_filter:
             circ["filter"] = pt_filter
+        own_clusters = bool(cluster and cluster.get("geojson"))     # 1.12.0: per-period clusters of a GeoJSON layer, in their own source
+        if own_clusters:
+            circ.pop("filter", None)
+            pt_filter = None
+            circ["minzoom"] = int(cluster["points_zoom"])
         if tiled:
             circ["minzoom"] = tiled["points_zoom"]
         base.append(circ)
@@ -499,6 +505,8 @@ def data_layers(d: dict, src: str, source_layer: str | None, t: dict, *, visible
             sym["filter"] = pt_filter
         if tiled:
             sym["minzoom"] = tiled["points_zoom"]
+        elif own_clusters:
+            sym["minzoom"] = int(cluster["points_zoom"])
         syms.append(sym)
         if cluster:
             ccol = cluster["fill"]
@@ -507,6 +515,9 @@ def data_layers(d: dict, src: str, source_layer: str | None, t: dict, *, visible
             if tiled:                                # one source layer per zoom, each shown at its own zoom only
                 for z in range(tiled["zmin"], tiled["points_zoom"]):
                     cdefs.append((f"{source_layer}__c{z}", z, z + 1, f"{lid}--cl{z}"))
+            elif own_clusters:                       # 1.12.0: one collection, a set per period and zoom
+                for z in range(int(cluster["zmin"]), int(cluster["points_zoom"])):
+                    cdefs.append((None, z, z + 1, f"{lid}--cl{z}"))
             else:
                 cdefs.append((None, None, None, f"{lid}--cl"))
             for csl, zlo, zhi, cid in cdefs:
@@ -515,11 +526,15 @@ def data_layers(d: dict, src: str, source_layer: str | None, t: dict, *, visible
                 if csl and cluster.get("periods"):   # 1.11.0: one cluster set per period; the slider picks the set (gm:period)
                     extra["filter"] = ["==", ["get", "_per"], int(cluster.get("period0") or 0)]
                     per = {"gm:period": 1}
+                elif own_clusters:
+                    extra = {"filter": ["all", ["==", ["get", "_z"], zlo], ["==", ["get", "_per"], int(cluster.get("period0") or 0)]]}
+                    per = {"gm:period": 1, "gm:z": zlo}
                 zr = {} if zlo is None else {"minzoom": zlo, "maxzoom": zhi}
-                base.append({"id": cid, "type": "circle", "source": src, **extra, **zr, "layout": dict(vis), "metadata": {**_meta(lid, "cluster"), **per},
+                csrc = f"pc-{lid}" if own_clusters else src
+                base.append({"id": cid, "type": "circle", "source": csrc, **extra, **zr, "layout": dict(vis), "metadata": {**_meta(lid, "cluster"), **per},
                              "paint": {"circle-color": ccol, "circle-radius": steps, "circle-opacity": 0.85, "circle-stroke-color": cluster["stroke"],
                                        "circle-stroke-width": 1.5, "circle-stroke-opacity": 1}})
-                syms.append({"id": cid + "-n", "type": "symbol", "source": src, **extra, **zr, "metadata": {**_meta(lid, "cluster-count"), **per},
+                syms.append({"id": cid + "-n", "type": "symbol", "source": csrc, **extra, **zr, "metadata": {**_meta(lid, "cluster-count"), **per},
                              "layout": {**vis, "text-field": ["get", "point_count_abbreviated"], "text-font": ["Inter SemiBold"], "text-size": 11,
                                         "text-allow-overlap": True, "text-ignore-placement": False, "icon-image": "gm-box",
                                         "icon-size": ["/", ["*", 2, steps], 8], "icon-allow-overlap": True, "icon-ignore-placement": False},
@@ -710,7 +725,10 @@ def style(*, t: dict, bdefs: list[dict], bundled_attr: str | None, base_defs: li
         else:
             sid = f"data-{d['id']}"
             src = {"type": "geojson", "data": {"gm": d["id"]}, "attribution": "", "tolerance": 0.3}
-            if clusters.get(d["id"]):
+            if clusters.get(d["id"]) and clusters[d["id"]].get("geojson"):
+                # 1.12.0: a layer on the time slider: its clusters are a small collection of their own, one set per period and zoom
+                sources[f"pc-{d['id']}"] = {"type": "geojson", "data": {"gm": clusters[d["id"]]["geojson"]}, "attribution": ""}
+            elif clusters.get(d["id"]):
                 c = clusters[d["id"]]
                 src.update({"cluster": True, "clusterRadius": CLUSTER_RADIUS_PX, "clusterMaxZoom": max(0, int(c["points_zoom"]) - 1)})
             sources[sid] = src

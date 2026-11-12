@@ -1252,10 +1252,17 @@ def plan_atlas(inp: dict, opt: dict) -> dict:
     fm = len(set(["pdf"] + list(opt.get("formats") or [])))
     an = atlas.plan_extra(d)                  # by: time with animate: the frames are renders too (M15)
     per = f"{d['time']['word']} of {d['field']}" if d["options"].get("by") == "time" else f"{d['field']} value"
-    return {"renders": n + an.get("renders", 0), "files_written": n * (fm + 1) + 8 + an.get("files_written", 0), "network_requests": 0,
+    tile_req, tile_note = 0, ""
+    if d["tiles"] and d["options"].get("tiles"):              # 1.12.0: the tile composites are the one thing an atlas run fetches
+        import basemap_render as br
+        comps = n if (d["options"].get("by") != "time" and d["options"].get("mode") == "focus") else 1
+        tile_req = min(br.HARD_CAP, comps * br.CAPS["T2"])
+        tile_note = (f"; the tile basemap is kept: {comps} composite(s), at most {tile_req} tile requests in all (fewer from the cache), "
+                     "each inside the provider's cap for one map")
+    return {"renders": n + an.get("renders", 0), "files_written": n * (fm + 1) + 8 + an.get("files_written", 0), "network_requests": tile_req,
             "est_seconds": 20 + 9 * n + an.get("est_seconds", 0), "frames": an.get("frames", 0),
             "note": f"{n} maps, one per {per}" + (", with the same classes in every map" if d["shared"] else "") + (f"; {an['note']}" if an else "")
-                    + ". The build never fetches."}
+                    + tile_note + (". The build never fetches." if not tile_req else ". The page builds themselves fetch nothing.")}
 
 
 def stage_atlas_plan(c: Ctx) -> dict:
@@ -1265,9 +1272,15 @@ def stage_atlas_plan(c: Ctx) -> dict:
         maps = atlas.make_specs(c.inputs["spec"], d, c.run_dir / "specs")
     except (atlas.AtlasError, ValueError) as ex:
         return {"ok": False, "summary": str(ex).splitlines()[0][:160], "findings": [finding(getattr(ex, "fid", "MAP-RUN-003"), "BLOCK", str(ex)[:600])]}
+    tiles_note = ""
+    if d["tiles"] and d["options"].get("tiles"):              # 1.12.0: the pages keep the tile basemap; its composites are made here, once
+        tier = str(c.results.get("tier") or "T1")
+        tp = atlas.prepare_tiles(maps, tier=tier if tier in ("T1", "T2") else "T1", http=c.http)
+        d["findings"] += tp["findings"]
+        tiles_note = f", {tp['composites']} tile composite(s)" if tp["composites"] else ", bundled basemap"
     c.results["atlas"] = {"disc": d, "maps": maps}
     c.results["pre_findings"] = list(d["findings"])
-    return {"ok": True, "summary": f"{len(maps)} map(s) planned" + (", classes shared" if d["shared"] else ""), "findings": d["findings"]}
+    return {"ok": True, "summary": f"{len(maps)} map(s) planned" + (", classes shared" if d["shared"] else "") + tiles_note, "findings": d["findings"]}
 
 
 def stage_atlas_build(c: Ctx) -> dict:
@@ -1376,7 +1389,7 @@ def stage_atlas_package(c: Ctx) -> dict:
     with open(dest / "index.csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(["page", "value", "title", "features", "folder"])
-        for r, row in zip(a["results"], a["rows"]):
+        for r, row in zip(a["results"], a["rows"], strict=True):
             w.writerow([row["page"], r["value"], r["title"], r["features"], f"maps/{r['slug']}"])
     c.add_file(dest / "index.csv", "index")
     sh = d["shared"]
@@ -1690,6 +1703,7 @@ REGISTRY = {
                                                 "out": "folder", "formats": "list (pdf always; png, svg optional)", "overwrite": "bool", "brand": "slug", "template": "name",
                                                 "by": "field (default) or time: one page per period of the layer's time_field (M15)", "unit": "auto|year|quarter|month|day",
                                                 "cumulative": "bool: each period draws everything up to it, its own features emphasised", "planned": "bool (default: cumulative)",
+                                                "tiles": "bool: keep the MapSpec's tile basemap (one composite per page extent, inside the tile caps; the one thing this run fetches)",
                                                 "animate": "gif,mp4 (by: time)", "animate_sizes": "square,slide", "hold": "seconds per frame (1.0)", "last_hold": "seconds (3.0)"},
         "plan": plan_atlas, "stages": [("probe", "Detect the tier", stage_probe), ("atlas-plan", "Choose the values and the shared classes, write one MapSpec per map", stage_atlas_plan),
                                       ("build", "Build and lint every map; check the classes match", stage_atlas_build), ("assemble", "Index pages and the combined PDF", stage_atlas_assemble),

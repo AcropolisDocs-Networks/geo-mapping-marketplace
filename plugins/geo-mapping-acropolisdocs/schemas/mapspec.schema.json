@@ -217,6 +217,10 @@
           ],
           "description": "how a print basemap's zoom is chosen. legible: the highest zoom whose labels print at 6 pt or more (the default for a style with labels). sharp: the lowest zoom whose pixels reach the export dpi, capped at 200 (the default for a style without labels); labels then print at about 4 pt."
         },
+        "prepared_as": {
+          "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,120}$",
+          "description": "1.12.0: the name the prepared tile composite is kept under when it is not the map's own id; written by map-atlas (tiles=true) so pages that show one extent share one composite"
+        },
         "scheme": {
           "enum": [
             "xyz",

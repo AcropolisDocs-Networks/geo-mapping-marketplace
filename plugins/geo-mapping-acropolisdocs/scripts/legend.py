@@ -59,7 +59,7 @@ def class_block(layer: dict, cls, colors: list[str], tokens: dict, *, stroke: st
     if swatch is not None and swatch not in SWATCHES:
         raise LegendError(f"unknown swatch shape '{swatch}' (one of {', '.join(SWATCHES)})")
     items = [{"label": lab, "fill": col, "stroke": stroke or tokens["legend_frame"], "count": cls.counts[i]}
-             for i, (lab, col) in enumerate(zip(cls.labels, colors))]
+             for i, (lab, col) in enumerate(zip(cls.labels, colors, strict=True))]
     if cls.nodata:
         items.append({"label": NO_DATA_LABEL, "fill": tokens["no_data"], "stroke": stroke or tokens["legend_frame"], "count": cls.nodata, "nodata": True})
     out = {"layer": layer["id"], "title": _layer_title(layer), "kind": "classes" if cls.kind == "numeric" else "categories",

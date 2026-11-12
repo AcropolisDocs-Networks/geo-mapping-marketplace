@@ -314,7 +314,7 @@ def _pmtiles_header(b: bytes) -> dict:
         raise TilesError(f"PMTiles version {b[7]}; version 3 is expected")
     keys = ("root_offset", "root_length", "metadata_offset", "metadata_length", "leaf_offset", "leaf_length", "data_offset", "data_length",
             "addressed_tiles", "tile_entries", "tile_contents")
-    h = dict(zip(keys, struct.unpack_from("<11Q", b, 8)))
+    h = dict(zip(keys, struct.unpack_from("<11Q", b, 8), strict=True))
     h.update(clustered=b[96], internal_compression=b[97], tile_compression=b[98], tile_type=b[99], min_zoom=b[100], max_zoom=b[101])
     h["bounds"] = [v / 1e7 for v in struct.unpack_from("<4i", b, 102)]
     h["center_zoom"] = b[118]

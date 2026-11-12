@@ -120,7 +120,7 @@ def units_auto(crs, bbox) -> tuple[str, str, list]:
     row = gl.country(iso)
     unit = (row or {}).get("units", "km")
     others = []
-    for lo, la in zip(lon[1:], lat[1:]):
+    for lo, la in zip(lon[1:], lat[1:], strict=True):
         o = gl.country_at(float(lo), float(la))
         if o and o != iso and (gl.country(o) or {}).get("units", "km") != unit and o not in others:
             others.append(o)

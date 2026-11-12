@@ -3,6 +3,8 @@
 #   bash kit.sh [OUTPUT_FOLDER]
 # Credentials, if the service needs them, come from YOUR environment (never paste them into a chat):
 #   GEO_USER and GEO_PASS (HTTP Basic, sent only over https)   GEO_CACERT = a CA file for a private certificate authority   GEO_MAX_TIME = seconds per request
+#   GEO_MAX_SECONDS = stop after this many seconds in total and exit 4. Run the same command again with the same folder to carry on: a run
+#   that stopped (the time budget, a service that kept failing, a closed laptop) resumes after its last whole page.
 # TLS verification stays on. Redirects are not followed. Send the output folder back; manifest.yaml lets the plugin check it.
 set -u
 @@VARS@@
@@ -36,24 +38,40 @@ params=( --data-urlencode "service=WFS" --data-urlencode "version=$VERSION" --da
 [ -n "$BBOXP" ] && params+=( --data-urlencode "bbox=$BBOXP" )
 count_features() { if command -v jq >/dev/null 2>&1; then jq '.features|length' "$1" 2>/dev/null || echo 0; else grep -o '"type" *: *"Feature"' "$1" | wc -l | tr -d ' '; fi; }
 hits=""
-get "$OUT/hits.xml" "${params[@]}" --data-urlencode "resultType=hits" >/dev/null && hits=$(grep -oE '(numberMatched|numberOfFeatures)="[0-9]+"' "$OUT/hits.xml" | head -1 | grep -oE '[0-9]+')
-rm -f "$OUT/hits.xml"
+STATE="$OUT/state.txt"; T0=$(date +%s); resumed=0
+save_state() { printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$KIT_ID" "$STARTED" "$hits" "$page" "$received" "$start" "$n" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
+if [ -f "$STATE" ]; then
+  { IFS= read -r s_kit; IFS= read -r STARTED; IFS= read -r hits; IFS= read -r page; IFS= read -r received; IFS= read -r start; IFS= read -r n; } < "$STATE"
+  if [ "$s_kit" != "$KIT_ID" ]; then echo "this folder holds the state of another kit; use a fresh folder" >&2; exit 2; fi
+  case "$page$received$start$n" in *[!0-9]*|"") echo "the state file in this folder is damaged; use a fresh folder" >&2; exit 2;; esac
+  resumed=1; echo "resuming after page $n ($received features so far)"
+else
+  get "$OUT/hits.xml" "${params[@]}" --data-urlencode "resultType=hits" >/dev/null && hits=$(grep -oE '(numberMatched|numberOfFeatures)="[0-9]+"' "$OUT/hits.xml" | head -1 | grep -oE '[0-9]+')
+  rm -f "$OUT/hits.xml"
+  STARTED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  page="$PAGE"; start=0; n=0; received=0
+fi
 cap="$MAXF"; [ -z "$cap" ] && cap="$hits"
 if [ -z "$cap" ]; then echo "the service does not say how many features match; set max_features in the plan, or narrow the filter" >&2; exit 4; fi
-echo "expected features: ${hits:-unknown (capped at $cap)}"
-STARTED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-page="$PAGE"; start=0; n=0; received=0
+[ "$resumed" -eq 0 ] && echo "expected features: ${hits:-unknown (capped at $cap)}"
+first=1
 while [ "$received" -lt "$cap" ] && [ $n -lt 5000 ]; do
+  if [ -n "${GEO_MAX_SECONDS:-}" ] && [ "$first" -eq 0 ] && [ $(( $(date +%s) - T0 )) -ge "$GEO_MAX_SECONDS" ]; then
+    echo "time budget reached after page $n ($received so far): run the same command again to carry on"; exit 4
+  fi
+  first=0
   n=$((n+1)); want=$page; [ $((cap - received)) -lt "$want" ] && want=$((cap - received))
   f=$(printf '%s/pages/page_%04d.json' "$OUT" "$n")
   a=( "${params[@]}" --data-urlencode "outputFormat=${FORMAT:-application/json}" --data-urlencode "$COUNTPARAM=$want" --data-urlencode "startIndex=$start" )
   [ -n "$SORT" ] && a+=( --data-urlencode "sortBy=$SORT" )
   [ -n "$PROPS" ] && a+=( --data-urlencode "propertyName=$PROPS" )
-  get "$f" "${a[@]}" >/dev/null
+  ( get "$f.part" "${a[@]}" >/dev/null ) || { rc=$?; rm -f "$f.part"; n=$((n-1)); save_state; echo "stopped at page $((n+1)); run the same command again to carry on from there" >&2; exit $rc; }
+  mv "$f.part" "$f"
   c=$(count_features "$f"); received=$((received + c)); start=$((start + c))
   echo "page $n: $c features ($received so far)"
+  [ "$c" -lt "$want" ] && [ -n "$hits" ] && [ "$received" -lt "$hits" ] && [ "$c" -gt 0 ] && page="$c"
+  save_state                                      # after every whole page: a run that stops resumes here
   [ "$c" -eq 0 ] && break
-  [ "$c" -lt "$want" ] && [ -n "$hits" ] && [ "$received" -lt "$hits" ] && page="$c"
   [ "$c" -lt "$want" ] && [ -z "$hits" ] && break
 done
 trunc=false; note=""
@@ -74,6 +92,7 @@ nn() { if [ -z "$1" ]; then printf 'null'; else q "$1"; fi; }
   if [ -f "$OUT/result.geojson" ]; then echo "    - {name: \"result.geojson\", bytes: $(size "$OUT/result.geojson"), sha256: $(q "$(sha "$OUT/result.geojson")"), feature_count: $(count_features "$OUT/result.geojson"), crs: $(q "$SRS")}"; fi
   echo 'attestation: {by: user, note: ""}'
 } > "$OUT/manifest.yaml"
+rm -f "$STATE"
 echo "done: $received features; send back the folder '$OUT'"
 [ "$trunc" = true ] && exit 3
 exit 0

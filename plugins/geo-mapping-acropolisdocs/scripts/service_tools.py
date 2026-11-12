@@ -731,6 +731,11 @@ def credentials_remove(name: str, delete_files: bool = False, store=None) -> dic
     return _cred_result(cr.remove(store or cred_store(), name, delete_files=bool(delete_files)))
 
 
+def credentials_keychain(name: str, to_file: bool = False, store=None) -> dict:
+    import credentials as cr
+    return _cred_result(cr.keychain(store or cred_store(), name, to_file=bool(to_file)))
+
+
 def credentials_audit(folder: str = "", store=None) -> dict:
     import credentials as cr
     return _cred_result(cr.audit(store or cred_store(), Path(folder).expanduser() if folder else None))
@@ -802,6 +807,50 @@ def fcc_bdc_fetch_tool(file_id: str = "", kind: str = "availability", fmt: str =
     finally:
         if c is not None:
             c.close()
+
+
+def basemap_tiles_tool(op: str, spec: str, provider: str = "", style: str = "", zoom: int = 0, detail: str = "", http=None, env=None, sleep=None) -> dict:
+    """1.12.0: basemap_render on the person's own computer, where a registered key lives: `plan` says what would be fetched (zoom, tile count,
+    the provider's terms), `render` fetches the tiles and writes the composite into the work folder's .geo-mapping/basemaps, where the map
+    build finds it. The MapSpec is a file inside the work folder. The answer carries no key and no tile address."""
+    import re
+    import basemap_render as br
+    root = gc.outputs_dir()
+    base = root.parent
+    p = Path(str(spec or "").strip().strip('"')).expanduser()
+    if not p.is_absolute():
+        p = base / p
+    try:
+        p = p.resolve()
+        inside = p.is_relative_to(base.resolve())
+    except OSError:
+        inside = False
+    if not inside or not p.is_file() or p.suffix.lower() not in (".yaml", ".yml"):
+        return fail("usage", "MAP-SVC-001", "spec must be a MapSpec file (.yaml) inside the work folder; name work_folder= and the file's path in it")
+    if op not in ("plan", "render"):
+        return fail("usage", "MAP-SVC-001", "op is plan or render")
+    try:
+        tier = json.loads((gc.workdir() / "env.json").read_text()).get("tier") or "T1"
+    except (OSError, ValueError):
+        tier = "T1"
+    kw = {"tier": tier if tier in br.CAPS else "T1", "provider": provider or None, "style": style or None, "zoom": int(zoom) if zoom else None,
+          "detail": detail or None, "env": env}
+    try:
+        if op == "plan":
+            return br.public_plan(br.plan_render(p, **kw))
+        s = gc.load_mapspec(p)
+        key = (s.get("basemap") or {}).get("prepared_as") or s.get("id") or "map"
+        out = root / "basemaps" / re.sub(r"[^A-Za-z0-9_.-]+", "-", str(key))
+        r = br.render(p, http=http, outroot=out, **kw, **({"sleep": sleep} if sleep else {}))
+    except Exception as ex:  # noqa: BLE001 - a MapSpec that cannot be planned is the answer, not a crash of the server
+        return fail("lint", "MAP-WEB-011", f"the basemap could not be prepared: {type(ex).__name__}: {str(ex)[:300]}")
+    if not r["ok"]:
+        return {"ok": False, "findings": r["findings"]}
+    rec = r["record"]
+    return {"ok": True, "findings": r["findings"], "composite": str(Path(r["composite"])),
+            "record": {k: rec.get(k) for k in ("map_id", "provider", "style", "zoom", "tiles", "fetched", "from_cache", "pixels", "bbox_wgs84", "display_crs",
+                                               "attribution", "license", "retrieved_at", "sha256", "label_pt", "paper_dpi")},
+            "next": "build the map in the same folder; the build reads this composite and fetches nothing"}
 
 
 def hist_fetch_tool(op: str, as_of: str, bbox: str, admin_level: str = "4", tags: str = "", out: str = "", http=None) -> dict:

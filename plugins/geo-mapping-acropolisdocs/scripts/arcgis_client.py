@@ -173,7 +173,7 @@ def esri_to_geojson(doc: dict, geometry_type: str | None = None) -> dict:
 
 
 def _signed_area(r) -> float:
-    return sum((x1 * y2 - x2 * y1) for (x1, y1), (x2, y2) in zip(r, r[1:] + r[:1])) / 2.0
+    return sum((x1 * y2 - x2 * y1) for (x1, y1), (x2, y2) in zip(r, r[1:] + r[:1], strict=True)) / 2.0
 
 
 def fetch_pages(http, profile: dict, plan: FetchPlan, outdir: Path, *, hits: int | None, layer: dict | None = None, resume: bool = True, page_fn=None) -> FetchResult:
@@ -313,7 +313,7 @@ def export_image(http, profile: dict, service_path: str, bbox: list, sr: int, ou
     r = http.get(url, p | {"f": "image"}, expect="image")
     Path(out).write_bytes(r.content)
     cw, ch = (got[2] - got[0]) / Wr, (got[3] - got[1]) / Hr
-    adjusted = any(abs(a - b) > 0.5 * min(cw, ch) for a, b in zip(got, (x0, y0, x1, y1)))
+    adjusted = any(abs(a - b) > 0.5 * min(cw, ch) for a, b in zip(got, (x0, y0, x1, y1), strict=True))
     return {"path": str(out), "bbox_requested": [x0, y0, x1, y1], "extent": got, "sr": int(sr), "width": Wr, "height": Hr, "cell_size": [cw, ch],
             "adjusted": adjusted, "bytes": len(r.content), "sha256": r.sha256, "url": oh.redact_url(r.url)}
 

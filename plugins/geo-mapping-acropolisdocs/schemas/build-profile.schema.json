@@ -4,7 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["profile", "plugin_name", "distribution_filename", "default_content_brand", "house_brand",
-               "brands_bundled", "brand_selection", "skills_excluded", "command_prefix",
+               "brands_bundled", "command_prefix",
                "description_vars", "mcp_server_name"],
   "properties": {
     "profile": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},
@@ -13,8 +13,6 @@
     "default_content_brand": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},
     "house_brand": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},
     "brands_bundled": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"}},
-    "brand_selection": {"const": "selectable"},
-    "skills_excluded": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
     "command_prefix": {"type": "string"},
     "description_vars": {
       "type": "object",
