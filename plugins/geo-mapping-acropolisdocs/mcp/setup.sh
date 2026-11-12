@@ -21,14 +21,32 @@ fail() {
   echo failed > "$BASE/setup.failed"
   echo
   echo "Setup did not finish. Fix the message above, then run this file again:  sh \"$HERE/setup.sh\""
+  echo "If a line above says \"Permission denied\" or \"Text file busy\", a program is using the environment: close Claude, then run this again."
   exit 1
 }
 
-PY=$(sh "$HERE/findpython.sh") || { echo "No Python 3.11 or newer was found. Install one (python.org, Homebrew or your package manager), then run this again."; fail; }
+# 1.12.3: a Python is used only when pycheck.py passes it; the reasons for the ones skipped are kept in python-check.log
+PYLOG="$BASE/python-check.log"
+export PYLOG
+rm -f "$PYLOG"
+PY=$(sh "$HERE/findpython.sh") || {
+  echo "No usable Python 3.11 or newer was found. Install one (python.org, Homebrew or your package manager), then run this again."
+  [ -s "$PYLOG" ] && { echo; echo "These Pythons were found and skipped:"; cat "$PYLOG"; }
+  fail
+}
 echo "Using Python: $PY"
+[ -s "$PYLOG" ] && { echo "Skipped as not fit to build on:"; cat "$PYLOG"; }
+if [ -x "$VENVPY" ] && ! "$VENVPY" "$HERE/pycheck.py" >/dev/null 2>&1; then
+  echo "The existing private environment was built on a Python that is not whole:"
+  "$VENVPY" "$HERE/pycheck.py"
+  echo "Rebuilding it on $PY"
+  rm -rf "$VENV"
+  [ -x "$VENVPY" ] && { echo "The old environment could not be removed because a program is using it: close Claude, and anything else running Python from $VENV, then run this again."; fail; }
+fi
 if [ ! -x "$VENVPY" ]; then
   echo "Creating the private environment in $VENV"
   "$PY" -m venv "$VENV" || { echo "python -m venv failed. On Debian and Ubuntu install the python3-venv package first."; fail; }
+  "$VENVPY" "$HERE/pycheck.py" || { echo "The new environment does not pass its own check (the reason is above)."; fail; }
 fi
 echo "Installing packages. The first run downloads about a hundred megabytes and can take a few minutes."
 "$VENVPY" -m pip install --upgrade --disable-pip-version-check --progress-bar off pip || fail

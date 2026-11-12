@@ -33,5 +33,8 @@ Each keeps its own licence (paths are inside the plugin; in the source repositor
   Caveat, Patrick Hand): SIL Open Font License 1.1, each with its licence text in styles/<pack>/LICENSES/.
 - Natural Earth data in assets/basemaps/: public domain (naturalearthdata.com).
 - U.S. Census Bureau cartographic boundary files and the OMB county-to-CBSA crosswalk in assets/: U.S. government works, public domain.
+- Python packages that the first-start install fetches from the Python Package Index (numpy, pandas, geopandas, shapely, matplotlib, Pillow,
+  pypdf and the rest listed in mcp/requirements.txt, requirements.txt and requirements-optional.txt): not part of this software and not in the
+  plugin file. Each is installed on the person's own computer under its own licence, which its distribution carries (`pip show NAME` names it).
 - Reference library entries (library/entries/) describe third-party datasets; each dataset stays under the licence
   its entry names, and data the plugin fetches keeps its publisher's terms. Maps carry the credits those terms require.

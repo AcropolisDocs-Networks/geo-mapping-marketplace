@@ -1,4 +1,4 @@
-# geo-mapping-acropolisdocs 1.12.2
+# geo-mapping-acropolisdocs 1.12.3
 
 Cartographic maps from a request or your own geodata: print maps (SVG, PDF, PNG), interactive web maps (one self-contained HTML page), data
 conversion and analysis, public data services, travel-time areas and terrain, each checked before it is handed over and each with its sources.
@@ -29,6 +29,48 @@ credential folder.
 
 The map skills run in the session's shell. In the desktop app that is a Linux sandbox, where `scripts/doctor.py --fix --quick` installs the
 map packages in about a minute; only the data server runs on your own computer.
+
+## What installs the first time the plugin starts
+
+Nothing is installed into your system Python and no administrator rights are needed. Everything below goes into one private folder (the table
+above) that is outside the plugin, so it survives plugin updates. To remove it, close Claude and delete that folder.
+
+1. **A Python is chosen.** The plugin needs a whole Python 3.11 or newer; 3.13 is the one it is tested on (python.org, or `winget install
+   Python.Python.3.13` on Windows). It tests every Python it finds (the version, its own standard library in place, the `venv` module) and skips
+   one that fails, such as a folder holding only `python.exe` and its DLLs. The Microsoft Store `python` stubs on Windows are skipped on purpose.
+2. **The private environment is built** from that Python.
+3. **The data server's packages go in first** (`mcp/requirements.txt`, exact versions, about a hundred megabytes). The server starts as soon as
+   they are in.
+4. **The map-building set follows** (`requirements.txt`: geopandas, shapely, matplotlib, Pillow, pypdf and the rest). It is installed at the tested
+   versions in `constraints.txt`: each is the newest release the test suite ran on, and a release is refused when a pin is behind the newest
+   release or has a known vulnerability. If one tested version cannot be installed on your computer, the newest that fit are installed instead and
+   the window says so. A package already newer than its pin would be moved back to the tested one, which is why every release checks that the pins
+   are the newest releases.
+5. **The optional extras go in one at a time** (`requirements-optional.txt`: rasterio, duckdb, h3, playwright, keyring and others), so one with no
+   build for your computer is skipped and named without stopping the rest. A map that needs a skipped extra says so.
+6. **Chromium for flythroughs and web-map checks** (about 150 MB, once).
+
+All together it is several hundred megabytes and a few minutes, and it needs the internet that one time. On **Windows** a window titled
+"geo-mapping setup" opens by itself: leave it open until it says Done, press a key, then restart Claude. On **macOS and Linux** it runs in the
+background and writes `setup.log` beside the environment; restart the plugin when the log ends with Done. The server answers from a Python that
+already has its packages while this runs, and a map that needs something not yet installed says so.
+
+It runs again only when a plugin update changes a package list, or when the environment was built on a Python that is not whole (it is rebuilt on
+a good one, and says so).
+
+**If something goes wrong,** look in the environment folder:
+
+| File | What it tells you |
+|---|---|
+| `launch.log` | what the latest start decided and why (whether it started setup, and if not, which marker stopped it) |
+| `python-check.log` | each Python that was found and skipped, with the reason |
+| `setup.log` (macOS and Linux) | the install output; on Windows the same lines are in the setup window |
+| `setup.failed` | the last setup did not finish; it is not retried by itself. Fix what the window said, then run it by hand |
+| `setup.running` | a setup is in progress, or was interrupted; one more than a day old is treated as dead and ignored |
+
+Run it by hand: **Windows** `mcp\setup.cmd all` in the plugin's folder (PowerShell: `& "<plugin folder>\mcp\setup.cmd" all`); **macOS and Linux**
+`sh "<plugin folder>/mcp/setup.sh" all`. If a line says **Access is denied**, a program is using the environment: close Claude (it keeps the data
+server running) and run it again. On Windows, PDF output needs WeasyPrint's GTK runtime, which pip cannot install; SVG, PNG and web maps do not.
 
 ## Your brand
 
@@ -64,6 +106,19 @@ or a folder named in `GEO_MAPPING_BRANDS`), so a plugin update never removes it.
 server's own exact pins. `requirements-optional.txt` holds the extras (rasterio, duckdb, h3, playwright and others); a map that needs one says
 so. PDF output needs WeasyPrint's native libraries (Pango), which pip cannot install: the doctor's PDF line says when they are missing, and
 SVG and PNG do not need them.
+
+## License and NOTICE
+
+Apache License 2.0 (`LICENSE`), copyright 2026 AcropolisDocs, LLC. You may use, change and redistribute the plugin, including commercially. Keep the
+`NOTICE` file with every copy and every modified version, and credit AcropolisDocs, LLC (License section 4(d)).
+
+- **Not covered by the licence:** the AcropolisDocs name and logo, and the shipped brand pack in `brands/`. A brand pack you add stays on your computer
+  and is used on your own authority; its marks belong to their owners (`NOTICE`, "Trademarks and brand packs").
+- **Bundled parts keep their own licences:** the Inter typeface and the style-pack typefaces (SIL Open Font License 1.1), Leaflet (BSD-2), MapLibre GL JS and
+  pmtiles (BSD-3), Natural Earth and the U.S. Census boundary files (public domain). Library entries describe third-party datasets; each stays under its
+  publisher's terms, and the credits those terms require are on your maps.
+- **The Python packages installed on first start** (see above) are fetched from the Python Package Index onto your computer. They are not in the plugin
+  file and not redistributed by it; each has its own licence, which `pip show NAME` names inside the private environment.
 
 ## Rules this plugin keeps
 

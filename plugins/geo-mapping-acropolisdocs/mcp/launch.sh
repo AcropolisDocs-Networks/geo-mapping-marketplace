@@ -28,18 +28,30 @@ start_setup() {
   echo "geo-mapping: installing the map packages, the optional extras and Chromium in the background (once). Log: $BASE/setup.log" >&2
 }
 
+# 1.12.3: launch.log (the latest start only) says what this start decided and why, so a setup that did not start leaves a reason.
+mkdir -p "$BASE" 2>/dev/null
+LOG="$BASE/launch.log"
+echo "$(date) launch.sh from $HERE" > "$LOG" 2>/dev/null
+BADVENV=0
+[ -x "$VENVPY" ] && ! "$VENVPY" "$HERE/pycheck.py" >/dev/null 2>&1 && BADVENV=1    # built on a Python that is not whole: setup rebuilds it
+
 # The first time, and when a new version changes a package list, install everything by itself; the server starts meanwhile from whatever
 # Python already works. Never twice at once, and not again after a failure (setup.failed says to run setup.sh by hand).
-if ! running && [ ! -f "$BASE/setup.failed" ]; then
-  if ! cmp -s "$HERE/requirements.txt" "$STAMP" || ! cmp -s "$ROOT/requirements.txt" "$FULLSTAMP"; then
-    start_setup
-  fi
+if running; then
+  echo "not starting setup: it is already running" >> "$LOG"
+elif [ -f "$BASE/setup.failed" ]; then
+  echo "not starting setup: setup.failed exists (run setup.sh by hand to see why)" >> "$LOG"
+elif [ "$BADVENV" = 1 ] || ! cmp -s "$HERE/requirements.txt" "$STAMP" || ! cmp -s "$ROOT/requirements.txt" "$FULLSTAMP"; then
+  echo "starting setup (broken environment: $BADVENV; otherwise the package lists changed or the full install never finished)" >> "$LOG"
+  start_setup
 fi
 
-if [ -x "$VENVPY" ] && cmp -s "$HERE/requirements.txt" "$STAMP" && "$VENVPY" -c "$IMPORTS" >/dev/null 2>&1; then
+if [ "$BADVENV" = 0 ] && [ -x "$VENVPY" ] && cmp -s "$HERE/requirements.txt" "$STAMP" && "$VENVPY" -c "$IMPORTS" >/dev/null 2>&1; then
   exec "$VENVPY" "$HERE/ogc_server.py" "$@"
 fi
 
+PYLOG="$LOG"
+export PYLOG
 PY=$(sh "$HERE/findpython.sh") || {
   echo "geo-mapping: no Python 3.11 or newer was found. Install one (python.org, Homebrew or your package manager) and restart the plugin." >&2
   exit 1
