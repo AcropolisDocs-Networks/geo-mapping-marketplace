@@ -304,9 +304,9 @@ def names_collection(plan, bbox, fit: int, max_zoom: int) -> tuple[dict, dict]:
     places = load("places") if cfg["places"] != "none" else None
     if places is not None and len(places):
         sel = mr.select_places(places, cfg, tier_deep)
-        # 1.5.0 (R3-SCRIPT): the same name choice as the print map; the web page's label glyphs are Inter's Latin ranges, so a name in another
-        # script (Greek and Cyrillic included) is given in English there and said (MAP-LOC-003)
-        import script_text as st
+        # 1.5.0 (R3-SCRIPT): the same name choice as the print map. 1.9.0: the page's label glyphs are Inter's Latin, Greek and Cyrillic
+        # ranges; a name in another script is given in English there and said (MAP-LOC-003)
+        import webmap_maplibre as wml
         try:
             web_names, _alt, _left = mp.choose_place_names(sel, cfg) if len(sel) else ([], [], set())
         except Exception:  # noqa: BLE001 - the plain names
@@ -318,10 +318,15 @@ def names_collection(plan, bbox, fit: int, max_zoom: int) -> tuple[dict, dict]:
             if tr == "capital":
                 mz = min(mz, 3.0)
             nm = str(web_names[i])
-            if st.needs_font(nm):
+            # 1.9.0: Greek and Cyrillic names are drawn as they are (the page's glyphs cover them now); a name with a character the
+            # glyph files do not hold still falls back to English
+            if not wml.glyphs_cover(nm):
                 from fontTools import unicodedata as ud_
                 stats.setdefault("script_fallback", set()).update({ud_.script(ch) for ch in nm} - {"Zyyy", "Zinh", "Zzzz", "Latn"})
                 nm = str(sel["name"].iloc[i])
+            if not nm.isascii():                             # which Inter range files the page carries beside Latin
+                from fontTools import unicodedata as ud2_
+                plan.web_name_scripts = set(getattr(plan, "web_name_scripts", ())) | ({ud2_.script(ch) for ch in nm} & set(INTER_SCRIPT_FACES))
             feats.append(feat(g.x, g.y, nm, tr, mz, sel["_prio"].iloc[i], "place"))
             stats["places"] += 1
     if cfg["water"]:
@@ -924,11 +929,24 @@ def build_css(t: dict) -> str:
     return css
 
 
-def inter_face() -> str:
-    f = gc.plugin_root() / "assets" / "fonts" / "inter" / "inter-latin-wght-normal.woff2"
-    b = base64.b64encode(f.read_bytes()).decode("ascii")
-    return ("@font-face{font-family:Inter;font-style:normal;font-weight:100 900;font-display:swap;"
-            f"src:url(data:font/woff2;base64,{b}) format('woff2')}}")
+# 1.9.0: the Inter range files a page adds beside Latin when its names are written in Greek or Cyrillic (the browser takes each only for
+# the characters in its unicode-range, so the page's own text and controls stay on the Latin file)
+INTER_SCRIPT_FACES = {"Grek": (("inter-greek-wght-normal.woff2", "U+0370-03FF"), ("inter-greek-ext-wght-normal.woff2", "U+1F00-1FFF")),
+                      "Cyrl": (("inter-cyrillic-wght-normal.woff2", "U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116"),
+                               ("inter-cyrillic-ext-wght-normal.woff2", "U+0460-052F,U+1C80-1C88,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F"))}
+
+
+def inter_face(scripts=()) -> str:
+    d = gc.plugin_root() / "assets" / "fonts" / "inter"
+    b = base64.b64encode((d / "inter-latin-wght-normal.woff2").read_bytes()).decode("ascii")
+    out = ("@font-face{font-family:Inter;font-style:normal;font-weight:100 900;font-display:swap;"
+           f"src:url(data:font/woff2;base64,{b}) format('woff2')}}")
+    for sc in sorted(set(scripts) & set(INTER_SCRIPT_FACES)):
+        for name, rng in INTER_SCRIPT_FACES[sc]:
+            b = base64.b64encode((d / name).read_bytes()).decode("ascii")
+            out += ("@font-face{font-family:Inter;font-style:normal;font-weight:100 900;font-display:swap;"
+                    f"src:url(data:font/woff2;base64,{b}) format('woff2');unicode-range:{rng}}}")
+    return out
 
 
 # ---------------------------------------------------------------------------------------------------------------- 1.4.0: style packs
@@ -951,11 +969,12 @@ def _face_woff2(path: str) -> str:
 
 def page_fonts(plan) -> str:
     """The page's @font-face: Inter, and the style pack's faces when its web level carries fonts (full, palette-and-fonts)."""
+    scripts = getattr(plan, "web_name_scripts", ())            # set while the names were chosen (names_collection)
     if not _web_fonts(plan):
-        return inter_face()
+        return inter_face(scripts)
     import map_style
     st = plan.style
-    out, seen = [inter_face()], set()                       # Inter stays for the map engine's own labels and controls
+    out, seen = [inter_face(scripts)], set()                # Inter stays for the map engine's own labels and controls
     for r in map_style.ROLES:
         f = st.type.get(r) or st.type.get("body")
         if f is None or f.get("brand") or (f["family"], f.get("style")) in seen:
@@ -1023,36 +1042,8 @@ def today() -> dt.date:
     return mr.today()
 
 
-def build_page(spec_path, *, brand: str | None = None, template: str | None = None, env=None) -> WebPage:
-    """Plan, resolve the basemap, choose the engine, assemble and return the page text with its findings. Writes nothing."""
-    import tempfile
-    import ref_library as rl
-    import map_render as mr
-    import webmap_maplibre as wml
-    spec_in = gc.load_mapspec(Path(spec_path))
-    cfg = config_of(spec_in)
-    mode = "screen" if cfg["theme"] == "dark" else "print"
-    import webmap_live as wlv
-    live_specs: list[dict] = []
-
-    def edit(sp):                                  # 0.15.0: live service layers go to the page only; the plan and the static picture never see them
-        web_edit(sp)
-        live_specs.extend(wlv.split(sp))
-    plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, spec_edit=edit, use_tiles=False)
-    spec = plan.spec
-    t = plan.tokens
-    findings: list[dict] = list(plan.findings) + pack_web_findings(plan)
-    notes = list(plan.notes)
-    audience = spec.get("audience") or "external"
-    ctl = cfg["controls"]
-    import webmap_3d as w3
-    import webmap_story as ws
-    s3 = w3.settings(spec_in)                     # 3D (M15): terrain, extrusions, masts, links in the air; None on a flat page
-    if ctl.get("compass") and not s3:
-        findings.append(finding("MAP-WEB-015", "WARN", "the compass control is drawn on a 3D page only (webmap.view pitch or bearing, or webmap.3d): this page is north-up, so no arrow is needed"))
-    pfields = [f["field"] for f in ws.panel_fields(cfg["panel"])]
-    pfields += [str(((c or {}).get("select") or {}).get("field")) for c in ((cfg["story"] or {}).get("chapters") or []) if isinstance(c, dict) and (c.get("select") or {}).get("field")]
-
+def _page_basemaps(audience, cfg, env, findings, plan, rl, spec_in, spec_path):
+    """build_page, stage 2 (1.9.0): the basemaps, each through the tile registry: terms, keys, attribution, the relief under the page. Split from build_page() unchanged."""
     # ---- basemap(s) through the registry
     entries = [e for e in rl.all_entries("all") if e.get("type") == "basemap-provider"]
     chosen = []
@@ -1088,7 +1079,11 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
             base_defs.append({"id": name, "mode": r["mode"], "title": r["title"], "url": r.get("url"), "attribution": r["attribution"],
                               "nativeMaxZoom": mz, "nativeMinZoom": 0, "zoomOffset": 0, "maxZoom": min(DEFAULT_MAX_ZOOM + 2, mz + 4), "tileSize": 512,
                               "host": (r.get("hosts") or [None])[0], "entry": r["entry"], "rev": r.get("rev"), "file": r.get("file")})
+    return base_defs, entries, findings
 
+
+def _page_layers(cfg, ctl, findings, live_specs, notes, pfields, plan, s3, spec, spec_path, t, w3, wlv):
+    """build_page, stage 3 (1.9.0): the data layers in draw order: each collection, its popups, legend block and layer definition; live layers. Split from build_page() unchanged."""
     # ---- layers
     label_by_layer = {lb.get("layer"): lb.get("field") for lb in (spec.get("labels") or []) if isinstance(lb, dict)}
     collections: dict[str, dict] = {}
@@ -1196,61 +1191,11 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
     vector_defs = [d for d in defs if d["kind"] not in ("image", "live")]
     source_counts = {d["id"]: len(collections[d["id"]]["features"]) for d in vector_defs}
     payload_features = sum(source_counts.values())
+    return bdefs, blocks, brecs, collections, conf, defs, findings, flat_links, images, label_by_layer, live, live_defs, notes, payload_features, search_field, source_counts, tcfg, time_layers, vector_defs
 
-    # ---- time slider: periods from the time layers' values; the classes stay those of the whole layer (no re-classing per period)
-    time_cfg = None
-    if tcfg and time_layers and ctl["time_slider"]:
-        lorder = next((l.spec.get("time_order") for l in plan.layers if l.id in time_layers and l.spec.get("time_order")), None)
-        try:
-            tp = time_periods({**tcfg, "_layer_order": lorder}, {lid: collections[lid] for lid in time_layers if lid in collections})
-        except ValueError as ex:
-            raise mp.PlanError(f"webmap.time: {ex}", gc.EXIT_USAGE) from None
-        if tp.get("kind") == "named":                # 1.3.0 (R1-TIME)
-            if tp.get("order_from") == "natural":
-                findings.append(finding("MAP-WEB-042", "INFO", f"webmap.time: the {len(tp['labels'])} named periods are in natural order ({', '.join(tp['labels'][:4])}"
-                                        + (", ..." if len(tp["labels"]) > 4 else "") + "); set the layer's time_order or webmap.time.order to give another"))
-            if tp.get("hidden"):
-                findings.append(finding("MAP-WEB-043", "WARN", f"webmap.time: {tp['hidden']} feature(s) have a period the order does not list "
-                                        f"({', '.join(tp.get('unlisted', [])[:4])}); they are hidden while the slider is on", tp.get("unlisted")))
-        if tp["labels"]:
-            mode_t = tcfg.get("mode") or "period"
-            time_cfg = {"labels": tp["labels"], "layers": sorted(time_layers), "mode": mode_t, "play": bool(tcfg.get("play", True)),
-                        "intervalMs": int(tcfg.get("interval_ms") or 1200), "field": next(iter(time_layers.values())), "start": int(tcfg.get("start", 0) or 0)}
-            if tp.get("num"):
-                time_cfg["num"] = {"lo": tp["num"]["lo"], "step": tp["num"]["step"]}
-            if tp.get("starts"):
-                time_cfg["starts"] = tp["starts"]
-            if tp.get("kind") == "named":
-                time_cfg["named"] = True
-            notes.append(f"time slider: {len(tp['labels'])} periods ({tp['labels'][0]} to {tp['labels'][-1]}) on {', '.join(sorted(time_layers))}"
-                         + (f"; {tp['missing']} feature(s) have no time and are hidden while the slider is on" if tp["missing"] else ""))
-        else:
-            findings.append(finding("MAP-WEB-022", "WARN", f"webmap.time: the time field has no values on layer(s) {', '.join(sorted(time_layers))}, so the page has no time slider"))
-    elif tcfg and not time_layers:
-        findings.append(finding("MAP-WEB-022", "WARN", "webmap.time is set but no layer has a time_field (or the field webmap.time.field names), so the page has no time slider"))
-    for c in collections.values():                   # a time value never travels without its period number
-        for f in c["features"]:
-            f["properties"].pop("_tv", None)
 
-    # ---- swipe compare
-    compare_cfg = None
-    cmp_in = cfg["compare"]
-    if cmp_in and ctl["compare"]:
-        ids_all = {d["id"] for d in defs}
-        left, right = list(cmp_in.get("left") or []), list(cmp_in.get("right") or [])
-        unknown = [x for x in left + right if x not in ids_all]
-        if unknown:
-            findings.append(finding("MAP-WEB-022", "BLOCK", f"webmap.compare names layer(s) the page does not have: {', '.join(unknown)}; the layers are {', '.join(sorted(ids_all))}", unknown))
-        both = sorted(set(left) & set(right))
-        if both:
-            findings.append(finding("MAP-WEB-022", "BLOCK", f"webmap.compare puts {', '.join(both)} on both sides; a layer on both sides needs no listing"))
-        if not unknown and not both and (left or right):
-            title_of = {d["id"]: d["title"] for d in defs}
-            compare_cfg = {"left": left, "right": right, "leftLabel": cmp_in.get("left_label") or ", ".join(title_of[x] for x in left) or "Both sides",
-                           "rightLabel": cmp_in.get("right_label") or ", ".join(title_of[x] for x in right) or "Both sides", "position": float(cmp_in.get("position", 0.5))}
-            for d in defs:
-                d["side"] = "left" if d["id"] in left else ("right" if d["id"] in right else None)
-
+def _page_engine_view(base_defs, cfg, collections, compare_cfg, ctl, defs, findings, live, live_defs, notes, payload_features, plan, s3, spec, time_cfg, vector_defs, w3, wlv, wml):
+    """build_page, stage 5 (1.9.0): the engine (Leaflet or MapLibre, and why), the first view and the zoom range. Split from build_page() unchanged."""
     # ---- engine
     tiled_candidates = [d["id"] for d in vector_defs if not d["context"] and wml.needs_tiles(collections[d["id"]])]
     vector_base = any(b["mode"] in ("vector", "vector-file") for b in base_defs)
@@ -1349,7 +1294,11 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
         findings.append(finding("MAP-WEB-010", "WARN", f"the data needs zoom {fit} to fit in a window, below the page's minimum zoom {min_zoom}; the first view shows only part of it"))
     if fit > max_zoom:
         findings.append(finding("MAP-WEB-010", "WARN", f"the data needs zoom {fit} to fit, above the page's maximum zoom {max_zoom}; the first view shows it smaller than the window"))
+    return bbox, bundled_max, engine, engine_why, fit, h, hosts, max_zoom, mb, min_zoom, pad_pct, s3, vector_base, wgs
 
+
+def _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, ctl, defs, engine, findings, fit, flat_links, label_by_layer, max_zoom, min_zoom, mr, notes, pfields, plan, s3, search_field, t, tempfile, vector_base, vector_defs, w3, wml):
+    """build_page, stage 6 (1.9.0): place, water and admin names; on MapLibre the large layers as embedded PMTiles, clusters, glyphs and the style. Split from build_page() unchanged."""
     # ---- names: place, water and admin names as text labels, tiered by zoom, and feature labels for the layers the spec labels
     names_col, names_stats = names_collection(plan, bbox, fit, max_zoom)
     notes += [n for n in plan.notes if n not in notes]              # what the layers said while they were packed (a windowed layer)
@@ -1357,7 +1306,7 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
     if names_stats.get("script_fallback"):                   # 1.5.0: the page's glyphs are Inter's; such names are in English here
         sc_ = sorted(names_stats.pop("script_fallback"))
         findings.append({"id": "MAP-LOC-003", "severity": "WARN", "message": f"place names in {', '.join(sc_)} are given in English on the web page: "
-                         "its label glyphs cover the Latin ranges only (the print map outlines them in Inter or their Noto face)", "detail": {"scripts": sc_}})
+                         "its label glyphs cover Latin, Greek and Cyrillic (the print map outlines the others in their Noto face)", "detail": {"scripts": sc_}})
     if names_on:
         collections[NAMES_ID] = names_col
         notes.append(f"{names_stats['places']} place names, {names_stats['water']} water names, {names_stats['admin']} admin names on the page, shown by zoom"
@@ -1480,50 +1429,11 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
             ranges.setdefault("Inter Regular", set()).update(wml.BASEMAP_GLYPH_RANGES)
         glyphs, gmissing = wml.glyph_payload(ranges)
         ml = {"style": st, "glyphs": glyphs, "glyph_missing": gmissing, "texts": texts}
+    return clusters, feature_labels, findings, flat_profiles, label_zoom, ml, names_on, names_stats, notes, p3, search_idx, search_packed, tiles
 
-    # ---- story and KPI panel (M15): the chapters checked against the page's layers, periods and features
-    story_cfg, sfs, snotes = ws.plan(cfg["story"], defs, collections, time_cfg, bbox)
-    findings += sfs
-    notes += snotes
-    panel_cfg, pfs = ws.panel_config(cfg["panel"], defs, {l.id: [c for c in l.gdf.columns if c != l.gdf.geometry.name] for l in plan.layers})
-    findings += pfs
 
-    # ---- text
-    els = spec.get("elements") or {}
-    title_el = els.get("title") or {}
-    title = text_lint.title_text(spec)
-    subtitle = title_el.get("subtitle") or ""
-    rendered = mr.render(plan)          # the static map: the fallback image, and the same checks the print build makes
-    findings += [f for f in rendered.findings if f["id"].startswith(("MAP-DATA", "MAP-CART", "MAP-LIC", "MAP-CRS"))]
-    story_pics = []
-    print_pics = str((cfg["story"] or {}).get("print_pictures", "on")).lower() if story_cfg else "on"
-    if print_pics in ("true", "false"):
-        print_pics = "on" if print_pics == "true" else "off"
-    if story_cfg and print_pics != "off":   # a static picture per chapter through the print path, for the print view (1.1.0: on, off or first)
-        tvals = time_values(plan, time_layers, time_cfg, tp if time_cfg else None)
-        chs = story_cfg["chapters"][:1] if print_pics == "first" else story_cfg["chapters"]
-        story_pics, pnotes = ws.pictures(spec_path, chs, brand=brand, template=template, mode=mode, base_edit=print_edit,
-                                         time_cfg=time_cfg, time_values=tvals, title=title,
-                                         uri=lambda r, t_, n_: fallback_uri(r, t_, n_, dpi=int((cfg["story"] or {}).get("print_dpi") or 96)))
-        story_pics += [None] * (len(story_cfg["chapters"]) - len(story_pics))
-        notes += pnotes
-    elif story_cfg:
-        story_pics = [None] * len(story_cfg["chapters"])
-        notes.append("story: chapter print pictures are off (webmap.story.print_pictures: off); the print view carries each chapter's words")
-    notes_lines = source_note_lines(plan) if (els.get("source_note") or {}).get("on", True) else []
-    tm_line = plan.pack["pack"].get("trademark_line")
-    if tm_line and (els.get("trademark_line") or {}).get("on", "auto") in ("auto", True):
-        notes_lines.append(tm_line)
-    ds = els.get("date_stamp") or {}
-    if ds.get("on", True):
-        notes_lines.append(ds.get("text") if ds.get("text") not in (None, "auto") else f"Map produced {gl.plan_date_text(plan, today())}")
-    attributions = []
-    for r in brecs:                      # layer credits are in the source note; the attribution control carries the basemap's
-        a = ((r or {}).get("license") or {}).get("attribution_text")
-        a = esc(a.rstrip(".")) if a else None
-        if a and a not in attributions:
-            attributions.append(a)
-
+def _page_frame(base_defs, blocks, brecs, cfg, collections, ctl, defs, engine, findings, names_on, panel_cfg, plan, rl, s3, search_field, source_counts, spec_in, story_cfg, t, tiles, time_cfg):
+    """build_page, stage 8 (1.9.0): the frame: webmap.frame, the credits corner, the brand mark, search and the panel. Split from build_page() unchanged."""
     # ---- the frame (1.1.0): webmap.frame, the credits corner, the brand chip, the layer names and the playback label
     import webmap_frame as wf
     fc, ffs = wf.resolve(spec_in.get("webmap") or {}, story=bool(story_cfg), time_on=bool(time_cfg), three_d=bool(s3), delivery=cfg["delivery"], engine=engine)
@@ -1583,7 +1493,11 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
             time_cfg["play"] = False
         if not pbk["on"]:                                  # no dock: the time is fixed at its first period (time.start)
             findings.append(finding("MAP-WEB-022", "INFO", f"the playback dock is off (webmap.frame.playback); the page shows period {time_cfg['labels'][max(0, min(len(time_cfg['labels']) - 1, time_cfg['start']))]} only"))
+    return bd, credit_list, default_tab, fc, findings, pbk, tabs, tdisp, tool_notes, tools, tsearch, wf
 
+
+def _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_max, cfg, clusters, compare_cfg, conf, credit_list, ctl, default_tab, defs, els, engine, fc, feature_labels, findings, images, label_zoom, max_zoom, mb, min_zoom, names_on, names_stats, notes, notes_lines, p3, pad_pct, panel_cfg, pbk, plan, print_pics, rendered, s3, search_field, search_idx, search_packed, source_counts, spec, spec_in, story_cfg, subtitle, t, tabs, tdisp, tiles, time_cfg, title, title_el, tool_notes, tools, tsearch, w3, wf, wgs):
+    """build_page, stage 9 (1.9.0): the page configuration the script reads, and the tabs of the panel. Split from build_page() unchanged."""
     # ---- page configuration
     import map_brand
     page_cfg = {
@@ -1680,7 +1594,11 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
         fb_uri = fallback_uri(rendered, title, notes)
         fb_img = f'<figure id="gm-fallback" hidden><img alt="{esc(alt)}" src="{fb_uri}"></figure>'
         noscript = '<noscript><style>#gm-fallback[hidden]{display:flex!important}#gm-map{display:none}</style></noscript>'
+    return conf_html, extra_ui, fb_img, frame_parts, map_brand, noscript, page_cfg, summary
 
+
+def _page_document(audience, base_defs, bd, cfg, clusters, collections, compare_cfg, conf, conf_html, credit_list, ctl, defs, engine, engine_why, entries, extra_ui, fb_img, fc, findings, fit, flat_profiles, frame_parts, h, hosts, live_defs, map_brand, max_zoom, min_zoom, ml, noscript, notes, p3, page_cfg, panel_cfg, payload_features, plan, rendered, search_field, search_packed, source_counts, spec, story_cfg, story_pics, summary, t, tabs, tiles, time_cfg, title, tools, w3, wf, wlv, wml, ws):
+    """build_page, stage 10 (1.9.0): the head (stamps, hidden accreditation, host manifest, CSP), the vendor scripts and data blobs, and the document. Split from build_page() unchanged."""
     # ---- head: stamps, hidden accreditation, host manifest, CSP
     props = map_brand.props_for(plan.brand, plan.manifest, "html")
     root_attrs = " ".join(f'{k}="{esc(v)}"' for k, v in props["root_attributes"].items())
@@ -1779,6 +1697,149 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
     import web_lint
     findings += web_lint.lint_page(doc, report, plan, [b for b in base_defs if b["mode"] in ("tiles", "vector")])
     recs = tile_records(base_defs, entries)
+    return doc, findings, recs, report
+
+
+def build_page(spec_path, *, brand: str | None = None, template: str | None = None, env=None) -> WebPage:
+    """Plan, resolve the basemap, choose the engine, assemble and return the page text with its findings. Writes nothing."""
+    import tempfile
+    import ref_library as rl
+    import map_render as mr
+    import webmap_maplibre as wml
+    spec_in = gc.load_mapspec(Path(spec_path))
+    cfg = config_of(spec_in)
+    mode = "screen" if cfg["theme"] == "dark" else "print"
+    import webmap_live as wlv
+    live_specs: list[dict] = []
+
+    def edit(sp):                                  # 0.15.0: live service layers go to the page only; the plan and the static picture never see them
+        web_edit(sp)
+        live_specs.extend(wlv.split(sp))
+    plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, spec_edit=edit, use_tiles=False)
+    spec = plan.spec
+    t = plan.tokens
+    findings: list[dict] = list(plan.findings) + pack_web_findings(plan)
+    notes = list(plan.notes)
+    audience = spec.get("audience") or "external"
+    ctl = cfg["controls"]
+    import webmap_3d as w3
+    import webmap_story as ws
+    s3 = w3.settings(spec_in)                     # 3D (M15): terrain, extrusions, masts, links in the air; None on a flat page
+    if ctl.get("compass") and not s3:
+        findings.append(finding("MAP-WEB-015", "WARN", "the compass control is drawn on a 3D page only (webmap.view pitch or bearing, or webmap.3d): this page is north-up, so no arrow is needed"))
+    pfields = [f["field"] for f in ws.panel_fields(cfg["panel"])]
+    pfields += [str(((c or {}).get("select") or {}).get("field")) for c in ((cfg["story"] or {}).get("chapters") or []) if isinstance(c, dict) and (c.get("select") or {}).get("field")]
+
+    base_defs, entries, findings = _page_basemaps(audience, cfg, env, findings, plan, rl, spec_in, spec_path)
+
+    bdefs, blocks, brecs, collections, conf, defs, findings, flat_links, images, label_by_layer, live, live_defs, notes, payload_features, search_field, source_counts, tcfg, time_layers, vector_defs = _page_layers(cfg, ctl, findings, live_specs, notes, pfields, plan, s3, spec, spec_path, t, w3, wlv)
+
+    # ---- time slider: periods from the time layers' values; the classes stay those of the whole layer (no re-classing per period)
+    time_cfg = None
+    if tcfg and time_layers and ctl["time_slider"]:
+        lorder = next((l.spec.get("time_order") for l in plan.layers if l.id in time_layers and l.spec.get("time_order")), None)
+        try:
+            tp = time_periods({**tcfg, "_layer_order": lorder}, {lid: collections[lid] for lid in time_layers if lid in collections})
+        except ValueError as ex:
+            raise mp.PlanError(f"webmap.time: {ex}", gc.EXIT_USAGE) from None
+        if tp.get("kind") == "named":                # 1.3.0 (R1-TIME)
+            if tp.get("order_from") == "natural":
+                findings.append(finding("MAP-WEB-042", "INFO", f"webmap.time: the {len(tp['labels'])} named periods are in natural order ({', '.join(tp['labels'][:4])}"
+                                        + (", ..." if len(tp["labels"]) > 4 else "") + "); set the layer's time_order or webmap.time.order to give another"))
+            if tp.get("hidden"):
+                findings.append(finding("MAP-WEB-043", "WARN", f"webmap.time: {tp['hidden']} feature(s) have a period the order does not list "
+                                        f"({', '.join(tp.get('unlisted', [])[:4])}); they are hidden while the slider is on", tp.get("unlisted")))
+        if tp["labels"]:
+            mode_t = tcfg.get("mode") or "period"
+            time_cfg = {"labels": tp["labels"], "layers": sorted(time_layers), "mode": mode_t, "play": bool(tcfg.get("play", True)),
+                        "intervalMs": int(tcfg.get("interval_ms") or 1200), "field": next(iter(time_layers.values())), "start": int(tcfg.get("start", 0) or 0)}
+            if tp.get("num"):
+                time_cfg["num"] = {"lo": tp["num"]["lo"], "step": tp["num"]["step"]}
+            if tp.get("starts"):
+                time_cfg["starts"] = tp["starts"]
+            if tp.get("kind") == "named":
+                time_cfg["named"] = True
+            notes.append(f"time slider: {len(tp['labels'])} periods ({tp['labels'][0]} to {tp['labels'][-1]}) on {', '.join(sorted(time_layers))}"
+                         + (f"; {tp['missing']} feature(s) have no time and are hidden while the slider is on" if tp["missing"] else ""))
+        else:
+            findings.append(finding("MAP-WEB-022", "WARN", f"webmap.time: the time field has no values on layer(s) {', '.join(sorted(time_layers))}, so the page has no time slider"))
+    elif tcfg and not time_layers:
+        findings.append(finding("MAP-WEB-022", "WARN", "webmap.time is set but no layer has a time_field (or the field webmap.time.field names), so the page has no time slider"))
+    for c in collections.values():                   # a time value never travels without its period number
+        for f in c["features"]:
+            f["properties"].pop("_tv", None)
+
+    # ---- swipe compare
+    compare_cfg = None
+    cmp_in = cfg["compare"]
+    if cmp_in and ctl["compare"]:
+        ids_all = {d["id"] for d in defs}
+        left, right = list(cmp_in.get("left") or []), list(cmp_in.get("right") or [])
+        unknown = [x for x in left + right if x not in ids_all]
+        if unknown:
+            findings.append(finding("MAP-WEB-022", "BLOCK", f"webmap.compare names layer(s) the page does not have: {', '.join(unknown)}; the layers are {', '.join(sorted(ids_all))}", unknown))
+        both = sorted(set(left) & set(right))
+        if both:
+            findings.append(finding("MAP-WEB-022", "BLOCK", f"webmap.compare puts {', '.join(both)} on both sides; a layer on both sides needs no listing"))
+        if not unknown and not both and (left or right):
+            title_of = {d["id"]: d["title"] for d in defs}
+            compare_cfg = {"left": left, "right": right, "leftLabel": cmp_in.get("left_label") or ", ".join(title_of[x] for x in left) or "Both sides",
+                           "rightLabel": cmp_in.get("right_label") or ", ".join(title_of[x] for x in right) or "Both sides", "position": float(cmp_in.get("position", 0.5))}
+            for d in defs:
+                d["side"] = "left" if d["id"] in left else ("right" if d["id"] in right else None)
+
+    bbox, bundled_max, engine, engine_why, fit, h, hosts, max_zoom, mb, min_zoom, pad_pct, s3, vector_base, wgs = _page_engine_view(base_defs, cfg, collections, compare_cfg, ctl, defs, findings, live, live_defs, notes, payload_features, plan, s3, spec, time_cfg, vector_defs, w3, wlv, wml)
+
+    clusters, feature_labels, findings, flat_profiles, label_zoom, ml, names_on, names_stats, notes, p3, search_idx, search_packed, tiles = _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, ctl, defs, engine, findings, fit, flat_links, label_by_layer, max_zoom, min_zoom, mr, notes, pfields, plan, s3, search_field, t, tempfile, vector_base, vector_defs, w3, wml)
+
+    # ---- story and KPI panel (M15): the chapters checked against the page's layers, periods and features
+    story_cfg, sfs, snotes = ws.plan(cfg["story"], defs, collections, time_cfg, bbox)
+    findings += sfs
+    notes += snotes
+    panel_cfg, pfs = ws.panel_config(cfg["panel"], defs, {l.id: [c for c in l.gdf.columns if c != l.gdf.geometry.name] for l in plan.layers})
+    findings += pfs
+
+    # ---- text
+    els = spec.get("elements") or {}
+    title_el = els.get("title") or {}
+    title = text_lint.title_text(spec)
+    subtitle = title_el.get("subtitle") or ""
+    rendered = mr.render(plan)          # the static map: the fallback image, and the same checks the print build makes
+    findings += [f for f in rendered.findings if f["id"].startswith(("MAP-DATA", "MAP-CART", "MAP-LIC", "MAP-CRS"))]
+    story_pics = []
+    print_pics = str((cfg["story"] or {}).get("print_pictures", "on")).lower() if story_cfg else "on"
+    if print_pics in ("true", "false"):
+        print_pics = "on" if print_pics == "true" else "off"
+    if story_cfg and print_pics != "off":   # a static picture per chapter through the print path, for the print view (1.1.0: on, off or first)
+        tvals = time_values(plan, time_layers, time_cfg, tp if time_cfg else None)
+        chs = story_cfg["chapters"][:1] if print_pics == "first" else story_cfg["chapters"]
+        story_pics, pnotes = ws.pictures(spec_path, chs, brand=brand, template=template, mode=mode, base_edit=print_edit,
+                                         time_cfg=time_cfg, time_values=tvals, title=title,
+                                         uri=lambda r, t_, n_: fallback_uri(r, t_, n_, dpi=int((cfg["story"] or {}).get("print_dpi") or 96)))
+        story_pics += [None] * (len(story_cfg["chapters"]) - len(story_pics))
+        notes += pnotes
+    elif story_cfg:
+        story_pics = [None] * len(story_cfg["chapters"])
+        notes.append("story: chapter print pictures are off (webmap.story.print_pictures: off); the print view carries each chapter's words")
+    notes_lines = source_note_lines(plan) if (els.get("source_note") or {}).get("on", True) else []
+    tm_line = plan.pack["pack"].get("trademark_line")
+    if tm_line and (els.get("trademark_line") or {}).get("on", "auto") in ("auto", True):
+        notes_lines.append(tm_line)
+    ds = els.get("date_stamp") or {}
+    if ds.get("on", True):
+        notes_lines.append(ds.get("text") if ds.get("text") not in (None, "auto") else f"Map produced {gl.plan_date_text(plan, today())}")
+    attributions = []
+    for r in brecs:                      # layer credits are in the source note; the attribution control carries the basemap's
+        a = ((r or {}).get("license") or {}).get("attribution_text")
+        a = esc(a.rstrip(".")) if a else None
+        if a and a not in attributions:
+            attributions.append(a)
+
+    bd, credit_list, default_tab, fc, findings, pbk, tabs, tdisp, tool_notes, tools, tsearch, wf = _page_frame(base_defs, blocks, brecs, cfg, collections, ctl, defs, engine, findings, names_on, panel_cfg, plan, rl, s3, search_field, source_counts, spec_in, story_cfg, t, tiles, time_cfg)
+
+    conf_html, extra_ui, fb_img, frame_parts, map_brand, noscript, page_cfg, summary = _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_max, cfg, clusters, compare_cfg, conf, credit_list, ctl, default_tab, defs, els, engine, fc, feature_labels, findings, images, label_zoom, max_zoom, mb, min_zoom, names_on, names_stats, notes, notes_lines, p3, pad_pct, panel_cfg, pbk, plan, print_pics, rendered, s3, search_field, search_idx, search_packed, source_counts, spec, spec_in, story_cfg, subtitle, t, tabs, tdisp, tiles, time_cfg, title, title_el, tool_notes, tools, tsearch, w3, wf, wgs)
+
+    doc, findings, recs, report = _page_document(audience, base_defs, bd, cfg, clusters, collections, compare_cfg, conf, conf_html, credit_list, ctl, defs, engine, engine_why, entries, extra_ui, fb_img, fc, findings, fit, flat_profiles, frame_parts, h, hosts, live_defs, map_brand, max_zoom, min_zoom, ml, noscript, notes, p3, page_cfg, panel_cfg, payload_features, plan, rendered, search_field, search_packed, source_counts, spec, story_cfg, story_pics, summary, t, tabs, tiles, time_cfg, title, tools, w3, wf, wlv, wml, ws)
     return WebPage(html=doc, findings=findings, report=report, stem=rendered.filename_stem, plan=plan, rendered=rendered, hosts=hosts, basemaps=base_defs, records=recs)
 
 

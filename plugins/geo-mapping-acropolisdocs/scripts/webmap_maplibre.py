@@ -67,6 +67,18 @@ def covered(manifest: dict, stack: str) -> set[int]:
     return out
 
 
+_COVER: dict = {}
+
+
+def glyphs_cover(text: str) -> bool:
+    """1.9.0: every character of the text, and of its upper-case form, is in both label stacks' glyph files (Latin, Greek, Cyrillic)."""
+    if "all" not in _COVER:
+        man = glyph_manifest()
+        sets = [covered(man, st) for st in man["stacks"]]
+        _COVER["all"] = set.intersection(*sets) if sets else set()
+    return all(ord(ch) in _COVER["all"] or ch.isspace() for ch in str(text) + str(text).upper())
+
+
 def glyph_ranges_for(texts: dict[str, set[str]]) -> dict[str, set[str]]:
     """{stack: {range}} the label texts need. `texts` is {stack: {text}}; upper-case forms are included (labels drawn upper case)."""
     out: dict[str, set[str]] = {}

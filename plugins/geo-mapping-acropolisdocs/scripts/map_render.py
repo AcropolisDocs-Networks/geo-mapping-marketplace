@@ -1167,64 +1167,8 @@ def wrap_lines(text: str, w: float, pt: float, weight: int = 400, max_lines: int
 
 
 # ---------------------------------------------------------------------------------------------------------------- main
-def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> Rendered:
-    """The map as one SVG page. 1.3.0 (R1-PANEL): `frame` draws the map in a frame passed in (its rect is the template's map region) instead of
-    fitting one, so the panels of a sheet share it exactly; `elements_off` lists the elements the sheet draws once for all of them (legend,
-    north_arrow, scale_bar, inset_map, title, logo), which this page then leaves out."""
-    if elements_off:
-        import copy as _copy
-        plan.spec = _copy.deepcopy(plan.spec)
-        els_ = plan.spec.setdefault("elements", {})
-        for name in elements_off:
-            els_[name] = {**(els_.get(name) or {}), "on": False}
-    spec, tpl, t = plan.spec, plan.tpl, plan.tokens
-    plan.__dict__["_hatch"] = {}
-    if getattr(plan, "style", None) is not None:          # 1.4.0: the plan's pack faces (another plan may have been prepared since)
-        tm.use_type({r: f_ for r, f_ in plan.style.type.items() if not f_.get("brand")} or None)
-    W, H = tpl["size_mm"]
-    fonts = dict(tpl["fonts"])
-    els = spec.get("elements") or {}
-    findings: list[dict] = []
-    rep: dict = {"template": plan.tpl_name, "brand": plan.brand, "crs": plan.crs}
-
-    def on(name: str, default=True):
-        v = (els.get(name) or {}).get("on", default)
-        return v
-
-    tiles_ = [b for b in plan.basemap if b.get("kind") == "tiles"]
-    if tpl.get("footer_fit") and tpl.get("footer_fit_classic") is False and getattr(plan, "look", "classic") == "classic":
-        tpl["footer_fit"] = False                 # 1.0.0: a template fitted since 1.0.0 keeps its fixed footer in the classic look
-    if tpl.get("footer_fit") and not tiles_:    # M16: the footer takes what its notes need
-        grown = lo.fit_footer(tpl, draw_footer(plan, tpl, fonts, {}, [], [], logo_in_map=tpl.get("layout") == "in-map")[1]["need_mm"])
-        if grown:
-            rep["footer_fit_mm"] = grown
-    elif tpl.get("footer_fit") and getattr(plan, "look", "classic") != "classic":
-        # 0.19.0: with a tile basemap too, when the prepared tiles still cover the taller frame (the room a shorter footer frees goes to the map)
-        trial = dict(tpl)
-        grown = lo.fit_footer(trial, draw_footer(plan, trial, fonts, {}, [], [], logo_in_map=tpl.get("layout") == "in-map")[1]["need_mm"])
-        if grown:
-            vis = lo.Frame.fit(lo.rect_of(trial["map"]), plan.extent, float((spec.get("extent") or {}).get("padding_pct", 5))).visible
-            bb = (tiles_[0].get("image") or {}).get("bbox_3857")
-            if bb and bb[0] <= vis[0] and bb[1] <= vis[1] and bb[2] >= vis[2] and bb[3] >= vis[3]:
-                tpl.clear()
-                tpl.update(trial)
-                rep["footer_fit_mm"] = grown
-    import ornaments
-    fr_style = str((els.get("frame") or {}).get("style") or "single")       # 1.4.0 (R2-ORN): double or bar-border take a band from the map region
-    border = ornaments.border_mm(fr_style) if frame is None else 0.0
-    outer_rect = lo.rect_of(tpl["map"])
-    if border:
-        m_ = dict(tpl["map"])
-        m_.update(x=m_["x"] + border, y=m_["y"] + border, w=m_["w"] - 2 * border, h=m_["h"] - 2 * border)
-        tpl = {**tpl, "map": m_}
-    map_rect = lo.rect_of(tpl["map"])
-    pad_pct = float((spec.get("extent") or {}).get("padding_pct", 5))
-    import shapely
-    data_parts = [np.asarray(l.gdf.geometry.values, dtype=object) for l in plan.layers
-                  if l.role not in ("context", "labels", "contour") and l.kind != "raster"]     # a raster fills the frame: overlays may sit on it (M12)
-    data_geoms = np.concatenate(data_parts) if data_parts else np.array([], dtype=object)
-    data_tree = shapely.STRtree(data_geoms) if len(data_geoms) else None          # built once for every layout the overlays try (M16)
-
+def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
+    """render, stage 2 (1.9.0): the legend, the confidentiality banner, the locator and the sizes of every overlay, none of which depend on the frame. Split from render() unchanged."""
     # ---- legend (does not depend on the frame)
     blocks = [l.legend_block for l in plan.layers if l.legend_block]
     classified = {l.id: l.cls for l in plan.layers if l.cls is not None}
@@ -1308,7 +1252,11 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
         findings.append(f("MAP-BRAND-014", "WARN", f"the {plan.brand} brand pack carries no secondary logo; the primary logo is used"))
 
     inset_try = {"corner": "lower-right", "drop": False}           # 0.24.0: the locator's corner, moved (or the locator dropped) if it would cover data
+    return banner_h, banner_on, blocks, conf, dt_cfg, dt_rows, dt_size, findings, inmap, inset, inset_cfg, inset_on, inset_try, legend_fit, logo_beside_scale, logo_box, na_cfg0, na_size, na_style, north_wanted, sb_style, sb_wanted, tbox
 
+
+def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, findings, fonts, frame, inmap, inset, inset_cfg, inset_on, inset_try, legend_fit, logo_beside_scale, logo_box, map_rect, na_size, north_wanted, pad_pct, plan, rep, sb_wanted, shapely, spec, t, tbox):
+    """render, stage 3 (1.9.0): choose the frame and place the overlays: extent.fit auto (move the map first, shrink only past the cover limit), the slide of one element, the locator dropped where its corner holds data. Split from render() unchanged."""
     # 1.3.0 (R1-FIT): extent.fit auto (move the map first, shrink only past fit_cover_pct of the focus area), overlay (never shrink) or shrink (1.2.0)
     ext_cfg = spec.get("extent") or {}
     fit_mode = str(ext_cfg.get("fit") or ("shrink" if getattr(plan, "look", "classic") == "classic" else "auto"))
@@ -1567,37 +1515,11 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
             vx0, vy0, vx1, vy1 = frame.visible
             rep["extent_fill"] = float(min(1.0, ((x1 - x0) * frame.scale) * ((y1 - y0) * frame.scale) / (frame.inner.w * frame.inner.h)))
             rep["clipped_features"] = int(((bx[:, 0] < vx0) | (bx[:, 1] < vy0) | (bx[:, 2] > vx1) | (bx[:, 3] > vy1)).sum())
+    return frame, info, inset, placed
 
-    # ---- scale bar and north arrow findings (for the chosen frame)
-    rep["scale"] = {k: info[k] for k in ("scale_denominator", "ratio", "variation", "units", "distortion", "bar_hidden")}
-    try:                                                         # 1.5.0: MAP-LOC-001/002, the locale and units chosen and why
-        findings += gl.locale_finding(plan, info)
-        rep["locale"] = {"country": gl.plan_country(plan), "locale": gl.plan_locale(plan), "units": info.get("units"),
-                         "units_reason": info.get("units_reason")}
-    except Exception as e:  # noqa: BLE001 - the map does not depend on it
-        findings.append(f("MAP-LOC-001", "INFO", f"the country under the centre could not be read ({type(e).__name__}); kilometres and en-GB dates"))
-    rep["north"] = info["north"]
-    if info["distortion"]["severity"] == "warn":
-        findings.append(f("MAP-CRS-003", "WARN", info["distortion"]["message"]))
-    elif info["distortion"]["severity"] == "block" and on("scale_bar"):
-        findings.append(f("MAP-CRS-003", "BLOCK", info["distortion"]["message"] + "; turn the scale bar off or use another projection"))
-    if north_wanted and not info["north"]["show"]:
-        findings.append(f("MAP-CART-020", "INFO", "north arrow hidden: " + info["north"]["reason"]))
-    if sb_wanted and info["bar"] is None:
-        findings.append(f("MAP-CART-021", "INFO", "scale bar hidden: " + info["bar_hidden"]))
-    if logo_box and logo_box.get("clear") and "logo" in placed:    # MAP-BRAND-015: nothing inside the logo's clear space
-        inside, need = clear_space_intrusions(placed, logo_box)
-        if inside:
-            findings.append(f("MAP-BRAND-015", "WARN", f"the {', '.join(inside)} sit(s) inside the logo's clear space ({logo_box['clear']:g} of its height, {need:.1f} mm, "
-                                                       f"from the {plan.brand} brand pack); move them or the logo"))
-    rep["overlays"] = {k: {"corner": v["corner"], "moved_from": v["moved_from"], "reason": v["reason"], "cover": v["cover"],
-                           "rect_mm": [round(v["rect"].x0, 2), round(v["rect"].y0, 2), round(v["rect"].x1, 2), round(v["rect"].y1, 2)]} for k, v in placed.items()}
-    if inset and "inset" in placed:
-        rep["inset"] = {"max_zoom_out": inset["max_zoom_out"], "zoom_out": inset["zoom_out"], "state": inset.get("state"), "crs": inset["crs"], "north": inset.get("north")}
-    for k, v in placed.items():
-        if v["moved_from"]:
-            rep.setdefault("notes", []).append(f"{k} moved from {v['moved_from']} to {v['corner']}: {v['reason']}")
 
+def _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rect, on, placed, plan, rep, t):
+    """render, stage 5 (1.9.0): the map body: grounds, relief, context, the data layers in order, the frame. Split from render() unchanged."""
     # ---- body
     body: list[str] = []
     bg_fill = t["water"] if plan.basemap else t["background"]
@@ -1645,6 +1567,11 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
         obstacles += co_rects
         findings += co_fs
         rep["callouts"] = co_recs
+    return body, co_svg, findings, i_map, obstacles, point_obstacles, trm, trt
+
+
+def _render_labels(H, W, banner_h, banner_on, blocks, body, border, co_svg, dt_cfg, dt_rows, dt_size, els, findings, fonts, fr_style, frame, i_map, info, inset, inset_cfg, legend_fit, logo_beside_scale, logo_box, map_rect, na_cfg0, na_size, na_style, obstacles, on, ornaments, outer_rect, placed, plan, point_obstacles, rep, sb_style, spec, t, tbox, tpl, trm, trt):
+    """render, stage 6 (1.9.0): labels (the data's own first, then place, water and admin names) and the overlays drawn at their placed rectangles. Split from render() unchanged."""
     # ---- labels: the data's own first, then the place, water and admin names in what room is left
     lab_svg, lab_stats, taken = draw_labels(plan, frame, obstacles, fonts, tpl)
     body.append(lab_svg)
@@ -1724,6 +1651,103 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
         ov.append(sd.rect(map_rect.x0, map_rect.y0, map_rect.w, banner_h, fill, "none"))
         ov.append(sd.text(map_rect.x0 + map_rect.w / 2, map_rect.y0 + banner_h / 2 + fonts["banner"] * PT * 0.35, txt, fonts["banner"], tcol, weight=700, anchor="middle"))
     body += ov
+    return body,
+
+
+def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> Rendered:
+    """The map as one SVG page. 1.3.0 (R1-PANEL): `frame` draws the map in a frame passed in (its rect is the template's map region) instead of
+    fitting one, so the panels of a sheet share it exactly; `elements_off` lists the elements the sheet draws once for all of them (legend,
+    north_arrow, scale_bar, inset_map, title, logo), which this page then leaves out."""
+    if elements_off:
+        import copy as _copy
+        plan.spec = _copy.deepcopy(plan.spec)
+        els_ = plan.spec.setdefault("elements", {})
+        for name in elements_off:
+            els_[name] = {**(els_.get(name) or {}), "on": False}
+    spec, tpl, t = plan.spec, plan.tpl, plan.tokens
+    plan.__dict__["_hatch"] = {}
+    if getattr(plan, "style", None) is not None:          # 1.4.0: the plan's pack faces (another plan may have been prepared since)
+        tm.use_type({r: f_ for r, f_ in plan.style.type.items() if not f_.get("brand")} or None)
+    W, H = tpl["size_mm"]
+    fonts = dict(tpl["fonts"])
+    els = spec.get("elements") or {}
+    findings: list[dict] = []
+    rep: dict = {"template": plan.tpl_name, "brand": plan.brand, "crs": plan.crs}
+
+    def on(name: str, default=True):
+        v = (els.get(name) or {}).get("on", default)
+        return v
+
+    tiles_ = [b for b in plan.basemap if b.get("kind") == "tiles"]
+    if tpl.get("footer_fit") and tpl.get("footer_fit_classic") is False and getattr(plan, "look", "classic") == "classic":
+        tpl["footer_fit"] = False                 # 1.0.0: a template fitted since 1.0.0 keeps its fixed footer in the classic look
+    if tpl.get("footer_fit") and not tiles_:    # M16: the footer takes what its notes need
+        grown = lo.fit_footer(tpl, draw_footer(plan, tpl, fonts, {}, [], [], logo_in_map=tpl.get("layout") == "in-map")[1]["need_mm"])
+        if grown:
+            rep["footer_fit_mm"] = grown
+    elif tpl.get("footer_fit") and getattr(plan, "look", "classic") != "classic":
+        # 0.19.0: with a tile basemap too, when the prepared tiles still cover the taller frame (the room a shorter footer frees goes to the map)
+        trial = dict(tpl)
+        grown = lo.fit_footer(trial, draw_footer(plan, trial, fonts, {}, [], [], logo_in_map=tpl.get("layout") == "in-map")[1]["need_mm"])
+        if grown:
+            vis = lo.Frame.fit(lo.rect_of(trial["map"]), plan.extent, float((spec.get("extent") or {}).get("padding_pct", 5))).visible
+            bb = (tiles_[0].get("image") or {}).get("bbox_3857")
+            if bb and bb[0] <= vis[0] and bb[1] <= vis[1] and bb[2] >= vis[2] and bb[3] >= vis[3]:
+                tpl.clear()
+                tpl.update(trial)
+                rep["footer_fit_mm"] = grown
+    import ornaments
+    fr_style = str((els.get("frame") or {}).get("style") or "single")       # 1.4.0 (R2-ORN): double or bar-border take a band from the map region
+    border = ornaments.border_mm(fr_style) if frame is None else 0.0
+    outer_rect = lo.rect_of(tpl["map"])
+    if border:
+        m_ = dict(tpl["map"])
+        m_.update(x=m_["x"] + border, y=m_["y"] + border, w=m_["w"] - 2 * border, h=m_["h"] - 2 * border)
+        tpl = {**tpl, "map": m_}
+    map_rect = lo.rect_of(tpl["map"])
+    pad_pct = float((spec.get("extent") or {}).get("padding_pct", 5))
+    import shapely
+    data_parts = [np.asarray(l.gdf.geometry.values, dtype=object) for l in plan.layers
+                  if l.role not in ("context", "labels", "contour") and l.kind != "raster"]     # a raster fills the frame: overlays may sit on it (M12)
+    data_geoms = np.concatenate(data_parts) if data_parts else np.array([], dtype=object)
+    data_tree = shapely.STRtree(data_geoms) if len(data_geoms) else None          # built once for every layout the overlays try (M16)
+
+    banner_h, banner_on, blocks, conf, dt_cfg, dt_rows, dt_size, findings, inmap, inset, inset_cfg, inset_on, inset_try, legend_fit, logo_beside_scale, logo_box, na_cfg0, na_size, na_style, north_wanted, sb_style, sb_wanted, tbox = _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl)
+
+    frame, info, inset, placed = _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, findings, fonts, frame, inmap, inset, inset_cfg, inset_on, inset_try, legend_fit, logo_beside_scale, logo_box, map_rect, na_size, north_wanted, pad_pct, plan, rep, sb_wanted, shapely, spec, t, tbox)
+
+    # ---- scale bar and north arrow findings (for the chosen frame)
+    rep["scale"] = {k: info[k] for k in ("scale_denominator", "ratio", "variation", "units", "distortion", "bar_hidden")}
+    try:                                                         # 1.5.0: MAP-LOC-001/002, the locale and units chosen and why
+        findings += gl.locale_finding(plan, info)
+        rep["locale"] = {"country": gl.plan_country(plan), "locale": gl.plan_locale(plan), "units": info.get("units"),
+                         "units_reason": info.get("units_reason")}
+    except Exception as e:  # noqa: BLE001 - the map does not depend on it
+        findings.append(f("MAP-LOC-001", "INFO", f"the country under the centre could not be read ({type(e).__name__}); kilometres and en-GB dates"))
+    rep["north"] = info["north"]
+    if info["distortion"]["severity"] == "warn":
+        findings.append(f("MAP-CRS-003", "WARN", info["distortion"]["message"]))
+    elif info["distortion"]["severity"] == "block" and on("scale_bar"):
+        findings.append(f("MAP-CRS-003", "BLOCK", info["distortion"]["message"] + "; turn the scale bar off or use another projection"))
+    if north_wanted and not info["north"]["show"]:
+        findings.append(f("MAP-CART-020", "INFO", "north arrow hidden: " + info["north"]["reason"]))
+    if sb_wanted and info["bar"] is None:
+        findings.append(f("MAP-CART-021", "INFO", "scale bar hidden: " + info["bar_hidden"]))
+    if logo_box and logo_box.get("clear") and "logo" in placed:    # MAP-BRAND-015: nothing inside the logo's clear space
+        inside, need = clear_space_intrusions(placed, logo_box)
+        if inside:
+            findings.append(f("MAP-BRAND-015", "WARN", f"the {', '.join(inside)} sit(s) inside the logo's clear space ({logo_box['clear']:g} of its height, {need:.1f} mm, "
+                                                       f"from the {plan.brand} brand pack); move them or the logo"))
+    rep["overlays"] = {k: {"corner": v["corner"], "moved_from": v["moved_from"], "reason": v["reason"], "cover": v["cover"],
+                           "rect_mm": [round(v["rect"].x0, 2), round(v["rect"].y0, 2), round(v["rect"].x1, 2), round(v["rect"].y1, 2)]} for k, v in placed.items()}
+    if inset and "inset" in placed:
+        rep["inset"] = {"max_zoom_out": inset["max_zoom_out"], "zoom_out": inset["zoom_out"], "state": inset.get("state"), "crs": inset["crs"], "north": inset.get("north")}
+    for k, v in placed.items():
+        if v["moved_from"]:
+            rep.setdefault("notes", []).append(f"{k} moved from {v['moved_from']} to {v['corner']}: {v['reason']}")
+
+    body, co_svg, findings, i_map, obstacles, point_obstacles, trm, trt = _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rect, on, placed, plan, rep, t)
+    body, = _render_labels(H, W, banner_h, banner_on, blocks, body, border, co_svg, dt_cfg, dt_rows, dt_size, els, findings, fonts, fr_style, frame, i_map, info, inset, inset_cfg, legend_fit, logo_beside_scale, logo_box, map_rect, na_cfg0, na_size, na_style, obstacles, on, ornaments, outer_rect, placed, plan, point_obstacles, rep, sb_style, spec, t, tbox, tpl, trm, trt)
 
     # ---- title and footer
     if inmap:
