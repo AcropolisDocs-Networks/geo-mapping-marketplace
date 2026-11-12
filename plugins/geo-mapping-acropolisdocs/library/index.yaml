@@ -67,9 +67,9 @@ entries:
   file: entries/data/ref.basemap-provider.pmtiles-user.yaml
   type: basemap-provider
   status: active
-  rev: 3
+  rev: 4
   tags_digest: b75fa54fdb09
-  entry_digest: c9418cea2f63
+  entry_digest: 6e34bff48bea
 - id: ref.basemap-provider.protomaps-api
   file: entries/data/ref.basemap-provider.protomaps-api.yaml
   type: basemap-provider

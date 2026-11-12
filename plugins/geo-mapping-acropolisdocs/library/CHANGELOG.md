@@ -2,6 +2,10 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-11
+
+- `ref.basemap-provider.pmtiles-user` rev 4: 1.10.0: a vector tile file is also the ground of a printed map (read through GDAL for the map window at the zoom of the print scale; three schemas). The file's own attribution, read from its metadata, is the credit.
+
 ## 2026-11-10
 
 - `ref.basemap-provider.thunderforest` rev 4: Active: the terms of service read 2026-11-10 - commercial use permitted, map images CC-BY-SA 4.0, printed media credited as Maps © www.thunderforest.com, Data © www.osm.org/copyright (now the export wording), no caching proxies or bulk downloads below Small Business; the person holds a key.

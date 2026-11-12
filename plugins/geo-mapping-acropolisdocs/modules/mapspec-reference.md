@@ -24,7 +24,8 @@ message: "Water makes up a small share of Arizona county area, highest along the
 audience: external                 # any | internal | external | regulatory; who sees the map (default external, the safe assumption)
 task: [market-rollup]              # optional: what the map is for; the library warns when a layer says it is a poor fit
 extent: {mode: fit_layers, padding_pct: 6}
-basemap: {provider: bundled}       # or none; streets or terrain: {provider: carto-positron, style: light_all} after the `basemap-render` module's steps have prepared the tiles
+basemap: {provider: bundled}       # or none; streets or terrain: {provider: carto-positron, style: light_all} after the `basemap-render` module's steps have prepared the tiles;
+                                   # your own vector tile file as the ground, nothing to prepare: {provider: pmtiles, source: pmtiles:FILE}
 layers:
   - id: counties
     source: {type: ref, id: ref.boundary.us.county.cb}       # or {type: file, path: data.gpkg, layer: counties}

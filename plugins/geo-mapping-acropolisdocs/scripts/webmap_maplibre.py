@@ -90,18 +90,53 @@ def glyph_ranges_for(texts: dict[str, set[str]]) -> dict[str, set[str]]:
     return out
 
 
-def glyph_payload(ranges: dict[str, set[str]]) -> tuple[dict, list[str]]:
-    """({'<stack>/<range>': base64}, [ranges asked for that the plugin has no file for])."""
+def pack_stack(style) -> dict | None:
+    """1.10.0: the glyph files of a style pack's own label face (the pack's glyphs/ folder, written by tools/sdf_glyphs.py --packs):
+    {stack, dir, ranges} or None when the pack labels in the brand's Inter or brings no glyph files. A file that does not match the
+    manifest is not used."""
+    if style is None or getattr(style, "fonts", "brand") == "brand" or not (getattr(style, "type", None) or {}).get("label"):
+        return None
+    if (style.type["label"] or {}).get("brand"):
+        return None
+    d = Path(style.dir) / "glyphs"
+    try:
+        man = json.loads((d / "MANIFEST.json").read_text(encoding="utf-8"))
+        ranges = {r: v for r, v in (man.get("ranges") or {}).items() if (d / f"{r}.pbf").is_file() and (d / f"{r}.pbf").stat().st_size == v.get("bytes")}
+    except (OSError, ValueError):
+        return None
+    if not man.get("stack") or "0-255" not in ranges:
+        return None
+    return {"stack": str(man["stack"]), "dir": d, "ranges": ranges}
+
+
+def use_pack_stack(st: dict, stack: str) -> int:
+    """Every label the engine draws takes the pack's label face. Returns the number of layers changed."""
+    n = 0
+    for ly in st["layers"]:
+        if ly.get("type") == "symbol" and (ly.get("layout") or {}).get("text-field"):
+            ly["layout"]["text-font"] = [stack]
+            n += 1
+    return n
+
+
+def glyph_payload(ranges: dict[str, set[str]], pack: dict | None = None) -> tuple[dict, list[str]]:
+    """({'<stack>/<range>': base64}, [ranges asked for that the plugin has no file for]). A pack's stack is served from the pack's own
+    files; a range the pack's face has no file for (Greek, Cyrillic) is served from Inter Regular under the pack's name, so those names
+    are still drawn."""
     man = glyph_manifest()
     out, missing = {}, []
     for stack, rs in ranges.items():
-        folder = GLYPH_STACKS[stack]
-        have = (man["stacks"].get(stack) or {}).get("ranges", {})
+        own = pack["ranges"] if pack and stack == pack["stack"] else {}
+        base = "Inter Regular" if own or stack not in GLYPH_STACKS else stack
+        folder = GLYPH_STACKS[base]
+        have = (man["stacks"].get(base) or {}).get("ranges", {})
         for r in sorted(rs, key=lambda s: int(s.split("-")[0])):
-            if r not in have:
+            if r in own:
+                out[f"{stack}/{r}"] = base64.b64encode((pack["dir"] / f"{r}.pbf").read_bytes()).decode("ascii")
+            elif r in have:
+                out[f"{stack}/{r}"] = base64.b64encode((glyph_dir() / folder / f"{r}.pbf").read_bytes()).decode("ascii")
+            else:
                 missing.append(f"{stack} {r}")
-                continue
-            out[f"{stack}/{r}"] = base64.b64encode((glyph_dir() / folder / f"{r}.pbf").read_bytes()).decode("ascii")
     return out, missing
 
 
@@ -514,6 +549,58 @@ def protomaps_layers(t: dict, src: str, visible: bool, group: str) -> list[dict]
     ]
 
 
+# 1.10.0: the same quiet basemap from the two other common tile schemas. role -> (source layer, filter or None); a role a schema has no
+# layer for is left out (OpenMapTiles and Shortbread carry no land layer: the page's water background is covered by a land-colour layer
+# under the water, drawn as the map background of that basemap).
+def _in(attr: str, values: list) -> list:
+    return ["in", ["to-string", ["get", attr]], ["literal", values]]
+
+
+VECTOR_SCHEMAS = {
+    "openmaptiles": {"water": ("water", None), "minor": ("transportation", _in("class", ["tertiary", "minor"])),
+                     "major": ("transportation", _in("class", ["motorway", "trunk", "primary", "secondary"])),
+                     "bound": ("boundary", ["all", _in("admin_level", ["2", "3", "4"]), ["!=", ["to-string", ["get", "maritime"]], "1"]]),
+                     "places": ("place", _in("class", ["city", "town", "state"])), "sort": "rank"},
+    "shortbread": {"water": ("ocean", None), "water2": ("water_polygons", None), "minor": ("streets", _in("kind", ["tertiary", "unclassified", "residential"])),
+                   "major": ("streets", _in("kind", ["motorway", "trunk", "primary", "secondary"])),
+                   "bound": ("boundaries", ["all", _in("admin_level", ["2", "4"]), ["!=", ["to-string", ["get", "maritime"]], "true"]]),
+                   "places": ("place_labels", _in("kind", ["capital", "state_capital", "city", "town"])), "sort": "population"},
+}
+
+
+def vector_base_layers(t: dict, src: str, visible: bool, group: str, schema: str | None) -> list[dict]:
+    """The basemap layers for a vector tile source in its own schema (Protomaps when the schema is not named)."""
+    sc = VECTOR_SCHEMAS.get(schema or "")
+    if sc is None:
+        return protomaps_layers(t, src, visible, group)
+    vis = "visible" if visible else "none"
+    m = lambda role: _meta(group, role)                          # noqa: E731
+    out = [{"id": f"{group}--earth", "type": "background", "layout": {"visibility": vis}, "paint": {"background-color": t["land"]}, "metadata": m("basemap")}]
+
+    def add(role, kind, paint, layout=None, minzoom=None, key=None):
+        if (key or role) not in sc:
+            return
+        layer, flt = sc[key or role]
+        d = {"id": f"{group}--{key or role}", "type": kind, "source": src, "source-layer": layer, "layout": {"visibility": vis, **(layout or {})}, "paint": paint,
+             "metadata": m("basemap-label" if kind == "symbol" else "basemap")}
+        if flt:
+            d["filter"] = flt
+        if minzoom is not None:
+            d["minzoom"] = minzoom
+        out.append(d)
+
+    round_ = {"line-cap": "round", "line-join": "round"}
+    add("water", "fill", {"fill-color": t["water"]})
+    add("water", "fill", {"fill-color": t["water"]}, key="water2")
+    add("minor", "line", {"line-color": t["frame"], "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.3, 15, 1.5], "line-opacity": 0.5}, round_, 11)
+    add("major", "line", {"line-color": t["frame"], "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.3, 10, 0.8, 14, 2.4], "line-opacity": 0.8}, round_)
+    add("bound", "line", {"line-color": t["frame"], "line-width": 0.8, "line-dasharray": [3, 2]})
+    add("places", "symbol", {"text-color": t["label"], "text-halo-color": t["land"], "text-halo-width": 1.5},
+        {"text-field": ["get", "name"], "text-font": ["Inter Regular"], "text-size": 11, "text-padding": 3,
+         "symbol-sort-key": (["coalesce", ["get", "rank"], 10] if sc["sort"] == "rank" else ["-", 0, ["coalesce", ["to-number", ["get", "population"]], 0]])})
+    return out
+
+
 def bundled_layers(bdefs: list[dict], detail_zoom: int) -> list[dict]:
     """The bundled background (Natural Earth countries, US states, lakes: the same data the print map draws) as fill and line layers, faded
     past the zoom where its generalized outlines stop being a position reference."""
@@ -551,7 +638,7 @@ def style(*, t: dict, bdefs: list[dict], bundled_attr: str | None, base_defs: li
         elif b["mode"] in ("vector", "vector-file"):
             sources[f"base-{b['id']}"] = ({"type": "vector", "tiles": [b["url"]], "maxzoom": int(b["nativeMaxZoom"]), "attribution": b.get("attribution") or ""}
                                           if b["mode"] == "vector" else {"type": "vector", "url": b["url"], "attribution": b.get("attribution") or ""})
-            layers += protomaps_layers(t, f"base-{b['id']}", on, f"base:{b['id']}")
+            layers += vector_base_layers(t, f"base-{b['id']}", on, f"base:{b['id']}", b.get("schema"))
     syms: list[dict] = []
     for d in defs:
         if d["kind"] == "live":                            # 0.15.0: a live service layer, fetched by the viewer's browser from its one host

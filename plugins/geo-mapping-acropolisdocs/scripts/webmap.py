@@ -1011,8 +1011,10 @@ def pack_web_findings(plan) -> list[dict]:
     left = []
     if st.fonts != "brand" and not _web_fonts(plan):
         left.append("its fonts (web level " + st.web + ")")
-    if st.fonts != "brand" and _web_fonts(plan):
-        left.append("its label face on labels the vector map engine draws (they stay in Inter: no glyphs for it)")
+    if st.fonts != "brand" and _web_fonts(plan) and (st.type.get("label") or {}).get("file"):
+        import webmap_maplibre as wml_
+        if wml_.pack_stack(st) is None:                              # 1.10.0: a pack with glyph files (glyphs/) labels in its own face
+            left.append("its label face on labels the vector map engine draws (they stay in Inter: the pack has no glyphs/ folder for it)")
     orn = [k for k, v in st.elements.items() if k != "callouts" and v and not (isinstance(v, dict) and v.get("style") == "single")]
     if orn:
         left.append("the ornaments (" + ", ".join(sorted(orn)) + ")")
@@ -1079,6 +1081,16 @@ def _page_basemaps(audience, cfg, env, findings, plan, rl, spec_in, spec_path):
             base_defs.append({"id": name, "mode": r["mode"], "title": r["title"], "url": r.get("url"), "attribution": r["attribution"],
                               "nativeMaxZoom": mz, "nativeMinZoom": 0, "zoomOffset": 0, "maxZoom": min(DEFAULT_MAX_ZOOM + 2, mz + 4), "tileSize": 512,
                               "host": (r.get("hosts") or [None])[0], "entry": r["entry"], "rev": r.get("rev"), "file": r.get("file")})
+            if r["mode"] == "vector-file":                 # 1.10.0: the file's own tile schema decides the page's basemap layers
+                import vector_ground as vgr
+                try:
+                    vi = vgr.inspect(r["file"])
+                except vgr.VectorGroundError:
+                    vi = {"schema": None, "layers": []}
+                base_defs[-1]["schema"] = vi["schema"]
+                if vi["schema"] is None:
+                    findings.append(finding("MAP-WEB-011", "WARN", f"the basemap file {Path(r['file']).name} is not in a tile schema the page styles (Protomaps, "
+                                            f"OpenMapTiles, Shortbread); its layers are {', '.join(vi['layers'][:10]) or 'none'}, so the basemap may draw nothing"))
     return base_defs, entries, findings
 
 
@@ -1423,11 +1435,15 @@ def _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, c
         for lid_, tl_ in tiles.items():                # 1.6.0: a pyramid's style layers, one zoom each, under the top zoom's
             if tl_.get("lod") and tl_["lod"]["zooms"]:
                 st["layers"] = wml.lod_style(st["layers"], tl_["source_layer"], tl_["lod"])
+        pstack = wml.pack_stack(plan.style) if _web_fonts(plan) else None
+        if pstack:                                     # 1.10.0: the pack's label face on every label the engine draws
+            nl = wml.use_pack_stack(st, pstack["stack"])
+            notes.append(f"labels drawn by the map engine are in the pack's label face ({pstack['stack']}; {nl} label layer(s))")
         texts = wml.style_texts(st, collections, tiles_text)
         ranges = wml.glyph_ranges_for(texts)
         if vector_base and any(b["mode"] in ("vector", "vector-file") for b in base_defs):
-            ranges.setdefault("Inter Regular", set()).update(wml.BASEMAP_GLYPH_RANGES)
-        glyphs, gmissing = wml.glyph_payload(ranges)
+            ranges.setdefault(pstack["stack"] if pstack else "Inter Regular", set()).update(wml.BASEMAP_GLYPH_RANGES)
+        glyphs, gmissing = wml.glyph_payload(ranges, pstack)
         ml = {"style": st, "glyphs": glyphs, "glyph_missing": gmissing, "texts": texts}
     return clusters, feature_labels, findings, flat_profiles, label_zoom, ml, names_on, names_stats, notes, p3, search_idx, search_packed, tiles
 
@@ -1732,6 +1748,13 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
 
     base_defs, entries, findings = _page_basemaps(audience, cfg, env, findings, plan, rl, spec_in, spec_path)
 
+    if base_defs and base_defs[0]["mode"] in ("tiles", "vector", "vector-file") and str((spec_in.get("context") or {}).get("preset") or "auto") == "auto":
+        # 1.10.0: as on paper, a tile or vector basemap carries its own roads, water and built-up land; the bundled context pack over it
+        # drew them twice. `context.preset` named in the MapSpec keeps it.
+        ctx_n = len([l for l in plan.layers if l.role == "context"])
+        if ctx_n:
+            plan.layers = [l for l in plan.layers if l.role != "context"]
+            plan.notes.append(f"context pack left out of the page: {base_defs[0]['title']} carries its own roads and water (name context.preset to keep it)")
     bdefs, blocks, brecs, collections, conf, defs, findings, flat_links, images, label_by_layer, live, live_defs, notes, payload_features, search_field, source_counts, tcfg, time_layers, vector_defs = _page_layers(cfg, ctl, findings, live_specs, notes, pfields, plan, s3, spec, spec_path, t, w3, wlv)
 
     # ---- time slider: periods from the time layers' values; the classes stay those of the whole layer (no re-classing per period)

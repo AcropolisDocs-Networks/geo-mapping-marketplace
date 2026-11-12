@@ -66,5 +66,6 @@ A `time_field` of names ("Phase 1", "Wave 2") works on the slider: the periods a
 ## Style packs on the web (1.4.0)
 
 A web page built from a MapSpec with `style.pack` takes the pack's palette, and its fonts where the pack's web level allows (antique and
-sketch: palette and fonts). Ornaments and treatments (frames, cartouches, paper, water-lining, glyphs, sketch lines) are print only, and
-labels drawn by the vector map engine stay in Inter; the build lists what was left out (MAP-STYLE-008).
+sketch: palette and fonts). Ornaments and treatments (frames, cartouches, paper, water-lining, glyphs, sketch lines) are print only; the
+build lists what was left out (MAP-STYLE-008). Labels drawn by the vector map engine are in the pack's label face too (1.10.0: antique,
+blueprint and sketch ship glyph files for it; a pack of your own without a `glyphs/` folder keeps those labels in Inter).

@@ -180,7 +180,7 @@
         "source": {
           "type": "string",
           "pattern": "^(mbtiles|dir|pmtiles):.+",
-          "description": "tiles you supply: mbtiles:FILE or dir:FOLDER (read by basemap_render, not by the build), or pmtiles:FILE, a vector basemap the MapLibre web page draws (M14)"
+          "description": "tiles you supply: mbtiles:FILE or dir:FOLDER of picture tiles (read by basemap_render, not by the build), or a vector tile file, pmtiles:FILE or a vector mbtiles:FILE (Protomaps, OpenMapTiles or Shortbread layers): the MapLibre web page draws it (M14) and a printed map reads it as its ground, in any projection (1.10.0)"
         },
         "treatment": {"enum": ["none", "muted", "knockout"], "description": "0.20.0: how a tile basemap sits behind the data on a print map. muted (the default under style.look auto): desaturated and pulled toward the brand land colour; knockout: further still; none (the classic default): the tiles as fetched"},
         "opacity": {

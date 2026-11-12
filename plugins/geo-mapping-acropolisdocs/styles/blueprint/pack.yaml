@@ -45,6 +45,10 @@ treatments:
   category_patterns: true
 web: full
 files:
+  'glyphs/MANIFEST.json': 75075d616c3d41122ab6cf5d5feb500bac08611bb2a550a33d2d77e6fb27db86
+  'glyphs/8192-8447.pbf': 2d6e7e8cecfe0ddd59d9a5b69a122f7413b4fc4f3c421c050a45b117befa12fd
+  'glyphs/256-511.pbf': c108dda8e16eb2ecdae402b510e30016b39afe0ad40d221d55aa3aba55e8c9c2
+  'glyphs/0-255.pbf': 0539d050286c75fc8996f2ec1052f4d0546ae8b45564edad5b1d819edcd6a90f
   'LICENSES/OFL-IBMPlexMono.txt': 7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da
   'LICENSES/OFL-IBMPlexSansCondensed.txt': 7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da
   'fonts/IBMPlexMono-Regular.ttf': 6a3412f058c7d8dfd9170c41e85ade48e5156ecb89356110ca57a0a27734af46

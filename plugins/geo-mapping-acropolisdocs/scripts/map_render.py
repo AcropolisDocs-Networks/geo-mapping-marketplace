@@ -820,6 +820,13 @@ def draw_basemap(plan: mp.Plan, frame: lo.Frame, ground_opacity: float = 1.0) ->
         if b["kind"] == "hillshade":                      # relief: above the land, countries and states; under the lakes and every layer (M12)
             out.append(image_markup(frame, b["image"], "gm-base gm-relief", data_layer=b.get("layer_id")))
             continue
+        if b["kind"] == "boundary":                       # 1.10.0: border lines of a vector-tile ground (states thinner than countries)
+            geoms, keep = to_sheet(b["gdf"], frame, False)
+            sw = 0.16 if b.get("class") == "country" else 0.12
+            out.append(f'<g class="gm-base gm-base-boundary" fill="none" stroke="{t["frame"]}" stroke-width="{sw}" stroke-linejoin="round" stroke-linecap="round">')
+            out += [f'<path d="{d}"/>' for d in (sd.line_path(geoms[i]) for i in np.where(keep)[0]) if d]
+            out.append("</g>")
+            continue
         poly = True
         geoms, keep = to_sheet(b["gdf"], frame, poly)
         if b["kind"] in ("lake", "ocean"):
@@ -2591,7 +2598,8 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
                 from pyproj import CRS as _C
                 bf = 0.008 if _C.from_user_input(crs).is_geographic else 800.0
                 cg = mine.geometry.buffer(bf).union_all().buffer(-bf)     # units simplified apart leave slivers between them: closed first
-                land = wpoly.intersection(a1.geometry.union_all()).area
+                import shapely as _shp                  # 1.10.0: unit by unit (a reprojected unit can be invalid, and merging the whole table then fails)
+                land = float(_shp.area(_shp.intersection(_shp.make_valid(np.asarray(a1.geometry.values, dtype=object)), wpoly)).sum())
                 if land > 0 and wpoly.intersection(cg).area / land >= INSET_STATE_IN and wpoly.area / max(cg.area, 1e-9) < INSET_STATE_SHARE:
                     nm = (gl.country(iso) or {}).get("name", iso)
                     state = {"name": nm, "geometry": cg, "bounds": tuple(float(v) for v in cg.bounds), "iso": iso, "col": "iso_a2", "value": iso,

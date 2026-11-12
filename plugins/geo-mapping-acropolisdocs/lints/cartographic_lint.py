@@ -281,6 +281,8 @@ def check_012(plan, report) -> list[dict]:
     gd = (getattr(plan, "crs_info", None) or {}).get("ground_detail") or {}
     if gd.get("drawn"):
         return []                         # 0.11.0: Census 1:500,000 land and TIGER water were drawn for this window
+    if getattr(plan, "vector_ground", None):
+        return []                         # 1.10.0: the ground is the person's own vector tile file, read at the zoom of this scale
     if den and [b for b in plan.basemap if b["kind"] != "tiles"] and den < 1_000_000:
         hint = ("run ground_detail.py prepare --spec on this MapSpec (detailed land and water: TIGER in the US, Overture elsewhere, fetched once) and build again" if gd
                 else "draw boundaries from a detailed data layer, or put a tile basemap under it (basemap-render)")
@@ -304,6 +306,8 @@ def check_024(plan, report=None) -> list[dict]:
         out.append(finding("MAP-CART-024", "BLOCK", f"the land ({gr.get('land')}) and the water ({gr.get('water')}) are at different resolutions; "
                            "draw both from one source (ground_detail.py prepare for TIGER, or basemap ground_detail: false for Natural Earth)", gr))
     ctx_water = [l.id for l in getattr(plan, "layers", []) if l.role == "context" and str(l.id).startswith(("context-lakes", "context-rivers"))]
+    if getattr(plan, "vector_ground", None):
+        ctx_water = []                                                                # 1.10.0: the river lines come from the same tile file as the ground
     if gr and ctx_water and "Natural Earth 1:10m" not in str(gr.get("water")):       # 1.5.0: OSM simplified land keeps the 10m lakes
         out.append(finding("MAP-CART-024", "BLOCK", f"context water ({', '.join(ctx_water)}) is Natural Earth 1:10m on {gr.get('water')} ground", ctx_water))
     return out

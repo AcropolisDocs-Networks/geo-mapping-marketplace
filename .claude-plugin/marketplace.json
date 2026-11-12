@@ -10,7 +10,7 @@
       "name": "geo-mapping-acropolisdocs",
       "source": "./plugins/geo-mapping-acropolisdocs",
       "description": "Cartographic map creation: import and convert geodata, query public OGC services, and produce branded maps (PNG, PDF, SVG, web map) with toggleable elements, provenance and lint gates. Ships in the AcropolisDocs brand; add your own brand pack (name, colours, logo) without a rebuild. Set in Inter.",
-      "version": "1.9.0",
+      "version": "1.10.0",
       "license": "Apache-2.0",
       "homepage": "https://acropolisdocs.com",
       "keywords": [

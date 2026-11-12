@@ -333,6 +333,7 @@ class Plan:
     focus_sheet: object = None                       # 0.18.0: the study area on the sheet (map_focus), set while the layers are drawn
     style: object = None                             # 1.4.0 (R2-PACK): the style pack, fixed for the whole build (map_style.Style)
     treatments: dict = field(default_factory=dict)  # 1.4.0 (R2-TREAT): the pack's treatments with the MapSpec's style.treatments over them
+    vector_ground: dict | None = None                # 1.10.0: roads, rivers and built-up land read from the person's own vector tile file
 
 
 THEME_MODES = {"light": "print", "dark": "screen"}     # the MapSpec says light or dark; the brand pack calls them print and screen
@@ -1185,7 +1186,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
             pre_notes.append(f"template auto: {want}, the paper of {(gl.country(iso) or {}).get('name', 'the country under the map') if iso else 'the default'}")
         except (lo.LayoutError, Exception) as ex:  # noqa: BLE001 - the brand default stays
             pre_notes.append(f"template auto: kept {tpl_value} ({type(ex).__name__})")
-    tiles_rec, tiles_notes = prepared_tiles(spec, use_tiles, wgs)
+    tiles_rec, tiles_notes = prepared_tiles(spec, use_tiles, wgs, base)
     choice = ce.choose_display(wgs, "thematic" if area_stat else "reference", area_stat=area_stat or None, tiles=bool(tiles_rec), prefer=crs_spec.get("prefer"))
     cs = ce.mapspec_crs(choice, "EPSG:3857" if tiles_rec else crs_spec.get("display"))
     display = cs["display"]
@@ -1242,7 +1243,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
             continue                          # coloured from the brand when it is read for the window (map_raster.prepare)
         style_layer(plan, l)
     plan.notes += tiles_notes
-    load_basemap(plan, tiles_rec, explained=bool(tiles_notes))
+    load_basemap(plan, tiles_rec, explained=bool(tiles_notes), vector_file=vector_source(spec, base) if use_tiles else None)
     add_context(plan)
     import map_raster
     try:
@@ -1350,6 +1351,8 @@ def add_context(plan: Plan) -> None:
     has_tiles = any(b.get("kind") == "tiles" for b in plan.basemap)
     roles = ["points" if l.wedge_info else l.role for l in plan.layers]       # sector wedges are site geometry, not an area fill
     preset, kinds = context_kinds(cfg, roles, has_tiles)
+    if plan.vector_ground:
+        return _context_from_tiles(plan, cfg, preset, kinds)
     if not kinds:
         if cfg["on"] and preset == "none":
             plan.notes.append("context pack: none" + (" (the tile basemap carries its own roads and water)" if has_tiles else ""))
@@ -1439,6 +1442,58 @@ def add_context(plan: Plan) -> None:
     plan.layers += added                     # after the data layers in the list (plan.layers[0] stays the first data layer); drawn first (draw_order)
     plan.notes.append(f"context pack '{preset}' at the {tier['tier']} tier (1:{den:,.0f}): " + ", ".join(what)
                       + (f"; opacity {op:g}" if op < 1 else ""))
+
+
+def _context_from_tiles(plan: Plan, cfg: dict, preset: str, kinds: list) -> None:
+    """1.10.0: the context pack on a vector-tile ground comes from the same file as the land and the water, so nothing is drawn at two
+    resolutions: the file's built-up land, river lines, roads (two classes, a third on large-scale maps) and ferry routes, in the styles the
+    bundled pack uses. The preset still decides which kinds are drawn; lakes are already in the ground's water."""
+    vg_ = plan.vector_ground
+    e = vg_["entry"]
+    if not kinds:
+        if cfg["on"] and preset == "none":
+            plan.notes.append("context pack: none")
+        return
+    t = plan.tokens
+    op = max(0.0, min(1.0, cfg["opacity"]))
+    over = map_look.params(plan.look)["context_over_surface"]
+    if over < 1 and any(l.kind == "raster" and l.role == "raster" for l in plan.layers) and "opacity" not in (plan.spec.get("context") or {}):
+        op *= over
+    added: list[LayerPlan] = []
+    what: list[str] = []
+    if "urban" in kinds and vg_.get("urban") is not None:
+        added.append(_context_layer(plan, "context-urban", "urban", vg_["urban"], e, geom_kind_="polygon", fill=t["neutral_ramp"][1], stroke="none",
+                                    width_mm=0.0, fill_opacity=0.45 * op, title="Urban areas"))
+        what.append("built-up land")
+    if "rivers" in kinds and vg_.get("rivers") is not None:
+        added.append(_context_layer(plan, "context-rivers", "rivers", vg_["rivers"], e, geom_kind_="line", stroke=t["water"], width_mm=0.22, stroke_opacity=op, title="Rivers"))
+        what.append("rivers")
+    if "roads" in kinds and (vg_.get("roads") or vg_.get("ferries") is not None):
+        rd = map_look.params(plan.look)["roads"]
+        if rd:
+            nr = t["neutral_ramp"]
+            fade = map_look.params(plan.look)["roads_under_lines"] if any(l.kind == "line" and l.role != "context" for l in plan.layers) else 1.0
+            styles = {k: (nr[min(i, len(nr) - 1)], w) for k, (i, w) in rd.items()}
+        else:
+            styles = {"major": (t["frame"], 0.35), "secondary": (t["legend_frame"], 0.2), "ferry": (t["frame"], 0.15)}
+            fade = 1.0
+        minor = (styles["secondary"][0], round(styles["secondary"][1] * 0.6, 3))
+        rows = (("context-roads-minor", (vg_.get("roads") or {}).get("minor"), *minor, None),
+                ("context-roads-secondary", (vg_.get("roads") or {}).get("secondary"), *styles["secondary"], None),
+                ("context-roads-major", (vg_.get("roads") or {}).get("major"), *styles["major"], None),
+                ("context-ferry", vg_.get("ferries"), *styles["ferry"], "0.8 0.6"))
+        n = 0
+        for lid, gdf, colour, w, dash in rows:
+            if gdf is not None and len(gdf):
+                added.append(_context_layer(plan, lid, "roads", gdf, e, geom_kind_="line", stroke=colour, width_mm=w, stroke_opacity=op * fade, dash=dash, title="Roads"))
+                n += 1
+        if n:
+            what.append("roads" + (" with the smaller roads" if (vg_.get("roads") or {}).get("minor") is not None else ""))
+    if not added:
+        plan.notes.append(f"context pack '{preset}': the basemap file holds none of it inside this map")
+        return
+    plan.layers += added
+    plan.notes.append(f"context pack '{preset}' from {vg_['file']}: " + ", ".join(what) + (f"; opacity {op:g}" if op < 1 else ""))
 
 
 # ---------------------------------------------------------------------------------------------------------------- styling
@@ -1919,7 +1974,7 @@ def layer_provenance(l: LayerPlan) -> dict:
     return p
 
 
-def prepared_tiles(spec: dict, use_tiles: bool, wgs) -> tuple[dict | None, list[str]]:
+def prepared_tiles(spec: dict, use_tiles: bool, wgs, base: Path | None = None) -> tuple[dict | None, list[str]]:
     """The prepared tile composite for this map (written by basemap_render), if the map asks for a tile basemap and the composite covers it.
     The build never fetches a tile; without a usable composite it draws the bundled basemap and says why."""
     bm = spec.get("basemap") or {}
@@ -1928,6 +1983,8 @@ def prepared_tiles(spec: dict, use_tiles: bool, wgs) -> tuple[dict | None, list[
         return None, []
     if not use_tiles:
         return None, []                                  # a web page loads its own tiles (webmap + tile_registry)
+    if vector_source(spec, base) is not None:
+        return None, []                                  # 1.10.0: a vector tile file is read as the ground itself (load_vector_ground), in any projection
     crs_req = (spec.get("crs") or {}).get("display")
     if crs_req and crs_req not in ("auto", "EPSG:3857"):
         return None, [f"basemap provider '{prov}' needs Web Mercator, but crs.display is {crs_req}; drawing the bundled basemap instead"]
@@ -1948,9 +2005,113 @@ def prepared_tiles(spec: dict, use_tiles: bool, wgs) -> tuple[dict | None, list[
     return rec, []
 
 
-def load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = False) -> None:
+def vector_source(spec: dict, base: Path | None):
+    """The person's own vector tile file named by basemap.source (pmtiles:FILE, or mbtiles:FILE when its tiles are vector tiles), or None.
+    A file that is named but missing is returned too, so the build can say so."""
+    bm = spec.get("basemap") or {}
+    src = str(bm.get("source") or "")
+    if bm.get("provider", "none") in ("none", "bundled") or ":" not in src:
+        return None
+    kind, name = src.split(":", 1)
+    if kind not in ("pmtiles", "mbtiles"):
+        return None
+    f = Path(name).expanduser()
+    if not f.is_absolute() and base is not None:
+        f = Path(base) / f
+    if kind == "mbtiles":
+        import sqlite3
+        try:
+            con = sqlite3.connect(f"file:{f.as_posix()}?mode=ro", uri=True)
+            try:
+                fmt = con.execute("select value from metadata where name = 'format'").fetchone()
+            finally:
+                con.close()
+        except sqlite3.Error:
+            return None
+        if not fmt or str(fmt[0]).lower() != "pbf":
+            return None                                   # picture tiles: a tile basemap (basemap_render)
+    return f
+
+
+def _wgs84_of_box(plan: Plan, b):
+    from pyproj import Transformer
+    t = Transformer.from_crs(plan.crs, "EPSG:4326", always_xy=True)
+    X, Y = np.meshgrid(np.linspace(b[0], b[2], 12), np.linspace(b[1], b[3], 12))
+    lon, lat = t.transform(X.ravel(), Y.ravel())
+    ok = np.isfinite(lon) & np.isfinite(lat)
+    if not ok.any():
+        return _wgs84_extent(plan)
+    return (float(lon[ok].min()), float(lat[ok].min()), float(lon[ok].max()), float(lat[ok].max()))
+
+
+def load_vector_ground(plan: Plan, path: Path) -> bool:
+    """1.10.0: the ground from the person's own vector tile file (vector_ground): land, water and border lines into plan.basemap, and the
+    file's roads, rivers and built-up land kept for the context pack (add_context), so one file is the whole ground at one resolution. The
+    colours are the brand's map roles. Returns False, with a note that says why, when the file cannot be the ground of this map; the
+    bundled ground is drawn then."""
+    import vector_ground as vg
+    import geopandas as gpd
+    import ref_library as rl
+    name = Path(path).name
+    den = scale_denominator(plan)
+    rect = lo.rect_of(plan.tpl["map"])
+    fr = lo.Frame.fit(rect, plan.extent, float((plan.spec.get("extent") or {}).get("padding_pct", 5)))
+    seen = _wgs84_of_box(plan, fr.visible)
+    window = _wgs84_of_box(plan, plan_visible_pad(plan))
+    try:
+        info = vg.inspect(path)
+        b = info["bounds"]
+        eps = 1e-6
+        if not (b[0] <= seen[0] + eps and b[1] <= seen[1] + eps and b[2] >= seen[2] - eps and b[3] >= seen[3] - eps):
+            raise vg.VectorGroundError(f"{name} covers {b[0]:.2f},{b[1]:.2f} to {b[2]:.2f},{b[3]:.2f} (lon/lat), which is not the whole map window "
+                                       f"({seen[0]:.2f},{seen[1]:.2f} to {seen[2]:.2f},{seen[3]:.2f}); use a larger extract or a narrower map")
+        g = vg.read(path, window, den)
+    except vg.VectorGroundError as ex:
+        plan.notes.append(f"basemap file: {ex}; drawing the bundled basemap instead")
+        plan.findings.append({"id": "MAP-CART-037", "severity": "WARN", "message": f"The vector basemap file is not drawn: {ex}. The bundled ground is drawn instead.",
+                              "detail": {"file": name}})
+        return False
+    if g["land"] is None:
+        plan.notes.append(f"basemap file {name}: no land in the map window; drawing the bundled basemap instead")
+        return False
+    e = next((x for x in rl.all_entries("all") if x.get("id") == "ref.basemap-provider.pmtiles-user"), None)
+    e = dict(e) if e else {"id": "user.vector-tiles", "title": "vector tiles supplied by the user", "rev": None, "license": {"class": "user-supplied"}}
+    lic = dict(e.get("license") or {})
+    if g.get("attribution"):
+        lic["attribution_text"] = g["attribution"]                # the file's own credit, read from its metadata
+    e["license"] = lic
+    e["source"] = {"product": f"vector tiles ({name})"}
+    e["title"] = f"Vector tiles: {name}"
+
+    def gdf_of(geom, **cols):
+        s = gpd.GeoSeries([geom], crs=g["crs"]).to_crs(plan.crs)
+        return gpd.GeoDataFrame({**{k: [v] for k, v in cols.items()}, "geometry": list(s.values)}, crs=plan.crs)
+
+    plan.basemap.append({"kind": "land", "gdf": gdf_of(g["land"]), "entry": e})
+    for cls, geom in (g["boundaries"] or {}).items():
+        plan.basemap.append({"kind": "boundary", "class": cls, "gdf": gdf_of(geom), "entry": e})
+    if g["water"] is not None:
+        plan.basemap.append({"kind": "lake", "gdf": gdf_of(g["water"]), "entry": e})
+    plan.vector_ground = {"entry": e, "file": name, "schema": g["schema"], "zoom": g["zoom"],
+                          "rivers": gdf_of(g["rivers"]) if g["rivers"] is not None else None,
+                          "urban": gdf_of(g["urban"]) if g["urban"] is not None else None,
+                          "ferries": gdf_of(g["ferries"]) if g["ferries"] is not None else None,
+                          "roads": {k: gdf_of(v) for k, v in (g["roads"] or {}).items()}}
+    res = f"vector tiles ({name}, zoom {g['zoom']})"
+    plan.crs_info["ground_resolution"] = {"land": res, "water": res}
+    plan.crs_info["vector_ground"] = {"file": name, "schema": g["schema"], "zoom": g["zoom"], "format": g["format"]}
+    plan.notes.append(f"ground: {name} ({g['schema']} schema), read at zoom {g['zoom']} for 1:{den:,.0f}, drawn in the brand's map colours"
+                      + ("; " + "; ".join(g["notes"]) if g["notes"] else ""))
+    return True
+
+
+def load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = False, vector_file: Path | None = None) -> None:
     bm = (plan.spec.get("basemap") or {})
     prov = bm.get("provider", "none")
+    if vector_file is not None and not tiles_rec:
+        if load_vector_ground(plan, vector_file):
+            return
+        explained = True
     if prov == "none":
         # The context pack brings the ground with it (0.3.0): roads and city names over page-white, with the sea the same white as the
         # desert, read as nothing. A map that draws any context kind gets the bundled land and water under it; `context: {on: false}`

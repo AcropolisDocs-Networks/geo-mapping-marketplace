@@ -1,6 +1,6 @@
 # acropolisdocs-maps: maps for Claude
 
-The Claude Code marketplace for **geo-mapping-acropolisdocs** 1.9.0: cartographic maps from a request or your own geodata (print maps as SVG, PDF and
+The Claude Code marketplace for **geo-mapping-acropolisdocs** 1.10.0: cartographic maps from a request or your own geodata (print maps as SVG, PDF and
 PNG, interactive web maps, data conversion and analysis, public data services, travel-time areas and terrain).
 
 ## Install

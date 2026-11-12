@@ -24,6 +24,10 @@ treatments:
   line_character: {style: sketch, amplitude_mm: 0.3, wavelength_mm: 4.0, overdraw: true, hatch_fills: true}
 web: palette-and-fonts
 files:
+  'glyphs/MANIFEST.json': 2aa9c8c133127babb4e971c8f80e96cff7d801947559d95e99288ff59c0aa9ad
+  'glyphs/8192-8447.pbf': 89a5e9bbeecc805d75c5ac8a044c4070312f41d72bef884f2b55bfc970a057a4
+  'glyphs/256-511.pbf': b20e01dc3e87e674768fbb0580b8f519c30808adfd0f9edf7e4ace10ee89f104
+  'glyphs/0-255.pbf': 65598ec9a483ba99a54c2526b9d20fc3ac85bfb7613c7b68610b9d5ee62f2890
   'LICENSES/OFL-Caveat.txt': 1f9d81d094273d82f3898a1ee8b598a717d050ecbf5ff7bede105b704880157b
   'LICENSES/OFL-PatrickHand.txt': 377f4f9c19e935228552478eb68cc2ed82910988a60ba60e2ac73b09f32d02d1
   'assets/paper.jpg': 8336ee029b8d0c4812b32046a48868c4b9d6b9017847af0186971670f95d5b65

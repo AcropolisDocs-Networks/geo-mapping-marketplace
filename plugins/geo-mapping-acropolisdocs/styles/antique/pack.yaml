@@ -48,6 +48,10 @@ treatments:
   place_glyphs: {}
 web: palette-and-fonts
 files:
+  'glyphs/MANIFEST.json': 7bfd5603711bb254924553d534b07824c71288032e7a7cf7733ad26555bb2d9d
+  'glyphs/8192-8447.pbf': 78d250b56fcfc4df36889296579d261eb53680a8f250d9122ff5f2f582bb5ebb
+  'glyphs/256-511.pbf': ce762d9037e61691d093edc897f2d2ffd511e152b01fdc77f969700c13b84da9
+  'glyphs/0-255.pbf': 330b929d94b73a8d93f7ae10d224d8f4e643adc920e3b2a8aac2ff3eea13780f
   'LICENSES/OFL-EBGaramond.txt': 0985066662eb755ed3683ae5482a81a9195b49ce3f7e165cc2388b3dbece7dd7
   'LICENSES/OFL-IMFellEnglish.txt': 2a3ca501fc4d5efcad9798531e3e06962b1e20c60e464f6cbd6c17630112c773
   'assets/paper.jpg': 69013fdb93a5268deb5a0df6d62c4fd57e03807285b6f4e610612e2c4d8b3124
