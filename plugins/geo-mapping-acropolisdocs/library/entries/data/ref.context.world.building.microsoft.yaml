@@ -1,0 +1,94 @@
+id: ref.context.world.building.microsoft
+type: context
+rev: 1
+status: active
+title: Microsoft Global ML Building Footprints
+summary: Machine-extracted building footprints worldwide (release 2026-02-03), published as gzipped GeoJSON-lines per region and Bing quadkey, with a dataset-links.csv
+  index; ODbL.
+tags:
+  geography:
+  - world
+  - north-america
+  level:
+  - site
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - parcel-level
+  scale:
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- Building footprints for a local map in the United States, Canada or Mexico, taken from the quadkey tiles that cover the bbox.
+- A built-up density surface (footprint count or area per hexagon) as a demand proxy.
+avoid_when:
+- 'Footprints are read as addresses or parcels: they are ML detections with no attributes beyond height where estimated.'
+- The derived database is redistributed without the ODbL terms.
+distinct_from:
+- id: ref.context.world.building.overture
+  why: Overture merges this with OSM and Google and adds height and class
+- id: ref.context.world.building.google
+  why: Global South only
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: CSV of per-tile links (dataset-links.csv), each a .csv.gz of GeoJSON lines
+  note: 'Download https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv (7.2 MB, verified 2026-11-04: columns Location, QuadKey,
+    Url, Size, UploadDate; 2,415 tiles for UnitedStates, 2,055 for Canada, Mexico listed too), pick the rows whose quadkey covers the map bbox, download
+    those Url files, gunzip and read each as GeoJSON lines (one feature per line), merge and supply the GeoPackage.'
+  columns:
+  - geometry
+  - properties.height
+  - properties.confidence
+  index_url: https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv
+  release: '2026-02-03'
+source:
+  publisher: Microsoft
+  product: Global ML Building Footprints, release 2026-02-03
+  url: https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv
+url_verified_on: '2026-11-04'
+vintage:
+  current: '2026-02-03'
+  cadence: irregular
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Building footprints © Microsoft, Open Data Commons Open Database License (ODbL).
+  note: ODbL as stated in the GlobalMLBuildingFootprints repository; github.com was not reachable from the build environment (HTTP 403), the index file
+    was.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_head
+    url: https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the dataset-links.csv index (7,171,802 bytes; release path 2026-02-03; 2,415 United States tiles) on 2026-11-04.

@@ -1,0 +1,85 @@
+id: ref.infrastructure.us.rail.tiger
+type: infrastructure
+rev: 1
+status: active
+title: US railroads (Census TIGER/Line)
+summary: Every rail line in the national TIGER/Line rails file (113,047 segments), for transport context under a market or fiber-route map.
+tags:
+  geography:
+  - us
+  level:
+  - line
+  domain:
+  - transport
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - regional
+  - state
+  - metro
+  - local
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Rail corridors as context on a metro or state map, or as candidate rights-of-way on a fiber or backhaul planning map.
+- Finding sites within a distance of a rail line with geo-ops nearest or buffer.
+avoid_when:
+- 'A national map: 113,047 segments are heavy; draw the Natural Earth railroads or none.'
+- 'Ownership, operator or track class is needed: TIGER carries only the name and feature class (MTFCC R1011 main line, R1051 carline, R1052 cog).'
+pairs_with:
+- ref.infrastructure.us.road.tiger-primary
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 32.62
+  features: 113047
+  columns:
+  - LINEARID
+  - FULLNAME
+  - MTFCC
+source:
+  publisher: US Census Bureau
+  product: 2025 TIGER/Line Shapefile, Rails (national)
+  url: https://www2.census.gov/geo/tiger/TIGER2025/RAILS/tl_2025_us_rails.zip
+  file_sha256: e969ffd49f119655ac478035b7f206fb861b70c4dddb926f8cac911182e7a113
+url_verified_on: '2026-11-04'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, TIGER/Line Shapefiles.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-05-04'
+  check:
+    kind: feature_count_and_hash
+    features: 113047
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the 2025 national archive (113,047 features, 34,200,737 bytes, SHA-256 recorded; LineString, EPSG:4269).

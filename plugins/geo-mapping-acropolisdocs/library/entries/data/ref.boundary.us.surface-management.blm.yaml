@@ -1,0 +1,114 @@
+id: ref.boundary.us.surface-management.blm
+type: boundary
+rev: 1
+status: active
+title: BLM National Surface Management Agency (federal and state land ownership)
+summary: Surface management agency polygons for the United States (BLM, USFS, NPS, DoD, BIA, state, private) from the BLM national map service, 464,680
+  features at the limited-scale generalization.
+tags:
+  geography:
+  - us
+  level:
+  - place
+  domain:
+  - general
+  - program
+  - telecom
+  use_for:
+  - context-basemap
+  - choropleth
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - parcel-level
+  scale:
+  - regional
+  - state
+  - metro
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Which agency manages the land under candidate tower sites in the West (ADMIN_AGENCY_CODE) before a permitting plan.
+- Federal versus private land as context on an Arizona, Nevada or Utah market map.
+avoid_when:
+- 'A national pull: 464,680 polygons; query with a state bbox.'
+- 'Legal title is implied: the layer is a cartographic compilation of surface management, not a cadastre.'
+distinct_from:
+- id: ref.boundary.us.protected.pad-us
+  why: PAD-US adds state, local and private conservation lands and is a download
+- id: ref.boundary.us.place.cb500k
+  why: municipalities
+- id: ref.boundary.us.urban-area.cb2020-500k
+  why: urban footprints
+- id: ref.boundary.us.aiannh.cb500k
+  why: Census tribal areas
+join:
+  key: ADMIN_AGENCY_CODE
+  type: string
+  note: Agency code (BLM, USFS, NPS, DOD, BIA, FWS, BOR, STATE, LOCAL, PRIVATE, OTHER); ADMIN_UNIT_NAME names the unit, ADMIN_ST the state.
+crs: EPSG:3857
+delivery:
+  mode: service
+  profile: blm-egis
+  protocol: arcgis
+  layer: lands/BLM_Natl_SMA_LimitedScale/MapServer/1
+  max_record_count: 2000
+  geometry: polygon
+  features: 464680
+  columns:
+  - SMA_ID
+  - ADMIN_DEPT_CODE
+  - ADMIN_AGENCY_CODE
+  - ADMIN_UNIT_NAME
+  - ADMIN_UNIT_TYPE
+  - HOLD_DEPT_CODE
+  - HOLD_AGENCY_CODE
+  - ADMIN_ST
+  - FAU_ID
+  request: service_query.py fetch --profile blm-egis --layer lands/BLM_Natl_SMA_LimitedScale/MapServer/1 --protocol arcgis
+  note: Layer 1 'Surface Management Agency' (polygon, maxRecordCount 2000, pagination; 464,680 features by returnCountOnly on 2026-11-04). Layers 4 to 16
+    split the same data by agency.
+source:
+  publisher: Bureau of Land Management
+  product: BLM National Surface Management Agency, limited scale
+  url: https://gis.blm.gov/arcgis/rest/services/lands/BLM_Natl_SMA_LimitedScale/MapServer/1
+url_verified_on: '2026-11-04'
+vintage:
+  current: current BLM service
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: Bureau of Land Management, National Surface Management Agency dataset.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://gis.blm.gov/arcgis/rest/services/lands/BLM_Natl_SMA_LimitedScale/MapServer/1?f=json
+    expect: 200
+    features: 464680
+    against: returnCountOnly=true on the layer
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the BLM map service (32 layers; layer 1 polygon, 14 fields, 464,680 features, maxRecordCount 2000) on 2026-11-04. Served through the
+      shipped blm-egis profile.

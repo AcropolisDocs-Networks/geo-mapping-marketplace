@@ -1,0 +1,86 @@
+id: ref.statistic.us.coverage.fcc-nbm
+type: statistic
+rev: 2
+status: draft
+title: FCC National Broadband Map (availability data)
+summary: Broadband availability by location and provider as filed with the FCC (Broadband Data Collection), summarized to Census geographies. Downloaded
+  by the person from the map's data download page.
+tags:
+  geography:
+  - us
+  level:
+  - county
+  - tract
+  - block-group
+  domain:
+  - telecom
+  use_for:
+  - choropleth
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A map of reported broadband availability by area, with the filing date stated.
+- A gap analysis that compares reported availability with a client's own footprint.
+avoid_when:
+- The map claims coverage quality; the data is provider-reported availability, not measured performance.
+- The reader may take 'available' to mean 'served'; word the title as reported availability.
+pairs_with:
+- ref.statistic.us.broadband.fcc-bdc-summary
+- ref.boundary.us.county.cb
+join:
+  key: geography_id
+  type: string
+  width: 5
+  note: In the 'Summary by Geography' files geography_id is the Census GEOID of the row's geography_type (county 5, tract 11, block group 12 digits as text).
+    Keep leading zeros.
+delivery:
+  mode: user-supplied
+  format: CSV (zip) per state and technology from the National Broadband Map data download page
+  note: In a browser open broadbandmap.fcc.gov/data-download, choose the filing date, 'Summary by Geography' (or 'Availability' for location-level rows),
+    the state and technology, and download the zip. Supply the zip; the columns are documented by the FCC's BDC data specification shipped with the download.
+    See ref.statistic.us.broadband.fcc-bdc-summary for the summary layout.
+source:
+  publisher: FCC
+  product: National Broadband Map, Broadband Data Collection public data
+vintage:
+  current: latest filing date on the download page (semiannual filings)
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: FCC National Broadband Map (Broadband Data Collection).'
+  note: Public domain; the host refuses automated requests, so the file is supplied by the person.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the FCC site refused automated requests from the build environment (HTTP 403); the data release layout is not verified.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Still draft: The FCC web hosts (fcc.gov, data.fcc.gov, broadbandmap.fcc.gov) refuse automated requests from the build environment (HTTP 403 on
+      2026-11-04); the download route and the join key are recorded, and the summary layout lives in ref.statistic.us.broadband.fcc-bdc-summary.'

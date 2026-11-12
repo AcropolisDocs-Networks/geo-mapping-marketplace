@@ -1,0 +1,98 @@
+id: ref.basemap-provider.nasa-gibs
+type: basemap-provider
+rev: 2
+status: active
+title: NASA GIBS satellite imagery
+summary: 'Satellite imagery tiles from NASA''s Global Imagery Browse Services: daily MODIS and VIIRS true colour for a chosen day, the Blue Marble relief
+  and the city lights at night; no key, open data, acknowledgement requested.'
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  audience:
+  - any
+  tier:
+  - T2
+  - W
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- 'A world, continental or regional map that needs real imagery under it: a wildfire smoke plume, snow cover, a hurricane, a flood, on the day it happened (basemap.time: YYYY-MM-DD).'
+- A night-lights or shaded-relief background for a national or world map, with no key and no fee.
+avoid_when:
+- 'A metro or site map: the daily imagery is 250 m per pixel (zoom 9 at most) and the Blue Marble and city lights 500 m (zoom 8); use USGS or a
+  commercial imagery provider for streets and buildings.'
+- 'Today''s date: the daily mosaic is built through the day, so today''s tiles are partly empty; the plugin takes two days ago unless a day is named.'
+- 'Bulk download or offline archives: GIBS is a visualisation service; a few tiles for a print map, the page loading the rest.'
+delivery:
+  mode: fetch
+source:
+  publisher: NASA Earth Science Data and Information System (ESDIS)
+  product: Global Imagery Browse Services (GIBS), WMTS in EPSG:3857
+  url: https://nasa-gibs.github.io/gibs-api-docs
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Imagery: NASA Global Imagery Browse Services (GIBS), part of NASA''s Earth Science Data and Information System (ESDIS)'
+  note: 'GIBS API documentation (read 2026-11-07): NASA "promotes full and open sharing of data" with no restrictions listed; it asks clients and
+    presentations to acknowledge "the use of imagery provided by services from NASA''s Global Imagery Browse Services (GIBS), part of NASA''s Earth
+    Science Data and Information System (ESDIS)". No rate limit or caching rule is stated; the tiles are sent with no-store, so none is kept.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-05-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Active (release 0.16.0): GIBS API documentation and Earthdata wiki read; every listed style answered HTTP 200 on 2026-11-07 (jpeg for
+      the daily and relief layers, png for Black Marble) from gibs.earthdata.nasa.gov with CORS open; Level9 layers serve zoom 0 to 9 and Level8
+      layers 0 to 8 in the 256-pixel numbering (zoom 10 and 9 answer 400); a daily layer with time "default" returned an almost empty tile, so a day is always named.'
+  - rev: 2
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+  check:
+    kind: http_get
+    url: https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/default/GoogleMapsCompatible_Level8/0/0/0.jpg
+    expect: 200
+url_template: https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/{style}/default/{time}/{matrix}/{z}/{y}/{x}.{ext}
+url_verified_on: '2026-11-07'
+provider:
+  attribution_html: Imagery <a href="https://earthdata.nasa.gov/gibs">NASA GIBS</a>, part of NASA's Earth Science Data and Information System (ESDIS)
+  max_zoom: 9
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: false
+  print_ok: true
+  production_ok: true
+  styles:
+  - MODIS_Terra_CorrectedReflectance_TrueColor
+  - VIIRS_SNPP_CorrectedReflectance_TrueColor
+  - BlueMarble_ShadedRelief_Bathymetry
+  - VIIRS_CityLights_2012
+  - VIIRS_Black_Marble
+  style_paths:
+    MODIS_Terra_CorrectedReflectance_TrueColor: {matrix: GoogleMapsCompatible_Level9, ext: jpg, daily: true, max_zoom: 9}
+    VIIRS_SNPP_CorrectedReflectance_TrueColor: {matrix: GoogleMapsCompatible_Level9, ext: jpg, daily: true, max_zoom: 9}
+    BlueMarble_ShadedRelief_Bathymetry: {matrix: GoogleMapsCompatible_Level8, ext: jpg, daily: false, max_zoom: 8}
+    VIIRS_CityLights_2012: {matrix: GoogleMapsCompatible_Level8, ext: jpg, daily: false, max_zoom: 8}
+    VIIRS_Black_Marble: {matrix: GoogleMapsCompatible_Level8, ext: png, daily: false, max_zoom: 8}
+attribution:
+  corner: 'Imagery: NASA GIBS, part of ESDIS'
+  links:
+  - text: NASA GIBS
+    href: https://earthdata.nasa.gov/gibs
+  full: 'Imagery: NASA Global Imagery Browse Services (GIBS), part of NASA''s Earth Science Data and Information System (ESDIS).'
+  required_on_map: true
+  collapse: allowed
+  export:
+    text: 'Imagery: NASA Global Imagery Browse Services (GIBS), part of NASA''s Earth Science Data and Information System (ESDIS)'
+  terms_read: '2026-11-09'

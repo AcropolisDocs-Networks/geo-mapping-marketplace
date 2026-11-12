@@ -1,0 +1,92 @@
+id: ref.public-service.us.energy.eia-opendata
+type: public-service
+rev: 1
+status: active
+title: US Energy Information Administration Open Data API (v2)
+summary: Energy statistics by state and plant from the EIA API v2 (electricity generation and prices, fuel, emissions), with a free key, to join to state
+  or market maps.
+tags:
+  geography:
+  - us
+  level:
+  - state
+  domain:
+  - energy
+  use_for:
+  - choropleth
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A state map of electricity prices, generation by fuel or emissions, joined on the state code, with the person's own key (map-credentials add eia).
+- State energy figures beside substations and transmission lines on an energy-resilience map.
+avoid_when:
+- 'Live grid conditions: EIA series are monthly or annual.'
+- 'More than 5,000 rows in one request: page with offset and length.'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: eia
+    kind: apikey
+    class: secret
+    host: api.eia.gov
+    inject:
+      query: api_key
+    reject:
+      status:
+      - 401
+      - 403
+    probe: https://api.eia.gov/v2/electricity/
+    signup_url: https://www.eia.gov/opendata/register.php
+    free: true
+    limits: Throttled per second and per hour (figures not stated); JSON responses at most 5,000 rows (API documentation, read 2026-11-07)
+    note: The key must be in the address; EIA does not read it from a header
+  request: https://api.eia.gov/v2/electricity/retail-sales/data/?frequency=annual&data[0]=price&facets[sectorid][]=RES
+  note: 'Without a key the API answers 403 with API_KEY_MISSING (checked 2026-11-07), so 403 is a reject status. Routes: electricity, natural-gas, petroleum,
+    coal, co2-emissions, seds (state energy data).'
+source:
+  publisher: US Energy Information Administration
+  product: EIA Open Data API v2
+  url: https://www.eia.gov/opendata/documentation.php
+url_verified_on: '2026-11-07'
+vintage:
+  current: rolling
+  cadence: monthly
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: US Energy Information Administration.'
+  note: 'Documentation (read 2026-11-07): data provided free of charge under the API Terms of Service and the EIA Copyrights and Reuse Policy (not read);
+    US federal statistics.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  check:
+    kind: http_get
+    url: https://www.eia.gov/opendata/documentation.php
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions, P2): API documentation read; the API answered 403 API_KEY_MISSING without a key on 2026-11-07.'

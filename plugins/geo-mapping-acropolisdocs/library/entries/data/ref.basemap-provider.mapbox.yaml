@@ -1,0 +1,140 @@
+id: ref.basemap-provider.mapbox
+type: basemap-provider
+rev: 6
+status: active
+title: Mapbox basemaps
+summary: 'Mapbox basemaps (Streets, Outdoors, Light, Dark, Satellite) as raster tiles from the Static Tiles API, with the person''s own Mapbox access
+  token; attribution is the Mapbox wordmark plus ''© Mapbox © OpenStreetMap''. Web pages only: printing needs Mapbox''s permission.'
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  - W
+  license_class:
+  - licensed
+  quality:
+  - commercial
+use_when:
+- A web map page for a client that already holds a Mapbox account and wants the Mapbox look, with a public token restricted to the page's site (map-credentials add mapbox --class browser).
+- Satellite imagery under a web page where the client's Mapbox plan covers the traffic (200,000 tile requests a month free).
+avoid_when:
+- 'A printed or exported map: Mapbox asks to be contacted "to print images generated from the Mapbox Studio print export option for any use", and the raster tile terms say nothing that allows print; use CARTO, USGS or the bundled basemap for print.'
+- 'Caching tiles for offline use: the terms do not allow it, so the page loads them live.'
+- No token is available; the plugin never asks for a token in chat.
+delivery:
+  mode: fetch
+  requires_credential:
+    name: mapbox
+    kind: apikey
+    class: secret
+    class_allowed: [secret, browser]
+    host: api.mapbox.com
+    inject: {query: access_token}
+    reject: {status: [401, 403]}
+    signup_url: https://account.mapbox.com/auth/signup/
+    probe: https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/0/0/0
+    free: true
+    limits: 'Static Tiles API "Up to 200,000" monthly tile requests free; Static Images API up to 50,000 (mapbox.com/pricing, read 2026-11-07)'
+    note: A public token (pk.) restricted to the page's URLs is the browser-class form; a secret token (sk.) is never needed for tiles
+  note: 'The Static Tiles API answered 401 without a token on 2026-11-07. Styles are Mapbox-owned (mapbox/streets-v12, outdoors-v12, light-v11,
+    dark-v11, satellite-v9) or the client''s own style id under its account.'
+source:
+  publisher: Mapbox
+  product: Static Tiles API (raster tiles of Mapbox styles)
+  url: https://docs.mapbox.com/help/dive-deeper/attribution/
+license:
+  class: licensed
+  external_ok: true
+  attribution_text: © Mapbox © OpenStreetMap
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  note: 'Read 2026-11-07: Terms of Service (licence to use the Services in Licensed Applications; proprietary notices may not be removed; the Product
+    Terms govern use and are a PDF not read); attribution guide ("© Mapbox", "© OpenStreetMap" and "Improve this map" as links, the wordmark always
+    shown; static and print maps carry the logo and "© Mapbox, © OpenStreetMap"); static maps help page (printing Studio exports needs Mapbox sales;
+    print maps need Mapbox attribution); pricing page (free monthly allowances).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-05-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: placeholder for a keyed commercial provider; nothing verified.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Still draft: the Terms of Service page answered on 2026-11-04 but could not be read as text from the build environment, so export, caching and
+      print terms remain unverified.'
+  - rev: 3
+    date: '2026-11-05'
+    note: 'requires_key is replaced by requires_credential (credentials spec, release 0.6.0): the key is the person''s own registered credential cred:mapbox for api.mapbox.com, secret by default (fetched host-side for print, never written into an output) or browser (restricted to the person''s domain, may go into a web page). GEO_MAPPING_KEY_ variables stay a command-line fallback.'
+  - rev: 5
+    date: '2026-11-07'
+    note: 'Active for web pages (release 0.16.0). The wordmark blocker is met: the page loads the Mapbox logo, while the Mapbox basemap is shown, from
+      Mapbox GL JS 3.9.4''s own stylesheet on api.mapbox.com (the a.mapboxgl-ctrl-logo rule, the mark Mapbox''s maps show, 88 x 23 px), and a saved
+      image carries it; the plugin ships no copy. Without the stylesheet the word Mapbox is shown. Attribution guide re-read: Leaflet maps still need
+      the logo and text attribution; the logo may sit in another corner and may not be restyled. The Static Tiles API answered 401 for a made-up
+      token (2026-11-07), so the address and the token''s place are right; a person''s own token is probed with map-credentials check --probe.
+      print_ok stays false (printing needs Mapbox''s permission).'
+  - rev: 4
+    date: '2026-11-07'
+    note: 'Still draft (reference library additions, section 7): Terms of Service, attribution guide, static maps help and pricing read on
+      2026-11-07; the Static Tiles API answered 401 without a token. print_ok false (printing needs Mapbox''s permission), cache_ok false, the
+      wordmark required; tile address, styles, signup and free limits recorded. The Product Terms PDF was not read. Blocker: the page cannot show the required Mapbox wordmark.'
+  - rev: 6
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse, the provider logo and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+  check:
+    kind: http_head
+    url: https://docs.mapbox.com/help/dive-deeper/attribution/
+    expect: 200
+url_verified_on: '2026-11-07'
+url_template: https://api.mapbox.com/styles/v1/mapbox/{style}/tiles/256/{z}/{x}/{y}?access_token={key}
+provider:
+  attribution_html: © <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> <a href="https://www.mapbox.com/map-feedback/">Improve this map</a>
+  max_zoom: 22
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: false
+  print_ok: false
+  production_ok: true
+  wordmark_required: true
+  styles:
+  - streets-v12
+  - outdoors-v12
+  - light-v11
+  - dark-v11
+  - satellite-v9
+attribution:
+  corner: © Mapbox © OpenStreetMap
+  links:
+  - text: © Mapbox
+    href: https://www.mapbox.com/about/maps/
+  - text: © OpenStreetMap
+    href: https://www.openstreetmap.org/copyright
+  - text: Improve this map
+    href: https://apps.mapbox.com/feedback/#/{lng}/{lat}/{zoom}
+  required_on_map: true
+  collapse: after_interaction
+  logo:
+    source: mapbox-gl.css (a.mapboxgl-ctrl-logo), loaded from the tile host while the basemap is shown
+    min_px:
+    - 65
+    - 20
+    corner: bottom-left
+    required: true
+    collapse: never
+  export:
+    text: © Mapbox © OpenStreetMap
+  terms_read: '2026-11-09'

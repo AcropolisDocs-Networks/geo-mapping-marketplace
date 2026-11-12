@@ -1,0 +1,140 @@
+id: ref.boundary.world.division.overture
+type: boundary
+rev: 2
+status: active
+title: Overture Maps divisions (administrative areas)
+summary: Countries, regions (states, provinces), counties and localities with names and hierarchy from the Overture divisions theme (division and division_area
+  types), GeoParquet on S3.
+tags:
+  geography:
+  - world
+  level:
+  - country
+  - state
+  - county
+  - place
+  domain:
+  - general
+  use_for:
+  - choropleth
+  - context-basemap
+  - join-key
+  - label-reference
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- A consistent world or multi-country admin hierarchy (country > region > county > locality) with one id scheme, for an international atlas.
+- Locality polygons for cities outside the United States where no national file is at hand.
+avoid_when:
+- 'The map is of the United States, Canada or Mexico for a client: the national statistical agencies'' files carry the official codes.'
+- 'Legal boundaries are implied: divisions come from OpenStreetMap and other open sources.'
+distinct_from:
+- id: ref.boundary.world.country.geoboundaries
+  why: geoBoundaries cites an official source per country
+- id: ref.boundary.world.state.ne10
+  why: Natural Earth is generalized and public domain
+- id: ref.boundary.world.admin.gadm41
+  why: GADM is restricted-license
+- id: ref.boundary.world.country.ne110
+  why: bundled generalized countries
+- id: ref.boundary.world.state.ne50
+  why: bundled generalized admin-1
+join:
+  key: id
+  type: string
+  note: Overture GERS id; subtype (country, region, county, locality), country (ISO 3166-1 alpha-2), region (ISO 3166-2), names.primary. division_area holds
+    the polygons, division the points and hierarchy.
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: GeoParquet (S3, read with pyarrow or DuckDB; filter on subtype and country)
+  note: 'Overture publishes each release as GeoParquet on S3: s3://overturemaps-us-west-2/release/<release>/theme=<theme>/type=<type>/*.parquet (listing
+    verified 2026-11-04: releases 2026-09-23.0, 2026-09-23.1, 2026-10-21.0; themes addresses, base, buildings, divisions, places, transportation). Files
+    are 700 to 800 MB each, so read them with a bbox filter rather than downloading: pyarrow.dataset(''s3://overturemaps-us-west-2/release/2026-10-21.0/theme=divisions/type=division_area/'',
+    filesystem=S3FileSystem(anonymous=True, region=''us-west-2'')).to_table(filter=(bbox.xmin > W) & (bbox.xmax < E) & ...), or DuckDB: SELECT ... FROM
+    read_parquet(''s3://.../theme=divisions/type=division_area/*'', hive_partitioning=1) WHERE bbox.xmin > W AND ...; save the result as GeoParquet and
+    supply it.'
+  columns:
+  - id
+  - geometry
+  - bbox
+  - version
+  - sources
+  - subtype
+  - class
+  - names
+  - country
+  - region
+  - division_id
+  - is_land
+  - is_territorial
+source:
+  publisher: Overture Maps Foundation
+  product: Overture divisions theme, release 2026-10-21.0
+  url: https://overturemaps-us-west-2.s3.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/&delimiter=/
+url_verified_on: '2026-11-04'
+vintage:
+  current: 2026-10-21.0
+  cadence: monthly
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: © Overture Maps Foundation; © OpenStreetMap contributors (ODbL 1.0).
+  note: The divisions theme is ODbL 1.0 (docs.overturemaps.org, read 2026-11-04).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://overturemaps-us-west-2.s3.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/&delimiter=/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the S3 release listing on 2026-11-04 and recorded the read pattern and the subtype hierarchy.
+  - rev: 2
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+attribution:
+  corner: © Overture Maps Foundation
+  links:
+  - text: © Overture Maps Foundation
+    href: https://docs.overturemaps.org/attribution/
+  full: © Overture Maps Foundation; © OpenStreetMap contributors (ODbL 1.0).
+  required_on_map: true
+  collapse: after_interaction
+  extra:
+  - corner: © OpenStreetMap contributors
+    links:
+    - text: © OpenStreetMap contributors
+      href: https://www.openstreetmap.org/copyright
+    required_on_map: true
+    collapse: after_interaction
+    short: © OSM
+    export:
+      text: © OpenStreetMap contributors (openstreetmap.org/copyright)
+  terms_read: '2026-11-09'

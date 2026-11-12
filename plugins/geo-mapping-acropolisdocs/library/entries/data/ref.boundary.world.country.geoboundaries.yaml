@@ -1,0 +1,108 @@
+id: ref.boundary.world.country.geoboundaries
+type: boundary
+rev: 3
+status: active
+title: geoBoundaries (administrative boundaries worldwide)
+summary: Open administrative boundaries (ADM0 to ADM2 and deeper) for every country, each with its source and licence stated per country in the geoBoundaries
+  API; from 1.5.0 the ADM1 and ADM2 of one country are fetched by geoboundaries.py (gbOpen, CC BY 4.0 or more open only).
+tags:
+  geography:
+  - world
+  level:
+  - country
+  - state
+  - county
+  - admin0
+  - admin1
+  - admin2
+  domain:
+  - general
+  use_for:
+  - choropleth
+  - context-basemap
+  - join-key
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - world
+  - national
+  - regional
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - community
+use_when:
+- A map outside the United States that needs administrative levels below the country (provinces, districts) with a stated source and licence.
+- 'A Canadian or Mexican market map before the StatCan or INEGI files are supplied: CAN ADM1 (13 units, Open Government Canada 2.0, from StatCan) and MEX
+  ADM1 come from the same API.'
+avoid_when:
+- The map is of the United States; the Census files carry the keys clients use.
+- 'The product goes external without credit: each country''s licence (CC BY 4.0 or an open government licence) is named in the API response and must be
+  followed.'
+distinct_from:
+- ref.boundary.world.state.ne50
+- ref.boundary.world.country.ne110
+- ref.boundary.world.state.ne10
+- ref.boundary.world.admin.gadm41
+join:
+  key: shapeISO
+  type: string
+  note: ISO 3166-2 code where the source carries one (e.g. CA-ON); shapeName and shapeID otherwise. Confirm against the API's boundary metadata for the
+    country.
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  tool: geoboundaries
+  format: GeoJSON per country and level, linked from the API; cached as GeoParquet with a record (source, licence, year, commit, SHA-256)
+  note: 'ref_fetch.py fetch ref.boundary.world.country.geoboundaries --variant nga --level adm1 (alpha-3 code; adm1 or adm2). GET
+    https://www.geoboundaries.org/api/current/gbOpen/{ISO3}/{ADM}/ and read boundaryLicense first: only CC BY 4.0 or more open is used. The download link
+    is a github.com file kept in Git LFS; where github.com refuses (HTTP 403 in the cloud workspace) the same file is read from media.githubusercontent.com
+    (verified 2026-11-10: NGA ADM1, 37 units, CC BY 4.0, GRID3 2022).'
+  api: https://www.geoboundaries.org/api/current/gbOpen/{ISO3}/{ADM}/
+source:
+  publisher: geoBoundaries (William & Mary geoLab)
+  product: geoBoundaries Global Database, gbOpen release
+  url: https://www.geoboundaries.org/api/current/gbOpen/CAN/ADM1/
+url_verified_on: '2026-11-10'
+vintage:
+  current: current gbOpen release (CAN ADM1 represents 2023)
+  cadence: annual
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Boundaries from geoBoundaries (geoboundaries.org); per-country licence as stated by the API.
+  note: The gbOpen release holds only openly licensed boundaries (CC BY 4.0 or an open government licence per country, named in boundaryLicense).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-11-10'
+  check:
+    kind: http_get
+    url: https://www.geoboundaries.org/api/current/gbOpen/CAN/ADM1/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the geoBoundaries site rate-limited the build environment (HTTP 429); the API and the license per country were not verified.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: the API answered for USA/ADM1 and CAN/ADM1 (2026-11-04) with boundaryLicense, boundarySource and the download links; the links go to
+      github.com, which the build environment cannot reach, so delivery is user-supplied with the API route recorded.'
+  - rev: 3
+    date: '2026-11-10'
+    note: 'Fetched by geoboundaries.py (1.5.0, R3-LIB): ADM1 and ADM2 per country, the licence read from each API record (CC BY 4.0 or more open only), the
+      LFS file read from media.githubusercontent.com where github.com refuses; verified with NGA ADM1 (37 units, CC BY 4.0).'

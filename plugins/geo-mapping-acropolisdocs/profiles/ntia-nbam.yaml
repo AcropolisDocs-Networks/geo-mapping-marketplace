@@ -1,0 +1,31 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-04 from the build environment.
+profile: ntia-nbam
+type: arcgis-rest
+base_url: https://services3.arcgis.com/OYP7N6mAJJCyH6hd/arcgis/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 2000
+  server_max_features: 2000
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: public-domain
+  confidential: false
+  attribution: 'Source: NTIA, National Broadband Availability Map.'
+host_visibility: shown
+host_confirmed_on: '2026-11-04'
+verified_on: '2026-11-04'
+notes: 'NTIA National Broadband Availability Map organization hosted services. Public feature services of NTIA''s NBAM organization (orgId OYP7N6mAJJCyH6hd):
+  Section106_Final_Proposal_Locations/FeatureServer/94 (BEAD final proposal locations, 2,616,153 points, fields proj_id, technology, County_GEOID),
+  Section106_Final_Proposal_ProjectCounty_Centroids/FeatureServer/96, middle-mile award layers, federal land layers for permitting. maxRecordCount
+  2000, pagination supported. Shipped with the plugin (M13), read-only: a profile of the same name saved in the working folder overrides it.'

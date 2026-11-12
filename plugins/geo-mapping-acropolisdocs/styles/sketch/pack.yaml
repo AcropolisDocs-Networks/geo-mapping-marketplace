@@ -1,0 +1,31 @@
+id: sketch
+version: 1
+title: Sketch
+intent: Hand-drawn, informal and challenge maps; wobbly lines, hatched fills, handwritten type.
+palette: brand-derived
+fonts: own
+derive:
+  chroma_cap: 0.16
+  context_desaturate: 0.3
+  ground: paper
+  tokens: {paper: '#F7F3EA', paper_land: '#F7F3EA'}
+ramps: pack
+type:
+  title: {family: Caveat, file: 'fonts/Caveat-wght.ttf', sha256: 0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988, style: normal, generic: cursive, licence: LICENSES/OFL-Caveat.txt, licence_id: OFL-1.1,
+          upstream: 'https://github.com/google/fonts/tree/main/ofl/caveat'}
+  label: {family: Patrick Hand, file: fonts/PatrickHand-Regular.ttf, sha256: 0f173b3e6cb6d1af25babf7f0057c5ac4ee11f9992b0469bb817e967ef4ad0fc, style: normal, generic: cursive, licence: LICENSES/OFL-PatrickHand.txt, licence_id: OFL-1.1,
+          upstream: 'https://github.com/google/fonts/tree/main/ofl/patrickhand'}
+  body: {family: Patrick Hand, file: fonts/PatrickHand-Regular.ttf, sha256: 0f173b3e6cb6d1af25babf7f0057c5ac4ee11f9992b0469bb817e967ef4ad0fc, style: normal, generic: cursive, licence: LICENSES/OFL-PatrickHand.txt, licence_id: OFL-1.1,
+         upstream: 'https://github.com/google/fonts/tree/main/ofl/patrickhand'}
+elements:
+  frame: {style: single}
+treatments:
+  paper: {image: assets/paper.jpg, dpi: 150}
+  line_character: {style: sketch, amplitude_mm: 0.3, wavelength_mm: 4.0, overdraw: true, hatch_fills: true}
+web: palette-and-fonts
+files:
+  'LICENSES/OFL-Caveat.txt': 1f9d81d094273d82f3898a1ee8b598a717d050ecbf5ff7bede105b704880157b
+  'LICENSES/OFL-PatrickHand.txt': 377f4f9c19e935228552478eb68cc2ed82910988a60ba60e2ac73b09f32d02d1
+  'assets/paper.jpg': 8336ee029b8d0c4812b32046a48868c4b9d6b9017847af0186971670f95d5b65
+  'fonts/Caveat-wght.ttf': 0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988
+  'fonts/PatrickHand-Regular.ttf': 0f173b3e6cb6d1af25babf7f0057c5ac4ee11f9992b0469bb817e967ef4ad0fc

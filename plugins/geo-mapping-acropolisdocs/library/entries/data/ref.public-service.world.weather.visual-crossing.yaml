@@ -1,0 +1,65 @@
+id: ref.public-service.world.weather.visual-crossing
+type: public-service
+rev: 1
+status: draft
+title: Visual Crossing Weather (history and forecast)
+summary: Worldwide weather history, forecasts and alerts by place from the Visual Crossing Timeline API, with a free key.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - world
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - commercial
+use_when:
+- Weather on a past date at a venue or site (history is on the free tier, per the comparison read earlier).
+avoid_when:
+- The editions and terms pages were not read (2026-11-07); free limits, commercial use and key parameter are unconfirmed.
+delivery:
+  mode: user-supplied
+  note: The Timeline API at weather.visualcrossing.com answered 400 without a key on 2026-11-07, asking anonymous requests to accept gzip; the key parameter
+    was not confirmed.
+source:
+  publisher: Visual Crossing Corporation
+  product: Timeline Weather API
+  url: https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Phoenix
+url_verified_on: '2026-11-07'
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: null
+  bulk_ok: false
+  attribution_text: Weather data by Visual Crossing
+  note: Terms not read.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): only the endpoint was checked on 2026-11-07; the editions page could not be read.'

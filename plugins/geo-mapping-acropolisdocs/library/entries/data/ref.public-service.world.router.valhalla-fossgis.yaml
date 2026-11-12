@@ -1,0 +1,80 @@
+id: ref.public-service.world.router.valhalla-fossgis
+type: public-service
+rev: 2
+status: active
+title: FOSSGIS public Valhalla server (routing and isochrones)
+summary: Keyless walk, bike and drive routing and travel-time areas on OpenStreetMap from the FOSSGIS community Valhalla server, for light use;
+  the default provider of the isochrone-map skill.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  - line
+  domain:
+  - routing
+  - transport
+  use_for:
+  - coverage-footprint
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- 5, 10 or 15 minute walk, bike or drive bands around up to 25 stations, stores or venues (isochrone.py --provider valhalla).
+avoid_when:
+- 'More than 25 origins or a production workload: the server is a shared community service; use your own openrouteservice key or your own Valhalla server.'
+- 'Transit travel times: computed from the agency''s GTFS feed instead.'
+delivery:
+  mode: service
+  protocol: rest-json
+  request: https://valhalla1.openstreetmap.de/isochrone?json={query}
+  note: 'No key. GET /isochrone?json=... through SafeHTTP; the default router: the plugin keeps to its terms (MAP-ISO-001, 002), nothing to acknowledge. The status endpoint answered on
+    2026-11-07.'
+source:
+  publisher: FOSSGIS e.V.
+  product: Valhalla public instance
+  url: https://valhalla1.openstreetmap.de/status
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: © OpenStreetMap contributors; routing by Valhalla (FOSSGIS)
+  note: 'Usage as the plugin records it (isochrone.py VALHALLA_TERMS, 0.11.0): identify the application, one request a second, no bulk or
+    production load, credit OpenStreetMap. The server''s own page could not be read on 2026-11-07.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-08'
+  verify_by: '2027-02-07'
+  check:
+    kind: http_get
+    url: https://valhalla1.openstreetmap.de/status
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions): documents the server isochrone.py already uses (0.11.0 terms and caps); the status endpoint
+      answered on 2026-11-07.'
+  - rev: 2
+    date: '2026-11-08'
+    note: 'Wording (0.23.0): the default router; the plugin keeps to its terms by itself (one request a second, 25 origins a run, the credit), so nothing is acknowledged.'

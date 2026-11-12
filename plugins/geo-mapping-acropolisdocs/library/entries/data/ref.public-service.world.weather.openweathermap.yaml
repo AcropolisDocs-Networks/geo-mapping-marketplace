@@ -1,0 +1,113 @@
+id: ref.public-service.world.weather.openweathermap
+type: public-service
+rev: 3
+status: active
+title: OpenWeatherMap (current weather and forecast)
+summary: Worldwide current weather, five-day forecasts, air pollution and geocoding from OpenWeather, with a free key (60 calls a minute, 1,000,000 a month).
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - world
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - commercial
+use_when:
+- Current conditions or a five-day forecast at sites anywhere, with the person's own key (the openweathermap credential).
+avoid_when:
+- 'A layer drawn from it names it in provenance.library_entry, so the map carries the text, the link and the logo the free plan requires.'
+- 'History on the free plan: not included.'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: openweathermap
+    kind: apikey
+    class: secret
+    host: api.openweathermap.org
+    inject:
+      query: appid
+    reject:
+      status:
+      - 401
+    signup_url: https://home.openweathermap.org/users/sign_up
+    free: true
+    limits: 'Free plan: 60 calls per minute and 1,000,000 calls per month; current weather, 3-hour forecast (5 days), air pollution, geocoding, weather
+      maps (pricing page, read 2026-11-07)'
+  request: https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&units=metric
+  note: Without a key the API answers 401 "Invalid API key" (2026-11-07).
+source:
+  publisher: OpenWeather Ltd
+  product: OpenWeatherMap APIs
+  url: https://openweathermap.org/price
+url_verified_on: '2026-11-10'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: restricted
+  external_ok: true
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: Weather data provided by OpenWeather (openweathermap.org)
+  note: OpenWeather FAQ (read 2026-11-10) - commercial use is allowed; on the plans from Free to Professional attribution is obligatory, in the
+    visible part of the solution - the text 'Weather data provided by OpenWeather', a hyperlink to openweathermap.org and the OpenWeather logo. The
+    pricing page (read 2026-11-10) names ODbL for the paid plans.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): pricing and the current weather page read (appid, limits) and the API answered 401 without a key on
+      2026-11-07; terms not read.'
+  - rev: 2
+    date: '2026-11-10'
+    note: 'Terms read 2026-11-10 (OpenWeather FAQ and pricing): commercial use allowed; free plan limits as recorded; attribution obligatory - the text,
+      a link and the OpenWeather logo. Still draft until the plugin can place a data provider''s logo on a map; the person holds a key.'
+  - rev: 3
+    date: '2026-11-10'
+    note: 'Active: the attribution block carries the text, the link and the OpenWeather logo (assets/logos/openweathermap.svg, supplied by the person,
+      drawn at 10 px in the text colour), which the print footer, the web credits corner and Save image draw from release 1.1.3.'
+attribution:
+  corner: Weather data provided by OpenWeather
+  full: Weather data provided by OpenWeather (openweathermap.org)
+  links:
+  - text: Weather data provided by OpenWeather
+    href: https://openweathermap.org/
+  required_on_map: true
+  collapse: never
+  logo:
+    file: openweathermap.svg
+    height_px: 10
+    link: https://openweathermap.org/
+    alt: OpenWeather
+    required: true
+  export:
+    text: Weather data provided by OpenWeather (openweathermap.org)
+  terms_read: '2026-11-10'

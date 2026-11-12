@@ -1,0 +1,64 @@
+id: ref.terrain.us.dem.3dep
+type: terrain
+rev: 1
+status: active
+title: USGS 3DEP bare-earth elevation (ImageServer)
+summary: 'The US national elevation model as a dynamic image service: 10 m (1/3 arc-second) over most of the lower 48, 1 m where lidar exists, 5 m in Alaska; public domain. One exportImage request gives a float32 GeoTIFF in metres for any window up to 4096 pixels a side.'
+tags:
+  geography: [us]
+  level: [grid]
+  domain: [general]
+  use_for: [context-basemap, site-map, coverage-footprint]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level]
+  scale: [regional, state, metro, local, site]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- A hillshade, contour lines or an elevation tint go under a US market, site or venue map (terrain-analysis, role hillshade or contour).
+- An elevation profile, a line-of-sight check or a viewshed between sites in the United States is asked for; the fetch is one request and nothing to acknowledge.
+avoid_when:
+- The window is outside the United States and its territories; the service has nothing there, and ref.terrain.world.dem.terrarium is the fallback.
+- A clutter or obstruction judgement is needed; this is bare earth, so buildings and trees are absent and a clear line of sight is optimistic.
+- An engineering-grade RF design is being signed off; a propagation tool with its own terrain and clutter model is the authority.
+pairs_with: [ref.terrain.world.dem.terrarium, ref.boundary.us.state.cb20m, ref.infrastructure.us.tower.fcc-asr]
+distinct_from: [ref.terrain.world.dem.terrarium]
+crs: EPSG:3857
+delivery:
+  mode: service
+  protocol: arcgis-imageserver
+  request: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage?bbox={lon0},{lat0},{lon1},{lat1}&bboxSR=4326&imageSR=4326&size={w},{h}&format=tiff&pixelType=F32&noDataInterpretation=esriNoDataMatchAny&interpolation=RS_BilinearInterpolation&f=image
+  max_pixels: 4096 x 4096 per request (the service itself allows 8000); scripts/terrain_fetch.py caps and caches the result under .geo-mapping/terrain/3dep/
+  format: GeoTIFF, float32 metres above NAVD88 (orthometric), one band
+  note: The service also serves WMS and WCS and ready-made raster functions (Hillshade Gray, Multidirectional Hillshade, Slope Map, contours), but the plugin computes those itself from the DEM so the brand decides the colours.
+source:
+  publisher: US Geological Survey, National Geospatial Program
+  product: 3D Elevation Program (3DEP) Bare Earth DEM dynamic service
+  url: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer
+url_verified_on: '2026-11-04'
+vintage:
+  current: 'all 3DEP DEM data published as of October 26, 2026 (the service description states its date)'
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Elevation: USGS 3D Elevation Program (3DEP), public domain. 3DEP data courtesy of the U.S. Geological Survey.'
+  note: 'All 3DEP products through The National Map are in the public domain and may be used without restriction; the USGS asks for credit on publication. bulk_ok is false for the service only: a window at a time, never a scrape of an area (bulk DEMs are a download from The National Map, not this service).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Verified the service answers (f=json: pixelType F32, bandCount 1, maxImageWidth 8000) and that exportImage over Phoenix Sky Harbor returns a float32 GeoTIFF reading about 341 m at the terminal (M12 raster and terrain engine).'

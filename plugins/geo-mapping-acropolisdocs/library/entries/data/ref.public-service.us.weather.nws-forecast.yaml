@@ -1,0 +1,84 @@
+id: ref.public-service.us.weather.nws-forecast
+type: public-service
+rev: 1
+status: active
+title: NOAA National Weather Service forecast API (api.weather.gov)
+summary: Keyless seven-day and hourly forecasts, station observations and alerts for any US point from the NWS API, as GeoJSON; the forecast partner of
+  the NWS watches and warnings entry.
+tags:
+  geography:
+  - us
+  level:
+  - site
+  - place
+  domain:
+  - weather
+  - hazard
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- The forecast or the latest observation at a handful of US sites or venues, for an event-readiness or field-work map.
+- The forecast zone, county and nearest stations of a site (the points endpoint returns them).
+avoid_when:
+- 'Warnings as polygons on a map: use ref.public-service.us.weather.nws (the event-driven map service).'
+- 'Climate history: use NOAA Climate Data Online (ref.public-service.us.weather.noaa-cdo).'
+- 'Thousands of points: limits are not published; a request over them is refused for about 5 seconds.'
+delivery:
+  mode: service
+  protocol: rest-json
+  request: https://api.weather.gov/points/{lat},{lon}
+  requests:
+    points: https://api.weather.gov/points/{lat},{lon}
+    forecast: https://api.weather.gov/gridpoints/{office}/{gridx},{gridy}/forecast
+    hourly: https://api.weather.gov/gridpoints/{office}/{gridx},{gridy}/forecast/hourly
+    observations: https://api.weather.gov/stations/{station}/observations/latest
+  note: 'No key; a User-Agent identifying the application is required (an API key may replace it later). The points endpoint answered for Phoenix on 2026-11-07.
+    Grid office and x,y can change: re-read /points before reusing a cached grid.'
+source:
+  publisher: NOAA, National Weather Service
+  product: NWS API (api.weather.gov)
+  url: https://www.weather.gov/documentation/services-web-api
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Source: NOAA National Weather Service.'
+  note: 'API documentation (read 2026-11-07): open data, free to use for any purpose, subject to rate limits; the limits are not published.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  check:
+    kind: http_get
+    url: https://api.weather.gov/points/33.45,-112.07
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions, P2): API documentation read and the points endpoint answered on 2026-11-07.'

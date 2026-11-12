@@ -1,0 +1,100 @@
+id: ref.boundary.us.cousub.tiger
+type: boundary
+rev: 1
+status: active
+title: US county subdivisions by state (Census TIGER/Line), the land base for detailed ground
+summary: County subdivisions at full TIGER/Line resolution, one file per state, covering each state's land and its coastal and inland water; with TIGER area water cut out they give land whose shoreline matches the TIGER water exactly.
+tags:
+  geography:
+  - us
+  level:
+  - county-subdivision
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  avoid_for:
+  - legal-boundary
+  - engineering-grade
+  - site-precision
+  scale:
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- The land under a metro or city map in the US, together with TIGER area water for the same counties, so land and water come from one source at one resolution (ground_detail.py, 0.12.0).
+- Town or township outlines (MCDs) on a map of one state, where they are the local government units.
+avoid_when:
+- 'The map is regional or national: use the Natural Earth ground or the cartographic boundary files.'
+- The map needs legal boundaries; TIGER/Line positions are not survey-grade.
+pairs_with:
+- ref.context.us.water-area.tiger
+distinct_from:
+- id: ref.boundary.us.county.cb500k
+  why: generalized at 1:500,000 and clipped to the shoreline, so its coast does not match TIGER water
+join:
+  key: GEOID
+  type: string
+  width: 10
+  note: Ten digits, state (2) + county (3) + subdivision (5); keep leading zeros.
+  pattern: ^\d{10}$
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 5.75
+  features: 242
+  columns:
+  - STATEFP
+  - COUNTYFP
+  - COUSUBFP
+  - GEOID
+  - NAME
+  - NAMELSAD
+  - ALAND
+  - AWATER
+  url_template: https://www2.census.gov/geo/tiger/TIGER2025/COUSUB/tl_2025_{statefp}_cousub.zip
+  note: The main URL is the Washington file (53), verified with its hash and count; every other state uses url_template with the two-digit state
+    FIPS as the variant (ref_fetch.py fetch ID --variant 04). Per-variant files carry no hash and their counts differ.
+source:
+  publisher: US Census Bureau
+  product: 2025 TIGER/Line Shapefile, County Subdivisions by state
+  url: https://www2.census.gov/geo/tiger/TIGER2025/COUSUB/tl_2025_53_cousub.zip
+  file_sha256: aab84795b29163455abc1667524b223f11ed6f63aeafa0f313dec607d3f95dcd
+url_verified_on: '2026-11-06'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, TIGER/Line Shapefiles.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-06'
+  verify_by: '2027-11-06'
+  check:
+    kind: feature_count_and_hash
+    features: 242
+    against: the Washington (53) archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-06'
+    note: Verified the 2025 Washington file (242 features, SHA-256 recorded); other states follow the same URL pattern and are fetched by variant. The land base for detailed ground (0.12.0).

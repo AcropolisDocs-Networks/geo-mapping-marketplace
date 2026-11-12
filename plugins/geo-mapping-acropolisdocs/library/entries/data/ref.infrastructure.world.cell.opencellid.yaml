@@ -1,0 +1,102 @@
+id: ref.infrastructure.world.cell.opencellid
+type: infrastructure
+rev: 1
+status: active
+title: OpenCelliD cell tower database (crowd-sourced)
+summary: Crowd-sourced cell identities (MCC, MNC, LAC/TAC, cell id) with estimated positions and ranges, worldwide, downloaded with a free API key under
+  CC BY-SA 4.0; the plugin never holds the key or the file.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - telecom
+  use_for:
+  - site-map
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - internal
+  confidentiality:
+  - restricted-license
+  freshness:
+  - monthly
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- A rough picture of where an operator's cells are observed (by MCC-MNC) in a market where no licensed site list is available.
+- An internal density comparison between operators from the same crowd-sourced base, with the share-alike terms noted.
+avoid_when:
+- 'The map goes to a client or external audience as a site inventory: positions are estimates from handset observations, and the CC BY-SA licence makes
+  the derived map share-alike (MAP-LIC-004).'
+- Exact site positions or a complete inventory are expected; coverage is uneven and follows where contributors drove.
+join:
+  key: mcc,mnc,lac,cell
+  type: string
+  note: Cell identity key (MCC, MNC, area, cell); radio holds GSM/UMTS/LTE/NR; lat/lon are the estimated position, range the estimate radius in metres,
+    samples the observation count.
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: CSV (gzip) per MCC or the full database, downloaded with a free API key from the OpenCelliD downloads page
+  note: 'Register at opencellid.org, download cell_towers.csv.gz (full) or the per-MCC file (310 to 316 for the United States, 302 Canada, 334 Mexico) from
+    https://opencellid.org/downloads.php (verified 2026-11-04), gunzip and supply the CSV. The key is never typed into chat or stored by the plugin. Columns:
+    radio, mcc, net, area, cell, unit, lon, lat, range, samples, changeable, created, updated, averageSignal.'
+  columns:
+  - radio
+  - mcc
+  - net
+  - area
+  - cell
+  - unit
+  - lon
+  - lat
+  - range
+  - samples
+  - changeable
+  - created
+  - updated
+  - averageSignal
+source:
+  publisher: Unwired Labs (OpenCelliD project)
+  product: OpenCelliD database export
+  url: https://opencellid.org/downloads.php
+url_verified_on: '2026-11-04'
+vintage:
+  current: daily export (per-MCC files refreshed daily)
+  cadence: monthly
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  external_ok: false
+  attribution_text: Cell data © OpenCelliD contributors, CC BY-SA 4.0 (opencellid.org).
+  note: 'CC BY-SA 4.0 as stated on the downloads page: attribution plus share-alike on derived data; a free API key is required to download. Kept internal
+    and restricted-license because a published map derived from it carries the same licence.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-05-04'
+  check:
+    kind: http_head
+    url: https://opencellid.org/downloads.php
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Verified the downloads page (HTTP 200, 2026-11-04) and recorded the licence (CC BY-SA 4.0), the key requirement and the export columns. User-supplied:
+      the plugin never holds the key or the file.'

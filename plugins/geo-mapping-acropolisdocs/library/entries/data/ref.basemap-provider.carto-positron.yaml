@@ -1,0 +1,104 @@
+id: ref.basemap-provider.carto-positron
+type: basemap-provider
+rev: 5
+status: active
+title: CARTO basemaps (Positron, Voyager, Dark Matter)
+summary: Quiet raster basemaps on OpenStreetMap data, suited to thematic overlay; a free key is required.
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - community
+use_when:
+- A neutral, light background under a thematic layer on a web map page.
+- A map that needs street context at metro scale, with the person's own free key registered (map-credentials add carto-positron).
+avoid_when:
+- No key is available; the plugin never asks for a key in chat. Use the bundled basemap.
+- The map is a bulk or offline export; the allowance and terms are for live tile use.
+delivery:
+  mode: fetch
+  requires_credential:
+    name: carto-positron
+    kind: apikey
+    class: secret
+    class_allowed: [secret, browser]
+    host: basemaps.cartocdn.com
+    inject: {query: key}
+    reject: {status: [401, 403]}
+    signup_url: https://www.carto.com/basemaps/apikey/
+    probe: https://basemaps.cartocdn.com/rastertiles/light_all/0/0/0.png
+    free: true
+    limits: 'Read 2026-11-08: non-commercial use free up to 5M requests a month; commercial use free up to 1M a month (calendar month, UTC, across all your keys, raster and vector tiles); paid plans above.'
+source:
+  publisher: CARTO
+  product: Basemaps (raster tiles)
+  url: https://carto.com/basemaps/
+license:
+  class: restricted
+  external_ok: true
+  attribution_text: © OpenStreetMap contributors, © CARTO
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  note: The publisher's page lists a free allowance (5 million requests a month non-commercial, 1 million commercial) and asks for the attribution;
+    read the current terms before heavy use.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-08'
+  verify_by: '2027-11-02'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Read the provider''s basemaps page (HTTP 200): raster tile URL pattern, key requirement, free allowance and attribution. Tiles for
+      light_all, dark_all-style names and voyager answered HTTP 200.'
+  - rev: 2
+    date: '2026-11-05'
+    note: 'requires_key is replaced by requires_credential (credentials spec, release 0.6.0): the key is the person''s own registered credential cred:carto-positron for basemaps.cartocdn.com, secret by default (fetched host-side for print, never written into an output) or browser (restricted to the person''s domain, may go into a web page). GEO_MAPPING_KEY_ variables stay a command-line fallback.'
+  - rev: 3
+    date: '2026-11-08'
+    note: 'Key details (0.23.0): the key request page read on 2026-11-08 (a free key by e-mail, no account; non-commercial use free up to 5M requests a month, commercial use free up to 1M, counted per calendar month in UTC across all keys, raster and vector).'
+  - rev: 4
+    date: '2026-11-08'
+    note: 'Probe address (0.26.0): one tile, basemaps.cartocdn.com/rastertiles/light_all/0/0/0.png, so credentials check --probe can test a tile key (the key is added at send time).'
+  - rev: 5
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+url_template: https://basemaps.cartocdn.com/rastertiles/{style}/{z}/{x}/{y}.png?key={key}
+provider:
+  attribution_html: © OpenStreetMap contributors, © CARTO
+  max_zoom: 20
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: true
+  print_ok: true
+  styles:
+  - light_all
+  - dark_all
+  - voyager
+url_verified_on: '2026-11-08'
+attribution:
+  corner: © OpenStreetMap contributors, © CARTO
+  links:
+  - text: © OpenStreetMap contributors
+    href: https://www.openstreetmap.org/copyright
+  - text: © CARTO
+    href: https://carto.com/attributions
+  required_on_map: true
+  collapse: after_interaction
+  export:
+    text: © OpenStreetMap contributors (openstreetmap.org/copyright), © CARTO
+  terms_read: '2026-11-09'

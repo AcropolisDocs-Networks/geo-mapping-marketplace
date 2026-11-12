@@ -1,0 +1,98 @@
+id: ref.context.us.hazard.fema-nfhl
+type: context
+rev: 2
+status: active
+title: FEMA National Flood Hazard Layer (flood hazard zones)
+summary: Effective flood hazard zones (Special Flood Hazard Areas and other zones) from the FEMA NFHL map service, for site-risk context on a market or
+  program map.
+tags:
+  geography:
+  - us
+  level:
+  - place
+  domain:
+  - hazard
+  use_for:
+  - context-basemap
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Flood-zone context under a site map or program map, filtered to the map's extent with SFHA_TF = 'T' for the 1 percent annual chance zones.
+- Counting a client's sites that fall inside a Special Flood Hazard Area.
+avoid_when:
+- 'The map is statewide or national: the layer is parcel-detailed and the host resets long requests; pull it with a bbox only.'
+- A flood determination or insurance decision is implied; FEMA's effective FIRM panels and letters of map change govern, not a map overlay.
+delivery:
+  mode: service
+  profile: fema-nfhl
+  protocol: arcgis
+  layer: public/NFHL/MapServer/28
+  max_record_count: 2000
+  geometry: polygon
+  columns:
+  - DFIRM_ID
+  - FLD_AR_ID
+  - STUDY_TYP
+  - FLD_ZONE
+  - ZONE_SUBTY
+  - SFHA_TF
+  - STATIC_BFE
+  - V_DATUM
+  - DEPTH
+  - SOURCE_CIT
+  request: service_query.py fetch --profile fema-nfhl --layer public/NFHL/MapServer/28 --protocol arcgis
+  note: 'Layer 28 ''Flood Hazard Zones'' (S_FLD_HAZ_AR), EPSG:4269, maxRecordCount 2000 with pagination. Always pass a bbox; the first plain request to
+    the layer page was reset by the host and the retry answered. Other layers: 0 NFHL Availability, 3 FIRM Panels, 22 Political Jurisdictions, 23 Levees,
+    27 Flood Hazard Boundaries.'
+source:
+  publisher: FEMA
+  product: National Flood Hazard Layer (NFHL) map service
+  url: https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28
+url_verified_on: '2026-11-04'
+vintage:
+  current: effective NFHL (continuously updated as studies take effect)
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: FEMA National Flood Hazard Layer.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the FEMA data host did not answer from the build environment; nothing here is verified.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: the NFHL map service answered (service root and layer 28 read 2026-11-04: ''Flood Hazard Zones'', polygon, EPSG:4269, maxRecordCount
+      2000, fields FLD_ZONE, ZONE_SUBTY, SFHA_TF, STATIC_BFE). Served through the shipped fema-nfhl profile; bbox required.'

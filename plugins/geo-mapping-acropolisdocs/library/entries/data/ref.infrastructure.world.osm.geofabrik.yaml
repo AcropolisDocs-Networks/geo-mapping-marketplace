@@ -1,0 +1,87 @@
+id: ref.infrastructure.world.osm.geofabrik
+type: infrastructure
+rev: 2
+status: active
+title: OpenStreetMap extracts by state or country (Geofabrik)
+summary: Daily OpenStreetMap extracts per continent, country and US state as .osm.pbf files from Geofabrik; the plugin cannot read PBF yet, so the person
+  converts the extract with ogr2ogr and supplies the result.
+tags:
+  geography:
+  - world
+  level:
+  - line
+  - place
+  - site
+  domain:
+  - transport
+  - general
+  use_for:
+  - context-basemap
+  - site-map
+  - label-reference
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  scale:
+  - state
+  - metro
+  - local
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- Local streets, buildings or points of interest for a metro or local map, from one state extract converted to GeoPackage.
+- A road network for geo-ops distance work in a market where TIGER is too coarse or the market is outside the United States.
+avoid_when:
+- 'A whole-country extract is wanted in one layer: the United States file is many gigabytes; take the state file and clip.'
+- 'The output database is redistributed: ODbL share-alike applies to a derived database, and the map must credit OpenStreetMap contributors.'
+pairs_with:
+- ref.public-service.world.osm.overpass
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: .osm.pbf (converted by the person to GeoPackage with ogr2ogr)
+  note: 'Download the state file from download.geofabrik.de/north-america/us/<state>-latest.osm.pbf (e.g. arizona-latest.osm.pbf; canada/<province>-latest.osm.pbf;
+    mexico-latest.osm.pbf), then convert: ogr2ogr -f GPKG arizona.gpkg arizona-latest.osm.pbf lines -where "highway IS NOT NULL" (layers: points, lines,
+    multilinestrings, multipolygons, other_relations; an OSM_CONFIG_FILE picks the tags). Supply the GeoPackage. Verified from the user''s computer on 2026-11-07:
+    the region index download.geofabrik.de/index-v1.json lists 554 extracts with their .osm.pbf addresses, and the Arizona file answered (a redirect to
+    the current file).'
+source:
+  url: https://download.geofabrik.de/index-v1.json
+  publisher: Geofabrik GmbH (OpenStreetMap data)
+  product: Geofabrik OpenStreetMap extracts
+url_verified_on: '2026-11-07'
+vintage:
+  current: daily extracts
+  cadence: live
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: © OpenStreetMap contributors, ODbL 1.0.
+  note: 'Open Database License 1.0: attribution, and a derived database (not a rendered map) carries the same licence (MAP-LIC-004).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-05-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: download.geofabrik.de and overpass-api.de reset the connection from the build environment (2026-11-04), so no address could be verified
+      here; the hosts are reachable from an ordinary workstation. The route and the ogr2ogr conversion are recorded; the plugin reads the converted GeoPackage,
+      not the PBF.'
+  - rev: 2
+    date: '2026-11-07'
+    note: 'Active: download.geofabrik.de answered from the user''s computer on 2026-11-07 (index-v1.json, 554 regions; the Arizona extract redirects to the current file). Still user-supplied: the plugin reads the converted GeoPackage, not the PBF.'

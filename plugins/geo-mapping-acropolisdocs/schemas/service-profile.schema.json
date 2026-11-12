@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Service profile (spec 6.4): references only, never secrets",
+  "type": "object",
+  "required": [
+    "profile",
+    "type",
+    "base_url",
+    "auth",
+    "network"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "profile": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+    },
+    "type": {
+      "enum": [
+        "geoserver",
+        "ogc-generic",
+        "ogc-api-features",
+        "arcgis-rest",
+        "wmts",
+        "xyz",
+        "mvt"
+      ]
+    },
+    "base_url": {
+      "type": "string",
+      "pattern": "^https?://"
+    },
+    "keep_trailing_slash": {
+      "type": "boolean",
+      "description": "1.0.2: send base_url exactly as saved, trailing slash included (a profile whose address carries the {key} slot always does)"
+    },
+    "workspace": {
+      "type": "string"
+    },
+    "endpoints": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^https?://"
+      }
+    },
+    "protocols": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "boolean"
+        ]
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": [
+        "method"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "enum": [
+            "none",
+            "user-managed",
+            "basic",
+            "credential"
+          ]
+        },
+        "credentials": {
+          "anyOf": [
+            {
+              "type": "object",
+              "maxProperties": 2,
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            {
+              "type": "string",
+              "pattern": "^cred:[a-z0-9][a-z0-9_-]{0,39}$"
+            }
+          ],
+          "description": "references only: netrc:PATH or file:PATH for basic (spec 6.4), cred:NAME for credential (0.6.0, a credential registered in the person's own credential folder); a key, user name or password is never stored"
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "required": [
+        "route",
+        "public"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "route": {
+          "enum": [
+            "mcp",
+            "user-run",
+            "device-run"
+          ]
+        },
+        "public": {
+          "type": "boolean"
+        },
+        "requires_vpn": {
+          "type": "boolean"
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_features_per_request": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "timeout_s": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 120
+        },
+        "server_max_features": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "max_total_features": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "cors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "browser_ok": {
+          "enum": [
+            true,
+            false,
+            "unknown"
+          ]
+        },
+        "mixed_content_ok": {
+          "type": "boolean"
+        },
+        "checked_on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "string"
+        },
+        "confidential": {
+          "type": "boolean"
+        },
+        "attribution": {
+          "type": "string"
+        }
+      }
+    },
+    "host_visibility": {
+      "enum": [
+        "shown",
+        "withheld"
+      ]
+    },
+    "host_confirmed_on": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "verified_on": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

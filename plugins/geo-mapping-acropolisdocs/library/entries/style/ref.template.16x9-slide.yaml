@@ -1,0 +1,38 @@
+id: ref.template.16x9-slide
+type: template
+rev: 1
+status: active
+title: 'Template: 16:9 slide'
+summary: The 16:9 slide sheet (338.67 x 190.5 mm) with title, map frame and footer regions.
+tags:
+  use_for:
+  - site-map
+  - choropleth
+  avoid_for: []
+  audience:
+  - any
+  license_class:
+  - open
+use_when:
+- The map is for a slide deliverable at 16:9 slide size.
+- The layout rules (title band, footer, legend corners) should be applied as designed.
+avoid_when:
+- The deliverable needs a different sheet size; choose the matching template.
+- The type must stay legible at a different viewing distance than this template assumes.
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Seed entry for a built-in capability; checked by the render tests.
+template:
+  file: templates/16x9-slide.yaml
+  kind: slide
+  size: 338.67 x 190.5 mm

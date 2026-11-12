@@ -1,0 +1,51 @@
+id: ref.basemap-provider.google-maps
+type: basemap-provider
+rev: 1
+status: blocked
+title: Google Maps tiles
+summary: 'Google map tiles: the plugin refuses to extract them (spec 9.1).'
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - community
+use_when:
+- 'Never: the entry exists so a request can be refused with a reason.'
+avoid_when:
+- 'Always: use the bundled basemap, OpenStreetMap-derived tiles or a PMTiles file.'
+delivery:
+  mode: fetch
+source:
+  publisher: Google
+  product: Map tiles
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: false
+  note: Blocked by policy; summary of the provider's terms, to re-verify at build.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Blocked: kept so that the refusal can say why.'
+blocked:
+  why: Google Maps Platform terms allow Google map content only through Google's own APIs with Google's display requirements; extracting tiles
+    for static maps or exports is not permitted. Use OpenStreetMap-derived or bundled basemaps instead.

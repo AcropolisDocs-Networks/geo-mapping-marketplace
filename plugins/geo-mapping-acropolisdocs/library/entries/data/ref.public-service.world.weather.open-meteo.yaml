@@ -1,0 +1,88 @@
+id: ref.public-service.world.weather.open-meteo
+type: public-service
+rev: 2
+status: active
+title: Open-Meteo weather forecast and history API
+summary: Keyless worldwide weather forecasts, historical weather and climate data by coordinate from Open-Meteo; free for non-commercial use
+  only, with commercial use on a paid plan.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  - grid
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - internal
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - derived
+use_when:
+- Forecast or recent weather at a handful of sites anywhere (temperature, wind, precipitation), for a non-commercial or internal map.
+- Weather history for a date at a venue or site when no national service covers the place.
+avoid_when:
+- 'A client or other commercial deliverable: the free API is for non-commercial purposes only; a paid plan is needed (a customization: the person''s one acknowledgment, map-services).'
+- 'More than a few thousand points: the free tier allows fewer than 10,000 calls a day, 5,000 an hour and 600 a minute.'
+- 'Official warnings: use the national service (NWS, ECCC, Met Office).'
+delivery:
+  mode: service
+  protocol: rest-json
+  request: https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,precipitation,wind_speed_10m
+  requests:
+    forecast: https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,precipitation,wind_speed_10m
+    current: https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,wind_speed_10m
+  note: 'No key. Several coordinates go in one request as comma-separated lists. The historical weather API is at archive-api.open-meteo.com.
+    The forecast endpoint answered on 2026-11-07.'
+source:
+  publisher: Open-Meteo
+  product: Weather Forecast API
+  url: https://open-meteo.com/en/terms
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: restricted
+  redistribute_ok: true
+  commercial_ok: false
+  bulk_ok: false
+  attribution_text: Weather data by Open-Meteo.com (CC BY 4.0)
+  note: 'Terms (open-meteo.com/en/terms, read 2026-11-07): "You may only use the free API services for non-commercial purposes"; "Less than
+    10''000 API calls per day, 5''000 per hour and 600 per minute", 300,000 a month, per IP address and application; data under CC BY 4.0.
+    Commercial use needs the Standard, Professional or Enterprise plan.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-08'
+  verify_by: '2027-02-07'
+  check:
+    kind: http_get
+    url: https://api.open-meteo.com/v1/forecast?latitude=49.28&longitude=-123.12&current=temperature_2m
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions): terms read on 2026-11-07 (non-commercial free tier, call limits, CC BY 4.0); the forecast
+      endpoint answered.'
+  - rev: 2
+    date: '2026-11-08'
+    note: 'Wording (0.23.0): a customization beyond the defaults; the person''s one acknowledgment (map-services) replaces terms_acknowledged.'

@@ -1,0 +1,50 @@
+id: ref.map-type.coverage-footprint
+type: map-type
+rev: 2
+status: active
+title: Coverage footprint (areas served)
+summary: Shades the areas a service covers or reaches, from a footprint polygon layer, on its own or under the sites and sectors it belongs to.
+tags:
+  use_for:
+  - coverage-footprint
+  avoid_for: []
+use_when:
+- The message states where a service is available, from a footprint polygon.
+- The footprint comes from the operator's own polygons or from reported availability data such as the FCC National Broadband Map.
+avoid_when:
+- The footprint is a prediction; word the title as modelled or reported.
+- No footprint data is available.
+pairs_with:
+- ref.palette.categorical
+chooses_when:
+  message_type:
+  - availability
+  data_shape:
+  - polygon-footprint
+requires:
+  data_shape: see chooses_when
+  join_key: false
+recommended:
+  role: polygons
+  opacity: 0.5
+  wording: availability
+guarded_by:
+- MAP-TEL-003
+- MAP-CART-016
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check: the coverage-map pipeline takes a footprint polygon file (option coverage=FILE) and map-create draws a polygon layer with a see-through fill (tests/test_telecom.py, tests/test_map_render.py)
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the renderer does not build this map type yet; the entry records when to choose it so selection can say it is not available.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: the coverage-map pipeline (M6) overlays a footprint polygon layer (coverage=FILE) and map-create draws one as a polygons layer; FCC National Broadband Map data is worded as availability (MAP-TEL-003). Selection now offers it for an availability message.'

@@ -1,0 +1,94 @@
+id: ref.public-service.world.router.ors
+type: public-service
+rev: 2
+status: active
+title: openrouteservice (HeiGIT) routing and isochrones
+summary: Worldwide walk, bike and drive routing and travel-time areas (isochrones) on OpenStreetMap from openrouteservice, with the person's
+  own free key; the keyed provider behind the isochrone-map skill.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  - line
+  domain:
+  - routing
+  - transport
+  use_for:
+  - coverage-footprint
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - derived
+use_when:
+- Drive, walk or bike time bands from more origins than the public Valhalla server allows (isochrone.py --provider ors --credential cred:ors).
+- Travel-time catchments up to 60 minutes around stores, venues or sites.
+avoid_when:
+- 'Transit travel times: openrouteservice has no transit; the isochrone-map skill computes transit from the agency''s GTFS feed.'
+- 'No key is registered: use the keyless FOSSGIS Valhalla server (ref.public-service.world.router.valhalla-fossgis) for light use.'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: ors
+    kind: apikey
+    class: secret
+    host: api.openrouteservice.org
+    inject: {header: Authorization}
+    reject: {status: [401, 403]}
+    signup_url: https://account.heigit.org/
+    free: true
+    limits: 'Standard plan, free to use for everyone: isochrones 500 a day and 20 a minute; directions 2,000 a day and 40 a minute (account.heigit.org/info/plans,
+      read 2026-11-10)'
+    note: The raw key goes in the Authorization header with no prefix
+  request: https://api.openrouteservice.org/v2/isochrones/{profile}
+  note: 'POST only for isochrones (isochrone.py POST_ALLOWED); profiles foot-walking, cycling-regular, driving-car; at most 60 minutes and 10
+    bands a request (MAP-ISO-004). The hosted API allows at most 5 locations and 10 intervals a request, 120 km, and 1 h driving, 5 h cycling, 20 h on
+    foot (hosted API restrictions, read 2026-11-10). Plans are at account.heigit.org.'
+source:
+  publisher: Heidelberg Institute for Geoinformation Technology (HeiGIT)
+  product: openrouteservice API v2
+  url: https://openrouteservice.org/
+url_verified_on: '2026-11-10'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: © openrouteservice by HeiGIT | Data from OpenStreetMap
+  note: HeiGIT terms of service (account.heigit.org/info/tos, read 2026-11-10) - results obtained from openrouteservice are licensed under CC-BY-SA
+    4.0 and need the attribution '© openrouteservice by HeiGIT | Data from OpenStreetMap', on the map or elsewhere; OpenStreetMap requires its
+    attribution wherever its data reaches an end user.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-02-10'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions): documents cred:ors as isochrone.py registers it (0.11.0: host, header, limits, caps); the plans
+      page at account.heigit.org could not be read as text, so the free-tier limits are not confirmed.'
+  - rev: 2
+    date: '2026-11-10'
+    note: 'Active: the Standard plan read on account.heigit.org/info/plans (free; isochrones 500 a day, 20 a minute), the hosted API restrictions and
+      the HeiGIT terms of service (results CC-BY-SA 4.0, attribution wording) read 2026-11-10; the person''s ors key has been in use since 0.11.0.'

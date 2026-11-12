@@ -1,0 +1,36 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-07 from the user's computer.
+profile: eccc-geomet
+type: ogc-generic
+base_url: https://api.weather.gc.ca
+endpoints:
+  ogcapi: https://api.weather.gc.ca
+  wms: https://geo.weather.gc.ca/geomet
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 500
+  server_max_features: 10000
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 100000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: attribution
+  confidential: false
+  attribution: 'Data Source: Environment and Climate Change Canada'
+host_visibility: shown
+host_confirmed_on: '2026-11-07'
+verified_on: '2026-11-07'
+notes: 'Environment and Climate Change Canada, Meteorological Service of Canada GeoMet. OGC API (pygeoapi) at api.weather.gc.ca with 104 collections
+  at the 2026-11-07 read, among them climate-stations (8,435), climate-daily, climate-hourly, climate-normals, hydrometric-stations (8,057),
+  hydrometric-realtime, citypageweather-realtime, swob-realtime, aqhi-observations-realtime, weather-alerts and the hurricanes-* layers. The OpenAPI
+  definition declares no security scheme. WMS for gridded model layers at geo.weather.gc.ca/geomet. Licence: ECCC Data Servers End-use Licence
+  2.1.1 (commercial use permitted with attribution; alerts must not be altered). Shipped with the plugin (reference library additions, phase 4),
+  read-only: a profile of the same name saved in the working folder overrides it.'

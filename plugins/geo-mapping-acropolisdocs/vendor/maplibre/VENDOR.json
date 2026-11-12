@@ -1,0 +1,42 @@
+{
+  "libraries": [
+    {
+      "name": "maplibre-gl",
+      "version": "5.24.0",
+      "license": "BSD-3-Clause",
+      "published": "2026-04-23",
+      "source": "npm:maplibre-gl@5.24.0 (dist/maplibre-gl.js, dist/maplibre-gl.css, LICENSE.txt)",
+      "npm_integrity": "sha512-ALyFxgtd5R+65UqZ/++lOqwWcC0SNho9c27fYSyLmG7AfnAul2o46F05aDJGPbFU57wos9dgcIySHs0Xe6ia3A==",
+      "upstream_sha256": {
+        "maplibre-gl.js": "45a9b07a9189ce56054c620a947ccf41e291e58c95e9b61533b740aaa65ee5cb",
+        "maplibre-gl.css": "ab1e70d59ec40465bae7e7030da2f3ccf28133fd502e62bd598eefbadfd7a732"
+      },
+      "patches": [
+        "maplibre-gl.js: removed the sourceMappingURL comment",
+        "maplibre-gl.css: font-family sans-serif set to Inter, system-ui, sans-serif (3 places)"
+      ],
+      "license_file": "LICENSE-maplibre-gl.txt"
+    },
+    {
+      "name": "pmtiles",
+      "version": "4.5.0",
+      "license": "BSD-3-Clause",
+      "published": "2026-08-10",
+      "source": "npm:pmtiles@4.5.0 (dist/pmtiles.js, the browser bundle that defines the global `pmtiles`)",
+      "npm_integrity": "sha512-CBeD4SoUluFziGdy/8k7FOjQxQy486n+929W/tWophauvMICpkZ26vGBWhDt/6b1FZQWNaf4jFdT/5+q0Wii5w==",
+      "upstream_sha256": {
+        "pmtiles.js": "caf981bc46f6327ee7e65d5dc964d89d38a69f60edca2bd4c5c890c21b554c6c"
+      },
+      "patches": [
+        "pmtiles.js: removed the sourceMappingURL comment"
+      ],
+      "license_file": "LICENSE-pmtiles.txt",
+      "license_note": "the npm package carries no licence file; LICENSE-pmtiles.txt is the LICENSE file of the protomaps/PMTiles repository"
+    }
+  ],
+  "shipped_sha256": {
+    "maplibre-gl.js": "8b2c6bfadb8cc2d720aea2816ac368e51ab75dbb81ee3fac2f8b97256ebd1585",
+    "maplibre-gl.css": "52dc599adad67c7e166d14e67ba9651b30221508915f67eaf8669279ea0d9a2e",
+    "pmtiles.js": "ca16879182f180bd18648457701ec7106d2159944dca107fd17afc4110c79056"
+  }
+}

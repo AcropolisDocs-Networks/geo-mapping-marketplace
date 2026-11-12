@@ -1,0 +1,92 @@
+id: ref.boundary.ca.csd.statcan2021
+type: boundary
+rev: 1
+status: draft
+title: Canadian census subdivisions (StatCan 2021 cartographic boundary file)
+summary: The 5,161 census subdivisions (municipalities and equivalents) as 2021 cartographic polygons from Statistics Canada.
+tags:
+  geography:
+  - ca
+  level:
+  - place
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - parcel-level
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- A Canadian market map rolled up by municipality (CSDUID), joined to census or client tables that use the 2021 geographic codes.
+avoid_when:
+- 'Nothing is verified from the build environment: download the file in a browser and supply it before drawing.'
+- 'The map needs exact legal boundaries: the cartographic files are clipped to the coast and generalized; the digital boundary files hold the full extent.'
+pairs_with:
+- ref.boundary.world.state.ne10
+join:
+  key: CSDUID
+  type: string
+  width: 7
+  note: CSDUID as text; keep leading zeros. PRUID is the two-digit province code (35 Ontario, 24 Quebec, 59 British Columbia, 48 Alberta).
+crs: EPSG:3347
+delivery:
+  mode: user-supplied
+  format: Shapefile (zip), Lambert conformal conic (EPSG:3347)
+  note: Download lcsd000b21a_e.zip from the 2021 Census boundary files page (www12.statcan.gc.ca/census-recensement/2021/geo/sip-pis/boundary-limites/index2021-eng.cfm,
+    'cartographic boundary file') in a browser and supply it. www12.statcan.gc.ca answered HTTP 403 to the build environment on 2026-11-04 for the boundary
+    file index and the zips, so the files are not verified; the Statistics Canada Open Licence page was read.
+source:
+  publisher: Statistics Canada
+  product: 2021 Census Cartographic Boundary File, Canadian census subdivisions
+  url: https://www.statcan.gc.ca/en/reference/licence
+url_verified_on: '2026-11-04'
+vintage:
+  current: 2021 Census
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Adapted from Statistics Canada, 2021 Census cartographic boundary files. This does not constitute an endorsement by Statistics Canada
+    of this product.
+  note: 'Statistics Canada Open Licence (statcan.gc.ca/en/reference/licence, read 2026-11-04): attribution with the stated wording.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_head
+    url: https://www.statcan.gc.ca/en/reference/licence
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: www12.statcan.gc.ca answered HTTP 403 to the build environment on 2026-11-04 for the boundary file index and the zips, so the files are
+      not verified; the Statistics Canada Open Licence page was read.'

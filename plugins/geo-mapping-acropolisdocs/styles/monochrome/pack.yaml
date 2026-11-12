@@ -1,0 +1,14 @@
+id: monochrome
+version: 1
+title: Monochrome
+intent: Black-and-white print, fax and accessibility-first maps; categories told apart by hatch, dot and dash patterns.
+palette: brand-derived
+fonts: brand
+derive:
+  chroma_cap: 0.0
+  context_desaturate: 1.0
+  ground: white
+ramps: pack
+treatments:
+  category_patterns: true
+web: full

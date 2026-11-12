@@ -1,0 +1,50 @@
+id: ref.boundary.world.state.ne10-locator
+type: boundary
+rev: 1
+status: active
+title: World first-level divisions for locators and country lookup, 10m simplified (Natural Earth)
+summary: 4,596 states, provinces, regions and prefectures worldwide, simplified at 0.02 degrees, bundled so a map anywhere gets an admin-1
+  locator and its country (units, dates, national CRS) without the network.
+tags:
+  geography: [world]
+  level: [state]
+  domain: [general]
+  use_for: [locator-inset, context-basemap, join-key]
+  avoid_for: [engineering-grade, legal-boundary, site-precision, parcel-level, choropleth]
+  scale: [world, national]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: [The locator of a city or regional map outside the United States (the admin-1 unit with its neighbours)., 'Finding the country
+    and admin-1 unit under a map''s centre (units, date style, national CRS).']
+avoid_when: [A choropleth or any map that shows the outlines up close; simplified at about 2 km. Use ref.boundary.world.state.ne10.]
+pairs_with: [ref.boundary.world.country.ne110]
+distinct_from:
+- {id: ref.boundary.world.state.ne50, why: 'the 1:50m admin-1 covers few countries; this one covers every country, simplified for locators'}
+join: {key: iso_3166_2, type: string, note: ISO 3166-2 code; iso_a2 is the country; name_* carry names in other languages.}
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_10m_admin1_loc.parquet
+  sha256: 36efc3308c73dec7a2285eafeb0bae978039ae5de9336e0357e1945e1dd260d7
+  size_mb: 2.79
+  format: GeoParquet (zstd)
+  features: 4596
+  columns: [name, name_en, name_local, admin, adm0_a3, iso_a2, iso_3166_2, type_en, latitude, longitude, name_el, name_ja, name_zh,
+    name_ar, name_hi, name_ru, name_ko, name_he]
+source: {publisher: Natural Earth, product: 'Admin 1 - States, Provinces, 10m (simplified for locators)', url: 'https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_1_states_provinces.zip',
+  file_sha256: efc59726337323058f9446210adc96673179cd344e053666ee3d28cb58ba2b05}
+url_verified_on: 2026-11-02
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-10
+  verify_by: 2027-11-10
+  check: {kind: feature_count_and_hash, features: 4596, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-10, note: Bundled payload built and verified (M1).}

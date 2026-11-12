@@ -1,0 +1,17 @@
+name: portrait-social
+label: Portrait social graphic, 4:5 (8 x 10 in, 1080 x 1350 px at 135 dpi)
+kind: social
+# 1.2.0 (Days 3, 4 and 9): a tall subject (a city, Arizona, California, a corridor) filled a third to a half of the square sheet. 4:5 is the tallest
+# picture X, Instagram and LinkedIn show in the feed without cropping. The same elements, fonts and footer as square-social, in a taller frame.
+size_mm: [203.2, 254]
+margin_mm: 8
+title:  {x: 8, y: 8,   w: 187.2, h: 30}
+map:    {x: 8, y: 40,  w: 187.2, h: 164}
+map_full: {x: 8, y: 8, w: 187.2, h: 196}   # the default layout: the map runs up over the title band, and the title sits in the map
+footer: {x: 8, y: 207, w: 187.2, h: 40}
+footer_fit: true                         # the footer shrinks to its notes and the map grows into the room
+fonts:  {title: 22, subtitle: 12, label: 10, legend_title: 11, legend: 10, note: 10, scale: 10, banner: 11}
+legend_max: {w: 80, h: 110}
+inset_size: {w: 44, h: 38}
+logo_height_mm: 11
+raster_default_dpi: 135

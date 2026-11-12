@@ -1,0 +1,15 @@
+name: a3-portrait
+label: ISO A3, portrait (297 x 420 mm)
+kind: print
+size_mm: [297, 420]
+margin_mm: 12
+title:  {x: 12, y: 10,  w: 273, h: 24}
+map:    {x: 12, y: 37,  w: 273, h: 341}
+map_full: {x: 12, y: 10, w: 273, h: 368}   # the default layout: the map runs up over the title band, and the title sits in the map
+footer: {x: 12, y: 381, w: 273, h: 30}
+footer_fit: true                           # the footer shrinks to its notes and the map grows into the room (layout.fit_footer)
+fonts:  {title: 26, subtitle: 13, label: 8, legend_title: 10, legend: 9, note: 7.5, scale: 8, banner: 9}
+legend_max: {w: 92, h: 165}
+inset_size: {w: 64, h: 48}
+logo_height_mm: 13
+raster_default_dpi: 300

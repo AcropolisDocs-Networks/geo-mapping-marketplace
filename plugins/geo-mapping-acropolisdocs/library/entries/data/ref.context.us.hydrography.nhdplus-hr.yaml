@@ -1,0 +1,94 @@
+id: ref.context.us.hydrography.nhdplus-hr
+type: context
+rev: 1
+status: active
+title: National Hydrography Dataset Plus High Resolution (USGS map service)
+summary: Stream network flowlines, water bodies, catchments and HUC12 watersheds for the United States from the USGS NHDPlus HR map service on hydro.nationalmap.gov.
+tags:
+  geography:
+  - us
+  level:
+  - line
+  - water
+  domain:
+  - general
+  - hazard
+  use_for:
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Rivers and water bodies with names for a local or metro map, pulled for the bbox from layer 3 (network flowlines) and layer 9 (water bodies).
+- Watershed (HUC12) outlines as context for a flood or drainage question beside the FEMA zones.
+avoid_when:
+- 'The map is statewide or larger: the network is dense; use TIGER water by county or Natural Earth rivers.'
+- 'Flow modelling is implied: the service draws the network; NHDPlus value-added attributes need the downloaded data.'
+pairs_with:
+- ref.context.us.water-area.tiger
+- ref.context.us.water-linear.tiger
+delivery:
+  mode: service
+  profile: usgs-hydro
+  protocol: arcgis
+  layer: NHDPlus_HR/MapServer/3
+  max_record_count: 2000
+  geometry: polyline
+  columns:
+  - permanent_identifier
+  - gnis_name
+  - fcode
+  - ftype
+  - reachcode
+  - lengthkm
+  - flowdir
+  request: service_query.py fetch --profile usgs-hydro --layer NHDPlus_HR/MapServer/3 --protocol arcgis
+  note: 'Layers: 3 NetworkNHDFlowline, 4 NonNetworkNHDFlowline, 8 NHDArea, 9 NHDWaterbody, 10 NHDPlusCatchment, 12 WBDHU12; maxRecordCount 2000, data refreshed
+    October 2022 per the service. Query with a bbox.'
+source:
+  publisher: US Geological Survey, The National Map
+  product: NHDPlus High Resolution map service
+  url: https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer
+url_verified_on: '2026-11-04'
+vintage:
+  current: NHDPlus HR, data refreshed October 2022
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Map services and data available from U.S. Geological Survey, National Geospatial Program.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the NHDPlus_HR map service (13 layers, maxRecordCount 2000) and the nhd service on 2026-11-04; USGS terms read (public domain with the
+      acknowledgement line). Served through the shipped usgs-hydro profile.

@@ -1,0 +1,121 @@
+id: ref.context.world.building.overture
+type: context
+rev: 2
+status: active
+title: Overture Maps buildings (footprints)
+summary: Worldwide building footprints with height and class where known, merged from OpenStreetMap, Microsoft and Google open footprints and other sources,
+  from the Overture buildings theme (GeoParquet on S3).
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - parcel-level
+  scale:
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- Building footprints under a venue, campus or small-cell map, read for the map's bbox only.
+- Built-up density (footprint area per hexagon) as a proxy for demand where no population raster is loaded.
+avoid_when:
+- 'A metro-wide or larger extent: footprints are tens of millions of polygons; aggregate to hexagons first or use urban areas.'
+- 'The derived database is redistributed without the ODbL terms: the buildings theme carries ODbL because it includes OpenStreetMap.'
+distinct_from:
+- id: ref.context.world.building.microsoft
+  why: single-source ML footprints by tile, no height merge
+- id: ref.context.world.building.google
+  why: Global South coverage only, CC BY
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: GeoParquet (S3, read with pyarrow or DuckDB using a bbox filter)
+  note: 'Overture publishes each release as GeoParquet on S3: s3://overturemaps-us-west-2/release/<release>/theme=<theme>/type=<type>/*.parquet (listing
+    verified 2026-11-04: releases 2026-09-23.0, 2026-09-23.1, 2026-10-21.0; themes addresses, base, buildings, divisions, places, transportation). Files
+    are 700 to 800 MB each, so read them with a bbox filter rather than downloading: pyarrow.dataset(''s3://overturemaps-us-west-2/release/2026-10-21.0/theme=buildings/type=building/'',
+    filesystem=S3FileSystem(anonymous=True, region=''us-west-2'')).to_table(filter=(bbox.xmin > W) & (bbox.xmax < E) & ...), or DuckDB: SELECT ... FROM
+    read_parquet(''s3://.../theme=buildings/type=building/*'', hive_partitioning=1) WHERE bbox.xmin > W AND ...; save the result as GeoParquet and supply
+    it.'
+  columns:
+  - id
+  - geometry
+  - bbox
+  - version
+  - sources
+  - subtype
+  - class
+  - height
+  - num_floors
+  - names
+  - level
+source:
+  publisher: Overture Maps Foundation
+  product: Overture buildings theme, release 2026-10-21.0
+  url: https://overturemaps-us-west-2.s3.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/&delimiter=/
+url_verified_on: '2026-11-04'
+vintage:
+  current: 2026-10-21.0
+  cadence: monthly
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: © Overture Maps Foundation; © OpenStreetMap contributors (ODbL 1.0).
+  note: The buildings theme is ODbL 1.0 because it merges OpenStreetMap buildings (docs.overturemaps.org, read 2026-11-04).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://overturemaps-us-west-2.s3.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/&delimiter=/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the S3 release listing on 2026-11-04 and recorded the bbox-filtered read pattern.
+  - rev: 2
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+attribution:
+  corner: © Overture Maps Foundation
+  links:
+  - text: © Overture Maps Foundation
+    href: https://docs.overturemaps.org/attribution/
+  full: © Overture Maps Foundation; © OpenStreetMap contributors (ODbL 1.0).
+  required_on_map: true
+  collapse: after_interaction
+  extra:
+  - corner: © OpenStreetMap contributors
+    links:
+    - text: © OpenStreetMap contributors
+      href: https://www.openstreetmap.org/copyright
+    required_on_map: true
+    collapse: after_interaction
+    short: © OSM
+    export:
+      text: © OpenStreetMap contributors (openstreetmap.org/copyright)
+  terms_read: '2026-11-09'

@@ -1,0 +1,47 @@
+id: ref.map-type.locator-inset
+type: map-type
+rev: 1
+status: active
+title: Locator inset (where this map sits)
+summary: A small map in a corner that places the main map's area in its wider context.
+tags:
+  use_for:
+  - locator-inset
+  avoid_for: []
+use_when:
+- The audience may not know where the main map's area is.
+- The main map is a region, state or metro inside a larger known area.
+avoid_when:
+- The main map is already national or world scale; there is nothing larger to show.
+- The corner is needed for the legend and the data would be covered.
+pairs_with:
+- ref.boundary.us.state.cb20m
+chooses_when:
+  message_type:
+  - context
+  - locate
+  data_shape:
+  - extent
+requires:
+  data_shape: an extent inside a larger known area
+  join_key: false
+recommended:
+  corner: upper-right
+  highlight: extent rectangle
+guarded_by:
+- MAP-CART-009
+- MAP-SPEC-005
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check: map-create draws and removes the inset by toggle (tests/test_map_render.py::test_toggles_remove_their_elements)
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Active: the inset element exists and can be toggled; the layout moves it before it covers data.'

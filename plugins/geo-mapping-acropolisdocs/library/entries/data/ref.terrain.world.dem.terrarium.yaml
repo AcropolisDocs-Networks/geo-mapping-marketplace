@@ -1,0 +1,76 @@
+id: ref.terrain.world.dem.terrarium
+type: terrain
+rev: 2
+status: active
+title: Terrain Tiles on AWS (Mapzen Terrarium), world elevation
+summary: 'World elevation as 256 px PNG tiles (Terrarium encoding, metres = R * 256 + G + B / 256 - 32768), zoom 0 to 15, from SRTM, 3DEP, EU-DEM, ArcticDEM, ETOPO1 and national sources; about 30 m per pixel at zoom 12 to 13 at mid latitudes. Attribution to the sources is required.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [general]
+  use_for: [context-basemap, site-map, coverage-footprint]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level, site-precision]
+  scale: [world, national, regional, state, metro, local]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2, W]
+  license_class: [attribution]
+  quality: [derived]
+use_when:
+- A hillshade, contours, an elevation profile, a line of sight or a viewshed is needed outside the United States, where 3DEP has nothing (Canada, Mexico, the Caribbean, Europe).
+- A world or continental map wants relief under the data at a coarse zoom, and a few dozen tiles cover it.
+avoid_when:
+- The window is in the United States; ref.terrain.us.dem.3dep is finer (10 m or 1 m against 30 m) and needs no credit line beyond the USGS courtesy.
+- The map cannot carry the attribution block (a slide with no notes, a thumbnail); the credit line is long and it is required.
+- A site-level or engineering-grade judgement is wanted; the tiles are resampled SRTM-class data with a horizontal error of tens of metres and no clutter.
+pairs_with: [ref.terrain.us.dem.3dep, ref.boundary.world.country.ne110]
+distinct_from: [ref.terrain.us.dem.3dep]
+crs: EPSG:3857
+delivery:
+  mode: fetch
+  url_template: https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png
+  tile_size: 256
+  min_zoom: 0
+  max_zoom: 15
+  encoding: 'Terrarium: elevation_m = (R * 256 + G + B / 256) - 32768'
+  cap: 64 tiles per fetch (scripts/terrain_fetch.py lowers the zoom until the window fits), 4 requests at a time, raw tiles cached under .geo-mapping/terrain/terrarium-tiles/
+  note: 'Also published as normal (RGB normals) and geotiff (512 px GeoTIFF) tilesets at the same host; the plugin uses terrarium only. Hosted by the AWS Open Data Sponsorship Program; no key.'
+source:
+  publisher: Mapzen (Linux Foundation), hosted on the Registry of Open Data on AWS
+  product: Terrain Tiles (joerd), terrarium tileset
+  url: https://registry.opendata.aws/terrain-tiles/
+  terms_url: https://github.com/tilezen/joerd/blob/master/docs/attribution.md
+url_verified_on: '2026-11-04'
+vintage:
+  current: 'joerd build of the tileset (sources listed in the attribution document; 3DEP and SRTM v3 for the US and the world between 60 N and 56 S)'
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Elevation: Terrain Tiles on AWS (Mapzen Terrarium). ArcticDEM terrain data DEM(s) were created from DigitalGlobe, Inc., imagery and funded under National Science Foundation awards 1043681, 1559691, and 1542736; Australia terrain data (c) Commonwealth of Australia (Geoscience Australia) 2017; Austria terrain data (c) offene Daten Osterreichs - Digitales Gelandemodell (DGM) Osterreich; Canada terrain data contains information licensed under the Open Government Licence - Canada; Europe terrain data produced using Copernicus data and information funded by the European Union - EU-DEM layers; Global ETOPO1 terrain data U.S. National Oceanic and Atmospheric Administration; Mexico terrain data source: INEGI, Continental relief, 2016; New Zealand terrain data Copyright 2011 Crown copyright (c) Land Information New Zealand and the New Zealand Government (All rights reserved); Norway terrain data (c) Kartverket; United Kingdom terrain data (c) Environment Agency copyright and/or database right 2015. All rights reserved; United States 3DEP (formerly NED) and global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey.'
+  note: 'The tiles carry no single licence: each source keeps its own terms, and the tilezen attribution document lists the credit each one requires (the text above is that list, with ASCII in place of the accented letters). The plugin fetches only with terms_acknowledged, which is the person''s statement that the credit line will be printed with the map; bulk_ok is false because the window is what is fetched, never an area for keeping.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://s3.amazonaws.com/elevation-tiles-prod/terrarium/10/201/409.png
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Verified a tile answers (HTTP 200, image/png, 64 KB) and that nine zoom-12 tiles over Monterrey decode to about 539 m in the city (M12 raster and terrain engine). Attribution copied from the tilezen document on this date.'
+  - rev: 2
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+attribution:
+  corner: 'Elevation: Terrain Tiles on AWS (Mapzen Terrarium)'
+  required_on_map: true
+  collapse: allowed
+  note: The full statement (every national source) is in the popover and on exports.
+  terms_read: '2026-11-09'

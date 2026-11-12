@@ -1,0 +1,107 @@
+id: ref.statistic.us.broadband.bead-ntia
+type: statistic
+rev: 1
+status: active
+title: NTIA BEAD final proposal locations (Section 106 public layer)
+summary: Broadband serviceable locations and community anchor institutions in states' BEAD final proposals, one point per location with project id, technology
+  and county GEOID, from NTIA's National Broadband Availability Map organization.
+tags:
+  geography:
+  - us
+  level:
+  - site
+  - county
+  domain:
+  - telecom
+  use_for:
+  - site-map
+  - market-rollup
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A map of BEAD-funded locations by technology (FTTP, licensed fixed wireless, satellite) in a state or county, or a county choropleth built by counting
+  points per County_GEOID and joining ref.boundary.us.county.cb.
+- Overlaying BEAD project areas with a client's footprint to find overbuild or partnership markets.
+avoid_when:
+- 'The layer is pulled nationally without a filter: 2.6 million points at 2,000 per page is 1,300 requests; filter by state or County_GEOID.'
+- 'The map presents proposals as built networks: these are final proposals under NTIA review, not completed deployments.'
+pairs_with:
+- ref.boundary.us.county.cb
+- ref.statistic.us.broadband.fcc-bdc-summary
+join:
+  key: County_GEOID
+  type: string
+  width: 5
+  note: Five-digit county GEOID as text; State_FIPS is the two-digit state. Aggregate by County_GEOID to join ref.boundary.us.county.cb.
+delivery:
+  mode: service
+  profile: ntia-nbam
+  protocol: arcgis
+  layer: Section106_Final_Proposal_Locations/FeatureServer/94
+  max_record_count: 2000
+  geometry: point
+  features: 2616153
+  columns:
+  - served_lvl
+  - full_addre
+  - state
+  - proj_id
+  - technology
+  - cai
+  - technology_full
+  - State_FIPS
+  - County_GEOID
+  - County_Name
+  request: service_query.py fetch --profile ntia-nbam --layer Section106_Final_Proposal_Locations/FeatureServer/94 --protocol arcgis
+  note: Layer 94 'Final_Proposal_BSLs_byProjectNoSat_Counties' (2,616,153 points, maxRecordCount 2000, pagination; read 2026-11-04). Filter with where=state='AZ'
+    or County_GEOID='04013'. Layer 96 of Section106_Final_Proposal_ProjectCounty_Centroids/FeatureServer gives one centroid per project and county. full_addre
+    is null in the public view.
+source:
+  publisher: NTIA (National Broadband Availability Map organization, owner NBAM_Admin)
+  product: Section 106 Final BEAD Proposal Locations
+  url: https://services3.arcgis.com/OYP7N6mAJJCyH6hd/arcgis/rest/services/Section106_Final_Proposal_Locations/FeatureServer/94
+url_verified_on: '2026-11-04'
+vintage:
+  current: 2026-09 (service last edited 2026-09-22)
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: NTIA, BEAD final proposal locations (Section 106 public layer).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://services3.arcgis.com/OYP7N6mAJJCyH6hd/arcgis/rest/services/Section106_Final_Proposal_Locations/FeatureServer/94?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the NTIA layer (2,616,153 points, 11 fields including County_GEOID and technology, maxRecordCount 2000) on 2026-11-04; served through
+      the shipped ntia-nbam profile. State broadband office layers (AZ, CA) are discoverable from the same organization's hub and were not added because
+      the national layer carries every state.

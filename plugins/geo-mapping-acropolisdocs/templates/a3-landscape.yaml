@@ -1,0 +1,15 @@
+name: a3-landscape
+label: ISO A3, landscape (420 x 297 mm)
+kind: print
+size_mm: [420, 297]
+margin_mm: 12
+title:  {x: 12, y: 10,  w: 396, h: 24}
+map:    {x: 12, y: 37,  w: 396, h: 215}
+map_full: {x: 12, y: 10, w: 396, h: 242}   # the default layout: the map runs up over the title band, and the title sits in the map
+footer: {x: 12, y: 255, w: 396, h: 30}
+footer_fit: true                           # the footer shrinks to its notes and the map grows into the room (layout.fit_footer)
+fonts:  {title: 26, subtitle: 13, label: 8, legend_title: 10, legend: 9, note: 7.5, scale: 8, banner: 9}
+legend_max: {w: 100, h: 150}
+inset_size: {w: 70, h: 48}
+logo_height_mm: 13
+raster_default_dpi: 300

@@ -1,0 +1,30 @@
+id: ref.map-type.choropleth
+type: map-type
+rev: 3
+status: active
+title: Choropleth (normalized rate by area)
+summary: Shades areas by a rate or ratio so that areas of different size or population compare fairly.
+tags:
+  use_for: [choropleth]
+  avoid_for: [dot-density, proportional-symbol]
+use_when:
+  - The message compares a normalized rate or percentage across polygons.
+  - The data joins cleanly to one boundary level.
+avoid_when:
+  - The values are raw counts; normalize them first or use proportional symbols.
+  - Polygons differ greatly in size and the message is about totals.
+pairs_with: [ref.boundary.us.county.cb, ref.boundary.us.state.cb20m]
+chooses_when: {message_type: [compare, rank, pattern], data_shape: [polygon-rate]}
+requires: {data_shape: "one normalized numeric value per polygon", join_key: true}
+recommended: {classification: quantile, classes: 5, palette_kind: sequential, legend: stepped}
+guarded_by: [MAP-CART-001, MAP-CART-002, MAP-CART-003, MAP-CART-005, MAP-CART-006, MAP-A11Y-001]
+license: {class: open, redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-02
+  verify_by: 2027-11-02
+  check: "map-create produces a passing MAP-CART lint on a fixture (tests/test_map_render.py::test_choropleth_builds_clean_and_parses)"
+  changelog:
+    - {rev: 1, date: 2026-11-02, note: "Seed entry (draft)."}
+    - {rev: 2, date: 2026-11-02, note: "Active: the MAP-CART lints exist (M2); the check builds a choropleth and lints it clean."}
+    - {rev: 3, date: 2026-11-02, note: "Adds chooses_when (message types and data shapes it serves) for ref-library select; pairs with the state boundary too."}

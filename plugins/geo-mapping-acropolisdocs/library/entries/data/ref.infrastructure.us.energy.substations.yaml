@@ -1,0 +1,75 @@
+id: ref.infrastructure.us.energy.substations
+type: infrastructure
+rev: 1
+status: draft
+title: US electric substations (HIFLD, withdrawn from HIFLD Open)
+summary: Substation points with voltage and owner, formerly the HIFLD Electric Substations layer; no publisher copy is currently reachable, so the entry
+  records the state of the source.
+tags:
+  geography:
+  - us
+  level:
+  - site
+  domain:
+  - energy
+  - telecom
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - derived
+use_when:
+- Power-availability context for a site or data-center map, once a publisher copy (HIFLD on GeoPlatform, or the EIA Energy Atlas) is verified.
+avoid_when:
+- 'Nothing is verified: do not draw substations from this entry until a publisher copy is recorded.'
+pairs_with:
+- ref.infrastructure.us.energy.transmission-lines
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: Shapefile or GeoJSON exported by the person from the EIA U.S. Energy Atlas or a HIFLD successor
+  note: 'The HIFLD Open feature service that carried this layer (services1.arcgis.com/Hp6G80Pky0om7QvQ) answers ''Invalid URL'' for it (2026-11-04): the
+    layer was withdrawn from HIFLD Open. Third-party copies exist on ArcGIS Online (state agencies, universities) but none from the publisher, so nothing
+    is recorded as a source. The EIA U.S. Energy Atlas (atlas.eia.gov) publishes a substations layer; export it there and supply the file.'
+source:
+  publisher: DHS HIFLD (withdrawn) / EIA U.S. Energy Atlas
+  product: Electric Substations
+vintage:
+  current: not verified
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: DHS HIFLD / EIA.'
+  note: Public domain; not verified for this entry.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-05-04'
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: The HIFLD Open feature service that carried this layer (services1.arcgis.com/Hp6G80Pky0om7QvQ) answers ''Invalid URL'' for it (2026-11-04):
+      the layer was withdrawn from HIFLD Open. Third-party copies exist on ArcGIS Online (state agencies, universities) but none from the publisher, so
+      nothing is recorded as a source. The EIA Energy Atlas copy was not confirmed from the build environment.'

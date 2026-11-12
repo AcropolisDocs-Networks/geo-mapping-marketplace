@@ -1,0 +1,105 @@
+id: ref.public-service.ca.weather.eccc-geomet
+type: public-service
+rev: 1
+status: active
+title: Environment and Climate Change Canada weather, climate and water (MSC GeoMet)
+summary: Canada's national weather service data with no key - climate and hydrometric stations, daily and hourly climate records, real-time
+  observations, city forecasts, air quality and weather alerts - from the MSC GeoMet OGC API, for weather context on a Canadian site or market map.
+tags:
+  geography:
+  - ca
+  level:
+  - site
+  - place
+  domain:
+  - weather
+  - hazard
+  use_for:
+  - site-map
+  - context-basemap
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Weather stations, climate normals or recent observations near Canadian sites, for example a Vancouver or Toronto site map with the nearest climate stations.
+- Active weather alerts over a Canadian market for a readiness or outage brief, stamped with the capture time.
+- River gauges (hydrometric stations) near sites exposed to flooding.
+avoid_when:
+- 'The map covers the United States: use the NWS entries (ref.public-service.us.weather.nws) or NOAA Climate Data Online (ref.public-service.us.weather.noaa-cdo).'
+- 'The map will be read later as current: alerts and real-time layers change continuously, so the capture time goes in the title or a note.'
+- 'An alert would be restyled or summarized: the licence asks that watches and warnings are reproduced without altering their content or intent.'
+delivery:
+  mode: service
+  profile: eccc-geomet
+  protocol: ogcapi
+  layer: climate-stations
+  geometry: point
+  layers:
+    climate-stations: Climate stations (8,435 at the 2026-11-07 read); STN_ID, STATION_NAME, PROV_STATE_TERR_CODE, ELEVATION, CLIMATE_IDENTIFIER, FIRST_DATE, LAST_DATE
+    hydrometric-stations: Hydrometric stations (8,057); STATION_NUMBER, STATION_NAME, PROV_TERR_STATE_LOC, STATUS_EN, REAL_TIME, DRAINAGE_AREA_GROSS
+    climate-daily: Daily climate observations by station and date
+    climate-normals: Climate normals by station
+    citypageweather-realtime: City forecast pages, current conditions
+    swob-realtime: Surface weather observations, real time
+    aqhi-observations-realtime: Air Quality Health Index observations
+    weather-alerts: Active public weather alerts (polygons)
+  columns:
+  - STN_ID
+  - STATION_NAME
+  - PROV_STATE_TERR_CODE
+  - ELEVATION
+  - CLIMATE_IDENTIFIER
+  - FIRST_DATE
+  - LAST_DATE
+  request: service_query.py fetch --profile eccc-geomet --layer climate-stations --protocol ogcapi
+  note: 'OGC API Features at api.weather.gc.ca (104 collections at the 2026-11-07 read; the OpenAPI definition declares no security scheme, so
+    no key). Items are paged (limit, offset) and filter by bbox and properties. Gridded model layers (HRDPS, RDPS, GDPS) are WMS at
+    geo.weather.gc.ca/geomet. Free-tier limits are not stated by the provider.'
+source:
+  publisher: Environment and Climate Change Canada, Meteorological Service of Canada
+  product: MSC GeoMet (OGC API and WMS)
+  url: https://api.weather.gc.ca/collections
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Data Source: Environment and Climate Change Canada'
+  note: 'ECCC Data Servers End-use Licence 2.1.1 (eccc-msc.github.io/open-data/licence, read 2026-11-07): use including for commercial purposes,
+    with the attribution above, linked to the licence where possible; no implied endorsement; watches and warnings reproduced without altering
+    their content or intent.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  check:
+    kind: http_get
+    url: https://api.weather.gc.ca/collections?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions): the collections list answered (104 collections), climate-stations and hydrometric-stations items
+      read with their fields, and the end-use licence read on 2026-11-07. Served through the new shipped eccc-geomet profile.'

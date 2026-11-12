@@ -1,0 +1,120 @@
+id: ref.boundary.world.state.ne10
+type: boundary
+rev: 1
+status: active
+title: States and provinces worldwide, 1:10,000,000 (Natural Earth admin-1)
+summary: 4,596 first-level divisions (US states, Canadian provinces, Mexican states and the rest of the world) with ISO 3166-2 codes, postal abbreviations
+  and names in many languages, fetched from Natural Earth 10m.
+tags:
+  geography:
+  - world
+  - north-america
+  level:
+  - state
+  domain:
+  - general
+  use_for:
+  - choropleth
+  - context-basemap
+  - locator-inset
+  - atlas
+  - join-key
+  - label-reference
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - parcel-level
+  scale:
+  - world
+  - national
+  - regional
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - community
+use_when:
+- A North American market map that needs Canadian provinces and Mexican states beside US states from one file, joined on iso_3166_2 (CA-ON, MX-SON, US-AZ).
+- A sharper admin-1 outline than the bundled 1:50,000,000 file for a regional or national map outside the United States.
+avoid_when:
+- 'The map is of the United States only and goes to a client or regulator: the Census state file carries the official boundaries and FIPS codes.'
+- 'The map is metro or local: 1:10,000,000 lines look coarse at that scale.'
+pairs_with:
+- ref.boundary.world.country.ne110
+- ref.boundary.us.state.cb20m
+distinct_from:
+- id: ref.boundary.world.state.ne50
+  why: 'the bundled 1:50m file: coarser, no network needed'
+- id: ref.boundary.world.country.geoboundaries
+  why: geoBoundaries carries official per-country sources and deeper levels
+- id: ref.boundary.world.admin.gadm41
+  why: GADM is restricted-license and far more detailed
+join:
+  key: iso_3166_2
+  type: string
+  note: ISO 3166-2 code such as US-AZ, CA-ON, MX-SON; postal holds the two-letter abbreviation, adm0_a3 the country, name_en the English name.
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 14.22
+  features: 4596
+  columns:
+  - featurecla
+  - scalerank
+  - adm1_code
+  - iso_3166_2
+  - iso_a2
+  - name
+  - name_en
+  - name_local
+  - type_en
+  - postal
+  - admin
+  - adm0_a3
+  - region
+  - latitude
+  - longitude
+  - wikidataid
+  - ne_id
+  note: The shapefile carries 120 attribute columns (names in 25 languages and per-country feature-class flags); the list above is the useful subset.
+source:
+  publisher: Natural Earth
+  product: Natural Earth 5.1.x, 1:10m Cultural Vectors, Admin 1 States and Provinces
+  url: https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_1_states_provinces.zip
+  file_sha256: efc59726337323058f9446210adc96673179cd344e053666ee3d28cb58ba2b05
+url_verified_on: '2026-11-04'
+vintage:
+  current: 5.1.x (naciscdn.org current file, downloaded 2026-11-04)
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Made with Natural Earth.
+  note: Natural Earth is in the public domain (naturalearthdata.com/about/terms-of-use, read 2026-11-04); the credit line is a courtesy.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: feature_count_and_hash
+    features: 4596
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the naciscdn.org archive (4,596 features, 14,909,524 bytes, SHA-256 recorded; the same bytes are served from naturalearth.s3.amazonaws.com).
+      Fetched on demand; not bundled.

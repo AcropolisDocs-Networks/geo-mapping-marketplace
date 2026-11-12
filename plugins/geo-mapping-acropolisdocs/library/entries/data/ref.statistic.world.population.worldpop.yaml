@@ -1,0 +1,67 @@
+id: ref.statistic.world.population.worldpop
+type: statistic
+rev: 1
+status: active
+title: WorldPop constrained population 2020, 100 m, by country
+summary: 'People per 100 m cell for 2020, one GeoTIFF per country in EPSG:4326, constrained to built settlement so rural cells are empty rather than smeared; a UN-adjusted variant matches national totals. The country-file alternative to GHSL.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [demographics]
+  use_for: [normalization, coverage-footprint, density-surface]
+  avoid_for: [legal-boundary, parcel-level, site-precision]
+  scale: [national, regional, state, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [derived]
+use_when:
+- One country's population surface is wanted as a single file in degrees (Mexico is 56 MB, the United States 494 MB) for people under footprints or along a corridor.
+- A national total must agree with the UN estimate; take the UNadj variant.
+avoid_when:
+- A map crosses a border; country files are modelled separately and their edges do not always agree, so ref.statistic.world.population.ghsl is the one grid.
+- The area is in the United States and census geography is at hand; ref.statistic.us.acs5.population carries margins of error and a vintage.
+- Anything finer than a neighbourhood is read from it; a cell holds a model's estimate, not a count.
+pairs_with: [ref.statistic.world.population.ghsl, ref.boundary.world.country.geoboundaries]
+distinct_from: [ref.statistic.world.population.ghsl, ref.statistic.us.acs5.population]
+join:
+  key: none
+  type: raster
+  note: 'No join: the value is read under polygons with raster_io.zonal (sum) and the partial-pixel policy is written into the provenance.'
+delivery:
+  mode: fetch
+  url_template: https://data.worldpop.org/GIS/Population/Global_2000_2020_Constrained/2020/BSGM/{ISO3}/{iso3}_ppp_2020_constrained.tif
+  alt_template: https://data.worldpop.org/GIS/Population/Global_2000_2020_Constrained/2020/BSGM/{ISO3}/{iso3}_ppp_2020_UNadj_constrained.tif
+  format: GeoTIFF float32, EPSG:4326, 3 arc-second (about 100 m) cells, nodata -99999
+  note: '{ISO3} is the upper-case ISO 3166-1 alpha-3 code in the folder and lower-case in the file name (USA/usa_ppp_2020_constrained.tif, MEX/mex_ppp_2020_constrained.tif). The BSGM folder holds the countries modelled with the built-settlement growth model; the hub lists a maxar_v1 folder for the rest. Not bundled: fetched per country, sha256 recorded, kept under .geo-mapping/fetch/.'
+source:
+  publisher: WorldPop, University of Southampton
+  product: 'Constrained individual countries 2020 (100 m resolution), Global 2000-2020 Constrained'
+  url: https://hub.worldpop.org/geodata/summary?id=49914
+  methods: https://www.worldpop.org/methods/populations/
+url_verified_on: '2026-11-04'
+vintage:
+  current: '2020 (the constrained series ends at 2020)'
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Population: WorldPop (www.worldpop.org, School of Geography and Environmental Science, University of Southampton), constrained 2020 100 m, CC BY 4.0.'
+  note: 'The hub page links creativecommons.org/licenses/by/4.0/; WorldPop asks that the dataset be cited with its DOI, which the hub page for each country gives.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_head
+    url: https://data.worldpop.org/GIS/Population/Global_2000_2020_Constrained/2020/BSGM/MEX/mex_ppp_2020_constrained.tif
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Verified by HEAD from the build environment: USA (HTTP 200, 494,369,192 bytes) and MEX (200, 56,060,408 bytes) constrained files, the hub summary page with its CC BY 4.0 link and the methods page. No file was downloaded or bundled (M12).'

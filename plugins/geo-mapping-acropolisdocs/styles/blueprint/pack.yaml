@@ -1,0 +1,52 @@
+id: blueprint
+version: 1
+title: Blueprint
+intent: Engineering and network drawings, route and fibre plans; white line work on a Prussian-blue ground.
+palette: own
+fonts: own
+modes:
+  print:
+    background: '#1A4470'
+    land: '#285380'
+    water: '#102C52'
+    frame: '#A9C8E6'
+    legend_frame: '#6F95BC'
+    label: '#F2F7FC'
+    label_halo: '#1A4470'
+    legend_bg: '#1D4A78'
+    neutral_ramp: ['#285380', '#2A5A86', '#41719C', '#5D8AB2', '#7EA4C8']
+    sequential_ramp: ['#4F8DB8', '#62A3CB', '#7BBADB', '#98CFE8', '#B9E1F1', '#D9EFF8', '#F4FBFE']
+    emphasis: '#3FD8FF'
+    status: {success: '#9FE0B5', warning: '#F2D98C', danger: '#F5A6A6'}
+    categorical: ['#F2F7FC', '#9ED8F0', '#F2D98C', '#F5A6A6', '#B7E8C6', '#D9C2F2']
+    no_data: '#5D8AB2'
+    diverging_ramp: ['#F5A6A6', '#D7A3B0', '#A4A5C2', '#2A5A86', '#6FAACC', '#A6D8EE', '#E6F6FC']
+    grid: '#A9C8E6'
+    ornament: '#E6F0FA'
+    ornament_light: '#1A4470'
+    water_line: '#6F95BC'
+  screen: {inherit: print}
+ramps: pack
+type:
+  title: {family: IBM Plex Sans Condensed SemiBold, file: fonts/IBMPlexSansCondensed-SemiBold.ttf, sha256: a081ca60548aea14100757a2d6fe71ca60fd90ebce779c9a8ae5a0c8fb4526d4, style: normal, generic: sans-serif, licence: LICENSES/OFL-IBMPlexSansCondensed.txt,
+          licence_id: OFL-1.1, upstream: 'https://github.com/google/fonts/tree/main/ofl/ibmplexsanscondensed'}
+  label: {family: IBM Plex Sans Condensed, file: fonts/IBMPlexSansCondensed-Regular.ttf, sha256: e7437c072eef2ef592ae6f2beb0000446287385907abb57ac1cf07bcbaa2aa33, style: normal, generic: sans-serif, licence: LICENSES/OFL-IBMPlexSansCondensed.txt,
+          licence_id: OFL-1.1, upstream: 'https://github.com/google/fonts/tree/main/ofl/ibmplexsanscondensed'}
+  body: {family: IBM Plex Mono, file: fonts/IBMPlexMono-Regular.ttf, sha256: 6a3412f058c7d8dfd9170c41e85ade48e5156ecb89356110ca57a0a27734af46, style: normal, generic: monospace, licence: LICENSES/OFL-IBMPlexMono.txt, licence_id: OFL-1.1,
+         upstream: 'https://github.com/google/fonts/tree/main/ofl/ibmplexmono'}
+elements:
+  frame: {style: double}
+  title: {box: title-block}
+  north_arrow: {style: arrow}
+  scale_bar: {style: line}
+  legend: {frame: plain}
+treatments:
+  grid: {spacing_mm: 10, opacity: 0.3}
+  category_patterns: true
+web: full
+files:
+  'LICENSES/OFL-IBMPlexMono.txt': 7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da
+  'LICENSES/OFL-IBMPlexSansCondensed.txt': 7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da
+  'fonts/IBMPlexMono-Regular.ttf': 6a3412f058c7d8dfd9170c41e85ade48e5156ecb89356110ca57a0a27734af46
+  'fonts/IBMPlexSansCondensed-Regular.ttf': e7437c072eef2ef592ae6f2beb0000446287385907abb57ac1cf07bcbaa2aa33
+  'fonts/IBMPlexSansCondensed-SemiBold.ttf': a081ca60548aea14100757a2d6fe71ca60fd90ebce779c9a8ae5a0c8fb4526d4

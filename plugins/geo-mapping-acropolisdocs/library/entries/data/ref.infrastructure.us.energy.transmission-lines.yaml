@@ -1,0 +1,104 @@
+id: ref.infrastructure.us.energy.transmission-lines
+type: infrastructure
+rev: 1
+status: active
+title: US electric power transmission lines (HIFLD layer re-hosted on GeoPlatform)
+summary: 94,619 transmission line segments with voltage class, owner and status from the HIFLD Electric Power Transmission Lines layer as re-hosted by the
+  GeoPlatform Federal User Community.
+tags:
+  geography:
+  - us
+  level:
+  - line
+  domain:
+  - energy
+  - telecom
+  use_for:
+  - context-basemap
+  - site-map
+  - flow-line
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - derived
+use_when:
+- Transmission corridors as context for tower siting, backhaul rights-of-way or power-availability questions on a market map.
+- Sites within a distance of a line of a given VOLT_CLASS (geo-ops nearest or buffer).
+avoid_when:
+- 'A national map: 94,619 lines are heavy; filter by state bbox.'
+- 'Ownership or voltage is decisive: many rows carry OWNER ''NOT AVAILABLE'' and VOLTAGE -999999; the layer mixes imagery-traced and OpenStreetMap-sourced
+  lines.'
+pairs_with:
+- ref.infrastructure.us.energy.substations
+crs: EPSG:3857
+delivery:
+  mode: service
+  profile: hifld-geoplatform
+  protocol: arcgis
+  layer: US_Electric_Power_Transmission_Lines/FeatureServer/0
+  max_record_count: 2000
+  geometry: polyline
+  features: 94619
+  columns:
+  - ID
+  - TYPE
+  - STATUS
+  - OWNER
+  - VOLTAGE
+  - VOLT_CLASS
+  - INFERRED
+  - SUB_1
+  - SUB_2
+  - SOURCE
+  - SOURCEDATE
+  - VAL_METHOD
+  - VAL_DATE
+  request: service_query.py fetch --profile hifld-geoplatform --layer US_Electric_Power_Transmission_Lines/FeatureServer/0 --protocol arcgis
+  note: 94,619 polylines (returnCountOnly, 2026-11-04); maxRecordCount 2000 with pagination; query with a bbox. SUB_1 and SUB_2 name the end substations
+    by id.
+source:
+  publisher: DHS HIFLD, re-hosted by the GeoPlatform Federal User Community
+  product: US Electric Power Transmission Lines
+  url: https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/US_Electric_Power_Transmission_Lines/FeatureServer/0
+url_verified_on: '2026-11-04'
+vintage:
+  current: 2025-08-26 (data last edited)
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: DHS HIFLD Electric Power Transmission Lines, via GeoPlatform.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-05-04'
+  check:
+    kind: http_get
+    url: https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/US_Electric_Power_Transmission_Lines/FeatureServer/0?f=json
+    expect: 200
+    features: 94619
+    against: returnCountOnly=true on the layer
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the GeoPlatform Federal User Community service (94,619 polylines, 19 fields, maxRecordCount 2000) on 2026-11-04. The HIFLD Open address
+      was withdrawn; quality marked derived.

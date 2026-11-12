@@ -1,0 +1,96 @@
+id: ref.boundary.us.protected.pad-us
+type: boundary
+rev: 1
+status: draft
+title: Protected Areas Database of the United States (PAD-US 4.1)
+summary: Fee, easement, designation and proclamation boundaries of public and protected lands (federal, state, local, tribal, private conservation) from
+  USGS; the download is a large geodatabase, so the person supplies a clipped copy.
+tags:
+  geography:
+  - us
+  level:
+  - place
+  domain:
+  - general
+  - program
+  use_for:
+  - context-basemap
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - parcel-level
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Public and protected lands as context for tower siting and permitting (federal land managers, wilderness, parks) on a market map.
+- Counting a client's sites by land manager agency (Mang_Name, Mang_Type).
+avoid_when:
+- 'Nothing is verified beyond the catalogue item: do not draw it until a download or service is recorded.'
+- 'Legal ownership is implied: PAD-US is an inventory compiled from many sources.'
+distinct_from:
+- id: ref.boundary.us.surface-management.blm
+  why: BLM SMA is the federal surface ownership layer, served live
+- id: ref.boundary.us.place.cb500k
+  why: municipalities
+- id: ref.boundary.us.urban-area.cb2020-500k
+  why: urban footprints
+- id: ref.boundary.us.aiannh.cb500k
+  why: Census tribal areas
+- id: ref.boundary.us.military.tiger
+  why: military installations only
+join:
+  key: Unit_Nm
+  type: string
+  note: Unit name; Mang_Type and Mang_Name give the managing agency, Des_Tp the designation, GAP_Sts the protection status.
+crs: EPSG:5070
+delivery:
+  mode: user-supplied
+  format: File geodatabase or state GeoPackage from the ScienceBase item, clipped by the person
+  note: Open https://www.sciencebase.gov/catalog/item/652ef930d34edd15305a9b03 (PAD-US 4.1, verified 2026-11-04) and download the state or national geodatabase;
+    clip to the market and supply it. The ArcGIS feature service address recorded in earlier notes answered 'Invalid URL', so no service is recorded.
+source:
+  publisher: US Geological Survey, Gap Analysis Project
+  product: Protected Areas Database of the United States (PAD-US) 4.1
+  url: https://www.sciencebase.gov/catalog/item/652ef930d34edd15305a9b03
+url_verified_on: '2026-11-04'
+vintage:
+  current: 4.1 (2024)
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Geological Survey Gap Analysis Project, PAD-US 4.1.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_head
+    url: https://www.sciencebase.gov/catalog/item/652ef930d34edd15305a9b03
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: the ScienceBase catalogue item answered (HTTP 200, 2026-11-04) but no download file or service was verified; the person downloads and
+      clips.'

@@ -1,0 +1,64 @@
+"""Shared by every kit variant: writes manifest.yaml for a finished run (standard library only; Python 3.10 or newer)."""
+import datetime
+import hashlib
+import json
+import os
+import platform
+import sys
+
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _count(path):
+    try:
+        with open(path, "rb") as f:
+            d = json.load(f)
+        return len(d.get("features", [])) if isinstance(d, dict) else None
+    except (ValueError, OSError):
+        return None
+
+
+def _y(v):
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    return json.dumps(str(v))
+
+
+def write_manifest(out, req, hits, truncated, started, finished, note=""):
+    pages = sorted(n for n in os.listdir(os.path.join(out, "pages")) if n.startswith("page_"))
+    files, total = [], 0
+    for n in pages:
+        p = os.path.join(out, "pages", n)
+        c = _count(p)
+        total += c or 0
+        files.append({"name": "pages/" + n, "bytes": os.path.getsize(p), "sha256": _sha256(p), "feature_count": c})
+    result = os.path.join(out, "result.geojson")
+    if os.path.isfile(result):
+        files.append({"name": "result.geojson", "bytes": os.path.getsize(result), "sha256": _sha256(result), "feature_count": _count(result), "crs": req.get("srs") or "EPSG:4326"})
+    L = ["manifest_version: 1", "kit_id: " + _y(req["kit_id"]), "created_by: plugin-kit",
+         "service: {type: %s, version: %s, host_class: %s}" % (req["protocol"], _y(req.get("version")), req.get("host_class", "public")),
+         "request:", "  operation: " + _y(req.get("operation", "GetFeature")), "  layer: " + _y(req["layer"]), "  filter: " + _y(req.get("cql_filter")),
+         "  bbox: " + (json.dumps(req["bbox"]) if req.get("bbox") else "null"), "  srs: " + _y(req.get("srs") or "EPSG:4326"),
+         "  properties: " + (json.dumps(req["properties"]) if req.get("properties") else "null"), "  sort_by: " + _y(req.get("sort_by")), "  page_size: " + _y(req.get("page_size")),
+         "run:", "  started_at: " + _y(started), "  finished_at: " + _y(finished), "  tool: {python: %s, platform: %s}" % (_y(platform.python_version()), _y(platform.system())),
+         "result:", "  hits_expected: " + _y(hits), "  total_features: " + _y(total), "  pages: " + _y(len(pages)), "  truncated: " + _y(bool(truncated)), "  shortfall_note: " + _y(note), "  files:"]
+    for f in files:
+        L.append("    - {" + ", ".join("%s: %s" % (k, _y(v)) for k, v in f.items()) + "}")
+    L += ["attestation: {by: user, note: \"\"}", ""]
+    with open(os.path.join(out, "manifest.yaml"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(L))
+    return total
+
+
+def now():
+    return datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()

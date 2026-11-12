@@ -1,0 +1,97 @@
+id: ref.boundary.us.military.tiger
+type: boundary
+rev: 1
+status: active
+title: US military installations (Census TIGER/Line)
+summary: The 706 military installation polygons in the TIGER/Line MIL file, for base context and exclusion areas on a site or spectrum map.
+tags:
+  geography:
+  - us
+  level:
+  - place
+  domain:
+  - general
+  - program
+  - telecom
+  use_for:
+  - context-basemap
+  - coverage-footprint
+  - site-map
+  avoid_for:
+  - legal-boundary
+  - site-precision
+  - engineering-grade
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Showing bases near a market as context for coordination zones (CBRS DPAs, AWS-3 federal incumbents) or for sites on or near an installation.
+- Counting a client's sites inside installation boundaries.
+avoid_when:
+- The map needs the official DoD boundary or a secure-area line; TIGER holds a cartographic outline with a name only.
+- 'The map is about spectrum protection zones themselves: those come from the NTIA and FCC rules, not from this outline.'
+distinct_from:
+- id: ref.boundary.us.protected.pad-us
+  why: PAD-US holds every public land manager; this file holds installations only
+join:
+  key: AREAID
+  type: string
+  note: Census landmark area id as text; FULLNAME carries the installation name.
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 2.78
+  features: 706
+  columns:
+  - AREAID
+  - FULLNAME
+  - MTFCC
+  - ALAND
+  - AWATER
+  - INTPTLAT
+  - INTPTLON
+source:
+  publisher: US Census Bureau
+  product: 2025 TIGER/Line Shapefile, Military Installations (national)
+  url: https://www2.census.gov/geo/tiger/TIGER2025/MIL/tl_2025_us_mil.zip
+  file_sha256: 5ec1a70c88021f287649ef0ca8996d7c88ee3b69d2f5506b447637601e789628
+url_verified_on: '2026-11-04'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, TIGER/Line Shapefiles.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: feature_count_and_hash
+    features: 706
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the 2025 national archive (706 features, 2,917,158 bytes, SHA-256 recorded).

@@ -1,0 +1,101 @@
+id: ref.boundary.us.zcta.cb2020-500k
+type: boundary
+rev: 1
+status: active
+title: US ZIP Code Tabulation Areas, 2020 vintage, 1:500,000 (Census cartographic boundary)
+summary: ZCTA polygons (33,791), the Census approximation of ZIP code areas, for ZIP-keyed customer or sales data.
+tags:
+  geography:
+  - us
+  level:
+  - zcta
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  avoid_for:
+  - parcel-level
+  - engineering-grade
+  - legal-boundary
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A customer or sales table keyed on ZIP code needs shading by area.
+- A choropleth where ZCTAs are the finest geography available to the audience.
+avoid_when:
+- The data is keyed on real USPS ZIP codes for delivery routes; ZCTAs are statistical areas and differ from ZIP codes.
+- 'The map needs a current vintage: ZCTAs are redrawn only each decennial census, so this file reflects 2020.'
+pairs_with:
+- ref.boundary.us.county.cb500k
+join:
+  key: GEOID20
+  type: string
+  width: 5
+  note: The five-digit ZCTA code (ZCTA5CE20). Keep leading zeros; New England ZIPs begin with 0.
+  pattern: ^\d{5}$
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 63.57
+  features: 33791
+  columns:
+  - ZCTA5CE20
+  - AFFGEOID20
+  - GEOID20
+  - NAME20
+  - LSAD20
+  - ALAND20
+  - AWATER20
+source:
+  publisher: US Census Bureau
+  product: 2020 Cartographic Boundary File, ZIP Code Tabulation Areas, 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2020_us_zcta520_500k.zip
+  file_sha256: c69a4ede8aebebfc7ed3a98a9075c6aaa1b75d514a129bc5c662fd806d2f3d17
+url_verified_on: '2026-11-02'
+vintage:
+  current: 2020 (decennial)
+  cadence: static
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check:
+    kind: feature_count_and_hash
+    features: 33791
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Verified the 2020 archive (33,791 features). The 2025 cartographic set does not include ZCTAs; they are published with the decennial
+      vintage. Revisit when the Bureau publishes ZCTAs for the next vintage.

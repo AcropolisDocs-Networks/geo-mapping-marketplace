@@ -1,0 +1,114 @@
+id: ref.statistic.us.broadband.fcc-bdc-summary
+type: statistic
+rev: 3
+status: active
+title: 'FCC Broadband Data Collection: availability summary by geography'
+summary: Provider-reported fixed and mobile availability summarized by county, tract, block group or other Census geography (the 'Summary by Geography'
+  files of the National Broadband Map), as a join table for availability choropleths.
+tags:
+  geography:
+  - us
+  level:
+  - county
+  - tract
+  - block-group
+  - cbsa
+  - state
+  domain:
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - normalization
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- 'An availability choropleth by county or tract: join the summary rows to the Census boundary on geography_id and shade a speed-tier share.'
+- Comparing a client's footprint with reported availability by technology code (10 copper, 40 cable, 50 fiber, 71 licensed fixed wireless, 300 to 500 mobile)
+  on one filing date.
+avoid_when:
+- The map claims measured performance; the rows are provider filings of where service is available, not speed tests.
+- The reader may take 'available' to mean 'served'; word the title as reported availability and state the filing date.
+pairs_with:
+- ref.boundary.us.county.cb
+- ref.boundary.us.tract.cb500k
+- ref.statistic.us.coverage.fcc-nbm
+- ref.public-service.us.broadband.fcc-bdc-api
+join:
+  key: geography_id
+  type: string
+  note: Census GEOID as text for the row's geography_type (state 2, county 5, tract 11, block group 12 digits); keep leading zeros. One row per geography,
+    technology and speed tier.
+delivery:
+  mode: service
+  tool: fcc_bdc
+  format: CSV in a zip, from the FCC public data API (bdc.fcc.gov) with the person's fcc-bdc key
+  columns:
+  - geography_type
+  - geography_id
+  - geography_desc
+  - area_data_type
+  - biz_res
+  - technology
+  - total_units
+  - speed_02_02
+  - speed_10_1
+  - speed_25_3
+  - speed_100_20
+  - speed_250_25
+  - speed_1000_100
+  note: fcc_bdc.py summary lists the 'Summary by Geography' file of a filing date, downloads it (capped; over 100 MB only in a confirmed run), checks the
+    columns above (MAP-FCC-006) and keeps the rows of one geography, state, technology, speed tier and unit type. The column list is confirmed against the
+    file in the 1.3.0 live check.
+source:
+  publisher: FCC
+  product: 'Broadband Data Collection, National Broadband Map public data: Summary by Geography'
+vintage:
+  current: latest filing date on the download page (semiannual filings, June and December)
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: FCC National Broadband Map (Broadband Data Collection).'
+  note: Public domain. Fetched through the FCC public data API (bdc.fcc.gov) with the person's key; the broadbandmap.fcc.gov pages refuse scripted requests.
+  terms_accepted: the FCC API Terms of Use, agreed when the token is generated
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-11-04'
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: The FCC web hosts (fcc.gov, data.fcc.gov, broadbandmap.fcc.gov) refuse automated requests from the build environment (HTTP 403 on 2026-11-04),
+      so neither the download nor the API route could be verified. The route, the geography_id join and the technology codes are recorded from the FCC''s
+      published data specification so the person can download and join the files.'
+  - rev: 2
+    date: '2026-11-10'
+    note: 'The API route corrected: the FCC Public Data API is on bdc.fcc.gov (specification of 8 June 2026), described in ref.public-service.us.broadband.fcc-bdc-api;
+      rev 1 named api.broadbandmap.fcc.gov. Still draft: the download page refuses scripted requests.'
+  - rev: 3
+    date: '2026-11-10'
+    note: 'Active (1.3.0, R1-FCC): delivered by the fcc_bdc tool through the public data API with the person''s key; the summary columns declared and checked
+      on every read.'

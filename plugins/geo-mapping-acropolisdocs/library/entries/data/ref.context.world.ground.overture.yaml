@@ -1,0 +1,86 @@
+id: ref.context.world.ground.overture
+type: context
+rev: 1
+status: active
+title: Overture Maps land and water (base theme), for detailed ground anywhere
+summary: Land (OSM coastline-derived land, islands and islets) and water areas (sea inlets, lakes, reservoirs, rivers and canals as polygons) from
+  the Overture base theme, read for a map's window only and cached per z8 quadkey tile, so a city map anywhere gets a shoreline at street detail.
+tags:
+  geography: [world]
+  level: [water, line]
+  domain: [general]
+  use_for: [context-basemap]
+  avoid_for: [engineering-grade, legal-boundary, site-precision, parcel-level]
+  scale: [metro, local, site]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [monthly]
+  tier: [T2]
+  license_class: [share-alike]
+  quality: [community]
+use_when: ['The land and water under a city or metro map (finer than 1:1,500,000) whose window is not wholly inside the United States, or anywhere when TIGER is not cached: ground_detail.py prepare reads it once.']
+avoid_when: ['A regional or national map: at 1:1,500,000 and smaller the OSM simplified land or Natural Earth is drawn instead.', 'A legal shoreline or tidal extent.']
+pairs_with: [ref.context.world.building.overture, ref.boundary.world.division.overture]
+distinct_from:
+- {id: ref.context.world.land.osm-simplified, why: 'the same OSM coastline, simplified for zoom 0-9 (regional scales), one global file'}
+- {id: ref.context.us.water-area.tiger, why: 'US only, public domain, preferred for a window wholly inside the United States'}
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  tool: overture_io
+  release: 2026-10-21.0
+  format: GeoParquet (S3, read by HTTPS range requests through SafeHTTP; row groups chosen by the bbox column statistics)
+  url_template: https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/{release}/theme=base/type={type}/
+  cap_mb: 300
+  cache: .geo-mapping/cache/ground/global-overture/<release>/<quadkey>.parquet
+  note: 'One z8 quadkey tile a variant (ref_fetch.py fetch ref.context.world.ground.overture --variant 12022011; ground_detail.py prepare names
+    them for a window). Land: type=land, subtype land (class land, island, islet). Water: type=water polygons except swimming and reflecting
+    pools; lines and points are left out. Read 2026-11-10: 48 land files (30.5 GB) and 32 water files (28.8 GB); an Athens window of two z8
+    tiles read 112 MB.'
+  columns: [kind, class, geometry]
+source:
+  publisher: Overture Maps Foundation
+  product: Overture base theme (land, water), release 2026-10-21.0
+  url: https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/theme=base/&delimiter=/
+url_verified_on: '2026-11-10'
+vintage:
+  current: 2026-10-21.0
+  cadence: monthly
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: © Overture Maps Foundation; © OpenStreetMap contributors (ODbL 1.0).
+  note: The base theme's land and water are ODbL 1.0 because they are derived from OpenStreetMap (docs.overturemaps.org attribution page). A printed
+    map is a Produced Work (the credit is required); a web page or data export that carries the ground gets the share-alike notice.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-02-10'
+  check:
+    kind: http_get
+    url: https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/theme=base/&delimiter=/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-10'
+    note: 'Release 2026-10-21.0 pinned; the base theme listing (land, water, land_cover, land_use, infrastructure, bathymetry) read 2026-11-10;
+      an Athens window read live through overture_io (1.5.0, R3-GND). verify_by is three months on: Overture keeps recent releases only.'
+attribution:
+  corner: © Overture Maps Foundation
+  links:
+  - {text: © Overture Maps Foundation, href: 'https://docs.overturemaps.org/attribution/'}
+  full: © Overture Maps Foundation; © OpenStreetMap contributors (ODbL 1.0).
+  required_on_map: true
+  collapse: after_interaction
+  extra:
+  - corner: © OpenStreetMap contributors
+    links:
+    - {text: © OpenStreetMap contributors, href: 'https://www.openstreetmap.org/copyright'}
+    required_on_map: true
+    collapse: after_interaction
+    short: © OSM
+    export: {text: © OpenStreetMap contributors (openstreetmap.org/copyright)}
+  terms_read: '2026-11-10'

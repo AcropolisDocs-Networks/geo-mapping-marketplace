@@ -1,0 +1,105 @@
+id: ref.boundary.us.county.cb500k
+type: boundary
+rev: 1
+status: active
+title: US counties, 1:500,000 (Census cartographic boundary)
+summary: 'County polygons simplified to 1:500,000: a sharper outline than the bundled 1:20,000,000 file, for state and metro maps.'
+tags:
+  geography:
+  - us
+  level:
+  - county
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  avoid_for:
+  - parcel-level
+  - engineering-grade
+  - legal-boundary
+  - site-precision
+  scale:
+  - state
+  - metro
+  - regional
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A choropleth of one state or a few states, where the 1:20,000,000 county outlines look coarse.
+- A metro or multi-county map that needs recognizable county shapes and still renders fast.
+avoid_when:
+- The map is national; the bundled 1:20,000,000 counties are smaller and quicker.
+- The map needs exact legal boundaries or site-level precision; these outlines are simplified and clipped to the coast.
+pairs_with:
+- ref.boundary.us.county.cb
+- ref.statistic.us.acs5.population
+join:
+  key: GEOID
+  type: string
+  width: 5
+  note: Keep leading zeros. Never cast to integer. STUSPS holds the postal code.
+  pattern: ^\d{5}$
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 11.21
+  features: 3235
+  columns:
+  - STATEFP
+  - COUNTYFP
+  - COUNTYNS
+  - GEOIDFQ
+  - GEOID
+  - NAME
+  - NAMELSAD
+  - STUSPS
+  - STATE_NAME
+  - LSAD
+  - ALAND
+  - AWATER
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, Counties, 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_county_500k.zip
+  file_sha256: aa976c00b181939755d0da757f4c7c2dc0103c3b3b4530fb2a91c2bb62fc777c
+url_verified_on: '2026-11-02'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check:
+    kind: feature_count_and_hash
+    features: 3235
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Verified 2025 archive (3,235 features, SHA-256 recorded). Fetched on demand; not bundled.

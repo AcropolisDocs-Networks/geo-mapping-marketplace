@@ -1,0 +1,54 @@
+id: ref.map-type.proportional-symbol
+type: map-type
+rev: 1
+status: active
+title: Proportional symbols (size by count or amount)
+summary: Draws a circle at each place, with its area proportional to a count or amount, so totals compare by size.
+tags:
+  use_for:
+  - proportional-symbol
+  avoid_for:
+  - choropleth
+  - dot-density
+use_when:
+- The message compares totals, such as sites, customers or traffic, across places.
+- Places differ so much in size that shading areas would mislead.
+avoid_when:
+- The values are rates; shade the areas instead.
+- There are thousands of overlapping places; aggregate first or use a density surface.
+pairs_with:
+- ref.boundary.us.state.cb20m
+- ref.boundary.us.county.cb
+chooses_when:
+  message_type:
+  - magnitude
+  - compare
+  data_shape:
+  - point-count
+  - polygon-count
+requires:
+  data_shape: one count or amount per point (or per polygon centroid)
+  join_key: false
+recommended:
+  scaling: area
+  shape: circle
+  min_symbol_mm: 0.8
+  legend: nested
+guarded_by:
+- MAP-CART-010
+- MAP-CART-011
+- MAP-A11Y-001
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check: map-create builds proportional symbols and the MAP-CART lint passes (tests/test_map_render.py::test_proportional_symbols_scale_by_area)
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Active: the renderer scales by area with a visible minimum, and MAP-CART-010 blocks any other scaling.'

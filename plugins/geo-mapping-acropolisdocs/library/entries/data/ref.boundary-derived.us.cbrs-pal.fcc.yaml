@@ -1,0 +1,90 @@
+id: ref.boundary-derived.us.cbrs-pal.fcc
+type: boundary-derived
+rev: 1
+status: draft
+title: FCC CBRS Priority Access Licenses (Auction 105) by county
+summary: Winning bidders and PAL block counts per county from Auction 105 (3.5 GHz CBRS), as a table to join to county polygons for a licence-holding map.
+tags:
+  geography:
+  - us
+  level:
+  - county
+  domain:
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  avoid_for:
+  - legal-boundary
+  - site-precision
+  - engineering-grade
+  scale:
+  - national
+  - regional
+  - state
+  detail:
+  - generalized
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A map of CBRS PAL holdings by county for one bidder, or the number of PALs won per county.
+- Checking where a client holds priority access before a CBRS deployment map.
+avoid_when:
+- 'The map should show CBRS coverage or GAA use: PALs are county-level licences, not coverage, and GAA use is not in the auction results.'
+- 'Current holdings after secondary-market transfers matter: the auction results are the 2020 close, and ULS holds later assignments.'
+pairs_with:
+- ref.boundary.us.county.cb
+join:
+  key: county_fips
+  type: string
+  width: 5
+  note: Five-digit state+county FIPS in the results files (results_by_license.zip and all_county_status.zip); keep leading zeros. Up to 7 PAL blocks per
+    county.
+crs: EPSG:4269
+delivery:
+  mode: user-supplied
+  format: zip of CSV tables from the FCC Public Reporting System
+  note: In a browser open https://auctiondata.fcc.gov/public/projects/auction105 (verified 2026-11-04, HTTP 200) and download results_by_license.zip and
+    all_county_status.zip from the page's downloads; the static_files links are served by the page's application, so a direct request returns the page,
+    not the zip. Supply the zip; join on county FIPS to ref.boundary.us.county.cb.
+  columns:
+  - 'as published: bidder, license (county FIPS and block), gross and net winning bid, county status columns'
+source:
+  publisher: FCC
+  product: Auction 105 (3.5 GHz Priority Access Licenses) public results
+  url: https://auctiondata.fcc.gov/public/projects/auction105
+url_verified_on: '2026-11-04'
+vintage:
+  current: Auction 105 close (2020-08-25); PAL terms run 10 years
+  cadence: static
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: FCC Auction 105 public results.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://auctiondata.fcc.gov/public/projects/auction105
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: the Auction 105 page answered (HTTP 200, 2026-11-04) and names results_by_license.zip and all_county_status.zip, but the files are served
+      by the page''s application and a direct request returned HTML, so the table layout is not verified. The person downloads them in a browser.'

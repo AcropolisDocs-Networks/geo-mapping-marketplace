@@ -1,0 +1,31 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-04 from the build environment.
+profile: fema-nfhl
+type: arcgis-rest
+base_url: https://hazards.fema.gov/arcgis/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 2000
+  server_max_features: 2000
+  max_concurrency: 1
+  timeout_s: 90
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: public-domain
+  confidential: false
+  attribution: 'Source: FEMA National Flood Hazard Layer (NFHL).'
+host_visibility: shown
+host_confirmed_on: '2026-11-04'
+verified_on: '2026-11-04'
+notes: 'FEMA National Flood Hazard Layer. public/NFHL/MapServer: layer 28 Flood Hazard Zones (S_FLD_HAZ_AR: FLD_ZONE, ZONE_SUBTY, SFHA_TF, STATIC_BFE),
+  0 NFHL Availability, 3 FIRM Panels, 22 Political Jurisdictions, 23 Levees. EPSG:4269; maxRecordCount 2000. Always query with a bbox: the national
+  layer is large and the host resets long requests. Shipped with the plugin (M13), read-only: a profile of the same name saved in the working
+  folder overrides it.'

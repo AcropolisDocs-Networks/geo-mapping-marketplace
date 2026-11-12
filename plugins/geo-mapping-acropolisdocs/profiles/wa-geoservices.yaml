@@ -1,0 +1,30 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-04 from the build environment.
+profile: wa-geoservices
+type: arcgis-rest
+base_url: https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 2000
+  server_max_features: 2000
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: open
+  confidential: false
+  attribution: 'Source: Washington State Geospatial Open Data Portal (geo.wa.gov).'
+host_visibility: shown
+host_confirmed_on: '2026-11-04'
+verified_on: '2026-11-04'
+notes: 'Washington State Geospatial Open Data Portal hosted services. Hosted feature services of the state geospatial portal (counties, parcels,
+  emergency response boundaries, basemap). Discovery: geo.wa.gov (ArcGIS Hub, orgId jsIt88o09Q0r1j8h). Licence varies by layer: read each item''s
+  terms before external use. Shipped with the plugin (M13), read-only: a profile of the same name saved in the working folder overrides it.'

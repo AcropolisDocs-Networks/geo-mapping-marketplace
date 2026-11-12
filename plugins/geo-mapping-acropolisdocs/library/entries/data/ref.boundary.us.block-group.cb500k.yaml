@@ -1,0 +1,102 @@
+id: ref.boundary.us.block-group.cb500k
+type: boundary
+rev: 1
+status: active
+title: US block groups, 1:500,000 (Census cartographic boundary)
+summary: Block group polygons for the nation (242,298), for the finest ACS geography.
+tags:
+  geography:
+  - us
+  level:
+  - block-group
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  avoid_for:
+  - parcel-level
+  - engineering-grade
+  - legal-boundary
+  - site-precision
+  scale:
+  - metro
+  - local
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A neighborhood-scale map of one metro or city from an ACS block-group table.
+avoid_when:
+- The map covers a state or more; the national file has 242,298 polygons. Fetch a state file instead.
+- Estimates for small areas are noisy; check the margins of error before classifying.
+pairs_with:
+- ref.statistic.us.acs5.population
+join:
+  key: GEOID
+  type: string
+  width: 12
+  note: State + county + tract + block group, 12 characters. Keep leading zeros.
+  pattern: ^\d{12}$
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 92.66
+  features: 242298
+  columns:
+  - STATEFP
+  - COUNTYFP
+  - TRACTCE
+  - BLKGRPCE
+  - GEOIDFQ
+  - GEOID
+  - NAME
+  - NAMELSAD
+  - LSAD
+  - ALAND
+  - AWATER
+  url_template: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_{statefp}_bg_500k.zip
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, Block Groups, 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_bg_500k.zip
+  file_sha256: ea189e05d817d70dd54995d3cdf699efd2826f79634cdeaeb68dca3bc2e56634
+url_verified_on: '2026-11-02'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check:
+    kind: feature_count_and_hash
+    features: 242298
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Verified the national archive (242,298 features). A per-state file is also published; the Arizona file was checked.

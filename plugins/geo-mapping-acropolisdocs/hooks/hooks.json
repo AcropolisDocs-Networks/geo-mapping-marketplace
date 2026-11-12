@@ -1,0 +1,4 @@
+{
+  "description": "Empty by default (v0.14). Two hooks are written and off until spike P7 (hook scoping on the desktop app, Appendix H) has been run: the pre-export lint hook and the credentials reminder hook, in hooks/optional/hooks.json. hooks/README.md says how to turn them on and test them. Hooks act only on this plugin's own files (MAP-ED-005).",
+  "hooks": {}
+}

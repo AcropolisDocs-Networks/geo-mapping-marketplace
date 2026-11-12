@@ -1,0 +1,108 @@
+id: ref.boundary-derived.us.license-area.fcc
+type: boundary-derived
+rev: 2
+status: active
+title: FCC Cellular Market Areas (CMA) and other licence areas
+summary: The 734 Cellular Market Areas as polygons from the FCC's public ArcGIS Online organization; BTA, MTA, EA and PEA definitions remain county lists
+  on fcc.gov, which the person downloads.
+tags:
+  geography:
+  - us
+  level:
+  - license-area/cma
+  - license-area/bta
+  - license-area/mta
+  - license-area/ea
+  - license-area/pea
+  domain:
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  avoid_for:
+  - legal-boundary
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A spectrum-holding or licence map rolled up by CMA, where the client reports by FCC market.
+- Joining an auction result or licence table to its market polygon by CMA number.
+avoid_when:
+- The client reports by county, CBSA or DMA; use the Census geographies or the licensed DMA file instead.
+- 'The map needs BTA, MTA, EA or PEA polygons: only the CMA layer is served; the others are county-list definitions the person builds by dissolving counties.'
+pairs_with:
+- ref.boundary.us.county.cb
+- ref.infrastructure.us.hifld.cell-tower
+join:
+  key: CMA
+  type: integer
+  note: CMA number 1 to 734 (MSA 1-306, RSA 307-734 by the FCC numbering); the NAME field carries the state and market name. BTA, MTA, EA and PEA keys come
+    from the FCC county lists.
+crs: EPSG:3857
+delivery:
+  mode: service
+  profile: fcc-agol
+  protocol: arcgis
+  layer: cma/FeatureServer/0
+  max_record_count: 2000
+  geometry: polygon
+  features: 734
+  columns:
+  - FID
+  - CMA
+  - NAME
+  request: service_query.py fetch --profile fcc-agol --layer cma/FeatureServer/0 --protocol arcgis
+  note: One request returns every CMA (734 features under the 2000-row cap). The service was uploaded by the FCC in 2016; CMA definitions have not changed
+    since.
+source:
+  publisher: FCC
+  product: Cellular Market Areas (ArcGIS Online feature service, FCC organization YnOQrIGdN9JGtBh4)
+  url: https://services.arcgis.com/YnOQrIGdN9JGtBh4/arcgis/rest/services/cma/FeatureServer/0
+url_verified_on: '2026-11-04'
+vintage:
+  current: 2016 service (CMA definitions are static)
+  cadence: static
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: Federal Communications Commission.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://services.arcgis.com/YnOQrIGdN9JGtBh4/arcgis/rest/services/cma/FeatureServer/0?f=json
+    expect: 200
+    features: 734
+    against: returnCountOnly=true on the layer
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the FCC site refused automated requests from the build environment (HTTP 403), so the county definitions could not be verified. Verify
+      from a browser, then promote.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: the CMA polygons are served from the FCC''s ArcGIS Online organization (734 features, fields CMA and NAME, maxRecordCount 2000; read
+      2026-11-04). BTA, MTA, EA and PEA stay county-list definitions on fcc.gov: The FCC web hosts (fcc.gov, data.fcc.gov, broadbandmap.fcc.gov) refuse
+      automated requests from the build environment (HTTP 403 on 2026-11-04).'

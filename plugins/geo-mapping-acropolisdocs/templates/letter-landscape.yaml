@@ -1,0 +1,16 @@
+name: letter-landscape
+label: Letter, landscape (11 x 8.5 in)
+kind: print
+size_mm: [279.4, 215.9]
+margin_mm: 10
+title:  {x: 10, y: 8,   w: 259.4, h: 19}
+map:    {x: 10, y: 29,  w: 259.4, h: 154}
+map_full: {x: 10, y: 8, w: 259.4, h: 175}   # the default layout: the map runs up over the title band, and the title sits in the map
+footer: {x: 10, y: 186, w: 259.4, h: 22}
+footer_fit: true                           # 1.0.0: the footer shrinks to its notes and the map grows into the room (layout.fit_footer)
+footer_fit_classic: false                  # the classic look keeps the fixed footer it had before 1.0.0
+fonts:  {title: 20, subtitle: 10.5, label: 7, legend_title: 8.5, legend: 7.5, note: 6.5, scale: 7, banner: 8}
+legend_max: {w: 78, h: 110}
+inset_size: {w: 52, h: 36}
+logo_height_mm: 10
+raster_default_dpi: 300

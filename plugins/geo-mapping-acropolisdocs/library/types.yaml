@@ -1,0 +1,24 @@
+# Entry types, their required fields and facets, and their review cadence (spec 9.3.2, 9.3.3, 12.10).
+# `program` (M13): a program's own geography (venues, sites, routes) that the person supplies; the entry documents the expected columns.
+version: 2
+core_fields: [id, type, rev, status, title, summary, tags, use_when, avoid_when, license, maintenance]
+statuses: [draft, active, deprecated, retired, blocked]
+delivery_modes: [bundled, fetch, service, derived, user-supplied]
+maintenance_fields: [owner, reviewed_on, verify_by]
+data_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class]
+types:
+  boundary:          {family: data,   cadence_months: 12, required_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class], extra_fields: [join, crs, delivery, vintage]}
+  boundary-derived:  {family: data,   cadence_months: 12, required_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class], extra_fields: [join, crs, delivery]}
+  infrastructure:    {family: data,   cadence_months: 6,  required_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class], extra_fields: [crs, delivery]}
+  crosswalk:         {family: data,   cadence_months: 12, required_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class], extra_fields: [join, delivery]}
+  statistic:         {family: data,   cadence_months: 12, required_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class], extra_fields: [join, delivery]}
+  context:           {family: data,   cadence_months: 12, required_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class], extra_fields: [delivery]}
+  gazetteer:         {family: data,   cadence_months: 12, required_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class], extra_fields: [delivery]}
+  terrain:           {family: data,   cadence_months: 12, required_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class], extra_fields: [crs, delivery]}
+  basemap-provider:  {family: data,   cadence_months: 12, required_facets: [use_for, audience, tier, license_class], extra_fields: [url_template, delivery]}
+  public-service:    {family: data,   cadence_months: 3,  required_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class], extra_fields: [delivery]}
+  program:           {family: data,   cadence_months: 6,  required_facets: [geography, level, use_for, scale, audience, confidentiality, freshness, license_class], extra_fields: [crs, delivery]}
+  palette:           {family: style,  cadence_months: 12, required_facets: [use_for, audience, license_class], extra_fields: []}
+  symbol-set:        {family: style,  cadence_months: 12, required_facets: [use_for, audience, license_class], extra_fields: []}
+  template:          {family: style,  cadence_months: 12, required_facets: [use_for, audience, license_class], extra_fields: []}
+  map-type:          {family: method, cadence_months: 12, required_facets: [use_for], extra_fields: [requires, recommended]}

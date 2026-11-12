@@ -1,0 +1,89 @@
+id: ref.public-service.fi.transit.digitransit
+type: public-service
+rev: 1
+status: draft
+title: Digitransit (Finland) routing and transit APIs
+summary: Finnish public transport routing (OpenTripPlanner), stops and real-time data for HSL (Helsinki), Waltti cities and all of Finland from Digitransit,
+  with a subscription key.
+tags:
+  geography:
+  - fi
+  level:
+  - site
+  - line
+  domain:
+  - transport
+  - routing
+  use_for:
+  - site-map
+  - context-basemap
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - authoritative
+use_when:
+- Stops, routes or transit travel times in Helsinki or another Finnish city, with the person's own subscription key (map-credentials add digitransit).
+avoid_when:
+- Cost and licence are not confirmed (the terms of use were not read, 2026-11-07).
+- 'Large batches: the provider asks for 0.5 to 1 second between requests and suggests hosting the API locally for heavy use.'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: digitransit
+    kind: apikey
+    class: secret
+    host: api.digitransit.fi
+    inject:
+      header: digitransit-subscription-key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://portal-api.digitransit.fi/
+    free: true
+    limits: Rate and quota limits enforced since 31.1.2024, meant to stop misuse; no more than 10 requests a second (registration page, read 2026-11-07)
+    note: Subscribe to a product in the portal; the key is under Profile. The same name also works as a URL parameter
+  note: 'Registration page (read 2026-11-07): key as header or URL parameter named digitransit-subscription-key; production hosts api.digitransit.fi and
+    cdn.digitransit.fi. Routing paths (routing/v2/<router>/gtfs/v1, GraphQL) were not confirmed; a guessed path answered 404.'
+source:
+  publisher: Digitransit (HSL, Fintraffic, Waltti)
+  product: Digitransit APIs
+  url: https://digitransit.fi/en/developers/api-registration/
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Source: Digitransit.'
+  note: Terms of use not read; treated as restricted until they are.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): the registration and API pages read on 2026-11-07 (key name, hosts, limits); cost, licence and the routing
+      path not confirmed.'

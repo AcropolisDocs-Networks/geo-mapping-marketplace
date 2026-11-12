@@ -1,0 +1,83 @@
+id: ref.infrastructure.us.road.tiger-primary
+type: infrastructure
+rev: 1
+status: active
+title: US primary roads (Census TIGER/Line)
+summary: Interstates and other primary roads for the nation (17,500 line features), as context under data.
+tags:
+  geography:
+  - us
+  level:
+  - line
+  domain:
+  - transport
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - national
+  - regional
+  - state
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Roads give a reader the orientation to find the map's area, under thematic data or site points.
+- A site map where interstates and major roads explain access or coverage corridors.
+avoid_when:
+- The map needs street-level routing or every local road; these files hold only the major road classes.
+- The map needs road positions accurate enough for engineering or survey work.
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 36.6
+  features: 17500
+  columns:
+  - LINEARID
+  - FULLNAME
+  - RTTYP
+  - MTFCC
+source:
+  publisher: US Census Bureau
+  product: US primary roads, TIGER/Line Shapefile 2025
+  url: https://www2.census.gov/geo/tiger/TIGER2025/PRIMARYROADS/tl_2025_us_primaryroads.zip
+  file_sha256: 400453e97b9e6693dfecb7362ce7a6cf260d27050f7d84d2a024ba0710b94c07
+url_verified_on: '2026-11-02'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, TIGER/Line Shapefiles.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-05-02'
+  check:
+    kind: feature_count_and_hash
+    features: 17500
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Verified the national archive (17,500 features).

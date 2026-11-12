@@ -1,0 +1,72 @@
+id: ref.public-service.uk.weather.metoffice-datahub
+type: public-service
+rev: 1
+status: draft
+title: Met Office Weather DataHub
+summary: UK and global site-specific forecasts, observations and map images from the Met Office Weather DataHub, by product subscription with daily call
+  limits.
+tags:
+  geography:
+  - uk
+  - world
+  level:
+  - site
+  - grid
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - authoritative
+use_when:
+- UK site forecasts on a UK site or venue map, once the person holds a DataHub subscription.
+avoid_when:
+- 'Until the free plan, the key header and the terms are read: the DataHub pages need JavaScript (2026-11-07).'
+- 'Official UK warnings: those come from the Met Office warnings service, not this entry.'
+delivery:
+  mode: user-supplied
+  note: Register, choose a product (Global Spot site-specific, observations, map images), subscribe to a plan; API-call plans have daily limits that reset
+    at 00:00 UTC. Product data is GeoJSON. Key delivery and the free plan were not read.
+source:
+  publisher: Met Office
+  product: Weather DataHub
+  url: https://datahub.metoffice.gov.uk/
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: Contains Met Office data.
+  note: Met Office Weather DataHub Terms and Conditions apply to orders (not read).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): the DataHub overview read (products, daily limits at 00:00 UTC); pricing, key delivery and terms not
+      readable as text on 2026-11-07.'

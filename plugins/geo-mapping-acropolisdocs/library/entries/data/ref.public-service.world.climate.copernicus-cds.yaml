@@ -1,0 +1,155 @@
+id: ref.public-service.world.climate.copernicus-cds
+type: public-service
+rev: 3
+status: active
+title: Copernicus Climate Data Store (ERA5 and other climate datasets)
+summary: Reanalysis, climate projections and other Copernicus climate datasets through the CDS API, with the person's own personal access token; for climate
+  and weather context behind a map. Files, not features.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Climate or reanalysis context for a market map (ERA5 temperature, precipitation, wind), with the person's own token (map-credentials add copernicus-cds).
+avoid_when:
+- 'Parallel or batch requests: ECMWF asks for requests one at a time and may disable an account that repeats invalid requests.'
+- 'A map that needs features: the CDS delivers gridded NetCDF or GRIB, read into GeoTIFF rasters (climate_read).'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: copernicus-cds
+    kind: apikey
+    class: secret
+    host: cds.climate.copernicus.eu
+    inject:
+      header: PRIVATE-TOKEN
+    reject:
+      status:
+      - 401
+    probe: https://cds.climate.copernicus.eu/api/profiles/v1/account/
+    signup_url: https://cds.climate.copernicus.eu/how-to-api
+    free: true
+    limits: No numeric quota is published. "Submit requests sequentially, rather than in parallel or in large batches" and "Repeated submission of invalid
+      requests may result in your account being disabled" (ECMWF, Data Stores Service protection measures, 22 October 2026; read 2026-11-10).
+    note: 'A personal access token, shown on the how-to-api page after login, sent as the PRIVATE-TOKEN header. The account endpoint answered 401 with
+      no token ("No authentication data provided") and with a wrong one ("profiles.auth.authentication_failed"), measured 2026-11-10; the API base
+      answers 202 to anyone and is not a test address. The older UID:APIKEY style is not covered. Only 401 means a wrong token: CDS also answers 403
+      when the account has not accepted a dataset''s licence (owner''s live check, 2026-11-10), which is reported as MAP-CDS-003 and leaves the token
+      alone.'
+  request: https://cds.climate.copernicus.eu/api/profiles/v1/account/
+  requests:
+    account: https://cds.climate.copernicus.eu/api/profiles/v1/account/
+    licences: https://cds.climate.copernicus.eu/api/profiles/v1/account/licences
+    processes: https://cds.climate.copernicus.eu/api/retrieve/v1/processes
+    messages: https://cds.climate.copernicus.eu/api/catalogue/v1/messages
+  note: 'Retrieval is a job: constraints, costing, execution (POST), then status and results (GET), all declared above (1.3.0, R1-REQ); cds_retrieve.py
+    runs it one job at a time and reads the NetCDF or GRIB result into GeoTIFFs. Accepting a dataset''s licence is never automated.'
+  api:
+    host: cds.climate.copernicus.eu
+    requests:
+    - method: GET
+      path: /api/profiles/v1/account/
+    - method: GET
+      path: /api/profiles/v1/account/licences
+    - method: GET
+      path: /api/retrieve/v1/processes
+    - method: GET
+      path: /api/retrieve/v1/processes/{dataset}
+    - method: GET
+      path: /api/catalogue/v1/messages
+    - method: GET
+      path: /api/catalogue/v1/collections/{dataset}
+    - method: GET
+      path: /api/retrieve/v1/jobs/{id}
+    - method: GET
+      path: /api/retrieve/v1/jobs/{id}/results
+    - method: POST
+      path: /api/retrieve/v1/processes/{dataset}/constraints
+      body: json
+      idempotent: true
+      changes: false
+    - method: POST
+      path: /api/retrieve/v1/processes/{dataset}/costing
+      body: json
+      idempotent: true
+      changes: false
+    - method: POST
+      path: /api/retrieve/v1/processes/{dataset}/execution
+      body: json
+      changes: false
+    - method: POST
+      path: /api/retrieve/v1/jobs/delete
+      body: json
+      changes: true
+      note: cancel a job; asked for each time
+    limits:
+      sequential: true
+    download_hosts:
+    - object-store.os-api.cci2.ecmwf.int
+    note: download_hosts measured from the PC in the 1.3.0 live check (2026-11-10, one small ERA5-Land monthly request; cds_fetch named the host). The
+      dataset catalogue (/api/catalogue/v1/collections/{dataset}) also links its forms from that host. The token is never sent there.
+  tool: cds_retrieve
+source:
+  publisher: ECMWF for the Copernicus Climate Change Service (C3S)
+  product: Climate Data Store API
+  url: https://cds.climate.copernicus.eu/how-to-api
+url_verified_on: '2026-11-10'
+vintage:
+  current: live
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: Generated using Copernicus Climate Change Service information.
+  note: Licence per dataset, accepted by hand on the dataset page before any download ("One must agree to the Terms of Use of a dataset before downloading
+    any data out of it", how-to-api, read 2026-11-10). ECMWF's acknowledgement page gives "[Generated using/Contains modified] Copernicus Climate Change
+    Service information [year]" with the disclaimer "Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus
+    information or data it contains"; use "Contains modified" for processed data, and add the year of the data after "information". Read the dataset's own
+    licence and its References citation before a map is published.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-02-10'
+  changelog:
+  - rev: 1
+    date: '2026-11-10'
+    note: 'Draft (release 1.2.0): host, header and base address from the CDS how-to-api page and API definitions; the account endpoint measured as the test
+      address (401 with no token and with a wrong token, from the owner''s PC); limits from ECMWF''s protection-measures announcement (22 October 2026);
+      credit wording from ECMWF''s acknowledgement page. Retrieval of datasets is not built.'
+  - rev: 2
+    date: '2026-11-10'
+    note: 'Active (1.3.0, R1-CDS): the retrieve API''s requests declared in delivery.api (constraints, costing and execution by POST; status, results, licences
+      by GET; job cancel as a change asked for each time); the GET-only avoid_when removed. download_hosts left empty until the live check measures it.'
+  - rev: 3
+    date: '2026-11-10'
+    note: 'Release 1.3.1 (owner''s live check of 1.3.0): download_hosts recorded (object-store.os-api.cci2.ecmwf.int, the host cds_fetch named); the
+      catalogue collection GET declared, where a dataset names its licences (links with rel "license"); a 403 is a licence not accepted, not a wrong
+      token (reject.status stays 401 and is now honoured as declared).'

@@ -1,0 +1,38 @@
+id: ref.template.portrait-social
+type: template
+rev: 1
+status: active
+title: 'Template: portrait social image'
+summary: The 4:5 portrait social image sheet (203.2 x 254 mm, 1080 x 1350 px) with title, map frame and footer regions.
+tags:
+  use_for:
+  - site-map
+  - choropleth
+  avoid_for: []
+  audience:
+  - any
+  license_class:
+  - open
+use_when:
+- The map is for a social deliverable at 4:5 portrait social size, for a tall subject (a city, a tall state, a corridor).
+- The layout rules (title band, footer, legend corners) should be applied as designed.
+avoid_when:
+- The deliverable needs a different sheet size; choose the matching template.
+- The type must stay legible at a different viewing distance than this template assumes.
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-11-10'
+  changelog:
+  - rev: 1
+    date: '2026-11-10'
+    note: '1.2.0: the 4:5 portrait social sheet (Days 3, 4 and 9 of the 30DayMapChallenge: tall subjects filled a third to a half of the square sheet).'
+template:
+  file: templates/portrait-social.yaml
+  kind: social
+  size: 203.2 x 254 mm

@@ -1,0 +1,40 @@
+id: ref.symbol-set.basic-shapes
+type: symbol-set
+rev: 1
+status: active
+title: Basic point shapes (circle, square, triangle, diamond, cross)
+summary: Five geometric point symbols that read in grayscale, so shape and color together carry a category.
+tags:
+  use_for:
+  - site-map
+  - proportional-symbol
+  avoid_for: []
+  audience:
+  - any
+  license_class:
+  - open
+use_when:
+- Sites differ by type and the reader must tell them apart without color alone.
+- Symbols must stay legible at small sizes in print.
+avoid_when:
+- The client requires its own icon set; supply it as a user asset.
+- More than five types; group them.
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Seed entry for a built-in capability; checked by the render tests.
+symbols:
+- circle
+- square
+- triangle
+- diamond
+- cross

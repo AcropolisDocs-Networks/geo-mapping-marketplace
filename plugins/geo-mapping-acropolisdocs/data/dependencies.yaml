@@ -1,0 +1,43 @@
+# `pip install -r requirements.txt` installs every row except the optional extras (mapclassify, contextily, cartopy, rasterio, contourpy, h3, duckdb, imageio-ffmpeg, scipy, playwright, psycopg, uharfbuzz), which are in requirements-optional.txt.
+# Not pip packages, so not rows: `qgis` (PyQGIS) is imported only by qgis_build_layout.py and qgis_project.py's optional check, which run inside
+# QGIS's own Python (qgis_process), never the plugin's; tests/test_dependencies.py lists it as provided by QGIS.
+# GTFS (0.10.0) needs no row of its own: gtfs.py uses the standard library with geopandas and shapely, and decodes GTFS-Realtime itself.
+# Runtime dependencies reported by map-doctor (spec 5). level: HARD = no map without it; SOFT = a quietly worse result.
+# min: the oldest version that works; an older one is reported TOO OLD, counts as missing and `--fix` upgrades it.
+# `measured` records what the 2026-11-02 cloud-workspace spike found (Appendix H, W2).
+- {name: pyogrio,    import: pyogrio,    pip: pyogrio,    level: HARD, why: "GDAL engine; the ogr2ogr equivalent for every vector format"}
+- {name: geopandas,  import: geopandas,  pip: geopandas,  level: HARD, why: "dataframes over geometry; GeoParquet via pyarrow"}
+- {name: shapely,    import: shapely,    pip: shapely,    level: HARD, why: "geometry operations"}
+- {name: pyproj,     import: pyproj,     pip: pyproj,     level: HARD, why: "CRS transforms and the crs-engine"}
+- {name: matplotlib, import: matplotlib, pip: matplotlib, level: HARD, why: "static rendering"}
+- {name: jsonschema, import: jsonschema, pip: jsonschema, level: HARD, min: "4.0", why: "MapSpec and manifest validation (Draft 2020-12; 3.x blocks every build)"}
+- {name: pyyaml,     import: yaml,       pip: pyyaml,     level: HARD, why: "MapSpec and library files"}
+- {name: pyarrow,    import: pyarrow,    pip: pyarrow,    level: SOFT, why: "GeoParquet read and write (the GDAL wheel has no Parquet driver)"}
+- {name: lxml,       import: lxml,       pip: lxml,       level: SOFT, why: "SVG composition and safe XML parsing; the QML, SLD and QGIS project of the styled data outputs and KML styles read back"}
+- {name: httpx,      import: httpx,      pip: httpx,      level: SOFT, why: "the bundled OGC MCP server and service clients"}
+- {name: mcp,        import: mcp,        pip: mcp,        level: SOFT, why: "the bundled OGC MCP server"}
+- {name: pandas,     import: pandas,     pip: pandas,     level: HARD, why: "attribute tables, joins and the data checks (installed with geopandas, imported directly)"}
+- {name: numpy,      import: numpy,      pip: numpy,      level: HARD, why: "classification, label placement and raster checks"}
+- {name: pillow,     import: PIL,        pip: pillow,     level: HARD, why: "PNG output, DPI and metadata chunks"}
+- {name: weasyprint, import: weasyprint, pip: weasyprint, level: SOFT, why: "PDF output (vector, Inter embedded); same renderer as acropolisdocs, loaded through scripts/pdf_stack.py"}
+- {name: pikepdf,    import: pikepdf,    pip: pikepdf,    level: SOFT, why: "WRITES PDF structure: Info dictionary, XMP and the hidden accreditation, atlas page merge, GeoPDF"}
+- {name: pypdf,      import: pypdf,      pip: pypdf,      level: SOFT, why: "reads a PDF back for the output lint (pages, size, fonts, images); same read-back library as acropolisdocs"}
+- {name: pypdfium2,  import: pypdfium2,  pip: pypdfium2,  level: SOFT, why: "draws the PDF page to pixels for the PNG (then pdftoppm, then Chromium); same page rasterizer as acropolisdocs"}
+- {name: fonttools,  import: fontTools,  pip: fonttools,  level: SOFT, why: "exact Inter text measurement for labels, legends and titles (without it widths are estimated)"}
+- {name: brotli,     import: brotli,     pip: brotli,     level: SOFT, why: "reads the bundled Inter woff2 for text measurement"}
+- {name: pydyf,      import: pydyf,      pip: pydyf,      level: SOFT, why: "the PDF fast path in scripts/pdf_stack.py writes WeasyPrint's content streams directly (installed with weasyprint, imported directly)"}
+- {name: playwright, import: playwright, pip: playwright, level: SOFT, why: "the last PNG route (Chromium) and the in-browser web-map checks; after pip, `playwright install chromium` fetches the browser once"}
+- {name: topojson,   import: topojson,   pip: topojson,   level: SOFT, why: "TopoJSON write (GDAL reads it but cannot write it)"}
+- {name: mapclassify, import: mapclassify, pip: mapclassify, level: SOFT, why: "optional cross-check only; the plugin classifies quantile, equal interval, Jenks, standard deviation and manual itself"}
+- {name: contextily, import: contextily, pip: contextily, level: SOFT, why: "tile compositing on T1 and T2"}
+- {name: cartopy,    import: cartopy,    pip: cartopy,    level: SOFT, why: "projection-aware rendering"}
+- {name: rasterio,   import: rasterio,   pip: rasterio,   level: SOFT, why: "raster inputs: GeoTIFF and COG windows, zonal statistics, hillshade, DEM fetch (raster_io, terrain, terrain_fetch); rasterio 1.4+ with GDAL 3.6+"}
+- {name: contourpy,  import: contourpy,  pip: contourpy,  level: SOFT, why: "contour lines from a DEM (raster_io.contours); installed with matplotlib, imported directly"}
+- {name: scipy,      import: scipy,      pip: scipy,      level: SOFT, why: "the terrain tiles of a 3D web page (with rasterio); faster cluster baking for large point layers on the MapLibre page (shapely's index does it without); without it a 3D page is drawn on flat ground"}
+- {name: h3,         import: h3,         pip: h3,         level: SOFT, why: "hex aggregation: role hexbin (and heat), geo_ops hexbin and grid shape hex, geo-analyze hexbin; H3 4.x"}
+- {name: openpyxl,    import: openpyxl,   pip: openpyxl,    level: SOFT, why: "XLSX tables for joins, site lists and trackers (table_join)"}
+- {name: python-pptx, import: pptx,       pip: python-pptx, level: SOFT, why: "slide output through map-pptx-adapter"}
+- {name: duckdb,      import: duckdb,     pip: duckdb,      level: SOFT, why: "large tables (M16): where filters on CSV and GeoParquet reads, big CSV tables for joins, grid sums; point-in-polygon pairs with its spatial extension, which is loaded only from this machine (INSTALL spatial once, or pip install duckdb-extension-spatial), never fetched at render time"}
+- {name: imageio-ffmpeg, import: imageio_ffmpeg, pip: imageio-ffmpeg, level: SOFT, why: "the MP4 of an animated atlas-by-time export (map_export --animate) and its read-back; a system ffmpeg on the PATH also works; without either only the GIF is written"}
+- {name: uharfbuzz,  import: uharfbuzz,  pip: uharfbuzz,   level: SOFT, why: "outlined text shaped as the live text is (1.0.0): Inter's ligatures and contextual forms (\"->\" as an arrow); without it outlined text keeps kerning and tabular figures only"}
+- {name: psycopg,    import: psycopg,    pip: "psycopg[binary]", level: SOFT, why: "live read-only connections to the person's own PostGIS database (postgis_client, 0.15.0); without it postgis_tables and postgis_fetch say how to install it"}

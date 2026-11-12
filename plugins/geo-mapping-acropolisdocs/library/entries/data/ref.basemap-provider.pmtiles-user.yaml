@@ -1,0 +1,79 @@
+id: ref.basemap-provider.pmtiles-user
+type: basemap-provider
+rev: 3
+status: active
+title: PMTiles basemap (your own file)
+summary: 'A vector or raster basemap from a PMTiles file you supply or host: the cleanest licensing position for a tiled basemap.'
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T1
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- The client wants a tiled basemap without depending on a public tile server.
+- 'A web map page that serves its own tiles from a file: a vector PMTiles basemap (basemap.source: pmtiles:FILE) is drawn by the MapLibre
+  page, embedded in it or served beside it.'
+avoid_when:
+- No PMTiles file is available; the bundled basemap needs no file at all.
+- The file's license is unknown; record it before the map is shared.
+delivery:
+  mode: user-supplied
+source:
+  publisher: You (or the file's publisher)
+  product: PMTiles archive
+license:
+  class: share-alike
+  attribution_text: © OpenStreetMap contributors
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  note: 'OpenStreetMap-derived tiles carry the ODbL: attribute, and share a derived database under the same license. Check the license of the
+    specific file you supply.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-05'
+  verify_by: '2027-11-02'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Seed: describes a user-supplied file; the plugin holds no tiles.'
+  - rev: 2
+    date: '2026-11-05'
+    note: 'M14: the MapLibre web page reads a vector PMTiles file named by basemap.source: pmtiles:FILE (embedded, or beside the page). requires_key: false removed (credentials, 0.6.0): a provider that needs no key declares no requires_credential.'
+  - rev: 3
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+provider:
+  attribution_html: © OpenStreetMap contributors
+  max_zoom: 19
+  tile_size: 256
+  bulk_ok: true
+  cache_ok: true
+  print_ok: true
+url_verified_on: '2026-11-09'
+attribution:
+  corner: © OpenStreetMap contributors
+  links:
+  - text: © OpenStreetMap contributors
+    href: https://www.openstreetmap.org/copyright
+  required_on_map: true
+  collapse: after_interaction
+  export:
+    text: © OpenStreetMap contributors (openstreetmap.org/copyright)
+  note: The file's own licence applies; this is the credit for an OpenStreetMap-derived archive.
+  terms_read: '2026-11-09'

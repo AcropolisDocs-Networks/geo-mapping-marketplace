@@ -1,0 +1,71 @@
+id: ref.public-service.ca-bc.transit.translink
+type: public-service
+rev: 1
+status: draft
+title: TransLink (Metro Vancouver) GTFS and GTFS-realtime
+summary: Metro Vancouver bus, SkyTrain, SeaBus and West Coast Express schedules (GTFS) and real-time feeds from TransLink's open API, with a free key.
+tags:
+  geography:
+  - ca-bc
+  level:
+  - site
+  - line
+  domain:
+  - transport
+  use_for:
+  - site-map
+  - context-basemap
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - authoritative
+use_when:
+- A Vancouver SkyTrain or bus map from the GTFS file, once the person has downloaded it or registered for a key.
+avoid_when:
+- 'Key delivery is unconfirmed: the GTFS and GTFS-realtime pages give no address or parameter in their text (2026-11-07).'
+- 'The older RTTI API: TransLink says it is deprecated.'
+delivery:
+  mode: user-supplied
+  format: GTFS (zip); GTFS-realtime (protobuf)
+  note: Register at translink.ca (app-developer-resources/register) for a key; static data at app-developer-resources/gtfs/gtfs-data and real-time at /gtfs/gtfs-realtime.
+    Use is under TransLink's Open API Terms of Use (not read).
+source:
+  publisher: TransLink
+  product: Open API (GTFS static and real-time)
+  url: https://www.translink.ca/about-us/doing-business-with-translink/app-developer-resources
+url_verified_on: '2026-11-07'
+vintage:
+  current: current GTFS
+  cadence: irregular
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Source: TransLink.'
+  note: Terms of Use (app-developer-resources/terms-of-use) not read; treated as restricted until they are.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): the developer resources page read on 2026-11-07 (key by registration, RTTI deprecated, terms linked);
+      the static URL and key delivery not stated.'

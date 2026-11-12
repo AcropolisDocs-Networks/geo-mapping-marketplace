@@ -1,0 +1,107 @@
+id: ref.boundary.us.urban-area.cb2020-500k
+type: boundary
+rev: 1
+status: active
+title: US urban areas (2020 Census), 1:500,000 (cartographic boundary)
+summary: The 2,645 urban areas defined after the 2020 Census as simplified polygons, for an urban/rural split on a market or coverage map.
+tags:
+  geography:
+  - us
+  level:
+  - place
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - context-basemap
+  - normalization
+  avoid_for:
+  - parcel-level
+  - engineering-grade
+  - legal-boundary
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Splitting sites, towers or availability rows into urban and rural before a rollup, using the 2020 urban area definitions.
+- A quiet urban-footprint layer under a state or regional map.
+avoid_when:
+- 'The map needs city limits or names for labels: urban areas cross municipal boundaries; use places instead.'
+- 'A later vintage is wanted: urban areas are defined once per decennial census, so 2020 is current until the 2030 definitions.'
+pairs_with:
+- ref.boundary.us.county.cb500k
+distinct_from:
+- id: ref.boundary.us.place.cb500k
+  why: places are legal cities and CDPs; urban areas are density footprints
+- id: ref.boundary.us.aiannh.cb500k
+  why: tribal areas, not urban footprints
+join:
+  key: GEOID20
+  type: string
+  width: 5
+  note: Five-digit urban area code (UACE20) as text; NAME20 holds the name, LSAD20 is 75 for every 2020 urban area.
+  pattern: ^\d{5}$
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 9.01
+  features: 2645
+  columns:
+  - UACE20
+  - AFFGEOID20
+  - GEOID20
+  - NAME20
+  - NAMELSAD20
+  - LSAD20
+  - ALAND20
+  - AWATER20
+source:
+  publisher: US Census Bureau
+  product: 2020 Cartographic Boundary File, Urban Areas, 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_us_ua20_500k.zip
+  file_sha256: 3637e86feb2b1b37b7a67eaff16dcc9ef17f779e9be513279831906fc195035d
+url_verified_on: '2026-11-04'
+vintage:
+  current: 2020 (decennial definition)
+  cadence: static
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: feature_count_and_hash
+    features: 2645
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the 2020 archive (2,645 features, 9,445,125 bytes, SHA-256 recorded). The 2025 cartographic set carries no urban area file (checked the
+      GENZ2025 directory listing), so the decennial file is the current one.

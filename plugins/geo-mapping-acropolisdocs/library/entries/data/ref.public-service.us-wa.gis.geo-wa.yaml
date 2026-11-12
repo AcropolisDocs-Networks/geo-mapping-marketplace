@@ -1,0 +1,92 @@
+id: ref.public-service.us-wa.gis.geo-wa
+type: public-service
+rev: 1
+status: active
+title: Washington State Geospatial Open Data Portal (geo.wa.gov)
+summary: 'Washington''s geospatial open data portal (WA Geoservices, orgId jsIt88o09Q0r1j8h): ArcGIS Hub discovery and hosted feature services (counties,
+  parcels, emergency response boundaries, basemap).'
+tags:
+  geography:
+  - us-wa
+  level:
+  - county
+  - place
+  - line
+  - site
+  domain:
+  - general
+  - transport
+  - program
+  use_for:
+  - context-basemap
+  - join-key
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- Washington counties, parcels and emergency boundaries for a Puget Sound or statewide market map.
+- Discovering a state layer by name on the hub, then pulling it through the shipped profile with geo-service-explore and geo-service-query.
+avoid_when:
+- 'A layer''s licence has not been read: state portals mix public-domain, CC BY and agency-specific terms, so each item''s terms are recorded in the capture
+  before external use.'
+- 'The need is national: use the Census, TIGERweb or federal entries; state portals cover their state only.'
+pairs_with:
+- ref.boundary.us.county.cb500k
+delivery:
+  mode: service
+  profile: wa-geoservices
+  protocol: arcgis
+  layer: (choose a service and layer with geo-service-explore)
+  max_record_count: 2000
+  columns:
+  - per layer
+  request: service_query.py fetch --profile wa-geoservices --layer (choose a service and layer with geo-service-explore) --protocol arcgis
+  note: 'REST root https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services (verified 2026-11-04). Discovery hub: https://geo.wa.gov. Layers are
+    chosen per map; nothing is pulled until a layer is named.'
+  hub: https://geo.wa.gov
+source:
+  publisher: Washington State Geospatial Open Data Portal
+  product: State GIS portal (ArcGIS Hub and REST services)
+  url: https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services
+url_verified_on: '2026-11-04'
+vintage:
+  current: live portal
+  cadence: irregular
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: Washington State Geospatial Open Data Portal.'
+  note: 'Portal-level: most layers are open government data, but the licence is per layer and is read from the item before external use.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-02-04'
+  check:
+    kind: http_get
+    url: https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the REST root (https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services) and the discovery hub on 2026-11-04; served through
+      the shipped wa-geoservices profile.

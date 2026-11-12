@@ -1,0 +1,28 @@
+# National CRS presets (1.5.0, R3-CRS). `crs`: the country's reference grid (conformal unless noted); `thematic`: an equal-area preset for
+# values per area where the country has one (else the regional rule applies); `utm`: the national datum's UTM zone by zone number.
+# Every code is checked with pyproj by tests/test_global_150.py: it exists and its area of use holds the country's centroid.
+schema: national-crs/1
+regions:
+  europe: {crs: EPSG:3035, bbox: [-25.0, 34.0, 45.0, 72.0], note: ETRS89-extended / LAEA Europe, equal-area}
+countries:
+  GB: {crs: EPSG:27700, name: British National Grid}
+  IE: {crs: EPSG:2157, name: Irish Transverse Mercator}
+  FR: {crs: EPSG:2154, name: Lambert-93}
+  NL: {crs: EPSG:28992, name: Amersfoort / RD New}
+  BE: {crs: EPSG:31370, name: Belgian Lambert 72}
+  CH: {crs: EPSG:2056, name: CH1903+ / LV95}
+  PT: {crs: EPSG:3763, name: ETRS89 / Portugal TM06}
+  GR: {crs: EPSG:2100, name: GGRS87 / Greek Grid}
+  SE: {crs: EPSG:3006, name: SWEREF99 TM}
+  PL: {crs: EPSG:2180, name: ETRF2000-PL / CS92}
+  CZ: {crs: EPSG:5514, name: S-JTSK / Krovak East North}
+  DE: {utm: {31: EPSG:25831, 32: EPSG:25832, 33: EPSG:25833}, thematic: EPSG:3035, name: ETRS89 / UTM}
+  ES: {utm: {29: EPSG:25829, 30: EPSG:25830, 31: EPSG:25831}, thematic: EPSG:3035, name: ETRS89 / UTM}
+  CA: {crs: EPSG:3347, name: NAD83 / Statistics Canada Lambert}
+  MX: {crs: EPSG:6372, name: Mexico ITRF2008 / LCC}
+  CO: {crs: EPSG:9377, name: MAGNA-SIRGAS 2018 / Origen-Nacional}
+  BR: {crs: EPSG:5880, name: SIRGAS 2000 / Brazil Polyconic}
+  AU: {crs: EPSG:9473, name: GDA2020 / Australian Albers, equal_area: true}
+  NZ: {crs: EPSG:2193, name: NZGD2000 / New Zealand Transverse Mercator 2000}
+  JP: {utm: {51: EPSG:6688, 52: EPSG:6689, 53: EPSG:6690, 54: EPSG:6691, 55: EPSG:6692}, name: JGD2011 / UTM}
+  IN: {crs: EPSG:7755, name: WGS 84 / India NSF LCC}

@@ -1,0 +1,173 @@
+# Map services and tile formats the plugin reads and writes (1.1.2). The guide's Reference tab draws its "Map services and tile formats"
+# table from this file, and tests/test_services_registry.py checks every row against the code that does the work, so the table cannot
+# claim what the plugin does not do. Write in plain words; "-" means the plugin does not use the type that way.
+#
+#   name       what people call it          forms      versions, address shapes or file kinds
+#   kind       service | tiles               print      what a printed map (PDF, PNG, SVG) does with it
+#   web        what a web map page does      data       finding, checking and downloading (the tools that do it)
+#   note       one line worth knowing        checks     code anchors the test verifies: tool (an MCP tool), const (script:NAME contains VALUE),
+#                                                       text (script contains the words)
+
+services:
+  - name: WMS
+    kind: service
+    forms: 1.1.1 and 1.3.0; WMS-T time
+    print: A picture layer (GetMap, tiled and cached, so a rebuild is offline), with a time when the layer has one
+    web: Drawn live as tiles by the reader's browser; a click asks GetFeatureInfo (the service must allow CORS)
+    data: Capabilities, the legend (GetLegendGraphic), what is at a point (GetFeatureInfo), a small preview
+    note: Pictures, not features; for the features themselves use the same server's WFS
+    checks:
+      - {tool: ogc_capabilities}
+      - {tool: ogc_get_legend}
+      - {tool: ogc_feature_info}
+      - {tool: ogc_preview_map}
+      - {const: "webmap_live:PROTOCOLS", value: wms}
+      - {text: map_raster, value: "GetMap"}
+
+  - name: WMTS
+    kind: service
+    forms: 1.0.0, key-value or REST tile addresses
+    print: "-"
+    web: Drawn live from its tile address
+    data: Capabilities (layers, tile matrix sets, styles); one tile read to check it
+    note: For print, use the same layer through WMS or as an XYZ address
+    checks:
+      - {tool: ogc_tile_probe}
+      - {const: "webmap_live:PROTOCOLS", value: wmts}
+      - {text: ogc_client, value: "WMTS"}
+
+  - name: WFS
+    kind: service
+    forms: 1.1.0 and 2.0.0; CQL filters
+    print: Its features, once downloaded, are an ordinary map layer
+    web: Downloaded features go into the page; or a CORS-enabled WFS is read live once for the page's area (up to 10,000 features)
+    data: Layers and fields (DescribeFeatureType), a count before downloading, paged downloads to GeoPackage, several layers in one run, refresh with a change report
+    note: Downloads are capped and ordered, and a short page is never taken for the end
+    checks:
+      - {tool: ogc_describe_layer}
+      - {tool: ogc_hits}
+      - {tool: ogc_fetch_features}
+      - {tool: service_harvest}
+      - {tool: service_refresh}
+      - {const: "webmap_live:PROTOCOLS", value: wfs}
+      - {const: "service_query:PROTOCOLS", value: wfs}
+
+  - name: OGC API - Features
+    kind: service
+    forms: Part 1 (/collections, /items)
+    print: Its features, once downloaded, are an ordinary map layer
+    web: Downloaded features go into the page
+    data: Collections, a sample of the fields, the number that match, paged downloads to GeoPackage
+    note: The modern, JSON successor to WFS
+    checks:
+      - {tool: ogc_fetch_features}
+      - {const: "service_query:PROTOCOLS", value: ogcapi}
+
+  - name: WCS
+    kind: service
+    forms: 2.0 GetCoverage
+    print: The downloaded grid is a raster layer (elevation, land cover)
+    web: The downloaded grid is drawn as a picture layer
+    data: The cells inside a box, written as a GeoTIFF, with the size held to a cap
+    note: For grids such as elevation models and land cover
+    checks:
+      - {tool: ogc_fetch_coverage}
+
+  - name: GeoServer
+    kind: service
+    forms: Its OGC endpoints (WMS, WMTS, WFS, WCS, OGC API - Features) and its REST interface
+    print: As WMS (pictures) or WFS (features), above
+    web: As WMS, WMTS or WFS live layers, or downloaded features, above
+    data: Read-only REST discovery (workspaces, layers, data stores, feature types, styles, layer groups); its SLD styles taken over onto your layer; a login kept as your own credential
+    note: The plugin only reads; it never changes anything on the server
+    checks:
+      - {tool: ogc_geoserver_rest}
+      - {text: sld_import, value: "SLD"}
+
+  - name: ArcGIS REST
+    kind: service
+    forms: FeatureServer, MapServer, ImageServer
+    print: Features once downloaded; a MapServer or ImageServer export as a picture layer
+    web: Downloaded features go into the page
+    data: Service and layer info, counts, paged queries to GeoPackage, the legend, a preview export
+    note: Honours the server's record limit and paging, so nothing is cut off silently
+    checks:
+      - {tool: ogc_capabilities}
+      - {const: "service_query:PROTOCOLS", value: arcgis}
+      - {text: map_raster, value: "/imageserver"}
+
+  - name: PostGIS
+    kind: service
+    forms: Your own database, read-only connection
+    print: A table, once read, is an ordinary map layer
+    web: A table, once read, goes into the page
+    data: Tables with geometry, their columns and counts; rows read into a GeoPackage
+    note: The login is your own registered credential and is never written into a map
+    checks:
+      - {tool: postgis_tables}
+      - {tool: postgis_fetch}
+
+  - name: Data catalogs and STAC
+    kind: service
+    forms: data.gov, ArcGIS Hub, Socrata, a STAC API
+    print: "-"
+    web: "-"
+    data: Searches the catalogs (the plugin's own library first) and turns a hit into a record to check
+    note: Finds data; the service it points to is then read as above
+    checks:
+      - {tool: catalog_search}
+
+  - name: XYZ and TMS raster tiles
+    kind: tiles
+    forms: "{z}/{x}/{y} addresses; TMS row order"
+    print: A background from a handful of tiles of a provider the library allows, prepared once so the build is offline
+    web: A background or a live layer
+    data: One tile read to check its size, type and cache rules
+    note: Only providers whose terms the library has read; Google and Bing are refused
+    checks:
+      - {tool: ogc_tile_probe}
+      - {const: "webmap_live:PROTOCOLS", value: xyz}
+      - {text: basemap_render, value: "xyz|tms"}
+
+  - name: Vector tiles (MVT)
+    kind: tiles
+    forms: Mapbox Vector Tiles, with TileJSON
+    print: "-"
+    web: Drawn live (MapLibre pages); a vector background
+    data: The source layers, their fields and zooms, read from a tile or its TileJSON
+    note: Written by the plugin inside PMTiles and MBTiles files, below
+    checks:
+      - {tool: ogc_tile_probe}
+      - {const: "webmap_live:PROTOCOLS", value: mvt}
+
+  - name: PMTiles
+    kind: tiles
+    forms: One-file tile archive (vector)
+    print: "-"
+    web: Large layers go into the page as PMTiles; your own PMTiles file as a background
+    data: Writes your layers as one PMTiles file, read back to check it
+    note: One file that a web server or storage bucket can serve without a tile server
+    checks:
+      - {text: tiles_out, value: "write_pmtiles"}
+      - {text: webmap, value: "PMTiles"}
+
+  - name: MBTiles
+    kind: tiles
+    forms: SQLite tile file (raster or vector)
+    print: Your own raster MBTiles file as a background
+    web: "-"
+    data: Writes your layers as vector MBTiles, read back to check it
+    note: Tiles you supply need no provider terms, only the credit you give
+    checks:
+      - {text: tiles_out, value: "write_mbtiles"}
+      - {text: basemap_render, value: "mbtiles:FILE"}
+
+  - name: Tile folder
+    kind: tiles
+    forms: A folder of z/x/y image files
+    print: A background from tiles you staged
+    web: "-"
+    data: "-"
+    note: For tiles exported from your own tile server or GIS
+    checks:
+      - {text: basemap_render, value: "dir:FOLDER"}

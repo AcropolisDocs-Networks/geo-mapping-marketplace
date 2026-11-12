@@ -1,0 +1,77 @@
+id: ref.infrastructure.us.tower.microwave
+type: infrastructure
+rev: 1
+status: draft
+title: Microwave service towers (FCC ULS microwave licences; HIFLD layer withdrawn)
+summary: Licensed microwave service towers from FCC ULS, formerly served as a HIFLD Open layer; the publisher's copy is withdrawn and the FCC download refuses
+  automated requests, so the person supplies the ULS file.
+tags:
+  geography:
+  - us
+  level:
+  - site
+  domain:
+  - telecom
+  use_for:
+  - site-map
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A context map of microwave service towers in a market, once the ULS l_micro.zip tables are supplied (LO table for locations).
+avoid_when:
+- 'Nothing is verified from the build environment: the FCC download answered HTTP 403 and the HIFLD Open layer is withdrawn; supply the file before drawing
+  it.'
+- 'Positions must be exact: filed coordinates are as submitted.'
+pairs_with:
+- ref.infrastructure.us.license.fcc-uls
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: zip of pipe-delimited ULS tables (LO carries locations)
+  note: 'Download l_micro.zip in a browser from data.fcc.gov/download/pub/uls/complete/ and supply it; see ref.infrastructure.us.license.fcc-uls for the
+    table layout. The HIFLD Open feature service that carried this layer (services1.arcgis.com/Hp6G80Pky0om7QvQ) answers ''Invalid URL'' for it (2026-11-04):
+    the layer was withdrawn from HIFLD Open. Third-party copies exist on ArcGIS Online (state agencies, universities) but none from the publisher, so nothing
+    is recorded as a source.'
+source:
+  publisher: FCC (ULS); DHS HIFLD layer withdrawn
+  product: Microwave Service Towers
+vintage:
+  current: weekly ULS complete file
+  cadence: monthly
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: FCC Universal Licensing System.'
+  note: Public domain; the download host refuses automated requests.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-05-04'
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: The FCC web hosts (fcc.gov, data.fcc.gov, broadbandmap.fcc.gov) refuse automated requests from the build environment (HTTP 403 on 2026-11-04),
+      and The HIFLD Open feature service that carried this layer (services1.arcgis.com/Hp6G80Pky0om7QvQ) answers ''Invalid URL'' for it (2026-11-04): the
+      layer was withdrawn from HIFLD Open. Third-party copies exist on ArcGIS Online (state agencies, universities) but none from the publisher, so nothing
+      is recorded as a source.'

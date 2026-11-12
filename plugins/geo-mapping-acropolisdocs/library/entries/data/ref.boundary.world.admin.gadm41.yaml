@@ -1,0 +1,102 @@
+id: ref.boundary.world.admin.gadm41
+type: boundary
+rev: 1
+status: active
+title: GADM 4.1 (administrative areas worldwide, restricted licence)
+summary: Detailed administrative boundaries for every country at all available levels (one 1.4 GB GeoPackage, or per-country downloads) from GADM; free
+  for academic and non-commercial use, redistribution and commercial use need permission.
+tags:
+  geography:
+  - world
+  level:
+  - country
+  - state
+  - county
+  - place
+  domain:
+  - general
+  use_for:
+  - choropleth
+  - context-basemap
+  - join-key
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  detail:
+  - detailed
+  audience:
+  - internal
+  confidentiality:
+  - restricted-license
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - community
+use_when:
+- An internal international map that needs deeper administrative levels (districts, municipalities) than geoBoundaries or Natural Earth hold, from one consistent
+  source.
+- Checking a country's admin hierarchy before choosing an official national file.
+avoid_when:
+- 'The map goes to a client or is published: GADM''s licence (gadm.org/license.html, read 2026-11-04) forbids redistribution and commercial use without
+  permission.'
+- 'A United States, Canadian or Mexican map for a client: the national files are official and open.'
+distinct_from:
+- id: ref.boundary.world.country.geoboundaries
+  why: open per-country licences
+- id: ref.boundary.world.state.ne10
+  why: public domain, generalized
+- id: ref.boundary.world.division.overture
+  why: ODbL, monthly
+- id: ref.boundary.world.country.ne110
+  why: bundled generalized countries
+- id: ref.boundary.world.state.ne50
+  why: bundled generalized admin-1
+join:
+  key: GID_1
+  type: string
+  note: GADM ids GID_0 (ISO3), GID_1, GID_2 and so on; NAME_1, NAME_2; HASC_1 carries the HASC code (e.g. CA.ON).
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: GeoPackage (world, 1.4 GB) or per-country GeoPackage/Shapefile from gadm.org
+  note: Download https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip (HEAD 200, 1,466,771,821 bytes, verified 2026-11-04) or the per-country file
+    from gadm.org/download_country.html, and supply the layer for the country.
+source:
+  publisher: GADM (University of California, Davis)
+  product: GADM version 4.1
+  url: https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip
+url_verified_on: '2026-11-04'
+vintage:
+  current: 4.1 (July 2022)
+  cadence: irregular
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: true
+  external_ok: false
+  attribution_text: Boundaries from GADM (gadm.org), version 4.1.
+  note: 'gadm.org/license.html (read 2026-11-04): free for academic and other non-commercial use; redistribution and commercial use are not allowed without
+    prior permission.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_head
+    url: https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the world GeoPackage (HEAD 200, 1.47 GB; too large to download and hash here) and read the licence page on 2026-11-04. Internal, restricted-license.

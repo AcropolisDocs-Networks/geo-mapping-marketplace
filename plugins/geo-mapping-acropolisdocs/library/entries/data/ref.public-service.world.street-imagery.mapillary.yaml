@@ -1,0 +1,110 @@
+id: ref.public-service.world.street-imagery.mapillary
+type: public-service
+rev: 4
+status: active
+title: Mapillary street-level imagery (Graph API)
+summary: Crowd-sourced street-level photos worldwide with their capture points and directions, from the Mapillary Graph API with a free client token, for
+  site surveys and checking what is at a location.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - imagery
+  - telecom
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - metro
+  - local
+  - site
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- Where street-level photos exist around candidate sites, poles or venues, as capture points on a desk-survey map, with the person's own client token registered
+  (map-credentials add mapillary).
+avoid_when:
+- 'Coverage must be complete or recent: imagery is contributed and uneven; check the capture date of each image.'
+- 'Vector tiles in a web page: tiles come from tiles.mapillary.com, a second host this credential is not registered for, and a web page would expose the
+  token.'
+- 'People or plates would be shown: use the images for context, not to identify anyone.'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: mapillary
+    kind: apikey
+    class: secret
+    host: graph.mapillary.com
+    inject:
+      header: Authorization
+      prefix: OAuth
+    reject:
+      status:
+      - 400
+      - 401
+      - 403
+      body:
+      - OAuthException
+      - access token
+    signup_url: https://www.mapillary.com/dashboard/developers
+    free: true
+    limits: Entity APIs 60,000 a minute per app, search APIs 10,000 a minute per app, tiles 50,000 a day (API documentation, read 2026-11-07)
+    note: A client token from a registered application, sent as the Authorization header with the OAuth prefix (0.14.0), so it never sits in an address;
+      never a user token (those need OAuth sign-in)
+  request: https://graph.mapillary.com/images?bbox={west},{south},{east},{north}&fields=id,captured_at,compass_angle,computed_geometry&limit=2000
+  note: 'API documentation (read 2026-11-07): metadata at graph.mapillary.com, vector tiles at tiles.mapillary.com; a token by query parameter (access_token)
+    or a header with the OAuth prefix, which works for the Entity API calls. The plugin sends the header form. Vector tiles take the query form only and
+    sit on another host, so they are not covered by this credential. A bbox search should stay small (about 0.01 degrees square).'
+source:
+  publisher: Mapillary (Meta)
+  product: Mapillary API v4
+  url: https://www.mapillary.com/developer/api-documentation
+url_verified_on: '2026-11-08'
+vintage:
+  current: rolling
+  cadence: irregular
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: © Mapillary, CC BY-SA
+  note: 'Terms of Use read 2026-11-08: CC BY-SA 4.0 unless marked otherwise (section 3b); show the Mapillary logo with a link to Mapillary where its
+    data is used (section 11); commercial use for the listed purposes only, with safeguards against re-identifying anyone (section 12); no scraping or
+    bulk extraction outside the published interfaces (section 5).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-09'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions): API documentation read on 2026-11-07 (hosts, token by query or OAuth header, rate limits); licence and terms
+      of use not read.'
+  - rev: 2
+    date: '2026-11-07'
+    note: 'Header form (0.14.0): the token goes in the Authorization header with the OAuth prefix instead of the access_token query parameter, so it never
+      appears in an address. Still draft: licence and terms not read.'
+  - rev: 3
+    date: '2026-11-08'
+    note: 'Active (0.24.0): the Mapillary Terms of Use read on 2026-11-08: content under CC BY-SA 4.0 unless marked otherwise; data used through the API or vector tiles shows the Mapillary logo with a link to Mapillary; commercial use for the listed purposes (product and dataset development, services to clients) with safeguards against re-identification; no scraping or bulk extraction outside the published interfaces.'
+  - rev: 4
+    date: '2026-11-09'
+    note: 'Rejections (1.0.2): the Graph API can answer 400 for a malformed request too, so a 400 counts as a rejection only when the answer is an
+      OAuth error (OAuthException, "access token"), the form the Graph API documents for a bad token; the answer to a wrong token was not read here.'

@@ -1,0 +1,84 @@
+id: ref.public-service.no.weather.met-frost
+type: public-service
+rev: 1
+status: draft
+title: MET Norway Frost (observations and climate data)
+summary: Weather observations and climate records for Norwegian stations from MET Norway's Frost API, signed with a free client ID.
+tags:
+  geography:
+  - 'no'
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Station observations or climate normals near Norwegian sites, with the person's own client ID (map-credentials add met-frost).
+avoid_when:
+- Request limits are not stated, and the terms page refuses automated readers, so they were not read (2026-11-07).
+- 'Forecasts: those come from MET Norway''s separate Locationforecast API, not Frost.'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: met-frost
+    kind: basic
+    class: secret
+    host: frost.met.no
+    inject:
+      basic: true
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://frost.met.no/auth/requestCredentials.html
+    free: true
+    limits: Not stated on the how-to page (read 2026-11-07)
+    note: Store the client ID as the username with an empty password (client ID followed by a colon); the client secret is only for data that is not open
+  request: https://frost.met.no/sources/v0.jsonld?types=SensorSystem&country=NO
+  note: 'How-to page (read 2026-11-07): register with an e-mail address for a client ID and secret; requests use the client ID as the HTTP Basic user. The
+    API''s own error response names its licence, CC BY 3.0 NO (2026-11-07).'
+source:
+  publisher: Norwegian Meteorological Institute (MET Norway)
+  product: Frost API
+  url: https://frost.met.no/howto.html
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: Data from MET Norway (CC BY 3.0 NO).
+  note: The licence is as the API states it in its responses (creativecommons.org/licenses/by/3.0/no/); the terms page was not read (robots disallowed).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): the how-to page read and the API answered with its licence on 2026-11-07; limits and terms not read.'

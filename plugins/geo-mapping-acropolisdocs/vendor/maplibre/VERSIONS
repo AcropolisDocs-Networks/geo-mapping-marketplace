@@ -1,0 +1,15 @@
+Vendored for the MapLibre web engine (M14). Both are BSD-3-Clause; the licence texts are in this folder and are copied into every page.
+
+maplibre-gl 5.24.0   npm, published 2026-04-23   dist/maplibre-gl.js, dist/maplibre-gl.css
+pmtiles     4.5.0    npm, published 2026-08-10   dist/pmtiles.js (browser bundle, global `pmtiles`)
+
+Why 5.24.0 and not 6.x: 6.x ships only as ES modules with a separate worker file, so a single-file page would have to load
+the worker and the library from blob: script URLs. The 5.x browser bundle carries its worker inside and starts it from a blob:
+URL, which needs only `worker-src blob:` and `child-src blob:` in the page's Content-Security-Policy. 5.24.0 is the last 5.x.
+
+Changes made to the files (VENDOR.json has the hashes before and after):
+  maplibre-gl.js   the sourceMappingURL comment removed
+  maplibre-gl.css  font-family sans-serif set to Inter, system-ui, sans-serif
+  pmtiles.js       the sourceMappingURL comment removed
+
+To update: npm pack the new versions, apply the same changes, record the hashes in VENDOR.json, run tests/test_m14_web.py.

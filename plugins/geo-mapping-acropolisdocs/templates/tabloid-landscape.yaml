@@ -1,0 +1,16 @@
+name: tabloid-landscape
+label: Tabloid, landscape (17 x 11 in)
+kind: print
+size_mm: [431.8, 279.4]
+margin_mm: 12
+title:  {x: 12, y: 10,  w: 407.8, h: 24}
+map:    {x: 12, y: 37,  w: 407.8, h: 197}
+map_full: {x: 12, y: 10, w: 407.8, h: 224}   # the default layout: the map runs up over the title band, and the title sits in the map
+footer: {x: 12, y: 238, w: 407.8, h: 30}
+footer_fit: true                           # 1.0.0: the footer shrinks to its notes and the map grows into the room (layout.fit_footer)
+footer_fit_classic: false                  # the classic look keeps the fixed footer it had before 1.0.0
+fonts:  {title: 26, subtitle: 13, label: 8, legend_title: 10, legend: 9, note: 7.5, scale: 8, banner: 9}
+legend_max: {w: 100, h: 140}
+inset_size: {w: 70, h: 48}
+logo_height_mm: 13
+raster_default_dpi: 300

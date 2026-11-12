@@ -1,0 +1,37 @@
+geo-mapping-acropolisdocs
+Copyright 2026 AcropolisDocs, LLC
+
+Licensed under the Apache License, Version 2.0 (the "License"); see the LICENSE file. You may use, modify and
+redistribute this software, including commercially, under the License. Every copy and every derivative work must
+keep this NOTICE file and credit AcropolisDocs, LLC (License section 4(d)).
+
+Versions 0.2.0 to 0.9.2 were distributed with a proprietary notice; AcropolisDocs, LLC also offers them under the
+Apache License, Version 2.0.
+
+Trademarks and brand packs
+--------------------------
+The License grants no rights to trade names, trademarks, service marks or logos (section 6).
+"AcropolisDocs" and the AcropolisDocs logo are trademarks of AcropolisDocs, LLC.
+The shipped brand pack (brands/acropolisdocs in the plugin; brands/ at the root of the source repository: logo and
+colour tokens) is not licensed under the Apache License. It is the plugin's default look; using the AcropolisDocs
+marks for anything other than maps credited to AcropolisDocs needs AcropolisDocs, LLC's permission.
+
+Since 1.7.0 the plugin carries no other organisation's brand. A brand pack a person adds (their own, or a client's)
+stays on their computer, is not part of this software, and is used on that person's own authority: its marks belong
+to their owners, and the plugin does not check the right to use them.
+
+Third-party components
+----------------------
+Each keeps its own licence (paths are inside the plugin; in the source repository they are under src/):
+
+- Inter typeface, Rasmus Andersson: SIL Open Font License 1.1, assets/fonts/inter/LICENSE.txt.
+  The map-label glyph files in assets/glyphs/ are generated from Inter and are under the same licence.
+- Leaflet: BSD 2-Clause, vendor/leaflet/LICENSE.
+- MapLibre GL JS: BSD 3-Clause, vendor/maplibre/LICENSE-maplibre-gl.txt.
+- pmtiles (Protomaps): BSD 3-Clause, vendor/maplibre/LICENSE-pmtiles.txt.
+- Style-pack typefaces in styles/<pack>/fonts/ (EB Garamond, IM Fell English, IBM Plex Mono and Sans Condensed, Source Serif 4,
+  Caveat, Patrick Hand): SIL Open Font License 1.1, each with its licence text in styles/<pack>/LICENSES/.
+- Natural Earth data in assets/basemaps/: public domain (naturalearthdata.com).
+- U.S. Census Bureau cartographic boundary files and the OMB county-to-CBSA crosswalk in assets/: U.S. government works, public domain.
+- Reference library entries (library/entries/) describe third-party datasets; each dataset stays under the licence
+  its entry names, and data the plugin fetches keeps its publisher's terms. Maps carry the credits those terms require.

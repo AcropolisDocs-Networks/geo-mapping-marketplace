@@ -1,0 +1,118 @@
+id: ref.statistic.us.acs5.population
+type: statistic
+rev: 4
+status: active
+title: ACS 5-year estimates, total population (Census Data API)
+summary: 'Total population by state, county, metro area, tract and block group: the usual denominator for turning counts into rates.'
+tags:
+  geography:
+  - us
+  level:
+  - state
+  - county
+  - cbsa
+  - tract
+  - block-group
+  - zcta
+  domain:
+  - demographics
+  use_for:
+  - normalization
+  avoid_for:
+  - legal-boundary
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A count of sites, customers or events must become a rate per 1,000 people before it is shaded.
+- A reader needs the population behind each area to judge how much a rate can be trusted.
+avoid_when:
+- The map needs the current population this year; ACS 5-year estimates average 2020 to 2024.
+- The geography is small (tract or block group) and the margin of error is not shown; the estimates can be too noisy to classify.
+pairs_with:
+- ref.boundary.us.county.cb
+- ref.boundary.us.tract.cb500k
+join:
+  key: GEO_ID parts
+  type: string
+  width: 5
+  note: The API returns state and county as separate columns; build the county GEOID as state + county (2 + 3 characters), keeping leading zeros.
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: census
+    kind: apikey
+    class: secret
+    host: api.census.gov
+    inject: {query: key}
+    reject: {status: [401, 403], redirect_path: [/data/invalid_key.html, /data/missing_key.html]}
+    probe: https://api.census.gov/data/2023/acs/acs5?get=NAME&for=us:1
+    signup_url: https://api.census.gov/data/key_signup.html
+    free: true
+    shape: '[0-9a-fA-F]{40}'
+    note: Free key from the Census Bureau, for ACS population denominators
+    limits: 'Read 2026-11-08: a key is required for every data query; up to 50 variables in one query; no daily limit is stated for a keyed request.'
+  request: https://api.census.gov/data/2024/acs/acs5?get=NAME,B01003_001E,B01003_001M&for=county:*&in=state:{statefp}
+  requests:
+    state: https://api.census.gov/data/2024/acs/acs5?get=NAME,B01003_001E,B01003_001M&for=state:*
+    county: https://api.census.gov/data/2024/acs/acs5?get=NAME,B01003_001E,B01003_001M&for=county:*&in=state:{statefp}
+    tract: https://api.census.gov/data/2024/acs/acs5?get=NAME,B01003_001E,B01003_001M&for=tract:*&in=state:{statefp}
+    block group: https://api.census.gov/data/2024/acs/acs5?get=NAME,B01003_001E,B01003_001M&for=block%20group:*&in=state:{statefp}&in=county:*&in=tract:*
+source:
+  publisher: US Census Bureau
+  product: American Community Survey 5-Year Estimates 2020-2024, table B01003 (Total Population)
+  url: https://api.census.gov/data/2024/acs/acs5/variables/B01003_001E.json
+url_verified_on: '2026-11-02'
+vintage:
+  current: 2020-2024
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, American Community Survey 5-Year Estimates 2020-2024. This product uses the Census Bureau Data
+    API but is not endorsed or certified by the Census Bureau.'
+  note: The API terms ask services that use it to display the 'not endorsed or certified' notice.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-08'
+  verify_by: '2027-11-02'
+  check:
+    kind: http_get
+    url: https://api.census.gov/data/2024/acs/acs5/variables/B01003_001E.json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Verified the variable B01003_001E exists in the 2024 5-year release and that the data endpoint now requires a key (HTTP 302 to the missing-key
+      page). Data values were not fetched.
+  - rev: 2
+    date: '2026-11-05'
+    note: 'requires_key is replaced by requires_credential (credentials spec, release 0.6.0): the request text carries no key and no variable; the key
+      is the person''s own registered credential cred:census, added at send time. The API rejects with redirects, not 401 or 403: no key answers
+      302 to /data/missing_key.html, a bad key 302 to /data/invalid_key.html (checked 2026-11-05); both are declared as reject pages. Requests by
+      level (state, county, tract) for ref_fetch.'
+  - rev: 3
+    date: '2026-11-08'
+    note: 'Key details (0.23.0): the query limits page read on 2026-11-08: a key must be used with all data queries; up to 50 variables in one query; no daily cap is stated.'
+  - rev: 4
+    date: '2026-11-08'
+    note: 'Block groups (0.25.0): the 2024 ACS 5-year examples page (read 2026-11-08) answers block groups for a whole state in one request with in=county:* and in=tract:*; a block group level is added (GEOID of 12 digits: state, county, tract, block group), joining ref.boundary.us.block-group.cb500k.'

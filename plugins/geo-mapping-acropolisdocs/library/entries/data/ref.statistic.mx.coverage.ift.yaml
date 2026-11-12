@@ -1,0 +1,79 @@
+id: ref.statistic.mx.coverage.ift
+type: statistic
+rev: 1
+status: draft
+title: IFT mobile coverage maps (Mexico), reference only
+summary: The Instituto Federal de Telecomunicaciones publishes operator coverage maps for Mexico as an interactive viewer; there is no bulk download, so
+  the entry records where to look and how to cite.
+tags:
+  geography:
+  - mx
+  level:
+  - place
+  domain:
+  - telecom
+  use_for:
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - choropleth
+  scale:
+  - national
+  - regional
+  - state
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - authoritative
+use_when:
+- Citing the regulator's published coverage view in a Mexican market brief, with a screenshot or a traced extent clearly marked as such.
+avoid_when:
+- 'A coverage layer is expected: the viewer offers no download or service; nothing here can be drawn by the plugin.'
+- 'The operator''s own coverage file is available: use it as a user-supplied layer instead.'
+join:
+  key: none
+  type: string
+  note: 'Reference only: nothing to join; the viewer has no download.'
+delivery:
+  mode: user-supplied
+  format: none (interactive viewer only; reference link)
+  note: Open https://www.ift.org.mx/usuarios-y-audiencias/mapas-de-cobertura (verified 2026-11-04) to view operator coverage by technology; cite the page
+    and date.
+source:
+  publisher: Instituto Federal de Telecomunicaciones (IFT)
+  product: Mapas de cobertura
+  url: https://www.ift.org.mx/usuarios-y-audiencias/mapas-de-cobertura
+url_verified_on: '2026-11-04'
+vintage:
+  current: as shown in the viewer
+  cadence: irregular
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  external_ok: true
+  attribution_text: 'Fuente: IFT, mapas de cobertura (consultado <date>).'
+  note: 'Reference only: the viewer''s terms allow citation, not bulk reuse; no data is held.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_head
+    url: https://www.ift.org.mx/usuarios-y-audiencias/mapas-de-cobertura
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft, reference only: the coverage-maps page answered (HTTP 200, 2026-11-04); it is a viewer without a download.'

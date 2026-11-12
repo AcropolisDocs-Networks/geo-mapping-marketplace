@@ -1,0 +1,95 @@
+id: ref.basemap-provider.os-maps
+type: basemap-provider
+rev: 3
+status: draft
+title: Ordnance Survey Maps API (OS Data Hub, Great Britain)
+summary: Ordnance Survey basemaps for Great Britain (Light, Road, Outdoor) from the OS Data Hub Maps API; a free OS Data Hub account and a
+  project key are required.
+tags:
+  geography:
+  - uk
+  use_for:
+  - context-basemap
+  - locator-inset
+  avoid_for: []
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - authoritative
+use_when:
+- A UK site or market map that should carry the national mapping agency's basemap, with the person's own OS Data Hub key registered (map-credentials add os-maps).
+avoid_when:
+- 'The map is outside Great Britain: OS covers England, Scotland and Wales; Northern Ireland is mapped by OSNI.'
+- 'Plan limits and print terms matter: they were not read (the Data Hub site needs JavaScript), so check the plan before a deliverable.'
+- 'A web page: the key is kept secret here until OS key restriction is confirmed, so it is fetched host-side for print only.'
+delivery:
+  mode: fetch
+  requires_credential:
+    name: os-maps
+    kind: apikey
+    class: secret
+    class_allowed: [secret]
+    host: api.os.uk
+    inject: {query: key}
+    reject: {status: [401, 403]}
+    signup_url: https://osdatahub.os.uk/
+    probe: https://api.os.uk/maps/raster/v1/zxy/Road_3857/7/63/42.png
+    free: true
+    limits: 'Not read: the OS Data Hub plan page needs JavaScript (2026-11-07). OpenData layers are free; Premium layers count against the plan.'
+    note: The key belongs to one API project on the person's OS Data Hub account
+  note: 'Tile address and the key parameter (key) from xyzservices (OrdnanceSurvey providers); the host answered 401 without a key on 2026-11-07.
+    Layers ending _3857 are Web Mercator; Leisure is British National Grid only.'
+source:
+  publisher: Ordnance Survey
+  product: OS Maps API (ZXY)
+  url: https://docs.os.uk/os-apis/accessing-os-apis/os-maps-api
+license:
+  class: restricted
+  external_ok: true
+  attribution_text: Contains OS data © Crown copyright and database rights
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  note: Attribution wording and Premium terms were not read on 2026-11-07; confirm before the entry leaves draft.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-08'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions): the OS Maps API overview page read (WMTS and ZXY, key per API project); tile pattern and parameter
+      from xyzservices; the host answered 401 without a key. Plans, attribution wording and key restriction not read.'
+  - rev: 2
+    date: '2026-11-08'
+    note: 'Probe address (0.26.0): one tile, api.os.uk/maps/raster/v1/zxy/Road_3857/7/63/42.png, so credentials check --probe can test a tile key (the key is added at send time).'
+  - rev: 3
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+url_template: https://api.os.uk/maps/raster/v1/zxy/{style}/{z}/{x}/{y}.png?key={key}
+provider:
+  attribution_html: Contains OS data © Crown copyright and database rights
+  max_zoom: 20
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: false
+  print_ok: false
+  styles:
+  - Light_3857
+  - Road_3857
+  - Outdoor_3857
+url_verified_on: '2026-11-07'
+attribution:
+  corner: Contains OS data © Crown copyright and database rights
+  required_on_map: true
+  collapse: never
+  terms_read: '2026-11-09'

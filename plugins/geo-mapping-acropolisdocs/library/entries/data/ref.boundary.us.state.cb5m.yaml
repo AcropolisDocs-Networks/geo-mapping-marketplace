@@ -1,0 +1,107 @@
+id: ref.boundary.us.state.cb5m
+type: boundary
+rev: 1
+status: active
+title: US states, moderately generalized (Census cartographic boundary, 1:5,000,000)
+summary: State polygons at 1:5,000,000, with the District of Columbia and Puerto Rico, for the locator inset and state outlines on state and regional maps where the 1:20,000,000 coast is too coarse.
+tags:
+  geography:
+  - us
+  level:
+  - state
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  - locator-inset
+  - atlas
+  avoid_for:
+  - parcel-level
+  - engineering-grade
+  - legal-boundary
+  - site-precision
+  scale:
+  - regional
+  - state
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T0
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- The locator inset of a state, metro or city map: the state outline and its neighbours with sounds, bays and islands that read at inset size.
+- State outlines on a regional or one-state map where the 1:20,000,000 coast is visibly coarse.
+avoid_when:
+- A national choropleth: the 1:20,000,000 file draws the same picture with a seventh of the vertices.
+- The map needs exact legal boundaries or shoreline detail at metro or city scale; use the 1:500,000 counties and TIGER water areas (ground detail).
+pairs_with:
+- ref.boundary.us.county.cb500k
+distinct_from:
+- id: ref.boundary.us.state.cb20m
+  why: the same states at 1:20,000,000, for national maps
+- id: ref.boundary.world.state.ne50
+  why: worldwide, lower fidelity, no FIPS codes
+join:
+  key: GEOID
+  type: string
+  width: 2
+  note: Keep leading zeros. STUSPS holds the two-letter postal code. Includes DC (11) and Puerto Rico (72).
+  pattern: ^\d{2}$
+crs: EPSG:4269
+delivery:
+  mode: bundled
+  path: assets/basemaps/us_states_cb5m.parquet
+  sha256: 57d8d201d46f054ce7d9f37f41a347d84023e43de5ee38ceca7276ff99f5226b
+  size_mb: 0.69
+  format: GeoParquet (zstd)
+  features: 52
+  columns:
+  - GEOID
+  - STATEFP
+  - STUSPS
+  - NAME
+  - ALAND
+  - AWATER
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, States, 1:5,000,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_state_5m.zip
+  file_sha256: 8a45692bc532dbd38938a1924f445850cef2682ea67d750d7fd2f19cfe836903
+url_verified_on: '2026-11-06'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-06'
+  verify_by: '2027-11-06'
+  check:
+    kind: feature_count_and_hash
+    features: 52
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-06'
+    note: Bundled for the locator inset (0.11.0); the same 52 features and columns as the 1:20,000,000 entry, from the 2025 1:5,000,000 file.

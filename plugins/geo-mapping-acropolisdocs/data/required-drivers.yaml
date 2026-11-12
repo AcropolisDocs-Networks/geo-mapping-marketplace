@@ -1,0 +1,14 @@
+# GDAL drivers map-doctor checks (Appendix H W1). mode: rw needs write, r read only is enough.
+- {name: GeoJSON,      mode: rw, formats: [GeoJSON]}
+- {name: ESRI Shapefile, mode: rw, formats: [Shapefile]}
+- {name: GPKG,         mode: rw, formats: [GeoPackage]}
+- {name: KML,          mode: rw, formats: [KML]}
+- {name: LIBKML,       mode: rw, formats: [KMZ], optional: true}
+- {name: FlatGeobuf,   mode: rw, formats: [FlatGeobuf]}
+- {name: GPX,          mode: rw, formats: [GPX]}
+- {name: CSV,          mode: rw, formats: [CSV]}
+- {name: TopoJSON,     mode: r,  formats: [TopoJSON], note: "read only in GDAL; write with the topojson package"}
+- {name: PMTiles,      mode: rw, formats: [PMTiles], optional: true}
+- {name: MVT,          mode: rw, formats: [MVT], optional: true}
+- {name: WFS,          mode: r,  formats: [WFS], optional: true}
+- {name: OAPIF,        mode: r,  formats: [OGC API Features], optional: true}

@@ -1,0 +1,96 @@
+id: ref.infrastructure.world.road.ne10
+type: infrastructure
+rev: 1
+status: active
+title: Roads worldwide, 1:10,000,000 (Natural Earth)
+summary: 56,600 major road segments worldwide (motorways, highways, ferries flagged) with route numbers, fetched from Natural Earth 10m; the bundled North
+  America subset is ref.infrastructure.na.road.ne10.
+tags:
+  geography:
+  - world
+  level:
+  - line
+  domain:
+  - transport
+  use_for:
+  - context-basemap
+  - site-map
+  - atlas
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - world
+  - national
+  - regional
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - community
+use_when:
+- Road context on a national or regional map outside North America, or a world map of corridors.
+- A small-multiple series across countries that needs the same road set on every page.
+avoid_when:
+- 'The map is of North America: the bundled subset (ref.infrastructure.na.road.ne10) needs no network.'
+- 'The map is metro or local: TIGER roads (US) or an OSM extract carry local streets.'
+pairs_with:
+- ref.infrastructure.na.road.ne10
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 8.66
+  features: 56600
+  columns:
+  - scalerank
+  - featurecla
+  - type
+  - sov_a3
+  - name
+  - label
+  - toll
+  - expressway
+  - level
+  - continent
+  - length_km
+  - min_zoom
+source:
+  publisher: Natural Earth
+  product: Natural Earth 5.1.x, 1:10m Cultural Vectors, Roads
+  url: https://naciscdn.org/naturalearth/10m/cultural/ne_10m_roads.zip
+  file_sha256: 880b235383a1e1ccf33f4ea6f82b6755a2ffbce07e3974e412b43e88fe954ae9
+url_verified_on: '2026-11-04'
+vintage:
+  current: 5.1.x (naciscdn.org current file, downloaded 2026-11-04)
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Made with Natural Earth.
+  note: Natural Earth is in the public domain (naturalearthdata.com/about/terms-of-use, read 2026-11-04); the credit line is a courtesy.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-05-04'
+  check:
+    kind: feature_count_and_hash
+    features: 56600
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the naciscdn.org archive (56,600 features, 9,075,919 bytes, SHA-256 recorded). Fetched on demand; the North America subset stays bundled.

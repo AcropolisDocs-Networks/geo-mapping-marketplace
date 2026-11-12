@@ -1,0 +1,33 @@
+# 1.7.0: what a brand made from a few inputs (set_brand.py new) starts from. The colours a person gives become the accents; these are the
+# quiet neutral grounds, text and rules around them, the status colours, and the plain mark used until a logo is given.
+# Colours live here and not in code (edition lint MAP-ED-004).
+neutrals:
+  print:
+    bg_primary: '#FFFFFF'
+    bg_surface: '#F6F6F4'
+    bg_elevated: '#EEEEEB'
+    text_primary: '#16171A'
+    text_secondary: '#45474D'
+    text_tertiary: '#83858C'
+    border_subtle: '#E1E1DD'
+    border_default: '#CACAC5'
+    border_strong: '#A5A6A1'
+    semantic: {success: '#2F7038', warning: '#7C6A1E', danger: '#B3323F', info: '#2F5F9E'}
+  screen:
+    bg_primary: '#0D0D0D'
+    bg_surface: '#141414'
+    bg_elevated: '#1C1C1C'
+    text_primary: '#F0EEE8'
+    text_secondary: '#B1B0A8'
+    text_tertiary: '#6C6B65'
+    border_subtle: '#2A2A2A'
+    border_default: '#333333'
+    border_strong: '#555555'
+    semantic: {success: '#7FB08A', warning: '#B3A77C', danger: '#E87686', info: '#86A6D6'}
+# the placeholder mark: a rounded square in the brand's first colour with an open ring; no letters, so it never depends on a font
+placeholder_logo: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="18" fill="{accent}"/><circle cx="50" cy="50" r="22" fill="none" stroke="{inner}" stroke-width="9"/></svg>'
+placeholder_inner: {on_dark_mark: '#FFFFFF', on_light_mark: '#16171A'}
+# the starter file `set_brand.py template` writes
+template: {name: Your Brand, slug: your-brand, owner: 'Your Company, Inc.', homepage: 'https://example.com', colors: ['#1A5FB4', '#C64600']}
+# 1.8.0: a PNG or JPEG logo is carried inside a plain SVG wrapper, so every output draws it the way it draws an SVG mark
+raster_logo: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}"><image width="{w}" height="{h}" href="data:{mime};base64,{b64}"/></svg>'

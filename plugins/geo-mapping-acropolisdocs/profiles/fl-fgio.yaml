@@ -1,0 +1,31 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-04 from the build environment.
+profile: fl-fgio
+type: arcgis-rest
+base_url: https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 2000
+  server_max_features: 2000
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: open
+  confidential: false
+  attribution: 'Source: Florida Geographic Information Office (geodata.floridagio.gov).'
+host_visibility: shown
+host_confirmed_on: '2026-11-04'
+verified_on: '2026-11-04'
+notes: 'Florida Geographic Information Office hosted services. 94 hosted feature services (911 regions, statewide parcels, coastal layers). Discovery:
+  geodata.floridagio.gov (ArcGIS Hub, orgId Gh9awoU677aKree0); the Florida Geographic Data Library (fgdl.org) and FDEP''s ca.dep.state.fl.us ArcGIS
+  Server are the other state sources. Licence varies by layer. Shipped with the plugin (M13), read-only: a profile of the same name saved in the
+  working folder overrides it.'

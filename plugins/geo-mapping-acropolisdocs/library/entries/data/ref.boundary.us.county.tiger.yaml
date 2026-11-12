@@ -1,0 +1,86 @@
+id: ref.boundary.us.county.tiger
+type: boundary
+rev: 1
+status: active
+title: US counties, full detail (Census TIGER/Line)
+summary: Full-resolution county polygons from TIGER/Line, for large-scale maps and spatial joins that need exact outlines.
+tags:
+  geography:
+  - us
+  level:
+  - county
+  domain:
+  - general
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  avoid_for:
+  - parcel-level
+  - site-precision
+  scale:
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A map of one metro area or county where shoreline and boundary detail should be accurate.
+- A spatial join of site points to counties, where outline accuracy decides the answer.
+avoid_when:
+- The map is state-wide or larger; the 84 MB file is slow and the detail is invisible. Use the 1:500,000 or bundled generalized counties.
+- The map needs legal boundaries; TIGER/Line is a mapping product and is not a legal description.
+pairs_with:
+- ref.boundary.us.county.cb500k
+join:
+  key: GEOID
+  type: string
+  width: 5
+  note: Keep leading zeros. Never cast to integer.
+  pattern: ^\d{5}$
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 80.1
+  note: Size from the publisher's Content-Length; feature count and hash not measured.
+source:
+  publisher: US Census Bureau
+  product: TIGER/Line Shapefile 2025, Counties and Equivalents
+  url: https://www2.census.gov/geo/tiger/TIGER2025/COUNTY/tl_2025_us_county.zip
+url_verified_on: '2026-11-02'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, TIGER/Line Shapefiles.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check:
+    kind: http_head
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: URL and size verified against the publisher (HTTP 200, Content-Length 83,989,800 bytes); contents not downloaded.

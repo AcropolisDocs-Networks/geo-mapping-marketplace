@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Provenance record, one per layer (spec 6.2)",
+  "type": "object",
+  "required": ["layer_id", "source_name", "retrieved_at", "license", "crs_original", "crs_used"],
+  "properties": {
+    "layer_id": {"type": "string"},
+    "source_name": {"type": "string"},
+    "source_url": {"type": ["string", "null"]},
+    "retrieved_at": {"type": "string"},
+    "license": {"type": "string"},
+    "license_url": {"type": ["string", "null"]},
+    "attribution_text": {"type": ["string", "null"]},
+    "crs_original": {"type": "string"},
+    "crs_used": {"type": "string"},
+    "transformations": {"type": "array", "items": {"type": "string"}},
+    "row_count": {"type": "integer", "minimum": 0},
+    "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "library_ref": {"type": ["string", "null"]},
+    "library_rev": {"type": ["integer", "null"]}
+  }
+}

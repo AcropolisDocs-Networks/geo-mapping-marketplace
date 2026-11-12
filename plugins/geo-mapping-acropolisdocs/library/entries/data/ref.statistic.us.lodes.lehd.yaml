@@ -1,0 +1,134 @@
+id: ref.statistic.us.lodes.lehd
+type: statistic
+rev: 2
+status: active
+title: LEHD Origin-Destination Employment Statistics (LODES) workplace counts
+summary: Jobs by workplace Census block (WAC) and by residence (RAC) from the Census Bureau's LEHD program, one gzipped CSV per state, year and job type,
+  for workplace-density and daytime-population maps.
+tags:
+  geography:
+  - us
+  level:
+  - block-group
+  - tract
+  - county
+  domain:
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - normalization
+  - market-rollup
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A daytime (workplace) population surface for capacity planning, aggregated from blocks to block groups or hexagons.
+- Normalizing a site or traffic metric by jobs rather than residents in a business district.
+avoid_when:
+- 'The map is of federal workers or the self-employed: LODES covers jobs reported to state unemployment insurance plus most federal civilians, and some
+  states lag or are missing in a given year.'
+- 'Block-level values are shown as exact: LODES applies noise infusion; roll up to block groups or tracts before mapping.'
+pairs_with:
+- ref.boundary.us.block-group.cb500k
+- ref.statistic.us.acs5.population
+join:
+  key: w_geocode
+  type: string
+  width: 15
+  note: Fifteen-digit 2020 Census block GEOID as text (first 12 digits are the block group, first 11 the tract, first 5 the county); keep leading zeros.
+    C000 is total jobs; CNS01 to CNS20 split by NAICS sector; CE01 to CE03 by earnings band.
+  pattern: ^\d{15}$
+delivery:
+  mode: fetch
+  format: CSV (gzip), one file per state, segment, job type and year
+  delimiter: ','
+  features: 36998
+  note: ref_fetch.py fetch ref.statistic.us.lodes.lehd downloads the Arizona 2022 WAC file (hash-checked, 36,998 rows), decompresses it and caches it
+    as a table without geometry, every column as text so w_geocode keeps its leading zero; --variant <state postal code, lower case> fetches that state's
+    2022 WAC file from the same path (the hash and count apply to Arizona only). rac/ (residence) and od/ (origin-destination) files and other years
+    use the same pattern and are supplied by the person. Join w_geocode to the block group GEOID by its first 12 characters.
+  columns:
+  - w_geocode
+  - C000
+  - CA01
+  - CA02
+  - CA03
+  - CE01
+  - CE02
+  - CE03
+  - CNS01
+  - CNS02
+  - CNS03
+  - CNS04
+  - CNS05
+  - CNS06
+  - CNS07
+  - CNS08
+  - CNS09
+  - CNS10
+  - CNS11
+  - CNS12
+  - CNS13
+  - CNS14
+  - CNS15
+  - CNS16
+  - CNS17
+  - CNS18
+  - CNS19
+  - CNS20
+  - CR01
+  - CR02
+  url_template: https://lehd.ces.census.gov/data/lodes/LODES8/{st}/wac/{st}_wac_S000_JT00_2022.csv.gz
+  size_mb: 0.86
+source:
+  publisher: US Census Bureau, Center for Economic Studies (LEHD)
+  product: LODES version 8, Workplace Area Characteristics (WAC), Arizona 2022
+  url: https://lehd.ces.census.gov/data/lodes/LODES8/az/wac/az_wac_S000_JT00_2022.csv.gz
+  file_sha256: a7ef9781f36c03c541e67018e9873bb9672ace60e6a6c837216572d9f5adb851
+url_verified_on: '2026-11-05'
+vintage:
+  current: 2022 (LODES8 on 2020 blocks)
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, LEHD Origin-Destination Employment Statistics (LODES).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-05'
+  verify_by: '2027-11-05'
+  check:
+    kind: http_head
+    url: https://lehd.ces.census.gov/data/lodes/LODES8/az/wac/az_wac_S000_JT00_2022.csv.gz
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the LODES8 directory and the Arizona 2022 WAC file (36,998 rows, 53 columns, SHA-256 recorded) on 2026-11-04. User-supplied until the
+      fetch reader handles gzip.
+  - rev: 2
+    date: '2026-11-05'
+    note: 'Fetch: ref_fetch reads gzip (M13 integration). The Arizona 2022 WAC file downloaded again on 2026-11-05: same SHA-256, 36,998 rows, 53 columns;
+      cached as a text table for joins. The variant template fixes the year at 2022 and takes the state postal code.'

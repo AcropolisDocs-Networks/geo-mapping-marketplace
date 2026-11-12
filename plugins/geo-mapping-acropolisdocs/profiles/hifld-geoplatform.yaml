@@ -1,0 +1,32 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-04 from the build environment.
+profile: hifld-geoplatform
+type: arcgis-rest
+base_url: https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 2000
+  server_max_features: 2000
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: public-domain
+  confidential: false
+  attribution: 'Source: DHS HIFLD, via GeoPlatform Federal User Community.'
+host_visibility: shown
+host_confirmed_on: '2026-11-04'
+verified_on: '2026-11-04'
+notes: 'HIFLD data re-hosted by the GeoPlatform Federal User Community. Public feature services carrying HIFLD Open layers (Cellular_Towers_in_the_United_States/FeatureServer/0,
+  24,148 points from FCC ULS cellular licences; US_Electric_Power_Transmission_Lines/FeatureServer/0, 94,619 lines; tribal and school geographies;
+  pipelines; rail nodes). The former HIFLD Open address (services1.arcgis.com/Hp6G80Pky0om7QvQ/.../Cellular_Towers) answers ''Invalid URL'': the
+  layers were withdrawn there. maxRecordCount 2000, pagination supported. Shipped with the plugin (M13), read-only: a profile of the same name
+  saved in the working folder overrides it.'

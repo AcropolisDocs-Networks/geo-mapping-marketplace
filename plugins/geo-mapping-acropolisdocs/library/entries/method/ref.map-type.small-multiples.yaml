@@ -1,0 +1,50 @@
+id: ref.map-type.small-multiples
+type: map-type
+rev: 2
+status: active
+title: Small multiples
+summary: A series of the same map for different times or categories, one map per value of a field, with the same classes on every page so they compare.
+tags:
+  use_for:
+  - atlas
+  avoid_for: []
+use_when:
+- The message is about change over time or between categories across the same area.
+- The reader will compare markets, states or vendors page by page and needs one legend for all of them.
+avoid_when:
+- A single comparison is enough; use one map.
+- The panels cannot be kept at the same scale and classes.
+pairs_with:
+- ref.palette.sequential
+chooses_when:
+  message_type:
+  - change
+  data_shape:
+  - polygon-rate-series
+requires:
+  data_shape: see chooses_when
+  join_key: false
+recommended:
+  shared_classes: true
+  index_page: true
+guarded_by:
+- MAP-CART-014
+- MAP-ATL-002
+- MAP-ATL-006
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check: the atlas pipeline builds one map per value with shared class edges and an index page (tests/test_atlas.py::test_every_map_shows_the_same_legend_when_classes_are_shared)
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the renderer does not build this map type yet; the entry records when to choose it so selection can say it is not available.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: map-atlas and the map-atlas-run pipeline (M7) build the series from one MapSpec with class edges taken from all the data, an index page and one combined PDF; selection now offers it for a change message over a series.'

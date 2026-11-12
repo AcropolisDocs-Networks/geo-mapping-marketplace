@@ -1,0 +1,46 @@
+id: ref.context.world.urban.ne10
+type: context
+rev: 1
+status: active
+title: World urban areas, 10m (Natural Earth)
+summary: 11,878 built-up footprints derived from night lights, drawn as a faint tint under site maps so towns read as towns.
+tags:
+  geography: [world]
+  level: [place]
+  domain: [general]
+  use_for: [context-basemap, site-map, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision, choropleth, normalization]
+  scale: [national, regional, state, metro]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A site or coverage map needs the built-up area under the points so a reader sees which sites are in town and which are rural.']
+avoid_when: [The map needs city limits or any legal boundary; these footprints come from night-time lights and have no administrative meaning.,
+  The map is a neighbourhood; the footprints are simplified to about 0.003 degrees.]
+pairs_with: [ref.gazetteer.world.place.ne10]
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_10m_urban_areas.parquet
+  sha256: b1b61407571a3a12ef41f9c27ff8d127da70a190b1ffa4f6b0fb9fdcd1ff834e
+  size_mb: 2.54
+  format: GeoParquet (zstd)
+  features: 11878
+  columns: [scalerank, area_sqkm, min_zoom]
+  note: Geometry simplified at 0.003 degrees (about 300 m); the footprints carry no names.
+source: {publisher: Natural Earth, product: 'Urban Areas, 10m', url: 'https://naciscdn.org/naturalearth/10m/cultural/ne_10m_urban_areas.zip',
+  file_sha256: 2c593114e954ce1adb297ddee5465f05d9e81fa0a26deb13f8500d58a00d7051}
+url_verified_on: 2026-11-04
+vintage: {current: Natural Earth 5.1.2, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-04
+  verify_by: 2027-11-04
+  check: {kind: feature_count_and_hash, features: 11878, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-04, note: Bundled payload built from Natural Earth 5.1.2 and verified (M10 toponymy and context pack).}

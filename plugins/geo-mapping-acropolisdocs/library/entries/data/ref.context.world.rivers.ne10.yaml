@@ -1,0 +1,46 @@
+id: ref.context.world.rivers.ne10
+type: context
+rev: 1
+status: active
+title: World rivers and lake centerlines, 10m (Natural Earth)
+summary: 1,473 named rivers with a scale rank, drawn as thin water-colour lines under data and labelled by name.
+tags:
+  geography: [world]
+  level: [line]
+  domain: [general]
+  use_for: [context-basemap, label-reference, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national, regional, state]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A regional or state map shows its main rivers so a corridor or market is read against them; scalerank picks the ones a given scale can carry.']
+avoid_when: [The map is a metro area or smaller; only the larger rivers are included and the lines are simplified to about 0.002 degrees.,
+  Hydrology or flood analysis is needed; use the NHD or a local source.]
+pairs_with: [ref.context.world.lakes.ne10]
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_10m_rivers.parquet
+  sha256: 300e2116fa73d82dbb7ebfb5face5eb83d1d06bc81235d7a8a6fdffec5944a74
+  size_mb: 1.22
+  format: GeoParquet (zstd)
+  features: 1473
+  columns: [name, scalerank, featurecla, min_zoom, ne_id]
+  note: Geometry simplified at 0.002 degrees (about 200 m); columns reduced to name, rank and zoom.
+source: {publisher: Natural Earth, product: 'Rivers + Lake Centerlines, 10m', url: 'https://naciscdn.org/naturalearth/10m/physical/ne_10m_rivers_lake_centerlines.zip',
+  file_sha256: ded71b01870855ccfe19b51f2ec14c9bb48fae23c0e9f3c11974d426433b5c38}
+url_verified_on: 2026-11-04
+vintage: {current: Natural Earth 5.1.2, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-04
+  verify_by: 2027-11-04
+  check: {kind: feature_count_and_hash, features: 1473, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-04, note: Bundled payload built from Natural Earth 5.1.2 and verified (M10 toponymy and context pack).}

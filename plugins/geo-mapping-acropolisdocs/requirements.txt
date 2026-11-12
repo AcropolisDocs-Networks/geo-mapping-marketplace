@@ -1,0 +1,38 @@
+# geo-mapping-acropolisdocs: Python packages for building maps (SVG, PDF, PNG, web map) and for the bundled OGC server.
+#   python3 -m pip install -r requirements.txt
+# Python 3.11 or newer (the OGC server's pinned shapely and geopandas need it; the map scripts themselves run on 3.9).
+# Same convention as the acropolisdocs plugin's requirements.txt: a FLOOR only where an older release is known to misbehave, never a ceiling.
+# The packages both plugins use are written the same way here, with the same floors, so one environment can hold both.
+# Tested with: pyogrio 0.13, geopandas 1.2, shapely 2.2, pyproj 3.8, matplotlib 3.11, numpy 2.5, pandas 3.0, pillow 12.3, pyarrow 26,
+#              weasyprint 70, pikepdf 10.16, pypdf 6.17, pypdfium2 5.13, fonttools 4.67, topojson 2.2, python-pptx 1.0.2, lxml 6.1.3.
+# data/dependencies.yaml says what each package is for and which are HARD (no map without it) or SOFT (a quietly worse result).
+
+# --- HARD: no map without these
+pyogrio                # GDAL engine for every vector format
+geopandas>=1.0         # geometry dataframes; 1.0 is the first release whose default engine is pyogrio
+shapely>=2.0           # the vectorised API (clip_by_rect, STRtree.query on arrays) arrived in 2.0
+pyproj                 # CRS transforms
+matplotlib             # static rendering
+numpy                  # classification, label placement
+pandas                 # attribute tables and joins
+Pillow                 # PNG output, DPI and metadata
+PyYAML                 # MapSpec and library files
+jsonschema>=4.0        # MapSpec validation (Draft 2020-12 validator; 3.x cannot check a MapSpec)
+
+# --- SOFT: a quietly worse result without these
+pyarrow                # GeoParquet read and write
+weasyprint>=61         # SVG to PDF, the same renderer as the acropolisdocs plugin (<61 mishandles named @page and break-*); needs Pango (see README)
+pikepdf                # writes PDF structure: Info dictionary, XMP and the hidden accreditation, atlas merge, GeoPDF
+pypdf                  # reads a PDF back for the output lint (pages, size, fonts, images); the acropolisdocs read-back library
+pypdfium2              # draws the PDF to pixels for the PNG; the acropolisdocs page rasterizer (pdftoppm and Chromium remain as fallbacks)
+fonttools[woff]>=4.38  # exact Inter text measurement; the [woff] extra brings the Brotli decoder that reads the bundled .woff2
+topojson               # TopoJSON write
+python-pptx>=0.6.21    # slide output (map-pptx-adapter)
+
+# --- The bundled OGC MCP server (exact pins, required by the edition lint; lxml also serves SVG composition and safe XML parsing)
+-r mcp/requirements.txt
+lxml                   # SVG composition and safe XML parsing; KML, QML, SLD and QGIS project read-back
+httpx                  # the OGC MCP server and the service clients (OGC, ArcGIS, geocoder, catalog search)
+mcp                    # the bundled OGC MCP server (its own environment pins it in mcp/requirements.txt)
+openpyxl               # XLSX tables for joins, site lists, trackers and the geocoder
+pydyf                  # the PDF fast path (installed with weasyprint; named because pdf_stack imports it directly)

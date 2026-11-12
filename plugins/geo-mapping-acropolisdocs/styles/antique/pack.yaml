@@ -1,0 +1,56 @@
+id: antique
+version: 1
+title: Antique
+intent: Historical and vintage maps; paper and ink, engraved type, ornament (the Day 6 telegraph and Day 8 Utopia maps).
+palette: own
+fonts: own
+modes:
+  print:
+    background: '#EFE4C8'
+    land: '#F3EAD3'
+    water: '#CFDAD3'
+    frame: '#3A2A1A'
+    legend_frame: '#8A7458'
+    label: '#3A2A1A'
+    label_halo: '#F3EAD3'
+    legend_bg: '#F1E7CF'
+    neutral_ramp: ['#F3EAD3', '#E2D4B4', '#C8B48E', '#A08A66', '#6E5A40']
+    sequential_ramp: ['#E6D2A8', '#D6B484', '#C29266', '#A9714C', '#8C5238', '#6C3826', '#4E2418']
+    emphasis: '#7A2E1F'
+    status: {success: '#3F5E3A', warning: '#7E5E22', danger: '#7A2E1F'}
+    categorical: ['#7A2E1F', '#3F5E3A', '#7E5E22', '#4A6C8C', '#6A3F5E', '#5E4A2F']
+    no_data: '#C8B48E'
+    diverging_ramp: ['#2F4A5E', '#5E7888', '#97A39E', '#E9DCBE', '#C49A72', '#A0623C', '#7A2E1F']
+    water_line: '#5F7A78'
+    hill_ink: '#5A4630'
+    ornament: '#3A2A1A'
+    ornament_light: '#F3EAD3'
+    place_ink: '#3A2A1A'
+  screen: {inherit: print}
+ramps: pack
+type:
+  title: {family: IM Fell English, file: fonts/IMFellEnglish-Regular.ttf, sha256: fe9705bbde51af802719246d4608d08d37bde956ab99d9a590da996a5221a24c, style: normal, generic: serif, licence: LICENSES/OFL-IMFellEnglish.txt, licence_id: OFL-1.1,
+          upstream: 'https://github.com/google/fonts/tree/main/ofl/imfellenglish (IMFeENrm28P.ttf)'}
+  label: {family: IM Fell English, file: fonts/IMFellEnglish-Italic.ttf, sha256: 47cd75dce54b1f2e0831359d22d5e688f519d68ae45706b664fd310fd0e3ccf7, style: italic, generic: serif, licence: LICENSES/OFL-IMFellEnglish.txt, licence_id: OFL-1.1,
+          upstream: 'https://github.com/google/fonts/tree/main/ofl/imfellenglish (IMFeENit28P.ttf)'}
+  body: {family: EB Garamond, file: 'fonts/EBGaramond-wght.ttf', sha256: ef9512f92f6d579e5dc75af59a5a4b1b8b47d2eda89e00b954d44520e5369027, style: normal, generic: serif, licence: LICENSES/OFL-EBGaramond.txt, licence_id: OFL-1.1,
+         upstream: 'https://github.com/google/fonts/tree/main/ofl/ebgaramond'}
+elements:
+  frame: {style: bar-border}
+  title: {box: cartouche}
+  north_arrow: {style: compass-rose, points: 16}
+  scale_bar: {style: alternating}
+  legend: {frame: cartouche}
+treatments:
+  paper: {image: assets/paper.jpg, dpi: 150}
+  water_lining: {rings: 5, first_mm: 0.6, step_mm: 0.7, width_mm: [0.25, 0.10], lakes: true}
+  hill_glyphs: {spacing_mm: 6}
+  place_glyphs: {}
+web: palette-and-fonts
+files:
+  'LICENSES/OFL-EBGaramond.txt': 0985066662eb755ed3683ae5482a81a9195b49ce3f7e165cc2388b3dbece7dd7
+  'LICENSES/OFL-IMFellEnglish.txt': 2a3ca501fc4d5efcad9798531e3e06962b1e20c60e464f6cbd6c17630112c773
+  'assets/paper.jpg': 69013fdb93a5268deb5a0df6d62c4fd57e03807285b6f4e610612e2c4d8b3124
+  'fonts/EBGaramond-wght.ttf': ef9512f92f6d579e5dc75af59a5a4b1b8b47d2eda89e00b954d44520e5369027
+  'fonts/IMFellEnglish-Italic.ttf': 47cd75dce54b1f2e0831359d22d5e688f519d68ae45706b664fd310fd0e3ccf7
+  'fonts/IMFellEnglish-Regular.ttf': fe9705bbde51af802719246d4608d08d37bde956ab99d9a590da996a5221a24c

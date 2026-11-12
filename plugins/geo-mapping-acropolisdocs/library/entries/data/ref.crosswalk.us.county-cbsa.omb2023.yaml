@@ -1,0 +1,99 @@
+id: ref.crosswalk.us.county-cbsa.omb2023
+type: crosswalk
+rev: 1
+status: active
+title: US county to metro/micro area crosswalk (OMB July 2023 delineations)
+summary: Which county belongs to which core-based statistical area and combined statistical area, 1,915 counties, as a small table.
+tags:
+  geography:
+  - us
+  level:
+  - county
+  - cbsa
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - join-key
+  - market-rollup
+  avoid_for:
+  - legal-boundary
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T0
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Rolling county data up to metro areas, or labelling counties with their metro.
+- Joining a county-keyed table to the metro boundary file.
+avoid_when:
+- The need is a county list for a state; counties outside any metro or micro area are not in this table.
+- The delineation is required to be current as of a later OMB bulletin; this file is the July 2023 delineation.
+pairs_with:
+- ref.boundary.us.cbsa.cb500k
+- ref.boundary.us.county.cb
+join:
+  key: county_geoid
+  type: string
+  width: 5
+  note: State FIPS + county FIPS; joins to GEOID in the county files. cbsa_code (string, 5) joins to GEOID in the CBSA file.
+  pattern: ^\d{5}$
+delivery:
+  mode: bundled
+  path: assets/crosswalks/county_cbsa_omb2023.csv
+  format: CSV (UTF-8)
+  size_mb: 0.2
+  features: 1915
+  columns:
+  - county_geoid
+  - county_name
+  - state_name
+  - cbsa_code
+  - cbsa_title
+  - area_type
+  - csa_code
+  - csa_title
+  - central_outlying
+  sha256: ba9646192b1a35fb38db105b94975415a2c608345b33859f2b9827024dc4d312
+source:
+  publisher: US Census Bureau, Population Division, from OMB Bulletin 23-01
+  product: Core Based Statistical Areas, Metropolitan Divisions, and Combined Statistical Areas, July 2023 (List 1)
+  url: https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/2023/delineation-files/list1_2023.xlsx
+  file_sha256: 952c4b1e78acbb54e6ec9412434b7602fedacbf021736351a63c181bdb753629
+url_verified_on: '2026-11-02'
+vintage:
+  current: OMB July 2023
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, delineation files based on OMB Bulletin 23-01.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check:
+    kind: row_count_and_hash
+    rows: 1915
+    against: the workbook's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Converted the publisher's workbook to CSV (one row per county, FIPS joined as strings); 1,915 counties, SHA-256 of both files recorded.

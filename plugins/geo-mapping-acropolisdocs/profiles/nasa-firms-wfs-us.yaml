@@ -1,0 +1,34 @@
+# Shipped service profile (read-only; see service_registry.py). Address from the FIRMS WFS info page, read 2026-11-09 (1.0.2).
+profile: nasa-firms-wfs-us
+type: ogc-generic
+base_url: https://firms.modaps.eosdis.nasa.gov/mapserver/wfs/USA_contiguous_and_Hawaii/{key}/
+protocols:
+  wfs: 2.0.0
+auth:
+  method: credential
+  credentials: cred:nasa-firms
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 1000
+  server_max_features: 1000
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: false
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: public-domain
+  confidential: false
+  attribution: 'Source: NASA FIRMS.'
+host_visibility: shown
+host_confirmed_on: '2026-11-09'
+notes: 'NASA FIRMS active-fire WFS for the contiguous United States and Hawaii. FIRMS has no global WFS: each of its twelve regions has its own
+  address (/mapserver/wfs/{Region}/{MAP_KEY}/), listed in the library entry ref.public-service.world.hazard.nasa-firms; save a copy of this
+  profile with another region for elsewhere. Layers ms:fires_modis_24hrs and _7days, ms:fires_noaa20_*, ms:fires_noaa21_* and ms:fires_landsat_*
+  (Landsat only in Canada, Alaska and this region). Your own MAP_KEY, registered as cred:nasa-firms, fills the {key} slot at send time; the address
+  keeps the trailing slash FIRMS documents. 5,000 transactions per 10 minutes per MAP_KEY. Shipped with the plugin (1.0.2), read-only.'

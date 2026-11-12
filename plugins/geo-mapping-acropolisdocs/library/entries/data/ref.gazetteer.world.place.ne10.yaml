@@ -1,0 +1,48 @@
+id: ref.gazetteer.world.place.ne10
+type: gazetteer
+rev: 1
+status: active
+title: World populated places, 10m (Natural Earth)
+summary: 7,342 cities and towns with capital flags, population and a scale rank, the source of the place names drawn on every map.
+tags:
+  geography: [world]
+  level: [place]
+  domain: [general]
+  use_for: [label-reference, context-basemap, atlas]
+  avoid_for: [engineering-grade, site-precision, join-key, normalization]
+  scale: [world, national, regional, state, metro]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A map at any scale from the world down to a metro area needs city and town names; scalerank and min_zoom say which to show first and pop_max breaks ties.',
+  'The locator or the web page needs capitals and major cities as orientation.']
+avoid_when: [The map is a single site or a neighbourhood; towns under about 5,000 people are missing and positions are generalized to a few hundred metres.,
+  The map needs population for analysis; pop_max is a rough figure of unknown year.]
+pairs_with: [ref.gazetteer.world.place.ne110, ref.context.world.urban.ne10]
+distinct_from: [ref.gazetteer.world.place.ne110]
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_10m_places.parquet
+  sha256: 16a9eb207af98eac1751c800e738b3c91dadd12e663a915b208707bf8bae0257
+  size_mb: 0.33
+  format: GeoParquet (zstd)
+  features: 7342
+  columns: [name, nameascii, adm0name, adm0_a3, adm1name, iso_a2, adm0cap, worldcity, megacity, pop_max, labelrank, scalerank, min_zoom, featurecla, ne_id]
+  note: Points as published (no simplification); columns reduced to the ones the label engine and the web page use.
+source: {publisher: Natural Earth, product: 'Populated Places (simple), 10m', url: 'https://naciscdn.org/naturalearth/10m/cultural/ne_10m_populated_places_simple.zip',
+  file_sha256: 2963ee08f7743f13f37d5243acd77a2f7a510e26a36c7e04b920f1b381f2b251}
+url_verified_on: 2026-11-04
+vintage: {current: Natural Earth 5.1.2, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-04
+  verify_by: 2027-11-04
+  check: {kind: feature_count_and_hash, features: 7342, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-04, note: Bundled payload built from Natural Earth 5.1.2 and verified (M10 toponymy and context pack).}

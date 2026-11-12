@@ -1,0 +1,89 @@
+id: ref.basemap-provider.usgs-topo
+type: basemap-provider
+rev: 4
+status: active
+title: USGS National Map topographic tiles
+summary: Topographic and imagery tiles from the USGS National Map, for US terrain context.
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  - W
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A US field or terrain map that needs topographic context under sites or routes.
+- A print map where a public-domain background with a plain credit line is wanted.
+avoid_when:
+- 'A map outside the United States: the service covers US territory only.'
+- 'Bulk tile download or offline caching of large areas: the service is a public map server, not a tile archive; use a few tiles for a print or the person''s
+  own MBTiles.'
+delivery:
+  mode: fetch
+source:
+  publisher: US Geological Survey
+  product: 'The National Map: USGS Topo'
+  url: https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: Map services and data available from U.S. Geological Survey, National Geospatial Program.
+  note: 'USGS FAQ ''What are the terms of use/licensing of map services and data from The National Map?'' (read 2026-11-04): public domain, no restrictions;
+    the acknowledgement line above is requested.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the tile URL answered HTTP 200 (image/jpeg), but the publisher''s license page could not be read, so the credit line is unverified.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: the USGS terms FAQ was read (public domain; acknowledgement line recorded) and the tile address answered again on 2026-11-04; attribution
+      and provider flags recorded.'
+  - rev: 3
+    date: '2026-11-05'
+    note: 'requires_key: false removed (credentials spec, release 0.6.0): a provider that needs no key simply declares no requires_credential.'
+  - rev: 4
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+  check:
+    kind: http_get
+    url: https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/0/0/0
+    expect: 200
+url_template: https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}
+url_verified_on: '2026-11-04'
+provider:
+  attribution_html: Map services and data available from U.S. Geological Survey, National Geospatial Program.
+  max_zoom: 16
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: true
+  print_ok: true
+  production_ok: true
+attribution:
+  corner: USGS The National Map
+  links:
+  - text: USGS The National Map
+    href: https://www.usgs.gov/programs/national-geospatial-program/national-map
+  full: Map services and data available from U.S. Geological Survey, National Geospatial Program.
+  required_on_map: true
+  collapse: allowed
+  export:
+    text: Map services and data available from U.S. Geological Survey, National Geospatial Program
+  terms_read: '2026-11-09'

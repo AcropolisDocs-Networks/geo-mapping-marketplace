@@ -1,0 +1,87 @@
+id: ref.basemap-provider.osm-standard
+type: basemap-provider
+rev: 4
+status: active
+title: OpenStreetMap standard tiles
+summary: 'The public OpenStreetMap tile server: light, attributed use only.'
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - community
+use_when:
+- A quick, lightly used context basemap under a single map, with visible attribution.
+- A web map page whose viewers load tiles in their own browsers.
+avoid_when:
+- The job needs many tiles at once or prefetching; the policy forbids bulk download and scraping.
+- The page cannot show attribution or send a proper User-Agent and Referer; the policy requires both.
+delivery:
+  mode: fetch
+source:
+  publisher: OpenStreetMap Foundation
+  product: Standard tile layer
+  url: https://operations.osmfoundation.org/policies/tiles/
+license:
+  class: restricted
+  external_ok: true
+  attribution_text: © OpenStreetMap contributors
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  note: Governed by the OSMF Tile Usage Policy; the data itself is under the ODbL.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Read the Tile Usage Policy page (HTTP 200) and recorded its requirements: HTTPS tile URL, visible attribution, identifying User-Agent,
+      caching at least 7 days, no bulk download.'
+  - rev: 2
+    date: '2026-11-02'
+    note: Adds provider.production_ok false and referer_required true, so the web map page can refuse this server for a public or production page and warn that a page opened from a file sends no Referer.
+  - rev: 3
+    date: '2026-11-05'
+    note: 'requires_key: false removed (credentials spec, release 0.6.0): a provider that needs no key simply declares no requires_credential.'
+  - rev: 4
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+url_template: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+provider:
+  attribution_html: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors
+  max_zoom: 19
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: true
+  print_ok: true
+  min_cache_days: 7
+  production_ok: false
+  referer_required: true
+url_verified_on: '2026-11-02'
+attribution:
+  corner: © OpenStreetMap contributors
+  links:
+  - text: © OpenStreetMap contributors
+    href: https://www.openstreetmap.org/copyright
+  full: © OpenStreetMap contributors. Data available under the Open Database Licence (ODbL).
+  required_on_map: true
+  collapse: after_interaction
+  short: © OSM
+  export:
+    text: © OpenStreetMap contributors (openstreetmap.org/copyright)
+  terms_read: '2026-11-09'

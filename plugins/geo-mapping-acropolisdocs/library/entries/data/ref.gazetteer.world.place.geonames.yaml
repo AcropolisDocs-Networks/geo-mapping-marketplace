@@ -1,0 +1,117 @@
+id: ref.gazetteer.world.place.geonames
+type: gazetteer
+rev: 3
+status: active
+title: GeoNames populated places (cities15000)
+summary: Worldwide populated places with population 15,000 or more (about 33,000 rows) from the GeoNames dump, for labels and locator context outside the
+  Natural Earth set.
+tags:
+  geography:
+  - world
+  level:
+  - place
+  domain:
+  - general
+  use_for:
+  - label-reference
+  - context-basemap
+  - locator-inset
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - world
+  - national
+  - regional
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - community
+use_when:
+- A map outside North America that needs more place labels than the bundled Natural Earth gazetteer gives.
+- A lookup of a city's coordinates, country and population for a locator inset or a label.
+avoid_when:
+- 'The map is of the United States and needs official names: Census places (ref.boundary.us.place.cb500k) carry the legal names and codes.'
+- 'The product is redistributed without credit: the CC BY 4.0 licence requires attribution.'
+delivery:
+  mode: fetch
+  format: zip holding cities15000.txt (tab-delimited, UTF-8, no header; 19 columns per the dump readme)
+  member: cities15000.txt
+  header: false
+  delimiter: \t
+  geometry_columns:
+    lon: longitude
+    lat: latitude
+  rolling: true
+  features: 34204
+  features_tolerance_pct: 5
+  note: 'ref_fetch.py fetch ref.gazetteer.world.place.geonames downloads https://download.geonames.org/export/dump/cities15000.zip (3.2 MB), reads the
+    header-less tab file inside it by the 19 declared columns and caches the places as points (longitude, latitude; EPSG:4326). GeoNames rewrites the
+    dump every day, so the entry is rolling: the hash and count are those of the copy verified on 2026-11-05 (34,204 places), and a later copy that
+    differs is used and reported, with the count held within 5 percent.'
+  columns:
+  - geonameid
+  - name
+  - asciiname
+  - alternatenames
+  - latitude
+  - longitude
+  - feature_class
+  - feature_code
+  - country_code
+  - cc2
+  - admin1_code
+  - admin2_code
+  - admin3_code
+  - admin4_code
+  - population
+  - elevation
+  - dem
+  - timezone
+  - modification_date
+  size_mb: 3.21
+source:
+  publisher: GeoNames
+  product: GeoNames dump, cities15000
+  url: https://download.geonames.org/export/dump/cities15000.zip
+  file_sha256: 6e5bb17e2c265df549ca7d8cae1762d8cf4ce04a9edca9426c2cdbf378b42c0e
+url_verified_on: '2026-11-05'
+vintage:
+  current: daily dump (downloaded 2026-11-05)
+  cadence: monthly
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Data from GeoNames (geonames.org), CC BY 4.0.
+  note: The dump readme (download.geonames.org/export/dump/readme.txt, read 2026-11-04) states the Creative Commons Attribution 4.0 licence.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-05'
+  verify_by: '2027-11-05'
+  check:
+    kind: http_head
+    url: https://download.geonames.org/export/dump/cities15000.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the download host answers, but the license terms and the file layout were not read in this review.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: cities15000.zip downloaded (3,365,828 bytes, SHA-256 recorded) and the dump readme read (CC BY 4.0, 19 tab-delimited columns, no header).
+      User-supplied because the fetch reader does not read header-less tab text yet.'
+  - rev: 3
+    date: '2026-11-05'
+    note: 'Fetch: ref_fetch reads header-less tab text inside a zip by the declared columns (M13 integration). cities15000.zip downloaded again (3,366,174
+      bytes, 34,204 places, SHA-256 recorded); the file is rewritten daily, so the entry is rolling: a later copy is used with the difference reported.'

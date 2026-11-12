@@ -1,0 +1,39 @@
+id: ref.palette.categorical
+type: palette
+rev: 1
+status: active
+title: Categorical colors (brand pack)
+summary: Distinct hues from the active brand pack, for unordered categories. Colors come from the pack; this entry holds none.
+tags:
+  use_for:
+  - site-map
+  - rag-status
+  avoid_for: []
+  audience:
+  - any
+  license_class:
+  - open
+use_when:
+- Categories have no order, such as technology, band or site type.
+- There are 7 or fewer categories.
+avoid_when:
+- More than 7 categories; group the rest as Other.
+- The categories are ordered; use a sequential ramp.
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Seed entry for a built-in capability; checked by the render tests.
+palette:
+  kind: categorical
+  max_categories: 7
+  source: brand pack token set
+  cvd_checked: true

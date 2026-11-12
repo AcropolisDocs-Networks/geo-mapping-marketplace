@@ -1,0 +1,95 @@
+id: ref.statistic.us.acs5.computers
+type: statistic
+rev: 1
+status: active
+title: ACS 5-year estimates, computers in the household (table B28001)
+summary: 'Households by types of computer (B28001): desktop or laptop, smartphone, tablet, none.'
+tags:
+  geography:
+  - us
+  level:
+  - state
+  - county
+  - cbsa
+  - tract
+  - block-group
+  - zcta
+  domain:
+  - demographics
+  use_for:
+  - choropleth
+  - market-rollup
+  avoid_for:
+  - legal-boundary
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A choropleth or table of acs 5-year estimates, computers in the household by state, county, tract or block group, with margins of error.
+avoid_when:
+- 'Small tracts or block groups without the margins shown: the estimates can be too noisy to classify (MAP-ACS-004 counts them).'
+- 'The map needs this year''s figures: ACS 5-year estimates average five years.'
+pairs_with:
+- ref.boundary.us.county.cb
+- ref.boundary.us.tract.cb500k
+join:
+  key: GEO_ID parts
+  type: string
+  width: 5
+  note: The API returns state and county as separate columns; build the county GEOID as state + county (2 + 3 characters), keeping leading zeros.
+delivery:
+  mode: service
+  tool: census_query
+  protocol: rest-json
+  query:
+    dataset: acs/acs5
+    year: 2024
+    group: B28001
+    level: tract
+    moe: true
+    route: auto
+  note: 'census_query.py fetches it by variable: the Census Data API with the person''s census key, or without one the ACS table-based Summary File (www2.census.gov). '
+source:
+  publisher: US Census Bureau
+  product: American Community Survey 5-Year Estimates 2020-2024, table B28001
+  url: https://api.census.gov/data/2024/acs/acs5/groups/B28001.json
+url_verified_on: '2026-11-10'
+vintage:
+  current: 2020-2024
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, American Community Survey 5-Year Estimates 2020-2024. This product uses the Census Bureau Data API but
+    is not endorsed or certified by the Census Bureau.'
+  note: The API terms ask services that use it to display the 'not endorsed or certified' notice.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-11-02'
+  check:
+    kind: http_get
+    url: https://api.census.gov/data/2024/acs/acs5/groups/B28001.json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-10'
+    note: 'New (1.3.0, R1-ACS): fetched by variable with census_query (API with a key, else the table-based Summary File); MOEs and CVs carried.'

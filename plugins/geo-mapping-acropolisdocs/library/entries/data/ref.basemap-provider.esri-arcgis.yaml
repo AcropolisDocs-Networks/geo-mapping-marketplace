@@ -1,0 +1,135 @@
+id: ref.basemap-provider.esri-arcgis
+type: basemap-provider
+rev: 6
+status: active
+title: Esri ArcGIS basemaps
+summary: 'Esri ArcGIS basemap styles (streets, navigation, light and dark gray, outdoor, community) as 512-pixel raster tiles from the Static Basemap
+  Tiles service, with the person''s own ArcGIS Location Platform key; "Powered by Esri" and the data sources on every map; no caching.'
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - licensed
+  quality:
+  - community
+use_when:
+- A client that already holds an ArcGIS Location Platform account (2 million basemap tiles a month free, then billed) and wants the Esri look on a web page or a printed map.
+- A printed or PDF map for a report or presentation to third parties, which the Master Agreement allows with the attribution on it (E204CW section 3.2(b)).
+avoid_when:
+- 'Keeping tiles for offline use or building a tile archive: the Master Agreement allows offline basemaps only through Esri Content Packages and forbids
+  otherwise scraping, downloading or storing the data (section 3.2(c)); E300 forbids exporting volumes of basemap tiles with session tokens.'
+- 'A map for a customer with no Esri account of its own: the data may be used only with the products Esri provided it for (section 3.2(a)).'
+- No key is available; the plugin never asks for a key in chat.
+delivery:
+  mode: fetch
+  requires_credential:
+    name: esri
+    kind: apikey
+    class: secret
+    class_allowed: [secret, browser]
+    host: static-map-tiles-api.arcgis.com
+    inject: {query: token}
+    reject: {status: [401, 403]}
+    signup_url: https://location.arcgis.com/sign-up/
+    probe: https://static-map-tiles-api.arcgis.com/arcgis/rest/services/static-basemap-tiles-service/v1/arcgis/streets/static/tile/0/0/0
+    free: true
+    limits: 'Static Basemap Tiles: 2 million tiles a month free on ArcGIS Location Platform, then $0.15 per 1,000 (developers.arcgis.com, read 2026-11-07)'
+    note: 'An API key with the basemaps privilege; a key restricted to the page''s referrers is the browser-class form. The service answers 401 for a
+      bad token (2026-11-07); the older ibasemaps-api host answers 200 with an error body, so it is not used.'
+source:
+  publisher: Esri
+  product: ArcGIS Static Basemap Tiles service (Location Platform)
+  url: https://developers.arcgis.com/rest/static-basemap-tiles/
+license:
+  class: licensed
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Powered by Esri. Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, © OpenStreetMap contributors, and the GIS User Community'
+  print_ok: true
+  note: 'Master Agreement E204CW read 2026-11-07 (arcgis.com/home/termsofuse.html): 3.2(a) data only with the products Esri provided it for; 3.2(b)
+    hard-copy or static electronic representations (PDF, GIF, JPEG, HTML) allowed, including in reports and presentations for third parties, with an
+    attribution statement naming Esri or its licensors; 3.2(c) offline only through Esri Content Packages, otherwise no scraping, downloading or
+    storing; 3.4 licensors'' extra attribution at esri.com/legal/third-party-data; B.1(g) attribution may not be removed. Static maps attribution guide
+    read the same day: "Powered by Esri" (at least "Esri") and the data source names, unobstructed. The source list differs by style and changes:
+    check it with the style''s attribution endpoint at each review. Earlier: The Master Agreement page lists PDFs only. Product-Specific Terms of Use E300 (read 2026-11-07): footnote 10 forbids programmatic use of
+    session tokens "(e.g., exporting volumes of basemap tiles)" on Location Platform and developer plans; footnote 89 requires authentication for a
+    revenue-generating application; E300 says nothing on caching, print or attribution, which sit in the Master Agreement E204 (PDF, not read).
+    The attribution service (static.arcgis.com/attribution/World_Street_Map) answered 200 on 2026-11-04.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-05-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: placeholder for a keyed commercial provider; nothing verified.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Still draft: the Master Agreement page and the attribution service both answered on 2026-11-04, but the agreement text could not be read from
+      the build environment, so export, caching and print terms remain unverified.'
+  - rev: 3
+    date: '2026-11-05'
+    note: 'requires_key is replaced by requires_credential (credentials spec, release 0.6.0): the key is the person''s own registered credential cred:esri for ibasemaps-api.arcgis.com, secret by default (fetched host-side for print, never written into an output) or browser (restricted to the person''s domain, may go into a web page). GEO_MAPPING_KEY_ variables stay a command-line fallback.'
+  - rev: 5
+    date: '2026-11-07'
+    note: 'Active (release 0.16.0): E204CW read (print and static maps allowed with attribution; no caching or storing; no scraping); the static maps
+      attribution guide read; tiles from the Static Basemap Tiles service (512 px, styles arcgis/streets, navigation, light-gray, dark-gray, outdoor,
+      community), which answered 401 for a made-up token. print_ok true, cache_ok false, production_ok true. A person''s own key is probed with
+      map-credentials check --probe on first use.'
+  - rev: 4
+    date: '2026-11-07'
+    note: 'Still draft (reference library additions, section 7): E300 read (no bulk tile export with session tokens; authentication for revenue
+      applications); print, caching and attribution are in E204, a PDF not read.'
+  - rev: 6
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+  check:
+    kind: http_head
+    url: https://developers.arcgis.com/rest/static-basemap-tiles/
+    expect: 200
+url_verified_on: '2026-11-07'
+url_template: https://static-map-tiles-api.arcgis.com/arcgis/rest/services/static-basemap-tiles-service/v1/{style}/static/tile/{z}/{y}/{x}?token={key}
+provider:
+  attribution_html: 'Powered by <a href="https://www.esri.com/">Esri</a> | Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, © OpenStreetMap contributors, and the GIS User Community'
+  max_zoom: 22
+  tile_size: 512
+  bulk_ok: false
+  cache_ok: false
+  print_ok: true
+  production_ok: true
+  styles:
+  - arcgis/streets
+  - arcgis/navigation
+  - arcgis/light-gray
+  - arcgis/dark-gray
+  - arcgis/outdoor
+  - arcgis/community
+attribution:
+  corner: 'Powered by Esri | Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, © OpenStreetMap contributors, and the GIS User Community'
+  links:
+  - text: Powered by Esri
+    href: https://www.esri.com/
+  full: 'Powered by Esri. Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, © OpenStreetMap contributors, and the GIS User Community.'
+  required_on_map: true
+  collapse: never
+  export:
+    text: 'Powered by Esri. Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, © OpenStreetMap contributors, and the GIS User Community'
+  dynamic:
+    kind: esri-attribution
+    lead: Powered by Esri
+    note: The style's current source list (static.arcgis.com/attribution) is embedded at a library refresh as dynamic.contributors; until then the corner
+      shows the recorded list, which never collapses.
+  terms_read: '2026-11-09'

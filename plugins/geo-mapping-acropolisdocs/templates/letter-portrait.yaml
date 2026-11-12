@@ -1,0 +1,15 @@
+name: letter-portrait
+label: Letter, portrait (8.5 x 11 in)
+kind: print
+size_mm: [215.9, 279.4]
+margin_mm: 10
+title:  {x: 10, y: 8,   w: 195.9, h: 19}
+map:    {x: 10, y: 29,  w: 195.9, h: 217}
+map_full: {x: 10, y: 8, w: 195.9, h: 238}   # the default layout: the map runs up over the title band, and the title sits in the map
+footer: {x: 10, y: 249, w: 195.9, h: 22}
+footer_fit: true                           # the footer shrinks to its notes and the map grows into the room (layout.fit_footer)
+fonts:  {title: 20, subtitle: 10.5, label: 7, legend_title: 8.5, legend: 7.5, note: 6.5, scale: 7, banner: 8}
+legend_max: {w: 70, h: 120}
+inset_size: {w: 48, h: 36}
+logo_height_mm: 10
+raster_default_dpi: 300

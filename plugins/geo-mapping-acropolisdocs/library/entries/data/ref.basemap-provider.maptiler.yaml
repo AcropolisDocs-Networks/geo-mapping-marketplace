@@ -1,0 +1,118 @@
+id: ref.basemap-provider.maptiler
+type: basemap-provider
+rev: 6
+status: active
+title: MapTiler basemaps
+summary: 'MapTiler Cloud vector and raster basemaps on OpenStreetMap and other data: a key and the MapTiler terms apply, with ''© MapTiler © OpenStreetMap
+  contributors'' shown on the map.'
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - licensed
+  quality:
+  - community
+use_when:
+- The client already holds a MapTiler account and wants this look on a web map page, with the person's own key registered (map-credentials add maptiler).
+- A styled vector basemap (streets, topo, satellite hybrid) behind an interactive page where the OSM Standard server would not be allowed.
+avoid_when:
+- No key is available; the plugin never asks for a key in chat. Use the bundled basemap.
+- 'The map is a print or static export beyond the plan''s allowance, or tiles would be cached in bulk: the terms limit bulk download and require attribution
+  on every display, and a free account must show the MapTiler logo.'
+delivery:
+  mode: fetch
+  requires_credential:
+    name: maptiler
+    kind: apikey
+    class: secret
+    class_allowed: [secret, browser]
+    host: api.maptiler.com
+    inject: {query: key}
+    reject: {status: [401, 403]}
+    signup_url: https://cloud.maptiler.com/
+    probe: https://api.maptiler.com/maps/streets-v2/0/0/0.png
+    free: true
+    limits: 'Read 2026-11-08: Free plan 5k map sessions and 100k API requests a month, for testing, prototypes, personal or non-commercial use; the MapTiler logo stays on the map; the service pauses at the limit until next month.'
+  note: Raster tiles at the url_template (style streets-v2, topo-v2, hybrid, basic-v2) or vector style JSON at api.maptiler.com/maps/{style}/style.json?key=;
+    the key is the person's registered credential cred:maptiler, never from chat.
+source:
+  publisher: MapTiler AG
+  product: MapTiler Cloud basemaps
+  url: https://www.maptiler.com/terms/
+license:
+  class: licensed
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: © MapTiler © OpenStreetMap contributors
+  note: 'MapTiler Terms of Service, section ''Map Data Attribution'' (read 2026-11-04): ''© MapTiler'' (with the MapTiler logo on a free account) and ''©
+    OpenStreetMap'' linked to openstreetmap.org/copyright on every map; commercial use per plan; no bulk extraction.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-08'
+  verify_by: '2027-11-04'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: placeholder for a keyed commercial provider; nothing verified.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: the terms page was read on 2026-11-04 (attribution requirement, logo on free accounts, no bulk extraction); key required, print terms
+      per plan (recorded as not stated).'
+  - rev: 3
+    date: '2026-11-05'
+    note: 'requires_key is replaced by requires_credential (credentials spec, release 0.6.0): the key is the person''s own registered credential cred:maptiler for api.maptiler.com, secret by default (fetched host-side for print, never written into an output) or browser (restricted to the person''s domain, may go into a web page). GEO_MAPPING_KEY_ variables stay a command-line fallback.'
+  - rev: 4
+    date: '2026-11-08'
+    note: 'Key details (0.23.0): the plans page read on 2026-11-08 (Free plan: 5k map sessions and 100k API requests a month, for testing, prototypes, personal or non-commercial use, the MapTiler logo on the map, service paused at the limit).'
+  - rev: 5
+    date: '2026-11-08'
+    note: 'Probe address (0.26.0): one tile, api.maptiler.com/maps/streets-v2/0/0/0.png, so credentials check --probe can test a tile key (the key is added at send time).'
+  - rev: 6
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse, the provider logo and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+  check:
+    kind: http_head
+    url: https://www.maptiler.com/terms/
+    expect: 200
+url_verified_on: '2026-11-08'
+provider:
+  wordmark_required: true
+  attribution_html: © <a href="https://www.maptiler.com/copyright/">MapTiler</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors
+  max_zoom: 22
+  tile_size: 512
+  bulk_ok: false
+  cache_ok: false
+  print_ok: null
+  production_ok: true
+url_template: https://api.maptiler.com/maps/{style}/{z}/{x}/{y}.png?key={key}
+attribution:
+  corner: © MapTiler © OpenStreetMap contributors
+  links:
+  - text: © MapTiler
+    href: https://www.maptiler.com/copyright/
+  - text: © OpenStreetMap contributors
+    href: https://www.openstreetmap.org/copyright
+  required_on_map: true
+  collapse: after_interaction
+  logo:
+    src: https://api.maptiler.com/resources/logo.svg
+    link: https://www.maptiler.com
+    corner: bottom-left
+    required: free-plan
+    collapse: never
+  export:
+    text: © MapTiler © OpenStreetMap contributors (openstreetmap.org/copyright)
+  terms_read: '2026-11-09'

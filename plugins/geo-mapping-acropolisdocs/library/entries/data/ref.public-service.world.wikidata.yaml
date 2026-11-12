@@ -1,0 +1,90 @@
+id: ref.public-service.world.wikidata
+type: public-service
+rev: 1
+status: active
+title: Wikidata SPARQL query service
+summary: 'The Wikidata Query Service answers SPARQL over Wikidata: place ids, coordinates (P625), populations, administrative hierarchies and external ids,
+  for lookups and crosswalks; CC0.'
+tags:
+  geography:
+  - world
+  level:
+  - place
+  - country
+  - state
+  - county
+  - site
+  domain:
+  - general
+  use_for:
+  - join-key
+  - label-reference
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - community
+use_when:
+- A crosswalk of place names to GeoNames, FIPS or ISO codes, or coordinates for a list of named venues, fetched with one SPARQL query.
+- Names of stadiums, universities or hospitals in a city with their coordinates for a locator map.
+avoid_when:
+- 'A bulk geometry source is expected: Wikidata holds points and ids, not boundaries.'
+- 'Queries run unattended at volume: the public endpoint caps a query at 60 seconds and about five parallel queries per client, and asks for an identifying
+  User-Agent.'
+pairs_with:
+- ref.gazetteer.world.place.geonames
+delivery:
+  mode: user-supplied
+  format: 'JSON or CSV from a SPARQL GET (format=json or Accept: text/csv), read as a table or as points from the P625 coordinate'
+  note: 'GET https://query.wikidata.org/sparql?query=<urlencoded SPARQL>&format=json (verified 2026-11-04 with a one-row query). Caps: 60 s per query, 5
+    parallel queries, and a User-Agent naming the tool; a LIMIT clause on every query. Convert the result with geo-convert (coordinate column as ''Point(lon
+    lat)'' WKT).'
+  columns:
+  - item
+  - itemLabel
+  - coord
+  - population
+  - external ids as selected
+source:
+  publisher: Wikimedia Foundation (Wikidata)
+  product: Wikidata Query Service (SPARQL endpoint)
+  url: https://query.wikidata.org/sparql?query=SELECT%20%3Fitem%20WHERE%20%7B%3Fitem%20wdt%3AP31%20wd%3AQ515%7D%20LIMIT%201&format=json
+url_verified_on: '2026-11-04'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Data from Wikidata (CC0).
+  note: Wikidata's structured data is CC0 1.0; no attribution is required, a credit is courteous.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-02-04'
+  check:
+    kind: http_get
+    url: https://query.wikidata.org/sparql?query=SELECT%20%3Fitem%20WHERE%20%7B%3Fitem%20wdt%3AP31%20wd%3AQ515%7D%20LIMIT%201&format=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the SPARQL endpoint with a one-row query (HTTP 200, 2026-11-04) and recorded the public caps.

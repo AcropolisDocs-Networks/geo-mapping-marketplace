@@ -1,0 +1,95 @@
+id: ref.context.world.building.google
+type: context
+rev: 1
+status: active
+title: Google Open Buildings (Africa, South and Southeast Asia, Latin America and the Caribbean)
+summary: Machine-detected building footprints with confidence and Plus Codes across the Global South, including Mexico, as CSV by S2 cell from Google Research;
+  CC BY 4.0. No coverage of the United States or Canada.
+tags:
+  geography:
+  - world
+  - mx
+  level:
+  - site
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - parcel-level
+  scale:
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - community
+use_when:
+- Building footprints for a Mexican or other Latin American local map, where Microsoft's coverage is thin.
+- A built-up density proxy in a market without a population raster.
+avoid_when:
+- 'The map is of the United States or Canada: the dataset does not cover them; use Microsoft or Overture footprints.'
+- Footprints are read as parcels or addresses.
+distinct_from:
+- id: ref.context.world.building.overture
+  why: Overture merges these footprints with other sources
+- id: ref.context.world.building.microsoft
+  why: Microsoft covers North America; Google does not
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: CSV (gzip) per S2 level-6 cell with WKT polygons, chosen from the coverage map on the project page
+  note: Open https://sites.research.google/gr/open-buildings/ (verified 2026-11-04), pick the S2 cells covering the bbox from the download section, download
+    the .csv.gz files, gunzip and read with geo-convert (columns latitude, longitude, area_in_meters, confidence, geometry as WKT, full_plus_code). Supply
+    the merged GeoPackage.
+  columns:
+  - latitude
+  - longitude
+  - area_in_meters
+  - confidence
+  - geometry
+  - full_plus_code
+source:
+  publisher: Google Research
+  product: Open Buildings v3
+  url: https://sites.research.google/gr/open-buildings/
+url_verified_on: '2026-11-04'
+vintage:
+  current: v3 (2023)
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Google Open Buildings, CC BY 4.0.
+  note: CC BY 4.0 as stated on the project page (read 2026-11-04). The per-cell tile index URL under the project's app host answered 404, so files are chosen
+    from the page.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_head
+    url: https://sites.research.google/gr/open-buildings/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the project page (HTTP 200, 2026-11-04; CC BY 4.0; coverage excludes North America except Mexico and the Caribbean). Files are chosen
+      from the page's download section.

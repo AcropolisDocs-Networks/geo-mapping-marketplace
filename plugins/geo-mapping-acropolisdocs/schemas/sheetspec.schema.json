@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SheetSpec: two to six maps on one sheet with one shared frame (1.3.0, R1-PANEL)",
+  "type": "object",
+  "required": ["sheet_version", "id", "panels"],
+  "additionalProperties": false,
+  "properties": {
+    "sheet_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,80}$"},
+    "template": {"description": "the sheet's template (a name, or custom:WxH); every panel is drawn on it"},
+    "brand": {"type": "string"},
+    "style": {"type": "object", "properties": {"pack": {"type": "string"}}, "description": "the style pack of the whole sheet (one pack per build; 1.4.0)"},
+    "title": {"type": "object", "additionalProperties": false, "properties": {"text": {"type": "string"}, "subtitle": {"type": "string"}}},
+    "arrangement": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "columns": {"type": "integer", "minimum": 1, "maximum": 3},
+        "rows": {"type": "integer", "minimum": 1, "maximum": 3},
+        "gap_mm": {"type": "number", "minimum": 0, "maximum": 30},
+        "caption": {"enum": ["below", "none"]}
+      }
+    },
+    "shared": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "extent": {"enum": ["union", "first", "each"]},
+        "scale": {"enum": ["same", "each"]},
+        "legend": {"enum": ["shared", "each", "none"]},
+        "locator": {"enum": ["one", "each", "none"]},
+        "north_arrow": {"enum": ["one", "each", "none"]},
+        "scale_bar": {"enum": ["one", "each", "none"]},
+        "sources": {"enum": ["one"]}
+      }
+    },
+    "export": {"type": "object", "properties": {"formats": {"type": "array", "items": {"enum": ["svg", "pdf", "png"]}}}},
+    "panels": {
+      "type": "array", "minItems": 2,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "properties": {
+          "spec": {"type": "string", "description": "a MapSpec file, relative to the sheet"},
+          "base": {"type": "string", "description": "a MapSpec file the override is merged onto (as atlas pages are made)"},
+          "override": {"type": "object"},
+          "caption": {"type": "string"}
+        },
+        "oneOf": [{"required": ["spec"], "not": {"required": ["base"]}}, {"required": ["base"], "not": {"required": ["spec"]}}]
+      }
+    }
+  }
+}

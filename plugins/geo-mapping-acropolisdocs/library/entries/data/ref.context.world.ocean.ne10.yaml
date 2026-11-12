@@ -1,0 +1,46 @@
+id: ref.context.world.ocean.ne10
+type: context
+rev: 1
+status: active
+title: World ocean, 10m (Natural Earth)
+summary: The ocean as one polygon, drawn in the water colour as the ground of regional, metro and local maps that have no tile basemap.
+tags:
+  geography: [world]
+  level: [water]
+  domain: [general]
+  use_for: [context-basemap, locator-inset, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [national, regional, state, metro]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A map finer than 1:10,000,000 with no tile basemap needs a coastline the 110m countries cannot give: the ocean is cut to the map window and drawn over the land colour.']
+avoid_when: [The map is a neighbourhood or a single site; the shoreline is generalized (simplified to about 0.0015 degrees)., Legal shorelines or tidal extents are needed.]
+pairs_with: [ref.context.world.lakes.ne10, ref.boundary.world.country.ne110]
+distinct_from: [ref.context.world.coastline.ne110]
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_10m_ocean.parquet
+  sha256: e6f67b19d199bf623cd7bcaa9aa6432a45ad9879fbdcc4d1433ae7a72a7f53df
+  size_mb: 2.49
+  format: GeoParquet (zstd)
+  features: 2
+  columns: [featurecla, area_deg2]
+  note: Geometry simplified at 0.0015 degrees (about 150 m) and exploded to its two parts; the map window cuts it before drawing.
+source: {publisher: Natural Earth, product: 'Ocean, 10m', url: 'https://naciscdn.org/naturalearth/10m/physical/ne_10m_ocean.zip',
+  file_sha256: db626fcd5d50b096b156c78a2cc95011b39f32a61b4e47d147e3f7a77b8b2719}
+url_verified_on: 2026-11-04
+vintage: {current: Natural Earth 5.1.2, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-04
+  verify_by: 2027-11-04
+  check: {kind: feature_count_and_hash, features: 2, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-04, note: Bundled payload built from Natural Earth 5.1.2 (M10 context ground).}

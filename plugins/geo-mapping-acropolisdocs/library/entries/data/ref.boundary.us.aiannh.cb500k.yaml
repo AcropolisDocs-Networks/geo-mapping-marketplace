@@ -1,0 +1,114 @@
+id: ref.boundary.us.aiannh.cb500k
+type: boundary
+rev: 1
+status: active
+title: US American Indian, Alaska Native and Native Hawaiian areas, 1:500,000 (Census cartographic boundary)
+summary: Federal and state reservations, off-reservation trust lands, tribal statistical areas and Hawaiian home lands as simplified polygons, for tribal-land
+  context and the tribal-lands rows in broadband programs.
+tags:
+  geography:
+  - us
+  level:
+  - place
+  domain:
+  - general
+  - demographics
+  - telecom
+  - program
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  avoid_for:
+  - parcel-level
+  - engineering-grade
+  - legal-boundary
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  detail:
+  - simplified
+  audience:
+  - any
+  - regulatory
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Showing tribal lands under a coverage, BEAD or tower map, or counting sites and locations inside each area.
+- A regulatory exhibit that needs the Census-defined tribal areas with their AIANNH codes.
+avoid_when:
+- The map needs legal reservation boundaries or trust-land parcels; these are generalized Census areas, and the Bureau of Indian Affairs holds the legal
+  record.
+- The map is local and needs the full-resolution outline; the TIGER/Line AIANNH file holds that.
+pairs_with:
+- ref.boundary.us.county.cb500k
+- ref.statistic.us.broadband.bead-ntia
+distinct_from:
+- id: ref.boundary.us.place.cb500k
+  why: tribal areas, not municipalities
+- id: ref.boundary.us.urban-area.cb2020-500k
+  why: tribal areas, not urban footprints
+join:
+  key: GEOID
+  type: string
+  width: 4
+  note: Four-digit AIANNH code as text (GEOIDFQ carries the fully qualified form); LSAD tells reservation from statistical area and trust land.
+  pattern: ^\d{4}[RT]?$
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 1.46
+  features: 704
+  columns:
+  - AIANNHCE
+  - AIANNHNS
+  - GEOIDFQ
+  - GEOID
+  - NAME
+  - NAMELSAD
+  - LSAD
+  - MTFCC
+  - ALAND
+  - AWATER
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, American Indian/Alaska Native/Native Hawaiian Areas, 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_aiannh_500k.zip
+  file_sha256: 79d2f62c00c9c52d4034d56b20eb493a003fcc6e265717077b32a4c5edebe467
+url_verified_on: '2026-11-04'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: feature_count_and_hash
+    features: 704
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the 2025 national archive (704 features, 1,527,626 bytes, SHA-256 recorded). TIGERweb layer 36 (Federal American Indian Reservations)
+      under the shipped tigerweb profile is the service alternative.

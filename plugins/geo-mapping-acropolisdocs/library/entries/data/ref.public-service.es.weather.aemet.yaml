@@ -1,0 +1,68 @@
+id: ref.public-service.es.weather.aemet
+type: public-service
+rev: 1
+status: draft
+title: AEMET OpenData (Spain weather and climate)
+summary: Spanish weather observations, forecasts and climate records from AEMET OpenData, with a free key; reuse requires citing AEMET.
+tags:
+  geography:
+  - es
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Station observations or climate values near Spanish sites, once the key delivery is confirmed.
+avoid_when:
+- How the key is sent is not stated on the information page (2026-11-07), so the plugin has no credential block for it yet.
+- 'Two steps per request: AEMET answers with a link to the data, which is fetched in a second request.'
+delivery:
+  mode: user-supplied
+  note: Request a key with an e-mail address (Obtención de API Key on opendata.aemet.es). The station inventory endpoint answered 200 with an empty body
+    without a key on 2026-11-07.
+source:
+  publisher: Agencia Estatal de Meteorología (AEMET)
+  product: AEMET OpenData
+  url: https://opendata.aemet.es/centrodedescargas/info
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Fuente: AEMET.'
+  note: 'Information page (read 2026-11-07): data in Annex II of AEMET''s public-price resolution (BOE, 5 January 2016) is free; use and reproduction are
+    allowed "citando a Aemet como autora de la misma".'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): the information page read on 2026-11-07 (key by e-mail, citation condition); key delivery not stated.'

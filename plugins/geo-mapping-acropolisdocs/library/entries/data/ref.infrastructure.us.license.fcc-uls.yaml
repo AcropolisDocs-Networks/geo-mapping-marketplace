@@ -1,0 +1,77 @@
+id: ref.infrastructure.us.license.fcc-uls
+type: infrastructure
+rev: 2
+status: draft
+title: FCC Universal Licensing System (licensed locations)
+summary: Licensed transmitter and base-station locations by radio service from the FCC ULS, for licence and site context. Downloaded by the person; the
+  plugin reads the tables once supplied.
+tags:
+  geography:
+  - us
+  level:
+  - site
+  domain:
+  - telecom
+  use_for:
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A map of licensed locations for one radio service (cellular, microwave, land mobile) in a market.
+- Checking which licensee holds locations near a client's sites.
+avoid_when:
+- The map needs a client's own sites; ULS holds licensed locations as filed, not operating sites.
+- Positions must be exact for engineering; filed coordinates are as submitted.
+pairs_with:
+- ref.infrastructure.us.hifld.cell-tower
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: zip of pipe-delimited tables per radio service (LO carries locations; HD, EN, FR carry licence header, entity and frequency rows)
+  note: 'Download the per-service ''complete'' file in a browser from data.fcc.gov/download/pub/uls/complete/: l_cell.zip (cellular), l_micro.zip (microwave),
+    l_LMcomm.zip (land mobile commercial), l_paging.zip, l_coast.zip. The LO table holds latitude and longitude in degrees, minutes, seconds with N/S and
+    E/W flags; convert to decimal. For cellular licence locations a verified service copy exists: ref.infrastructure.us.hifld.cell-tower.'
+  size_mb: 30 to 400 by service (varies weekly)
+source:
+  publisher: FCC
+  product: Universal Licensing System complete downloads
+vintage:
+  current: weekly complete files
+  cadence: monthly
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: FCC Universal Licensing System.'
+  note: Public domain; the download host refuses automated requests, so the file is supplied by the person.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-05-04'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the FCC site refused automated requests from the build environment (HTTP 403); nothing here is verified.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Still draft: The FCC web hosts (fcc.gov, data.fcc.gov, broadbandmap.fcc.gov) refuse automated requests from the build environment (HTTP 403 on
+      2026-11-04). The per-service file names and the LO table layout are recorded so the person can download them; the cellular subset is served by ref.infrastructure.us.hifld.cell-tower.'

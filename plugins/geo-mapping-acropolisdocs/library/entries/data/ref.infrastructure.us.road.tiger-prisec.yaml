@@ -1,0 +1,83 @@
+id: ref.infrastructure.us.road.tiger-prisec
+type: infrastructure
+rev: 1
+status: active
+title: US primary and secondary roads by state (Census TIGER/Line)
+summary: 'Primary and secondary roads for one state (Arizona checked: 1,320 line features), for state and metro context.'
+tags:
+  geography:
+  - us
+  level:
+  - line
+  domain:
+  - transport
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - state
+  - metro
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Roads give a reader the orientation to find the map's area, under thematic data or site points.
+- A site map where interstates and major roads explain access or coverage corridors.
+avoid_when:
+- The map needs street-level routing or every local road; these files hold only the major road classes.
+- The map needs road positions accurate enough for engineering or survey work.
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 2.47
+  features: 1320
+  columns:
+  - LINEARID
+  - FULLNAME
+  - RTTYP
+  - MTFCC
+  url_template: https://www2.census.gov/geo/tiger/TIGER2025/PRISECROADS/tl_2025_{statefp}_prisecroads.zip
+source:
+  publisher: US Census Bureau
+  product: US primary and secondary roads by state, TIGER/Line Shapefile 2025
+  url: https://www2.census.gov/geo/tiger/TIGER2025/PRISECROADS/tl_2025_04_prisecroads.zip
+  file_sha256: cbcea97b375bd62233b6ee6070c94b119e964f4bdf00eedc9ca3c90ae719d0bd
+url_verified_on: '2026-11-02'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, TIGER/Line Shapefiles.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-05-02'
+  check:
+    kind: feature_count_and_hash
+    features: 1320
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Verified the Arizona file; other states use the same file pattern.

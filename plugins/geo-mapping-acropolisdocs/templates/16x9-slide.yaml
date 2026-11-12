@@ -1,0 +1,16 @@
+name: 16x9-slide
+label: Slide, 16:9 (13.33 x 7.5 in)
+kind: slide
+size_mm: [338.67, 190.5]
+margin_mm: 8
+title:  {x: 8, y: 6,   w: 322.67, h: 22}
+map:    {x: 8, y: 30,  w: 322.67, h: 132}
+map_full: {x: 8, y: 6, w: 322.67, h: 156}   # the default layout: the map runs up over the title band, and the title sits in the map
+footer: {x: 8, y: 165, w: 322.67, h: 21}
+footer_fit: true                           # 1.0.0: the footer shrinks to its notes and the map grows into the room (layout.fit_footer)
+footer_fit_classic: false                  # the classic look keeps the fixed footer it had before 1.0.0
+fonts:  {title: 26, subtitle: 14, label: 10, legend_title: 12, legend: 10.5, note: 10, scale: 10, banner: 11}
+legend_max: {w: 92, h: 118}
+inset_size: {w: 60, h: 40}
+logo_height_mm: 10
+raster_default_dpi: 200

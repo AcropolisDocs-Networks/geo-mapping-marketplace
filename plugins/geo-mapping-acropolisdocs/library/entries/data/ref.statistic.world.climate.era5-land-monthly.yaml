@@ -1,0 +1,87 @@
+id: ref.statistic.world.climate.era5-land-monthly
+type: statistic
+rev: 2
+status: active
+title: ERA5-Land monthly averaged data (CDS)
+summary: Monthly means of ERA5-Land variables (2 m temperature, precipitation, soil moisture) over land on a 0.1 degree grid, 1950 to present.
+tags:
+  geography:
+  - world
+  level:
+  - grid
+  domain:
+  - weather
+  use_for:
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- 'A climate context layer for a market or a challenge map: one variable, a few months, the map window''s area (cds_retrieve.py plan, then submit).'
+avoid_when:
+- 'Daily or hourly series over a large area: the job grows past the 2 GB cap; ask for monthly means or a smaller window.'
+- 'Requests in parallel: ECMWF asks for one at a time ("Submit requests sequentially, rather than in parallel", 22 October 2026).'
+pairs_with:
+- ref.public-service.world.climate.copernicus-cds
+join:
+  key: none
+  type: raster
+  note: A gridded raster (GeoTIFF bands by month after climate_read); used as a raster layer or zonal statistics, not joined.
+delivery:
+  mode: service
+  tool: cds_retrieve
+  format: 'NetCDF (data_format: netcdf, download_format: unarchived) or GRIB'
+  cds:
+    dataset: reanalysis-era5-land-monthly-means
+    grid_deg: 0.1
+    licences:
+    - cc-by
+  note: Retrieved through the CDS entry's declared requests. The dataset's licence is read from its catalogue collection at run time (cc-by, revision 1,
+    read 2026-11-10); accept it on the dataset page first.
+source:
+  publisher: ECMWF for the Copernicus Climate Change Service (C3S)
+  product: ERA5-Land monthly averaged data
+  url: https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land-monthly-means
+url_verified_on: '2026-11-10'
+vintage:
+  current: monthly, updated about five days after each month
+  cadence: monthly
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: Generated using Copernicus Climate Change Service information.
+  terms_accepted: the dataset's Terms of use, accepted by the person on its CDS page
+  note: CC-BY 4.0 - the dataset's catalogue collection (reanalysis-era5-land-monthly-means) links licence cc-by revision 1, 'CC-BY licence', https://spdx.org/licenses/CC-BY-4.0
+    (read 2026-11-10). Contains modified ... when values are transformed.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-02-10'
+  changelog:
+  - rev: 1
+    date: '2026-11-10'
+    note: 'Draft (1.3.0, R1-CDS): the dataset id, grid and credit recorded; active after the live check (one small request from the PC) reads its licence
+      page and the download host.'
+  - rev: 2
+    date: '2026-11-10'
+    note: 'Active (1.3.1): licence read from the CDS catalogue (cc-by, revision 1, CC-BY 4.0) and recorded in delivery.cds.licences; the download host
+      measured in the owner''s live check of 1.3.0.'

@@ -1,0 +1,24 @@
+# Fonts for scripts Inter does not cover (1.5.0, R3-SCRIPT). Inter covers Latin, Greek and Cyrillic; a label in another script is set in the Noto
+# family below, shaped with HarfBuzz (uharfbuzz) and drawn as outlined paths with the words kept in <title> (spike S4). The fonts are not
+# bundled: `doctor --fonts arab,hebr,deva,hani` fetches the pinned file into the font cache (.geo-mapping/fonts/noto/), checks its SHA-256 and
+# the OFL text, and the terms register lists it. Pinned to commits of github.com/notofonts (read 2026-11-10 with git ls-remote).
+schema: script-fonts/1
+licence: {name: SIL Open Font License 1.1, check: "SIL Open Font License"}
+sources:
+  notofonts: {repo: notofonts/notofonts.github.io, commit: 4cf78353cd1668040ba8efa13029cd910fcdf9e2, base: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/4cf78353cd1668040ba8efa13029cd910fcdf9e2/fonts/",
+              licence_file: LICENSE, licence_sha256: f2095b08bed08b23a6fe26112fcd679a2bee3f002eef077eb05d215ed1051bd8}
+  noto-cjk: {repo: notofonts/noto-cjk, commit: f8d157532fbfaeda587e826d4cd5b21a49186f7c, base: "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/",
+             licence_file: Sans/LICENSE, licence_sha256: 6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2}
+fonts:
+  arab: {family: Noto Sans Arabic, source: notofonts, path: NotoSansArabic/hinted/ttf/NotoSansArabic-Regular.ttf, sha256: bdff3e5659d67e67def05b33f749683b9376ae819d65d3dd62ac4640b3aaef48, bytes: 234892, scripts: [Arab], shaping: complex}
+  hebr: {family: Noto Sans Hebrew, source: notofonts, path: NotoSansHebrew/hinted/ttf/NotoSansHebrew-Regular.ttf, sha256: cdefaf8efd47045f6820928eba84db5bed7557539328952b5f828315485e02ee, bytes: 26860, scripts: [Hebr], shaping: complex}
+  deva: {family: Noto Sans Devanagari, source: notofonts, path: NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Regular.ttf, sha256: 4e3c66638958c3e2ab5d37f47a8deb89fffeb7be9985c665a519bbc7ba762313, bytes: 243520, scripts: [Deva], shaping: complex}
+  beng: {family: Noto Sans Bengali, source: notofonts, path: NotoSansBengali/hinted/ttf/NotoSansBengali-Regular.ttf, sha256: b55c62ee531e3214da6c0701daecea89a52ba42db7d8206b92e6b51f397a3193, bytes: 143072, scripts: [Beng], shaping: complex}
+  thai: {family: Noto Sans Thai, source: notofonts, path: NotoSansThai/hinted/ttf/NotoSansThai-Regular.ttf, sha256: 61cf814eec46b294d6ea4401ac295d0cecd5207bd2331dcc5a15e7301d30ee44, bytes: 37780, scripts: [Thai], shaping: complex}
+  geor: {family: Noto Sans Georgian, source: notofonts, path: NotoSansGeorgian/hinted/ttf/NotoSansGeorgian-Regular.ttf, sha256: d3e33254b09e7bb2c5cf0f17e554b80462056c5a107097f258d495168c3a9346, bytes: 52888, scripts: [Geor], shaping: simple}
+  armn: {family: Noto Sans Armenian, source: notofonts, path: NotoSansArmenian/hinted/ttf/NotoSansArmenian-Regular.ttf, sha256: 720df88c332417a235b4d6209d14ec2e2bf4bfe2a954b7453d869ea593bfce1e, bytes: 30752, scripts: [Armn], shaping: simple}
+  jpan: {family: Noto Sans JP, source: noto-cjk, path: Sans/SubsetOTF/JP/NotoSansJP-Regular.otf, sha256: dff723ba59d57d136764a04b9b2d03205544f7cd785a711442d6d2d085ac5073, bytes: 4533028, scripts: [Hani, Hira, Kana], lang: [ja], shaping: simple}
+  hans: {family: Noto Sans SC, source: noto-cjk, path: Sans/SubsetOTF/SC/NotoSansSC-Regular.otf, sha256: faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9, bytes: 8331336, scripts: [Hani], lang: [zh], shaping: simple}
+  hant: {family: Noto Sans TC, source: noto-cjk, path: Sans/SubsetOTF/TC/NotoSansTC-Regular.otf, sha256: 5bab0cb3c1cf89dde07c4a95a4054b195afbcfe784d69d75c340780712237537, bytes: 5683368, scripts: [Hani], lang: [zht], shaping: simple}
+  kore: {family: Noto Sans KR, source: noto-cjk, path: Sans/SubsetOTF/KR/NotoSansKR-Regular.otf, sha256: 69975a0ac8472717870aefeab0a4d52739308d90856b9955313b2ad5e0148d68, bytes: 4644748, scripts: [Hang, Hani], lang: [ko], shaping: simple}
+aliases: {hani: hans, cjk: hans, hira: jpan, kana: jpan, hang: kore, zh: hans, ja: jpan, ko: kore, ar: arab, he: hebr, hi: deva, bn: beng, fa: arab, ur: arab}

@@ -1,0 +1,45 @@
+id: ref.gazetteer.world.place.ne110
+type: gazetteer
+rev: 1
+status: active
+title: World populated places, 110m (Natural Earth)
+summary: Major cities with a label rank, for labelling world and continental maps.
+tags:
+  geography: [world]
+  level: [place]
+  domain: [general]
+  use_for: [label-reference, context-basemap, atlas]
+  avoid_for: [engineering-grade, site-precision, join-key]
+  scale: [world]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A world map labels the largest cities, using labelrank to decide which to show first.']
+avoid_when: [The map is regional or smaller; only about 240 places are included., The map needs population for analysis; pop_max is
+    a rough figure of unknown year.]
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_110m_places.parquet
+  sha256: 8a20e9ed6c310193b8ec955840bbc65bfdc291d83754b243bbe4850f8bc213b4
+  size_mb: 0.03
+  format: GeoParquet (zstd)
+  features: 243
+  columns: [name, nameascii, adm0name, adm0_a3, adm1name, iso_a2, adm0cap, worldcity, megacity, pop_max, labelrank, scalerank, latitude,
+    longitude, min_zoom, ne_id]
+source: {publisher: Natural Earth, product: 'Populated Places (simple), 110m', url: 'https://naciscdn.org/naturalearth/110m/cultural/ne_110m_populated_places_simple.zip',
+  file_sha256: 3f3d99a9a5d84605bb3be07b94c9122b4d69d7545de478b314d75f5b0742afdf}
+url_verified_on: 2026-11-02
+vintage: {current: Natural Earth 5.1.2, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-02
+  verify_by: 2027-11-02
+  check: {kind: feature_count_and_hash, features: 243, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-02, note: Bundled payload built and verified (M1).}

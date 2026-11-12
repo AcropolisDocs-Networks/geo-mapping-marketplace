@@ -1,0 +1,87 @@
+id: ref.public-service.world.transit.transitland
+type: public-service
+rev: 1
+status: draft
+title: Transitland (GTFS feed catalogue and API)
+summary: A worldwide catalogue of GTFS and GTFS-realtime feeds with agencies, routes and stops through the Transitland v2 REST API, with a key.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  - line
+  domain:
+  - transport
+  use_for:
+  - site-map
+  - context-basemap
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - community
+use_when:
+- Finding the GTFS feed for an agency anywhere, or stops and routes in a bounding box, with the person's own key (map-credentials add transitland).
+avoid_when:
+- The free quota and terms were not read (2026-11-07).
+- 'Each feed keeps its own licence: Transitland lists it per feed.'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: transitland
+    kind: apikey
+    class: secret
+    host: transit.land
+    inject:
+      query: apikey
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://www.transit.land/plans-pricing/
+    free: true
+    limits: Plans set a monthly quota of REST requests; the free figure was not read (REST API documentation, 2026-11-07)
+    note: The key may also go in a header named apikey
+  request: https://transit.land/api/v2/rest/agencies?limit=20
+  note: Without a key the API answers 401 Unauthorized (2026-11-07).
+source:
+  publisher: Interline Technologies (Transitland)
+  product: Transitland v2 REST API
+  url: https://www.transit.land/documentation/rest-api/
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: irregular
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: null
+  bulk_ok: false
+  attribution_text: Transit data via Transitland and the feeds' publishers
+  note: Terms of Service and Data Attributions not read.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): the REST API documentation read (base address, apikey) and the API answered 401 without a key on 2026-11-07;
+      plans and terms not read.'

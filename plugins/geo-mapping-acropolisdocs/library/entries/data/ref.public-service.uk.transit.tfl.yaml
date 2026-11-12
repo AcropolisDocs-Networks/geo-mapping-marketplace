@@ -1,0 +1,83 @@
+id: ref.public-service.uk.transit.tfl
+type: public-service
+rev: 1
+status: active
+title: Transport for London Unified API
+summary: London Underground, bus, rail and bike data from TfL's Unified API (lines, stops and stations, status, arrivals), keyless at low volume; an app_key
+  raises the limit.
+tags:
+  geography:
+  - uk
+  level:
+  - site
+  - line
+  domain:
+  - transport
+  use_for:
+  - site-map
+  - context-basemap
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Stations and stops of a London line or mode, or line status, on a London site or venue map.
+- A London transit layer when no GTFS feed is supplied.
+avoid_when:
+- 'A busy or repeated pull without a key: register and subscribe to the data plan, then send app_key as a query parameter.'
+- 'Outside London: TfL covers London only.'
+delivery:
+  mode: service
+  protocol: rest-json
+  request: https://api.tfl.gov.uk/StopPoint/Mode/{mode}
+  requests:
+    line-status: https://api.tfl.gov.uk/Line/Mode/{mode}/Status
+    stops: https://api.tfl.gov.uk/StopPoint/Mode/{mode}
+    route: https://api.tfl.gov.uk/Line/{line}/Route/Sequence/outbound
+  note: 'Line status for the tube answered without a key on 2026-11-07. With a key: register on api-portal.tfl.gov.uk, subscribe to the 500-requests data
+    plan, and send app_key as a query parameter (app_id is no longer needed). The plugin sends no key for TfL today.'
+source:
+  publisher: Transport for London
+  product: TfL Unified API
+  url: https://api-portal.tfl.gov.uk/
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: Powered by TfL Open Data
+  note: The portal (read 2026-11-07) says open data may be used under TfL's transport data terms and conditions (not read); the attribution wording is TfL's
+    usual one, to be confirmed against those terms.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  check:
+    kind: http_get
+    url: https://api.tfl.gov.uk/Line/Mode/tube/Status
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions, P2): the API portal read (app_key query parameter, data plan) and line status answered without a key on 2026-11-07;
+      transport data terms not read.'

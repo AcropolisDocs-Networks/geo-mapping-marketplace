@@ -1,0 +1,15 @@
+name: story
+label: Story, 9:16 (7.5 x 13.33 in, 1080 x 1920 px at 144 dpi)
+kind: social
+size_mm: [190.5, 338.67]
+margin_mm: 8
+title:  {x: 8, y: 6,   w: 174.5, h: 26}
+map:    {x: 8, y: 34,  w: 174.5, h: 268}
+map_full: {x: 8, y: 6, w: 174.5, h: 296}   # the default layout: the map runs up over the title band, and the title sits in the map
+footer: {x: 8, y: 305, w: 174.5, h: 28}
+footer_fit: true                           # the footer shrinks to its notes and the map grows into the room (layout.fit_footer)
+fonts:  {title: 26, subtitle: 14, label: 10, legend_title: 12, legend: 10.5, note: 10, scale: 10, banner: 11}
+legend_max: {w: 80, h: 130}
+inset_size: {w: 50, h: 40}
+logo_height_mm: 10
+raster_default_dpi: 144

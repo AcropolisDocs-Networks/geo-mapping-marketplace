@@ -1,0 +1,12 @@
+# Optional extras; none is needed for the standard outputs. python3 -m pip install -r requirements-optional.txt
+mapclassify            # cross-check of the plugin's own classification
+contextily             # tile compositing
+cartopy                # projection-aware rendering
+rasterio>=1.4          # raster inputs, zonal statistics, hillshade, DEM fetch (terrain-analysis); contourpy for contours comes with matplotlib
+h3>=4                  # H3 hex aggregation: role hexbin / heat, geo_ops hexbin, geo-analyze hexbin
+duckdb>=1.1            # large tables (M16): where filters, big join tables, grid sums; its spatial extension for point-in-polygon (INSTALL spatial once)
+imageio-ffmpeg         # the MP4 of an animated atlas (map_export --animate); the GIF needs only Pillow
+scipy                  # 3D web page terrain tiles (with rasterio); faster cluster baking on the MapLibre page
+playwright             # the last PNG route and web-map checks; then run `playwright install chromium` once
+psycopg[binary]>=3.1   # live read-only PostGIS connections (postgis_tables, postgis_fetch; 0.15.0)
+uharfbuzz              # outlined text shaped as the live text is: ligatures and contextual forms (1.0.0); without it, kerning and tnum only

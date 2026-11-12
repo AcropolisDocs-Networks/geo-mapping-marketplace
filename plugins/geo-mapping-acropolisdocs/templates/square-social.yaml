@@ -1,0 +1,15 @@
+name: square-social
+label: Square social graphic (10 x 10 in, 1080 px at 108 dpi)
+kind: social
+size_mm: [254, 254]
+margin_mm: 9
+title:  {x: 9, y: 8,   w: 236, h: 30}
+map:    {x: 9, y: 40,  w: 236, h: 164}
+map_full: {x: 9, y: 8, w: 236, h: 196}   # the default layout: the map runs up over the title band, and the title sits in the map
+footer: {x: 9, y: 207, w: 236, h: 40}
+footer_fit: true                         # M16: the footer shrinks to its notes (two lines on most maps) and the map grows into the room
+fonts:  {title: 24, subtitle: 13, label: 10, legend_title: 11, legend: 10, note: 10, scale: 10, banner: 11}
+legend_max: {w: 90, h: 110}
+inset_size: {w: 52, h: 38}
+logo_height_mm: 11
+raster_default_dpi: 108

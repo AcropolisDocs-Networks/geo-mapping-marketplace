@@ -1,0 +1,111 @@
+id: ref.statistic.world.speed.ookla
+type: statistic
+rev: 2
+status: active
+title: Ookla Speedtest open data (mobile and fixed performance tiles)
+summary: Quarterly mean download and upload speed, latency and test counts per zoom-16 web Mercator tile, worldwide, from Ookla's open data on AWS; CC BY-NC
+  4.0, so internal use only.
+tags:
+  geography:
+  - world
+  level:
+  - place
+  domain:
+  - telecom
+  use_for:
+  - choropleth
+  - density-surface
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - internal
+  confidentiality:
+  - restricted-license
+  freshness:
+  - quarterly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - commercial
+use_when:
+- An internal map of measured mobile speeds by tile or rolled up to county, compared quarter over quarter.
+- Finding low-speed clusters near a client's sites for an internal performance review.
+avoid_when:
+- 'The map is for a client deliverable, a publication or any commercial use: the licence is CC BY-NC 4.0 (non-commercial), so external use is blocked (MAP-LIC-004).'
+- 'Operator attribution is expected: the open tiles aggregate all operators; per-operator data is a paid product.'
+join:
+  key: quadkey
+  type: string
+  width: 16
+  note: Zoom-16 Bing quadkey as text; the tile polygon is in the file. avg_d_kbps, avg_u_kbps, avg_lat_ms, tests, devices.
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: Parquet with the tile polygon as WKT text (not GeoParquet), or the same tiles as a zipped shapefile; one worldwide file per quarter and type
+  geometry_columns:
+    wkt: tile
+  quadkey_column: quadkey
+  features: 3409380
+  note: 'Both files were verified for 2025 Q3 mobile: parquet/performance/type=mobile/year=2025/quarter=3/2025-07-01_performance_mobile_tiles.parquet (188,770,845
+    bytes, 3,409,380 tiles; its footer read on 2026-11-05: quadkey, tile as WKT text, tile_x, tile_y, avg_d_kbps, avg_u_kbps, avg_lat_ms, avg_lat_down_ms,
+    avg_lat_up_ms, tests, devices; no GeoParquet metadata) and shapefiles/performance/type=mobile/year=2025/quarter=3/2025-07-01_performance_mobile_tiles.zip
+    (131,249,667 bytes) on ookla-open-data.s3.amazonaws.com; type=fixed for fixed broadband. The licence (CC BY-NC 4.0: attribution, non-commercial use only)
+    keeps the entry user-supplied: the person downloads the parquet and reads the market with the plugin''s own reader, ref_fetch.py read
+    ref.statistic.world.speed.ookla FILE.parquet --bbox=W,S,E,N --out market.parquet, which keeps only the tiles whose quadkey lies over the box before
+    it turns the tile WKT into polygons (the world is never parsed), then draws market.parquet as a file layer with this entry''s attribution. DuckDB
+    read_parquet on the s3:// path with a quadkey-prefix WHERE does the same without downloading the file.'
+  columns:
+  - quadkey
+  - tile
+  - avg_d_kbps
+  - avg_u_kbps
+  - avg_lat_ms
+  - tests
+  - devices
+  size_mb: 180.0
+source:
+  publisher: Ookla
+  product: Speedtest by Ookla Global Fixed and Mobile Network Performance Maps (AWS Open Data)
+  url: https://ookla-open-data.s3.amazonaws.com/shapefiles/performance/type%3Dmobile/year%3D2025/quarter%3D3/2025-07-01_performance_mobile_tiles.zip
+url_verified_on: '2026-11-05'
+vintage:
+  current: 2025 Q3 (2025 Q4 file also listed)
+  cadence: quarterly
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: true
+  external_ok: false
+  attribution_text: Speedtest® by Ookla® Global Fixed and Mobile Network Performance Maps, CC BY-NC 4.0.
+  note: 'CC BY-NC 4.0 per the AWS Open Data registry page (registry.opendata.aws/speedtest-global-performance, read 2026-11-04): attribution required, non-commercial
+    only.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-05'
+  verify_by: '2027-11-05'
+  check:
+    kind: http_head
+    url: https://ookla-open-data.s3.amazonaws.com/shapefiles/performance/type%3Dmobile/year%3D2025/quarter%3D3/2025-07-01_performance_mobile_tiles.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the S3 listing for 2025 (four quarterly mobile files), the Q3 parquet (HEAD 200, 188.8 MB) and the Q3 shapefile zip (HEAD 200, 131.2
+      MB) on 2026-11-04; licence read from the AWS registry page. Internal, non-commercial only; user-supplied because each file is worldwide and the parquet
+      is not GeoParquet.
+  - rev: 2
+    date: '2026-11-05'
+    note: 'The read recipe names the plugin''s reader (ref_fetch.py read, M13 integration): tile WKT into polygons, a box cut by quadkey prefix first. The
+      Q3 parquet footer read on 2026-11-05 (3,409,380 tiles, schema recorded). Still user-supplied: the licence is non-commercial.'

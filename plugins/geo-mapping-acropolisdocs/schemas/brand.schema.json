@@ -1,0 +1,497 @@
+{
+  "title": "AcropolisDocs brand registry — brand spec",
+  "version": "1.2.0",
+  "description": "Schema every brand.json file in references/brands/ must satisfy. Enforced by linters/lint_brand_registry.py (S rules).",
+  "type": "object",
+  "required": [
+    "identity",
+    "palette",
+    "logo",
+    "voice"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "identity": {
+      "type": "object",
+      "required": [
+        "slug",
+        "name",
+        "owner"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The brand's name: every file's Author, Creator, Last modified by and Company (branding/scripts/doc_props.py)"
+        },
+        "owner": {
+          "type": "string",
+          "description": "Legal owner of the brand (e.g. 'Acme Fiber, Inc.', 'AcropolisDocs')"
+        },
+        "homepage": {
+          "type": "string",
+          "format": "uri"
+        },
+        "description": {
+          "type": "string",
+          "description": "One-line brand summary"
+        },
+        "tagline": {
+          "type": "string"
+        }
+      }
+    },
+    "palette": {
+      "type": "object",
+      "required": [
+        "screen",
+        "print"
+      ],
+      "description": "Two color modes — screen (dark theme default) and print (light background, deepened accents). v6.19.0: screen.bg_primary is the brand's DARK surface and print.bg_primary its LIGHT one; lint_brand_registry R1 measures that each is what its role says (white reads better than black on a dark surface), and a deck refuses `--theme dark` for a brand whose screen.bg_primary measures light.",
+      "properties": {
+        "screen": {
+          "$ref": "#/$defs/paletteMode"
+        },
+        "print": {
+          "$ref": "#/$defs/paletteMode"
+        }
+      }
+    },
+    "typography": {
+      "type": "object",
+      "properties": {
+        "primary_family": {
+          "type": "string",
+          "description": "Sans-serif body font (e.g. 'Inter', 'Roboto')"
+        },
+        "office_family": {
+          "type": "string",
+          "description": "v9.8.0 (L15): the family name Word and PowerPoint set for this brand's face, when the font files cannot say it themselves (their name IDs 1, 4 and 6 are blanked to '.', a web-font protection). Read by load_brand.office_family() AHEAD of each face's internal_family, then primary_family. lint_brand_fonts F3 requires it when the files' names are blank. Telekom Greece: 'TeleNeo Office'."
+        },
+        "monospace_family": {
+          "type": "string"
+        },
+        "fallback_families": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "local_fonts": {
+          "type": "array",
+          "description": "Font files bundled with this brand, relative to references/fonts/<slug>/. render_brand_tokens emits an @font-face per entry so the brand's real typeface reaches HTML and PDF output instead of silently falling back.",
+          "items": {
+            "type": "object",
+            "required": [
+              "file",
+              "family",
+              "weight",
+              "style"
+            ],
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "family": {
+                "type": "string",
+                "description": "CSS family to register the file under — the brand's primary_family, not the font's own internal name, so one family carries all weights"
+              },
+              "weight": {
+                "type": "integer"
+              },
+              "style": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "italic"
+                ]
+              },
+              "internal_family": {
+                "type": "string",
+                "description": "The family name in the font's own name table, recorded so the linter can verify the file is what the entry claims"
+              },
+              "postscript_name": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "web_fonts": {
+          "type": "array",
+          "description": "Open-licence web faces for the brand's screen pages, relative to references/webfonts/<slug>/ (kept apart from references/fonts/, which the Office and PDF text measurement scans). render_brand_tokens embeds each as a base64 @font-face in screen mode only, so a page asks no outside host for a font (v11.24.0, SEC-5) and the PDF, which renders through fontconfig, is unchanged.",
+          "items": {
+            "type": "object",
+            "required": [
+              "file",
+              "family",
+              "weight"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "family": {
+                "type": "string"
+              },
+              "weight": {
+                "type": "string",
+                "pattern": "^[1-9]00 [1-9]?[0-9]00$",
+                "description": "the variable face's weight range, e.g. \"100 900\""
+              },
+              "unicode_range": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "description": "Per-brand BINARY assets that are the brand owner's own property, shipped alongside the token data. Declared here rather than discovered by a filesystem probe so that resolution matches every other brand property, the build can derive what to package from the declaration, and a declared-but-absent file is a hard packaging error instead of a silent fallback. Absent key = no asset = the generic path (theme injection for the deck template), which is a legitimate, declared state.",
+      "additionalProperties": false,
+      "properties": {
+        "pptx_template": {
+          "type": "object",
+          "description": "The brand's own PowerPoint template. build_deck.resolve_template() uses it verbatim (footer mode 'mark_only') instead of theme-injecting the AcropolisDocs base.",
+          "required": [
+            "file"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "file": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+\\.(potx|pptx)$",
+              "description": "Filename relative to skills/pptx/assets/templates/. The stem must equal the brand slug — prune() scopes per-brand binaries by the slug in front of the first dot."
+            },
+            "layouts_sidecar": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+\\.layouts\\.json$",
+              "description": "Optional <slug>.layouts.json beside the template, required when the template's own layout NAMES match none of pptxutil.classify_layout's markers. Travels with the template as one unit."
+            },
+            "layout_count": {
+              "type": "integer",
+              "description": "Slide layouts the template carries, recorded so the linter can verify the file is what the entry claims — the deck-template analogue of local_fonts.internal_family."
+            }
+          }
+        }
+      }
+    },
+    "logo": {
+      "type": "object",
+      "required": [
+        "dark",
+        "light"
+      ],
+      "description": "Brand logo SVGs as inline strings. dark = for dark backgrounds (light fills), light = for light backgrounds (dark fills): the keys name the GROUND each mark is drawn on, never the colour of the mark itself. A mark that carries its own panel may register one SVG under both. v6.19.0: lint_brand_registry measures each on the surface its key names (palette.screen.bg_primary for `dark`, palette.print.bg_primary for `light`) as a mark, 3:1 - L1 FAILS a pair registered the wrong way round, L2 warns when no registered mark reads on a surface - and every consumer takes the variant for the ground it draws on (a deck canvas, a page theme, a PDF cover or masthead).",
+      "properties": {
+        "dark": {
+          "type": "string",
+          "description": "Full SVG markup including <svg ...> ... </svg>: the mark drawn on a DARK ground. Where the brand's own file documents a dark-ground treatment (RADCOM's `.logo-transform { fill: #FFFFFF }`), this is the file with that treatment applied."
+        },
+        "light": {
+          "type": "string",
+          "description": "Full SVG markup: the mark drawn on a LIGHT ground."
+        },
+        "viewBox": {
+          "type": "string",
+          "description": "Canonical viewBox (e.g. '0 0 512 634')"
+        },
+        "ratio": {
+          "type": "number",
+          "description": "width/height aspect ratio for sizing"
+        }
+      }
+    },
+    "voice": {
+      "type": "object",
+      "required": [
+        "register",
+        "principles"
+      ],
+      "properties": {
+        "register": {
+          "enum": [
+            "formal",
+            "professional",
+            "conversational",
+            "energetic",
+            "restrained"
+          ]
+        },
+        "principles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "prohibited": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Marketing terms / claims the brand forbids"
+        },
+        "tagline_usage": {
+          "type": "string"
+        }
+      }
+    },
+    "ip_rules": {
+      "type": "object",
+      "description": "Trademark / IP guardrails the brand requires",
+      "properties": {
+        "trademark_marks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "disclaimer": {
+          "type": "string"
+        },
+        "prohibited_contexts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "naming_overrides": {
+      "type": "object",
+      "description": "Optional overrides for AcropolisDocs file-naming convention",
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "description": "Overrides default 'acropolisdocs_' file prefix"
+        },
+        "accept_prefixes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+_?$"
+          },
+          "description": "v8.4.0: prefixes name_check.validate() also passes, without being written. For a client folder whose house convention differs from the prefix the plugin writes."
+        }
+      }
+    },
+    "accreditation": {
+      "type": "object",
+      "description": "Universal accreditation credit (home brand only). Single source for the accreditation every deliverable carries regardless of active brand: `text`/`full` on paper, in Word, decks, workbooks and Markdown; `html_label` linked to `href` beside the mark in every HTML footer (v11.9.0).",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "full": {
+          "type": "string"
+        },
+        "html_label": {
+          "type": "string",
+          "description": "v11.9.0: the words of the HTML footer's lockup, beside the tiny mark, as a link to `href`. Every HTML page; the PDF band, Word, PowerPoint, xlsx and the Markdown bundle keep `text` / `full`."
+        },
+        "href": {
+          "type": "string",
+          "description": "v11.9.0: where the HTML lockup's `html_label` links (an absolute https URL)."
+        }
+      }
+    },
+    "locale": {
+      "type": "object",
+      "description": "v9.8.0 (SPEC_telekom-greece L2): the language this brand's deliverables are written in. Resolved by skills/branding/scripts/doc_locale.py, the one owner (locale_sites.site_lang applies it): the run's --lang or spec['lang'] wins, then the source page's own non-English lang, then locale.default, then 'en'. A language outside locale.supported is refused at the CLI's entry. A brand with no locale block writes English, unchanged.",
+      "additionalProperties": false,
+      "required": [
+        "default",
+        "supported"
+      ],
+      "properties": {
+        "default": {
+          "type": "string",
+          "enum": [
+            "en",
+            "el"
+          ],
+          "description": "The language a deliverable is written in when nobody asks for one."
+        },
+        "supported": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "en",
+              "el"
+            ]
+          },
+          "minItems": 1,
+          "description": "Languages this brand may be written in; must contain default. lint_brand_fonts F6 requires every declared face to carry the script of each supported language."
+        },
+        "strings": {
+          "type": "object",
+          "description": "Per-language brand strings, keyed by language then field (e.g. {\"el\": {\"tagline\": \"...\"}}). A field absent for a language falls back to the identity field.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "paletteMode": {
+      "type": "object",
+      "required": [
+        "accent_1",
+        "accent_2",
+        "accent_3",
+        "accent_4",
+        "accent_5",
+        "accent_text_cool",
+        "accent_text_warm",
+        "semantic"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "accent_1": {
+          "$ref": "#/$defs/hexColor",
+          "description": "Primary brand accent (H1/H2, table headers, CTA)"
+        },
+        "accent_2": {
+          "$ref": "#/$defs/hexColor",
+          "description": "Secondary accent"
+        },
+        "accent_3": {
+          "$ref": "#/$defs/hexColor",
+          "description": "Tertiary accent"
+        },
+        "accent_4": {
+          "$ref": "#/$defs/hexColor",
+          "description": "Quaternary accent"
+        },
+        "accent_5": {
+          "$ref": "#/$defs/hexColor",
+          "description": "Quinary accent"
+        },
+        "sequential": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 9,
+          "items": {
+            "$ref": "#/$defs/hexColor"
+          },
+          "description": "STORED single-hue ramp, light to dark, anchored on accent_1, for many-category part-to-whole fills where the five positional slots run out. Written at ingest by normalize_brand.py. Stored rather than computed at render time because palette_guard allowlists DECLARED data: a ramp derived while rendering is on-brand by construction and off-allowlist by definition, and blocked 10 of 12 brand/substrate pairs under --strict when it was tried (v4.27.0). The v4.26.0 `series.categorical` container that used to sit here is gone — accent_1..accent_5 ARE the series."
+        },
+        "accent_text_cool": {
+          "$ref": "#/$defs/hexColor",
+          "description": "<em> default + <em class=cool>"
+        },
+        "accent_text_warm": {
+          "$ref": "#/$defs/hexColor",
+          "description": "<em class=warm>"
+        },
+        "grad_hero": {
+          "type": "string",
+          "description": "CSS linear-gradient() string"
+        },
+        "grad_section": {
+          "type": "string"
+        },
+        "bg_primary": {
+          "$ref": "#/$defs/hexColor",
+          "description": "The surface this mode's slides and pages are drawn on: in `screen` the brand's DARK surface, in `print` its light one. v6.19.0: measured against its role (lint_brand_registry R1); a screen value that is light registers no dark surface, and a deck says so rather than drawing a white deck and calling it dark."
+        },
+        "bg_accent": {
+          "$ref": "#/$defs/hexColor",
+          "description": "v6.18.0 - the brand's ACCENT SURFACE: the background a deck's `alt` theme is drawn on. Declared, never derived: palette_guard admits tints toward it only because it is registered here, and build_deck refuses `--theme alt` for a brand that declares none. Read from screen first, then print."
+        },
+        "bg_surface": {
+          "$ref": "#/$defs/hexColor"
+        },
+        "bg_elevated": {
+          "$ref": "#/$defs/hexColor"
+        },
+        "text_primary": {
+          "$ref": "#/$defs/hexColor"
+        },
+        "text_secondary": {
+          "$ref": "#/$defs/hexColor"
+        },
+        "text_tertiary": {
+          "$ref": "#/$defs/hexColor"
+        },
+        "border_subtle": {
+          "$ref": "#/$defs/hexColor"
+        },
+        "border_default": {
+          "$ref": "#/$defs/hexColor"
+        },
+        "border_strong": {
+          "$ref": "#/$defs/hexColor"
+        },
+        "semantic": {
+          "type": "object",
+          "required": [
+            "success",
+            "warning",
+            "danger",
+            "info"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "success": {
+              "$ref": "#/$defs/hexColor"
+            },
+            "warning": {
+              "$ref": "#/$defs/hexColor"
+            },
+            "danger": {
+              "$ref": "#/$defs/hexColor"
+            },
+            "info": {
+              "$ref": "#/$defs/hexColor"
+            }
+          }
+        },
+        "series": {
+          "type": "object",
+          "description": "Per-brand authored chart series ramp. v4.84.0: load_brand's resolve_series() 'authored' branch, resolve_sequential() step 1 and _validate_series() have consumed this since it was written, but additionalProperties:false meant NO schema-valid brand could declare it — injecting it raised \"Additional properties are not allowed ('series' was unexpected)\" and resolve_series fell back to the positional slots. The escape hatch documented in the fork/brand spec was unreachable and _validate_series was dead code.",
+          "additionalProperties": false,
+          "properties": {
+            "categorical": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/hexColor"
+              },
+              "description": "Ordered, visually distinct series colours."
+            },
+            "sequential": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/hexColor"
+              },
+              "description": "Ordered light-to-dark ramp for intensity."
+            }
+          }
+        }
+      }
+    },
+    "hexColor": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    }
+  }
+}

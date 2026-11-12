@@ -1,0 +1,91 @@
+id: ref.boundary.mx.state.inegi2023
+type: boundary
+rev: 1
+status: draft
+title: Mexican states (INEGI Marco Geoestadístico 2023)
+summary: The 32 federal entities (estados and Ciudad de México) from INEGI's 2023 integrated geostatistical framework.
+tags:
+  geography:
+  - mx
+  level:
+  - state
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - parcel-level
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- A Mexican market map rolled up by estado (CVE_ENT), joined to INEGI census tables or a client's tables that use the CVEGEO codes.
+avoid_when:
+- 'Nothing is verified from the build environment: download the archive in a browser and supply it before drawing.'
+- 'Legal boundaries are implied: the framework is statistical.'
+pairs_with:
+- ref.boundary.world.state.ne10
+join:
+  key: CVE_ENT
+  type: string
+  width: 2
+  note: CVE_ENT as text with leading zeros (CVE_ENT 01 to 32; CVEGEO = CVE_ENT + CVE_MUN).
+crs: EPSG:6372
+delivery:
+  mode: user-supplied
+  format: Shapefile inside the integrated archive (mg_2023_integrado_conjunto_de_datos.zip; layers 00ent, 00mun, 00l, 00a)
+  note: Open https://www.inegi.org.mx/app/biblioteca/ficha.html?upc=794551067314 (verified 2026-11-04) and download the 'conjunto de datos' archive in a
+    browser; supply the 00ent shapefile. www.inegi.org.mx answered HTTP 403 for the download zip and the topic page from the build environment on 2026-11-04;
+    the product record page answered 200.
+source:
+  publisher: Instituto Nacional de Estadística y Geografía (INEGI)
+  product: Marco Geoestadístico, diciembre 2023 (integrado)
+  url: https://www.inegi.org.mx/app/biblioteca/ficha.html?upc=794551067314
+url_verified_on: '2026-11-04'
+vintage:
+  current: December 2023
+  cadence: annual
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Fuente: INEGI, Marco Geoestadístico 2023.'
+  note: INEGI's free-use terms (Términos de Libre Uso) require attribution; not re-read in this review because the terms page is behind the same 403.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_head
+    url: https://www.inegi.org.mx/app/biblioteca/ficha.html?upc=794551067314
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: www.inegi.org.mx answered HTTP 403 for the download zip and the topic page from the build environment on 2026-11-04; the product record
+      page answered 200.'

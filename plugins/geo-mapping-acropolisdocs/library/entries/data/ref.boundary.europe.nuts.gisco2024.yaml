@@ -1,0 +1,108 @@
+id: ref.boundary.europe.nuts.gisco2024
+type: boundary
+rev: 1
+status: active
+title: European NUTS regions 2024 (Eurostat GISCO)
+summary: The NUTS 2024 statistical regions of Europe at levels 0 to 3 (countries to small regions) from Eurostat GISCO, as GeoJSON with no key;
+  free for non-commercial use with the EuroGeographics notice.
+tags:
+  geography:
+  - europe
+  level:
+  - country
+  - state
+  - county
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  - locator-inset
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - parcel-level
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  detail:
+  - simplified
+  audience:
+  - internal
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - authoritative
+use_when:
+- A European market map shaded by a Eurostat statistic joined on NUTS_ID (population, broadband take-up, GDP by region).
+- Country or regional outlines for a non-commercial European overview map.
+avoid_when:
+- 'A commercial deliverable: GISCO grants use "on condition that the data will not be used for commercial purposes"; contact EuroGeographics for a licence.'
+- 'Exact administrative boundaries: these are statistical regions at 1:20 million; use 01M for detail, or the national mapping agency.'
+join:
+  key: NUTS_ID
+  type: string
+  note: NUTS_ID such as DE3, FR101, UKI3; LEVL_CODE 0 to 3, CNTR_CODE the two-letter country (EL for Greece, UK for the United Kingdom), NAME_LATN the name.
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: GeoJSON
+  size_mb: 2.96
+  features: 1798
+  columns:
+  - NUTS_ID
+  - LEVL_CODE
+  - CNTR_CODE
+  - NAME_LATN
+  - NUTS_NAME
+  - MOUNT_TYPE
+  - URBN_TYPE
+  - COAST_TYPE
+  url_template: https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/NUTS_RG_20M_2024_4326_LEVL_{variant}.geojson
+  note: 'The main URL is the all-levels 1:20 million file (1,798 regions: 39 at level 0, 115 at 1, 299 at 2, 1,345 at 3), verified with its hash.
+    One level at a time: ref_fetch.py fetch ID --variant 2 (level 0 to 3). Other scales (01M, 03M, 10M, 60M) and projections (3035, 3857)
+    follow the same file pattern and are downloaded by hand; earlier versions 2021, 2016, 2013 suit older statistics.'
+source:
+  publisher: Eurostat GISCO; administrative boundaries © EuroGeographics
+  product: NUTS 2024, regions 1:20 million, EPSG:4326
+  url: https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/NUTS_RG_20M_2024_4326.geojson
+  file_sha256: 9b076320043460cedbb721d41fab0b8c0e75237db58fc6234f4d706df2cee677
+url_verified_on: '2026-11-07'
+vintage:
+  current: NUTS 2024
+  cadence: irregular
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: true
+  attribution_text: © EuroGeographics for the administrative boundaries
+  note: 'GISCO statistical units page (read 2026-11-07): a non-exclusive, non-transferable right to use, on condition that the data is not used
+    for commercial purposes and the source is acknowledged; the EuroGeographics notice goes in the map legend; commercial use needs a
+    EuroGeographics licence.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-11-07'
+  check:
+    kind: http_head
+    url: https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/NUTS_RG_20M_2024_4326.geojson
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions): the 2024 all-levels 1:20 million file downloaded on 2026-11-07 (2,962,338 bytes, 1,798 regions,
+      SHA-256 recorded); the statistical units page and its copyright conditions read.'

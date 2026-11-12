@@ -1,0 +1,31 @@
+{
+  "schema": "brand-pack/1",
+  "slug": "acropolisdocs",
+  "house": true,
+  "source": {
+    "plugin": "acropolisdocs",
+    "version": "11.25.1",
+    "path": "skills/brand-registry/references/brands/acropolisdocs.json",
+    "root": "/root/.claude/plugins/synced/8a2a9221-fe78-4130-b3c5-e8457f7230b6_407fd03a-2c0d-4203-b30e-936781f069a7/acropolisdocs"
+  },
+  "imported_on": "2026-11-04T05:00:27Z",
+  "brand_schema_version": "unknown",
+  "source_sha256": "efffa71866b1b4aa467d6e68dc7cfc63aa8837fa6d613a87633261ae487029b4",
+  "files": {
+    "brand.json": "efffa71866b1b4aa467d6e68dc7cfc63aa8837fa6d613a87633261ae487029b4",
+    "map-tokens.yaml": "2a97d0880676691079ad57b220f55461cf45400549ac2389a1a277ece809615a"
+  },
+  "accreditation": {
+    "text": "Powered by AcropolisDocs",
+    "url": "acropolisdocs.com",
+    "full": "Powered by AcropolisDocs \u00b7 acropolisdocs.com",
+    "html_label": "AcropolisDocs",
+    "href": "https://acropolisdocs.com"
+  },
+  "trademark_line": null,
+  "ignored_from_brand": [
+    "typography",
+    "assets.pptx_template",
+    "palette gradient strings"
+  ]
+}

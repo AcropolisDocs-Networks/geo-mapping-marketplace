@@ -1,0 +1,85 @@
+id: ref.public-service.world.osm.overpass
+type: public-service
+rev: 2
+status: active
+title: Overpass API (OpenStreetMap queries)
+summary: The public Overpass API answers Overpass QL queries over live OpenStreetMap data (towers, masts, buildings, roads in a bbox) under fair-use limits;
+  results are GeoJSON-convertible JSON.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  - line
+  - place
+  domain:
+  - telecom
+  - transport
+  - general
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - metro
+  - local
+  - site
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- Mapped masts and towers (man_made=mast, man_made=tower, tower:type=communication) in a metro bbox as context when no licensed inventory exists.
+- Buildings or points of interest around a venue for a small-area map.
+avoid_when:
+- 'A statewide or national pull: the public instance''s fair-use terms (about 10,000 queries or 1 GB a day per client, 180 s timeout, 512 MB memory per
+  query, two concurrent requests) rule it out; use a Geofabrik extract.'
+- 'Completeness is expected: OpenStreetMap carries what contributors mapped, which for towers is uneven.'
+pairs_with:
+- ref.infrastructure.world.osm.geofabrik
+delivery:
+  mode: user-supplied
+  format: JSON from an Overpass QL query (converted with osmtogeojson or read as nodes with lat/lon)
+  note: 'POST the query to overpass-api.de/api/interpreter, e.g. [out:json][timeout:60];(node["man_made"~"mast|tower"](33.2,-112.3,33.7,-111.6););out body;
+    and save the JSON. Caps: one query at a time, under 180 s, data under 512 MB, a few thousand requests a day; set an identifying User-Agent. Verified
+    from the user''s computer on 2026-11-07: /api/status answered (rate limit 2 slots) and a mast query in a Phoenix box returned JSON (Overpass API
+    0.7.62.11, ODbL notice in osm3s.copyright).'
+source:
+  url: https://overpass-api.de/api/status
+  publisher: OpenStreetMap community (Overpass API, overpass-api.de)
+  product: Overpass API public instance
+url_verified_on: '2026-11-07'
+vintage:
+  current: live (minutely diffs)
+  cadence: live
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: © OpenStreetMap contributors, ODbL 1.0.
+  note: 'Open Database License 1.0: attribution, and a derived database (not a rendered map) carries the same licence (MAP-LIC-004).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: download.geofabrik.de and overpass-api.de reset the connection from the build environment (2026-11-04), so no address could be verified
+      here; the hosts are reachable from an ordinary workstation. The fair-use caps are recorded from the OSM wiki page (wiki.openstreetmap.org/wiki/Overpass_API,
+      read 2026-11-04).'
+  - rev: 2
+    date: '2026-11-07'
+    note: 'Active: overpass-api.de answered from the user''s computer on 2026-11-07 (status endpoint, rate limit 2 slots; a node query returned JSON with the ODbL notice). The fair-use caps stay as recorded from the OSM wiki.'

@@ -1,0 +1,40 @@
+id: ref.map-type.dot-density
+type: map-type
+rev: 1
+status: draft
+title: Dot density
+summary: Scatters dots in each area, one dot per fixed quantity, to show where a population or count concentrates.
+tags:
+  use_for:
+  - dot-density
+  avoid_for: []
+use_when:
+- The message is about where counts concentrate, not about a rate per area.
+avoid_when:
+- The reader needs exact values per area.
+- The dots would be placed at random and the audience may read them as real locations.
+pairs_with: []
+chooses_when:
+  message_type:
+  - distribution
+  data_shape:
+  - polygon-count
+requires:
+  data_shape: see chooses_when
+  join_key: false
+recommended: {}
+guarded_by: []
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check: none yet; the renderer does not build this map type
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the renderer does not build this map type yet; the entry records when to choose it so selection can say it is not available.'

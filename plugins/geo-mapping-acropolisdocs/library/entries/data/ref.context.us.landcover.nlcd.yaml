@@ -1,0 +1,84 @@
+id: ref.context.us.landcover.nlcd
+type: context
+rev: 1
+status: active
+title: NLCD land cover (MRLC web map service)
+summary: National Land Cover Database classes (developed, forest, cropland, water and so on) for the conterminous United States, served as a WMS image by
+  the MRLC consortium; a raster background for rural-versus-developed context.
+tags:
+  geography:
+  - us
+  level:
+  - place
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  - choropleth
+  scale:
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A developed-versus-undeveloped backdrop under a rural coverage or tower map, as a WMS image layer (M12 raster path).
+- Explaining propagation context (forest, open range) on a market map without modelling it.
+avoid_when:
+- 'The map needs the raster values for analysis: the 30 m GeoTIFFs on the MRLC S3 bucket answered HTTP 403 from the build environment; download them from
+  mrlc.gov/data in a browser.'
+- 'A local or site map: 30 m pixels look blocky; use footprints or imagery.'
+delivery:
+  mode: service
+  profile: mrlc-wms
+  protocol: wms
+  layer: NLCD_2021_Land_Cover_L48
+  max_record_count: 1
+  geometry: raster
+  columns:
+  - class value (raster)
+  request: ogc_preview_map / WMS GetMap on profile mrlc-wms, layer NLCD_2021_Land_Cover_L48
+  note: GetCapabilities verified 2026-11-04 at mrlc.gov/geoserver/mrlc_display/NLCD_2021_Land_Cover_L48/wms. Use GetMap for a print image; the Annual NLCD
+    collection (2024 Land Cover) is the current product and its layers are listed in the same GeoServer capabilities.
+source:
+  publisher: Multi-Resolution Land Characteristics (MRLC) Consortium, USGS
+  product: National Land Cover Database (NLCD) web map services
+  url: https://www.mrlc.gov/geoserver/mrlc_display/NLCD_2021_Land_Cover_L48/wms?SERVICE=WMS&REQUEST=GetCapabilities
+url_verified_on: '2026-11-04'
+vintage:
+  current: NLCD 2021 (service); Annual NLCD 2024 (download)
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: Multi-Resolution Land Characteristics Consortium (MRLC), National Land Cover Database.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://www.mrlc.gov/geoserver/mrlc_display/NLCD_2021_Land_Cover_L48/wms?SERVICE=WMS&REQUEST=GetCapabilities
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the MRLC GeoServer WMS capabilities (HTTP 200, text/xml) and the data page on 2026-11-04; the S3 GeoTIFF answered 403, so the service
+      is the recorded route. Served through the shipped mrlc-wms profile.

@@ -1,0 +1,15 @@
+name: arch-d-portrait
+label: Arch D poster, portrait (24 x 36 in)
+kind: print
+size_mm: [609.6, 914.4]
+margin_mm: 20
+title:  {x: 20, y: 16,  w: 569.6, h: 44}
+map:    {x: 20, y: 66,  w: 569.6, h: 766}
+map_full: {x: 20, y: 16, w: 569.6, h: 816}   # the default layout: the map runs up over the title band, and the title sits in the map
+footer: {x: 20, y: 838, w: 569.6, h: 62}
+footer_fit: true                           # the footer shrinks to its notes and the map grows into the room (layout.fit_footer)
+fonts:  {title: 54, subtitle: 26, label: 14, legend_title: 20, legend: 17, note: 13, scale: 15, banner: 16}
+legend_max: {w: 190, h: 360}
+inset_size: {w: 140, h: 100}
+logo_height_mm: 26
+raster_default_dpi: 150

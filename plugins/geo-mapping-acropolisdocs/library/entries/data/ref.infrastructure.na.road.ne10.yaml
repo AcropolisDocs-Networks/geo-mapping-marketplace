@@ -1,0 +1,48 @@
+id: ref.infrastructure.na.road.ne10
+type: infrastructure
+rev: 1
+status: active
+title: North America roads, 10m (Natural Earth)
+summary: 9,237 major and secondary highways, beltways and ferry routes for the US, Canada and Mexico, drawn in a quiet grey under site maps.
+tags:
+  geography: [us]
+  level: [line]
+  domain: [transport]
+  use_for: [context-basemap, site-map, atlas]
+  avoid_for: [engineering-grade, site-precision, legal-boundary]
+  scale: [national, regional, state, metro]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A site, coverage or program map at 1:5,000,000 or larger needs highways under the data so a reader finds the corridor a site sits on.',
+  'A Canadian or Mexican map needs roads; the TIGER files stop at the US border.']
+avoid_when: [The map needs local streets or routing; only highways and a few ferry routes are included.,
+  The map needs the Census road classes (RTTYP, MTFCC) for a US analysis; use the TIGER primary or primary/secondary roads.]
+pairs_with: [ref.infrastructure.us.road.tiger-primary, ref.infrastructure.us.road.tiger-prisec]
+distinct_from: [ref.infrastructure.us.road.tiger-primary]
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_10m_roads_na.parquet
+  sha256: 0312f2110de8241209ee408e377851788a1494e41bfc2aa9a300f3548c66b70c
+  size_mb: 1.02
+  format: GeoParquet (zstd)
+  features: 9237
+  columns: [type, name, label, sov_a3, scalerank, min_zoom, min_label]
+  note: The world file cut to North America (sov_a3 in USA, CAN, MEX) and simplified at 0.001 degrees (about 100 m) to keep the bundle small.
+source: {publisher: Natural Earth, product: 'Roads, 10m', url: 'https://naciscdn.org/naturalearth/10m/cultural/ne_10m_roads.zip',
+  file_sha256: 880b235383a1e1ccf33f4ea6f82b6755a2ffbce07e3974e412b43e88fe954ae9}
+url_verified_on: 2026-11-04
+vintage: {current: Natural Earth 5.1.2, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-04
+  verify_by: 2027-05-04
+  check: {kind: feature_count_and_hash, features: 9237, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-04, note: Bundled payload built from Natural Earth 5.1.2 and verified (M10 toponymy and context pack).}

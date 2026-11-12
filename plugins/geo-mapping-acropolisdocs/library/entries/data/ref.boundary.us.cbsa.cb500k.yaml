@@ -1,0 +1,102 @@
+id: ref.boundary.us.cbsa.cb500k
+type: boundary
+rev: 1
+status: active
+title: US metropolitan and micropolitan areas, 1:500,000 (Census cartographic boundary)
+summary: Core-based statistical area polygons (metros and micros), 935 areas, for market rollups and metro context.
+tags:
+  geography:
+  - us
+  level:
+  - cbsa
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  avoid_for:
+  - parcel-level
+  - engineering-grade
+  - legal-boundary
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Rolling a metric up to metro areas, or showing which counties sit in a metro.
+- A market view where telecom markets track metro areas more closely than counties.
+avoid_when:
+- The map must cover every county; areas outside any CBSA are not drawn.
+- A single metro map that needs county detail; pair this with the county file and the county-to-CBSA crosswalk.
+pairs_with:
+- ref.crosswalk.us.county-cbsa.omb2023
+- ref.boundary.us.county.cb500k
+join:
+  key: GEOID
+  type: string
+  width: 5
+  note: The five-digit CBSA code (same as CBSAFP). Keep it a string.
+  pattern: ^\d{5}$
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 4.48
+  features: 935
+  columns:
+  - CSAFP
+  - CBSAFP
+  - GEOIDFQ
+  - GEOID
+  - NAME
+  - NAMELSAD
+  - LSAD
+  - ALAND
+  - AWATER
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, Core Based Statistical Areas, 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_cbsa_500k.zip
+  file_sha256: 81b03427132380e392be59827d4412f82e624bf1ca63c6fabc420817dfa3fe96
+url_verified_on: '2026-11-02'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check:
+    kind: feature_count_and_hash
+    features: 935
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: Verified 2025 archive (935 features).

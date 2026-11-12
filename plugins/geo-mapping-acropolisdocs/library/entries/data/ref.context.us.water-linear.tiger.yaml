@@ -1,0 +1,90 @@
+id: ref.context.us.water-linear.tiger
+type: context
+rev: 1
+status: active
+title: US linear water by county (Census TIGER/Line)
+summary: Streams, canals and other water lines, one file per county, for drainage and canal context on a local map.
+tags:
+  geography:
+  - us
+  level:
+  - line
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Water lines under a metro or local site map, fetched for the counties the map covers (variant = five-digit county FIPS).
+- A clipped water layer for a small multiple of one county per page.
+avoid_when:
+- 'The map is statewide or national: fetch one county at a time only; Natural Earth lakes and rivers serve the larger scales.'
+- 'The map needs flow, order or stream network: NHDPlus HR (ref.context.us.hydrography.nhdplus-hr) carries the network.'
+pairs_with:
+- ref.context.world.lakes.ne10
+- ref.context.world.rivers.ne10
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 9.69
+  features: 21283
+  columns:
+  - ANSICODE
+  - LINEARID
+  - FULLNAME
+  - ARTPATH
+  - MTFCC
+  url_template: https://www2.census.gov/geo/tiger/TIGER2025/LINEARWATER/tl_2025_{statefp}_linearwater.zip
+  note: The main URL is the Maricopa County, AZ file (04013), verified with its hash and count; every other county uses url_template with the five-digit
+    county FIPS as the variant (ref_fetch.py fetch ID --variant 04019). Per-variant files carry no hash and their counts differ.
+source:
+  publisher: US Census Bureau
+  product: 2025 TIGER/Line Shapefile, Linear Hydrography by county
+  url: https://www2.census.gov/geo/tiger/TIGER2025/LINEARWATER/tl_2025_04013_linearwater.zip
+  file_sha256: 6fed3bbb1a2a4596ab23be8e7452877a102a183a15b80214cae3b77f670483c8
+url_verified_on: '2026-11-04'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, TIGER/Line Shapefiles.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: feature_count_and_hash
+    features: 21283
+    against: the Maricopa County (04013) archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the 2025 Maricopa County file (21,283 features, SHA-256 recorded, LineString); other counties follow the same URL pattern and are fetched
+      by variant.

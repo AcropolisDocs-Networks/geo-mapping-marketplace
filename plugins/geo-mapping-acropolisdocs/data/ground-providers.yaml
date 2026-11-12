@@ -1,0 +1,39 @@
+# Ground providers (1.5.0, R3-GND): where a map's land and water come from. Per window the build takes the finest provider whose coverage holds
+# the WHOLE window and whose scales include the map's (one source at one resolution, MAP-CART-024), and records the choice (MAP-GND-001).
+# A provider that is not cached for the window is skipped for the next coarser one and said (MAP-GND-002): a build never goes online.
+# `max_denominator`: the provider is used at this scale and finer (smaller denominators); `min_denominator`: and no finer than this.
+schema: ground-providers/1
+providers:
+  - id: us-tiger
+    title: TIGER/Line county subdivisions (land) and area water, U.S. Census Bureau
+    coverage: us                    # the whole window inside the United States (TIGER covers nothing beyond the border)
+    max_denominator: 1500000
+    resolution: TIGER/Line (full resolution)
+    entries: [ref.boundary.us.cousub.tiger, ref.context.us.water-area.tiger]
+    licence: public-domain
+    cache: library                  # .geo-mapping/cache/library/ (one file per state and per county)
+  - id: global-overture
+    title: Overture Maps base theme, land and water (OSM-derived)
+    coverage: world
+    max_denominator: 1500000
+    resolution: Overture base theme (OSM coastline and water)
+    entries: [ref.context.world.ground.overture]
+    licence: ODbL-1.0
+    cache: ground                   # .geo-mapping/cache/ground/global-overture/<release>/<quadkey z8>.parquet
+    tile_zoom: 8
+  - id: global-osm-simplified
+    title: OpenStreetMap simplified land polygons (osmdata.openstreetmap.de), Natural Earth 10m lakes
+    coverage: world
+    max_denominator: 10000000
+    min_denominator: 1500000
+    resolution: OSM simplified land polygons (zoom 0-9)
+    entries: [ref.context.world.land.osm-simplified, ref.context.world.lakes.ne10]
+    licence: ODbL-1.0
+    cache: library
+  - id: bundled-ne
+    title: Natural Earth (bundled)
+    coverage: world
+    resolution: Natural Earth 1:10m or 1:110m
+    entries: [ref.context.world.ocean.ne10, ref.context.world.lakes.ne10, ref.boundary.world.country.ne110]
+    licence: public-domain
+    cache: bundled

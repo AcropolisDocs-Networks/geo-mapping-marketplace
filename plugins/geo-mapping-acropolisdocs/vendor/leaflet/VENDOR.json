@@ -1,0 +1,18 @@
+{
+  "name": "leaflet",
+  "version": "1.9.4",
+  "license": "BSD-2-Clause",
+  "source": "npm:leaflet@1.9.4 (dist/leaflet.js, dist/leaflet.css)",
+  "upstream_sha256": {
+    "leaflet.js": "db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a",
+    "leaflet.css": "337bfca5cabd03b39815b2700febe2b3b7edf55921c59cd49f88ecb328212303"
+  },
+  "patches": [
+    "leaflet.js: removed the sourceMappingURL comment",
+    "leaflet.css: removed the three image url() references (layer-switcher and marker icons are not used) and set every font to Inter"
+  ],
+  "shipped_sha256": {
+    "leaflet.js": "dc71f8a6880bc3ca1bd9fa8dc5f1af48c702dc510b0a78240a07c5feed7ce935",
+    "leaflet.css": "7f25b777d84972ced131042eb0246fde01f49d4fbbccf741da567fbcb3b4d1d4"
+  }
+}

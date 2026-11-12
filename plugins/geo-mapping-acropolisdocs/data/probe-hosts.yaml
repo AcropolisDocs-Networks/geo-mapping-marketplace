@@ -1,0 +1,37 @@
+# Hosts map-env-probe tests with a HEAD request to classify shell egress (spec 3, Appendix H W5).
+# class: registry (package indexes), data (public datasets), tiles (basemaps), service (public OGC/Esri).
+- {host: pypi.org,                        url: "https://pypi.org/simple/",                      class: registry}
+- {host: github.com,                      url: "https://github.com/",                           class: registry}
+- {host: www2.census.gov,                 url: "https://www2.census.gov/",                       class: data}
+- {host: tigerweb.geo.census.gov,         url: "https://tigerweb.geo.census.gov/",               class: service}
+- {host: gibs.earthdata.nasa.gov,         url: "https://gibs.earthdata.nasa.gov/",               class: tiles}
+- {host: basemap.nationalmap.gov,         url: "https://basemap.nationalmap.gov/",               class: tiles}
+- {host: basemaps.cartocdn.com,           url: "https://basemaps.cartocdn.com/",                 class: tiles}
+# M13: hosts behind the shipped service profiles (profiles/) and the data hosts the library's fetch entries use; verified 2026-11-04.
+- {host: services.arcgis.com,             url: "https://services.arcgis.com/",                   class: service}
+- {host: services2.arcgis.com,            url: "https://services2.arcgis.com/",                  class: service}
+- {host: services3.arcgis.com,            url: "https://services3.arcgis.com/",                  class: service}
+- {host: services9.arcgis.com,            url: "https://services9.arcgis.com/",                  class: service}
+- {host: hazards.fema.gov,                url: "https://hazards.fema.gov/",                      class: service}
+- {host: mapservices.weather.noaa.gov,    url: "https://mapservices.weather.noaa.gov/",          class: service}
+- {host: api.weather.gov,                 url: "https://api.weather.gov/",                       class: service}
+- {host: api.weather.gc.ca,               url: "https://api.weather.gc.ca/",                     class: service}
+- {host: geo.weather.gc.ca,               url: "https://geo.weather.gc.ca/",                     class: service}
+- {host: gisco-services.ec.europa.eu,     url: "https://gisco-services.ec.europa.eu/",           class: data}
+- {host: carto.nationalmap.gov,           url: "https://carto.nationalmap.gov/",                 class: service}
+- {host: hydro.nationalmap.gov,           url: "https://hydro.nationalmap.gov/",                 class: service}
+- {host: azgeo.az.gov,                    url: "https://azgeo.az.gov/",                          class: service}
+- {host: feature.geographic.texas.gov,    url: "https://feature.geographic.texas.gov/",          class: service}
+- {host: query.wikidata.org,              url: "https://query.wikidata.org/",                    class: service}
+- {host: gis.blm.gov,                     url: "https://gis.blm.gov/",                           class: service}
+- {host: www.mrlc.gov,                    url: "https://www.mrlc.gov/",                          class: service}
+- {host: naciscdn.org,                    url: "https://naciscdn.org/",                          class: data}
+- {host: lehd.ces.census.gov,             url: "https://lehd.ces.census.gov/",                   class: data}
+- {host: download.geonames.org,           url: "https://download.geonames.org/",                 class: data}
+- {host: www.geoboundaries.org,           url: "https://www.geoboundaries.org/",                 class: data}
+- {host: overturemaps-us-west-2.s3.amazonaws.com, url: "https://overturemaps-us-west-2.s3.amazonaws.com/", class: data}
+- {host: ookla-open-data.s3.amazonaws.com, url: "https://ookla-open-data.s3.amazonaws.com/",     class: data}
+# 1.0.2: NASA FIRMS, behind the two shipped profiles that use the person's own MAP_KEY (nasa-firms-wms, nasa-firms-wfs-us); the HEAD carries no key.
+- {host: firms.modaps.eosdis.nasa.gov,   url: "https://firms.modaps.eosdis.nasa.gov/",          class: service}
+# 1.2.0: the Copernicus Climate Data Store (credential copernicus-cds); the HEAD carries no key.
+- {host: cds.climate.copernicus.eu,       url: "https://cds.climate.copernicus.eu/",             class: service}

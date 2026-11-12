@@ -1,0 +1,50 @@
+id: ref.boundary.world.country.ne110
+type: boundary
+rev: 1
+status: active
+title: World countries, 110m (Natural Earth)
+summary: Low-resolution country polygons for world and continental context, locators and world choropleths.
+tags:
+  geography: [world]
+  level: [country]
+  domain: [general]
+  use_for: [context-basemap, choropleth, locator-inset, atlas, join-key]
+  avoid_for: [engineering-grade, legal-boundary, site-precision, parcel-level]
+  scale: [world]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: [A world or continental map needs country outlines as context or as the units of a choropleth., A small locator inset shows
+    where a study area sits in the world.]
+avoid_when: [The map is of one country or smaller; the 110m outlines are too coarse and small countries are missing., 'Borders are disputed
+    or politically sensitive for the audience; Natural Earth draws de facto boundaries, so check the client''s policy first.', The map
+    needs legal or surveyed boundaries.]
+pairs_with: [ref.context.world.coastline.ne110, ref.context.world.lakes.ne110]
+join: {key: ISO_A3_EH, type: string, width: 3, note: 'Use ISO_A3_EH, not ISO_A3: Natural Earth stores -99 in ISO_A3 for France, Norway
+    and a few others. Kosovo and some territories have no official code.'}
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_110m_countries.parquet
+  sha256: ec9964e6a52cdc0d89df05a109c74e7d99a4c2edb57e15fe9a5765b84ca25b88
+  size_mb: 0.15
+  format: GeoParquet (zstd)
+  features: 177
+  columns: [NAME, ADMIN, SOVEREIGNT, ADM0_A3, ISO_A2_EH, ISO_A3_EH, CONTINENT, SUBREGION, POP_EST, LABEL_X, LABEL_Y, MIN_LABEL, MAX_LABEL,
+    NE_ID]
+source: {publisher: Natural Earth, product: 'Admin 0 - Countries, 110m', url: 'https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip',
+  file_sha256: 0f243aeac8ac6cf26f0417285b0bd33ac47f1b5bdb719fd3e0df37d03ea37110}
+url_verified_on: 2026-11-02
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-02
+  verify_by: 2027-11-02
+  check: {kind: feature_count_and_hash, features: 177, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-02, note: Bundled payload built and verified (M1).}

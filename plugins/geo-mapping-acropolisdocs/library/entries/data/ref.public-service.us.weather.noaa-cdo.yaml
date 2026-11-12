@@ -1,0 +1,101 @@
+id: ref.public-service.us.weather.noaa-cdo
+type: public-service
+rev: 2
+status: active
+title: NOAA Climate Data Online (CDO) web services v2
+summary: Historical weather and climate records for the United States and worldwide stations from NOAA NCEI - stations, daily summaries, normals -
+  through the CDO v2 API with a free token, for climate context on a site or market map.
+tags:
+  geography:
+  - us
+  - world
+  level:
+  - site
+  domain:
+  - weather
+  - hazard
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Weather stations with their record periods near sites, or daily temperature and precipitation history for a market, with the person's own free token registered (map-credentials add noaa-cdo).
+- A climate summary beside a site map (heat days, rainfall) where live alerts are not the point.
+avoid_when:
+- 'Active weather warnings: use ref.public-service.us.weather.nws.'
+- 'Storm events with damage and casualties: use ref.statistic.us.storm-events.noaa.'
+- 'A large pull: the token allows 5 requests a second and 10,000 a day; NCEI bulk files are the route for whole datasets.'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: noaa-cdo
+    kind: apikey
+    class: secret
+    host: www.ncei.noaa.gov
+    inject: {header: token}
+    reject: {status: [400, 401, 403], body: [token]}
+    probe: https://www.ncei.noaa.gov/cdo-web/api/v2/datasets
+    signup_url: https://www.ncei.noaa.gov/cdo-web/token
+    free: true
+    limits: '"5 requests per second and 10,000 requests per day" per token (CDO web services v2 page, read 2026-11-07)'
+    note: Free token sent by e-mail from the NCEI token page; the older www.ncdc.noaa.gov host is not the API host
+  request: https://www.ncei.noaa.gov/cdo-web/api/v2/stations?extent={south},{west},{north},{east}&limit=1000
+  requests:
+    stations: https://www.ncei.noaa.gov/cdo-web/api/v2/stations?extent={south},{west},{north},{east}&limit=1000
+    datasets: https://www.ncei.noaa.gov/cdo-web/api/v2/datasets
+    daily: https://www.ncei.noaa.gov/cdo-web/api/v2/data?datasetid=GHCND&stationid={stationid}&startdate={start}&enddate={end}&limit=1000
+  note: 'Endpoints datasets, datacategories, datatypes, locationcategories, locations, stations and data under /cdo-web/api/v2/. Without a token
+    the API answers HTTP 400 with "Token parameter is required." (checked 2026-11-07), so 400 is a reject status. A data request spans at most a
+    year; results page at 1,000.'
+source:
+  publisher: NOAA, National Centers for Environmental Information
+  product: Climate Data Online web services v2
+  url: https://www.ncei.noaa.gov/cdo-web/webservices/v2
+url_verified_on: '2026-11-07'
+vintage:
+  current: rolling
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: NOAA National Centers for Environmental Information.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-09'
+  verify_by: '2027-02-07'
+  check:
+    kind: http_get
+    url: https://www.ncei.noaa.gov/cdo-web/webservices/v2
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions): the CDO v2 page read on 2026-11-07 (base address, header token, token page, 5 a second and 10,000
+      a day); the API answered 400 without a token.'
+  - rev: 2
+    date: '2026-11-09'
+    note: 'Rejections (1.0.2): the API also answers 400 for a malformed request, so a 400 counts as a rejection only when the answer mentions the token
+      (as "Token parameter is required." does); any other 400 is reported as the service''s refusal and the key is left as it was. The answer to a
+      wrong token was not read.'

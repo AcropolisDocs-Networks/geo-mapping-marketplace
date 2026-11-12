@@ -1,0 +1,51 @@
+id: ref.map-type.rag-status
+type: map-type
+rev: 2
+status: active
+title: Red-amber-green status
+summary: Colors places by a three-level status, with a distinct shape for each status so the map survives grayscale and color-vision differences.
+tags:
+  use_for:
+  - rag-status
+  avoid_for: []
+use_when:
+- Each place has a status, such as on track, at risk or late.
+- The reader needs to see at a glance which locations in a program need attention.
+avoid_when:
+- The status levels have no agreed definition.
+- Color is the only cue; add labels or shapes for grayscale and color-vision differences.
+pairs_with:
+- ref.symbol-set.basic-shapes
+chooses_when:
+  message_type:
+  - status
+  data_shape:
+  - polygon-category
+  - point-category
+requires:
+  data_shape: see chooses_when
+  join_key: false
+recommended:
+  palette_kind: status
+  shape_redundancy: true
+guarded_by:
+- MAP-TEL-040
+- MAP-TEL-041
+- MAP-A11Y-001
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check: the program-map pipeline draws five statuses, each with its own shape and color (tests/test_telecom.py::test_program_map_runs_the_example_and_every_status_has_a_distinct_symbol)
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the renderer does not build this map type yet; the entry records when to choose it so selection can say it is not available.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: the program-map pipeline (M6) builds it from a tracker export, five statuses each with its own shape as well as color; selection now offers it for a status message.'

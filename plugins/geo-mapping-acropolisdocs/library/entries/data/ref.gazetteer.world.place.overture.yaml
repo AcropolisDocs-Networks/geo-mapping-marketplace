@@ -1,0 +1,117 @@
+id: ref.gazetteer.world.place.overture
+type: gazetteer
+rev: 2
+status: active
+title: Overture Maps places (points of interest)
+summary: Worldwide points of interest with names, categories, addresses and confidence scores from the Overture Maps Foundation places theme (GeoParquet
+  on S3), read with a bbox filter.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  - place
+  domain:
+  - general
+  use_for:
+  - site-map
+  - label-reference
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - community
+use_when:
+- Venues, stadiums, hospitals or retail around a program site, filtered by categories.primary within a bbox.
+- A labelled point layer of named places for a local map outside the Natural Earth and GeoNames sets.
+avoid_when:
+- 'Completeness or exact positions are expected: places carry a confidence score and come from merged open and licensed sources.'
+- 'The whole theme is downloaded: read with a bbox filter; the files total many gigabytes.'
+pairs_with:
+- ref.gazetteer.world.place.geonames
+join:
+  key: id
+  type: string
+  note: Overture GERS id (stable across releases); names.primary, categories.primary, addresses, confidence, bbox struct for filtering.
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: GeoParquet (S3, read with pyarrow or DuckDB using a bbox filter)
+  note: 'Overture publishes each release as GeoParquet on S3: s3://overturemaps-us-west-2/release/<release>/theme=<theme>/type=<type>/*.parquet (listing
+    verified 2026-11-04: releases 2026-09-23.0, 2026-09-23.1, 2026-10-21.0; themes addresses, base, buildings, divisions, places, transportation). Files
+    are 700 to 800 MB each, so read them with a bbox filter rather than downloading: pyarrow.dataset(''s3://overturemaps-us-west-2/release/2026-10-21.0/theme=places/type=place/'',
+    filesystem=S3FileSystem(anonymous=True, region=''us-west-2'')).to_table(filter=(bbox.xmin > W) & (bbox.xmax < E) & ...), or DuckDB: SELECT ... FROM
+    read_parquet(''s3://.../theme=places/type=place/*'', hive_partitioning=1) WHERE bbox.xmin > W AND ...; save the result as GeoParquet and supply it.'
+  columns:
+  - id
+  - geometry
+  - bbox
+  - version
+  - sources
+  - names
+  - categories
+  - confidence
+  - websites
+  - socials
+  - emails
+  - phones
+  - brand
+  - addresses
+source:
+  publisher: Overture Maps Foundation
+  product: Overture places theme, release 2026-10-21.0
+  url: https://overturemaps-us-west-2.s3.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/&delimiter=/
+url_verified_on: '2026-11-04'
+vintage:
+  current: 2026-10-21.0
+  cadence: monthly
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: © Overture Maps Foundation, places (CDLA Permissive 2.0).
+  note: The places theme is CDLA Permissive 2.0 (docs.overturemaps.org, read 2026-11-04); attribution recommended.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_get
+    url: https://overturemaps-us-west-2.s3.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/&delimiter=/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the S3 release listing (three releases, six themes; places type=place files of 730 to 815 MB) on 2026-11-04 and recorded the pyarrow
+      and DuckDB read pattern.
+  - rev: 2
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+attribution:
+  corner: © Overture Maps Foundation
+  links:
+  - text: © Overture Maps Foundation
+    href: https://docs.overturemaps.org/attribution/
+  full: © Overture Maps Foundation, places (CDLA Permissive 2.0).
+  required_on_map: true
+  collapse: after_interaction
+  terms_read: '2026-11-09'

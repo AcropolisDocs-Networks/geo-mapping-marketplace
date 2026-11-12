@@ -1,0 +1,48 @@
+id: ref.context.world.lakes.ne10
+type: context
+rev: 1
+status: active
+title: World lakes and reservoirs, 10m (Natural Earth)
+summary: 1,355 named lakes and reservoirs with a scale rank, drawn in the water colour under data and labelled by name.
+tags:
+  geography: [world]
+  level: [water]
+  domain: [general]
+  use_for: [context-basemap, label-reference, locator-inset, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national, regional, state, metro]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A regional, state or metro map shows its lakes and reservoirs as water so a site or market is read against them.',
+  'Water names are drawn from the name column, tiered by scalerank.']
+avoid_when: [The map is a neighbourhood or a single site; shorelines are generalized (simplified to about 0.002 degrees) and small ponds are missing.,
+  Legal shorelines or flood extents are needed.]
+pairs_with: [ref.context.world.rivers.ne10, ref.context.world.lakes.ne110]
+distinct_from: [ref.context.world.lakes.ne110]
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_10m_lakes.parquet
+  sha256: bb23025b43196f6d4836ba6be45407781fc5bb25c8644a2dff18494d2740ad3e
+  size_mb: 1.26
+  format: GeoParquet (zstd)
+  features: 1355
+  columns: [name, scalerank, featurecla, min_zoom, ne_id]
+  note: Geometry simplified at 0.002 degrees (about 200 m) to keep the bundle small; columns reduced to name, rank and zoom.
+source: {publisher: Natural Earth, product: 'Lakes + Reservoirs, 10m', url: 'https://naciscdn.org/naturalearth/10m/physical/ne_10m_lakes.zip',
+  file_sha256: 0803a06f9c3cb4671d89b68c48b142aad9366ba40f665245e12a913fbc61722a}
+url_verified_on: 2026-11-04
+vintage: {current: Natural Earth 5.1.2, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-04
+  verify_by: 2027-11-04
+  check: {kind: feature_count_and_hash, features: 1355, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-04, note: Bundled payload built from Natural Earth 5.1.2 and verified (M10 toponymy and context pack).}

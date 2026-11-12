@@ -1,0 +1,617 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acropolisdocs.com/schemas/geo-mapping/style-pack.schema.json",
+  "title": "Style pack (pack.yaml)",
+  "description": "1.4.0 (R2-PACK): a named, versioned bundle that sets how a map looks: palette, type, ornaments and treatments. The brand is the default pack's style; the brand's identity (logo, stamps, hidden accreditation, footer credit, edition lock) is kept under every pack.",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "title",
+    "intent",
+    "palette",
+    "fonts",
+    "web"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,30}$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated": {
+      "type": "string",
+      "description": "set on a pack written by a tool (the default pack), never hand-edited"
+    },
+    "palette": {
+      "enum": [
+        "own",
+        "brand",
+        "brand-derived"
+      ]
+    },
+    "fonts": {
+      "enum": [
+        "own",
+        "brand"
+      ]
+    },
+    "modes": {
+      "type": "object",
+      "description": "palette: own - the pack's tokens, the same keys as the brand's map-tokens.yaml (plus the pack's own ink tokens); `screen: {inherit: print}` reuses the print tokens",
+      "properties": {
+        "print": {
+          "$ref": "#/$defs/tokens"
+        },
+        "screen": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/tokens"
+            },
+            {
+              "type": "object",
+              "required": [
+                "inherit"
+              ],
+              "properties": {
+                "inherit": {
+                  "const": "print"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "print"
+      ],
+      "additionalProperties": false
+    },
+    "derive": {
+      "type": "object",
+      "description": "palette: brand-derived - how the brand's tokens are changed",
+      "additionalProperties": false,
+      "properties": {
+        "chroma_cap": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.4,
+          "description": "the largest CIELCh chroma (0 to about 0.4 as a fraction of 100) any data colour keeps"
+        },
+        "context_desaturate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "how much of the ground and context colours' saturation is taken away"
+        },
+        "ground": {
+          "enum": [
+            "brand",
+            "white",
+            "paper"
+          ]
+        },
+        "tokens": {
+          "type": "object",
+          "description": "extra ink tokens of the pack, as hex colours",
+          "additionalProperties": {
+            "$ref": "#/$defs/hex"
+          }
+        }
+      }
+    },
+    "ramps": {
+      "enum": [
+        "pack",
+        "brand-derived"
+      ]
+    },
+    "type": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "$ref": "#/$defs/face"
+        },
+        "label": {
+          "$ref": "#/$defs/face"
+        },
+        "body": {
+          "$ref": "#/$defs/face"
+        }
+      }
+    },
+    "elements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "type": "object",
+          "properties": {
+            "style": {
+              "enum": [
+                "single",
+                "double",
+                "bar-border"
+              ]
+            },
+            "bars": {
+              "type": "object"
+            },
+            "grid_mm": {
+              "type": "number",
+              "minimum": 2
+            }
+          },
+          "additionalProperties": false
+        },
+        "title": {
+          "type": "object",
+          "properties": {
+            "box": {
+              "enum": [
+                "plain",
+                "cartouche",
+                "title-block"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "north_arrow": {
+          "type": "object",
+          "properties": {
+            "style": {
+              "enum": [
+                "needle",
+                "arrow",
+                "triangle",
+                "compass",
+                "compass-rose"
+              ]
+            },
+            "points": {
+              "enum": [
+                8,
+                16
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "scale_bar": {
+          "type": "object",
+          "properties": {
+            "style": {
+              "enum": [
+                "alternating",
+                "line",
+                "ticks",
+                "ladder"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "legend": {
+          "type": "object",
+          "properties": {
+            "frame": {
+              "enum": [
+                "plain",
+                "ruled",
+                "cartouche"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "callouts": {
+          "type": "object",
+          "properties": {
+            "weight": {
+              "enum": [
+                "normal",
+                "strong"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "title_area": {
+          "enum": [
+            "normal",
+            "large"
+          ]
+        }
+      }
+    },
+    "treatments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "paper": {
+          "type": "object",
+          "required": [
+            "image"
+          ],
+          "properties": {
+            "image": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string"
+            },
+            "tile_px": {
+              "type": "integer"
+            },
+            "dpi": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "water_lining": {
+          "type": "object",
+          "properties": {
+            "rings": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
+            "first_mm": {
+              "type": "number",
+              "minimum": 0.1
+            },
+            "step_mm": {
+              "type": "number",
+              "minimum": 0.1
+            },
+            "width_mm": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0.02
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "lakes": {
+              "type": "boolean"
+            },
+            "token": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "hill_glyphs": {
+          "type": "object",
+          "properties": {
+            "set": {
+              "type": "string"
+            },
+            "spacing_mm": {
+              "type": "number",
+              "minimum": 2
+            },
+            "token": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "place_glyphs": {
+          "type": "object",
+          "properties": {
+            "set": {
+              "type": "string"
+            },
+            "token": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "line_character": {
+          "type": "object",
+          "properties": {
+            "style": {
+              "enum": [
+                "sketch"
+              ]
+            },
+            "amplitude_mm": {
+              "type": "number"
+            },
+            "wavelength_mm": {
+              "type": "number"
+            },
+            "overdraw": {
+              "type": "boolean"
+            },
+            "hatch_fills": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "grid": {
+          "type": "object",
+          "properties": {
+            "spacing_mm": {
+              "type": "number",
+              "minimum": 2
+            },
+            "token": {
+              "type": "string"
+            },
+            "opacity": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "category_patterns": {
+          "type": "boolean",
+          "description": "categories told apart by pattern (hatch, dot, dash) as well as tint"
+        }
+      }
+    },
+    "logo": {
+      "enum": [
+        "brand",
+        "mono"
+      ]
+    },
+    "web": {
+      "enum": [
+        "full",
+        "palette-and-fonts",
+        "palette-only",
+        "none"
+      ]
+    },
+    "web_glyphs": {
+      "type": "object",
+      "description": "MapLibre glyph stacks generated by tools/make_glyphs.py --pack",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "files": {
+      "type": "object",
+      "description": "SHA-256 of every file the pack ships, by path inside the pack",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "palette": {
+            "const": "own"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "modes"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "palette": {
+            "const": "brand-derived"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "derive"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "fonts": {
+            "const": "own"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "type"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "derive": {
+            "properties": {
+              "ground": {
+                "const": "paper"
+              }
+            },
+            "required": [
+              "ground"
+            ]
+          }
+        },
+        "required": [
+          "derive"
+        ]
+      },
+      "then": {
+        "properties": {
+          "derive": {
+            "required": [
+              "tokens"
+            ],
+            "properties": {
+              "tokens": {
+                "required": [
+                  "paper"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hex": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "tokens": {
+      "type": "object",
+      "required": [
+        "background",
+        "land",
+        "water",
+        "frame",
+        "legend_frame",
+        "label",
+        "label_halo",
+        "legend_bg",
+        "neutral_ramp",
+        "sequential_ramp",
+        "emphasis",
+        "status",
+        "categorical",
+        "no_data",
+        "diverging_ramp"
+      ],
+      "properties": {
+        "neutral_ramp": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hex"
+          },
+          "minItems": 3
+        },
+        "sequential_ramp": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hex"
+          },
+          "minItems": 3
+        },
+        "diverging_ramp": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hex"
+          },
+          "minItems": 3
+        },
+        "categorical": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hex"
+          },
+          "minItems": 3
+        },
+        "status": {
+          "type": "object",
+          "required": [
+            "success",
+            "warning",
+            "danger"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/hex"
+          }
+        }
+      },
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/hex"
+          },
+          {
+            "type": "array"
+          },
+          {
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "face": {
+      "type": "object",
+      "required": [
+        "family"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string",
+          "description": "a TTF or OTF inside the pack's fonts/ folder; absent for the brand's Inter"
+        },
+        "style": {
+          "enum": [
+            "normal",
+            "italic"
+          ]
+        },
+        "licence": {
+          "type": "string",
+          "description": "the licence file inside the pack's LICENSES/ folder"
+        },
+        "licence_id": {
+          "enum": [
+            "OFL-1.1",
+            "Apache-2.0",
+            "UFL-1.0"
+          ]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "upstream": {
+          "type": "string"
+        },
+        "generic": {
+          "enum": [
+            "serif",
+            "sans-serif",
+            "monospace",
+            "cursive"
+          ]
+        }
+      }
+    }
+  }
+}

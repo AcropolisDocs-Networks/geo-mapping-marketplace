@@ -1,0 +1,96 @@
+id: ref.boundary.world.historical.ohm
+type: boundary
+rev: 1
+status: active
+title: OpenHistoricalMap administrative boundaries as of a date
+summary: Historical countries, territories, states and counties from OpenHistoricalMap, each with start_date and end_date, filtered to the day a map shows.
+tags:
+  geography:
+  - world
+  level:
+  - country
+  - state
+  - county
+  domain:
+  - general
+  use_for:
+  - historical-boundaries
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - world
+  - national
+  - regional
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - community
+use_when:
+- 'A historical map that needs the boundaries of one date (the 1861 western territories of Day 6): hist_fetch.py fetch --as-of 1861-10-24 --bbox=... --admin-level
+  4.'
+avoid_when:
+- 'Bulk or nationwide pulls: the Overpass instance is a shared service; the daily planet file (planet.openhistoricalmap.org) is the bulk route.'
+- 'Places OHM has not mapped for that date: coverage is uneven (MAP-HIST-001 says so; use modern boundaries with a note).'
+- 'Newberry Atlas of Historical County Boundaries: CC BY-NC-SA, non-commercial, so not usable for a business brand (and its download moved, Day 6).'
+- 'IPUMS NHGIS: registration and limits on redistribution; a person may supply their own NHGIS files as source: file.'
+join:
+  key: ohm_id
+  type: integer
+  note: The OpenHistoricalMap relation id; name, admin_level, start_date and end_date ride along.
+crs: EPSG:4326
+delivery:
+  mode: service
+  protocol: overpass
+  tool: hist_fetch
+  api:
+    host: overpass-api.openhistoricalmap.org
+    requests:
+    - method: GET
+      path: /api/interpreter
+    limits:
+      sequential: true
+  note: One GET to the OHM Overpass instance (https://overpass-api.openhistoricalmap.org/api/, read from the OpenHistoricalMap/Overpass wiki page on 2026-11-10;
+    no rate limit stated). The REST API (https://www.openhistoricalmap.org/api/0.6/relation/{id}/full) and the vector tiles (vtiles.openhistoricalmap.org;
+    admin tiles public domain, osm_land ODbL) are the other routes.
+source:
+  publisher: OpenHistoricalMap
+  product: OpenHistoricalMap boundaries
+  url: https://openhistoricalmap.org/copyright
+url_verified_on: '2026-11-10'
+vintage:
+  current: live, edited daily
+  cadence: continuous
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: Map data courtesy of the OpenHistoricalMap project, in the public domain unless otherwise noted.
+  note: '"Except where otherwise noted, OpenHistoricalMap data is dedicated to the public domain" (CC0; copyright page read 2026-11-10). Single features
+    may carry CC BY or CC BY-SA in a license=* tag; share-alike applies when a significant part of them is reused. hist_fetch keeps the tag and the terms
+    register lists it.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-05-10'
+  check:
+    kind: http_get
+    url: https://openhistoricalmap.org/copyright
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-10'
+    note: 'New (1.3.0, R1-HIST): licence read on the OHM copyright page (CC0 unless noted; corrects the 1.2.0 spec''s ODbL), routes from the OHM Reuse and
+      Overpass wiki pages. The 1861 query is run from the PC in the live check.'

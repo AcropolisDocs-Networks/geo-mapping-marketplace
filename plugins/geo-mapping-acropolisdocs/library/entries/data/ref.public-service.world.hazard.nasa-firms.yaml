@@ -1,0 +1,142 @@
+id: ref.public-service.world.hazard.nasa-firms
+type: public-service
+rev: 3
+status: active
+title: NASA FIRMS active fire detections (VIIRS, MODIS)
+summary: Near-real-time satellite fire detections worldwide from NASA FIRMS, as CSV by area and day range, with a free MAP_KEY; for wildfire context near
+  sites.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - hazard
+  use_for:
+  - site-map
+  - density-surface
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Active fire detections from the last 1 to 10 days around a market or route, for a wildfire-readiness map, with the person's own MAP_KEY (map-credentials
+  add nasa-firms).
+avoid_when:
+- 'Fire perimeters: FIRMS detections are 375 m (VIIRS) or 1 km (MODIS) pixels, not mapped perimeters.'
+- 'A large area over many days: one request can count as several transactions against the 5,000 per 10 minutes of a MAP_KEY.'
+delivery:
+  mode: service
+  protocol: csv
+  format: CSV (latitude, longitude, bright_ti4, acq_date, acq_time, confidence, frp)
+  requires_credential:
+    name: nasa-firms
+    kind: apikey
+    class: secret
+    host: firms.modaps.eosdis.nasa.gov
+    inject:
+      path: true
+    reject:
+      status:
+      - 400
+      - 401
+      - 403
+      body:
+      - Invalid MAP_KEY
+    probe: https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/-112.1,33.4,-112.0,33.5/1
+    signup_url: https://firms.modaps.eosdis.nasa.gov/api/map_key/
+    free: true
+    limits: '"MAP_KEY limit is 5000 transactions / 10-minute interval"; a larger request may count as several (area API page, read 2026-11-07)'
+    note: The MAP_KEY sits in the address path; the plugin fills the {key} slot at send time (0.14.0)
+  request: https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{west},{south},{east},{north}/{days}
+  requests:
+    viirs-snpp: https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{west},{south},{east},{north}/{days}
+    viirs-noaa20: https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_NOAA20_NRT/{west},{south},{east},{north}/{days}
+    modis: https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/MODIS_NRT/{west},{south},{east},{north}/{days}
+  ogc:
+    profiles:
+    - nasa-firms-wms
+    - nasa-firms-wfs-us
+    wms-global: https://firms.modaps.eosdis.nasa.gov/mapserver/wms/fires/{key}/
+    wfs-region: https://firms.modaps.eosdis.nasa.gov/mapserver/wfs/{region}/{key}/
+    regions:
+    - Canada
+    - Alaska
+    - USA_contiguous_and_Hawaii
+    - Central_America
+    - South_America
+    - Europe
+    - Northern_and_Central_Africa
+    - Southern_Africa
+    - Russia_Asia
+    - South_Asia
+    - SouthEast_Asia
+    - Australia_NewZealand
+    wfs_layers:
+    - ms:fires_modis_24hrs
+    - ms:fires_modis_7days
+    - ms:fires_noaa20_24hrs
+    - ms:fires_noaa20_7days
+    - ms:fires_noaa21_24hrs
+    - ms:fires_noaa21_7days
+    - ms:fires_landsat_24hrs
+    - ms:fires_landsat_7days
+    note: 'The WFS and WMS info pages (read 2026-11-09). There is no global WFS: a WFS address names one of the twelve regions, then the MAP_KEY, then
+      a slash before the query (/{MAP_KEY}/?SERVICE=WFS&REQUEST=GetCapabilities&VERSION=2.0.0). MODIS, NOAA-20 and NOAA-21 layers are offered in every
+      region; the Landsat layers only in Canada, Alaska and USA_contiguous_and_Hawaii. The global WMS is the fires service (fires_viirs_*, fires_modis_*,
+      fires_landsat_*, the time-since-detection and WMS-Time layers); the WMS page names no regional WMS addresses (a region is a BBOX). The
+      plugin ships the profiles nasa-firms-wms (global) and nasa-firms-wfs-us (USA_contiguous_and_Hawaii), both with cred:nasa-firms.'
+  note: Area API /api/area/csv/[MAP_KEY]/[SOURCE]/[west,south,east,north]/[DAY_RANGE] (optionally /[DATE]). A wrong key answers HTTP 400 "Invalid MAP_KEY."
+    (checked 2026-11-07), and so does a malformed request (a wrong WFS path, layer or box), so a 400 counts as a rejection only when the answer says
+    Invalid MAP_KEY (1.0.2; the text could not be re-read from the build session on 2026-11-09, which gets no body from an error page). RT and URT detections are removed when the NRT ones are processed or after 6 hours.
+source:
+  publisher: NASA, Earth Science Data Systems (FIRMS)
+  product: FIRMS area API
+  url: https://firms.modaps.eosdis.nasa.gov/api/area/
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Source: NASA FIRMS.'
+  note: The API page (read 2026-11-07) gives no citation or terms; NASA data is generally free of restriction; FIRMS citation guidance not read.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-09'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): the area API page read on 2026-11-07 (URL pattern, sources, 5,000 per 10 minutes); the key sits in the
+      path, which the plugin cannot send.'
+  - rev: 2
+    date: '2026-11-07'
+    note: 'Active (0.14.0): the plugin can now send a key that sits in the address path; the entry gains cred:nasa-firms with the {key} slot, a probe and
+      400 as the reject status (an invalid MAP_KEY answered 400 on 2026-11-07).'
+  - rev: 3
+    date: '2026-11-09'
+    note: 'Rejections and the OGC routes (1.0.2): FIRMS answers 400 for a malformed request as well as for a wrong key, and a wrong WFS address locked a
+      working key; a 400 now counts as a rejection only when the answer says Invalid MAP_KEY (reject.body). The WFS and WMS info pages read on
+      2026-11-09: no global WFS, twelve regions, the WFS layer names, Landsat only in three North American regions; the profiles nasa-firms-wms and
+      nasa-firms-wfs-us ship with the plugin.'

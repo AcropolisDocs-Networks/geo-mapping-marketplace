@@ -1,0 +1,52 @@
+id: ref.map-type.sector-coverage
+type: map-type
+rev: 2
+status: active
+title: Sector coverage wedges
+summary: Draws each antenna sector as a wedge from its azimuth and beamwidth, colored by band, technology or site type; a site with no azimuth is a circle.
+tags:
+  use_for:
+  - coverage-footprint
+  - site-map
+  avoid_for: []
+use_when:
+- The map shows the direction and nominal reach of sectors at sites.
+- The site list carries azimuth and beamwidth columns, and the reader knows the sites.
+avoid_when:
+- The reader will take wedges as measured coverage; they show configuration, not signal.
+- Azimuth and beamwidth are missing.
+pairs_with:
+- ref.palette.categorical
+chooses_when:
+  message_type:
+  - configuration
+  data_shape:
+  - sector
+requires:
+  data_shape: see chooses_when
+  join_key: false
+recommended:
+  palette_kind: categorical
+  color_by: band
+  radius_m: 1500
+guarded_by:
+- MAP-TEL-002
+- MAP-TEL-020
+- MAP-TEL-021
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check: the coverage-map pipeline draws wedges from a site list (tests/test_telecom.py::test_coverage_map_runs_on_the_example_and_discloses_the_reduction)
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the renderer does not build this map type yet; the entry records when to choose it so selection can say it is not available.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: the coverage-map pipeline (M6) draws sector wedges from a site list with coordinate privacy for confidential sites; selection now offers it for a configuration message over sector data.'

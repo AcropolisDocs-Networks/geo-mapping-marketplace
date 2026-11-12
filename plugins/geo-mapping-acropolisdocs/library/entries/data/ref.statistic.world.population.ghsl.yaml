@@ -1,0 +1,70 @@
+id: ref.statistic.world.population.ghsl
+type: statistic
+rev: 1
+status: active
+title: GHSL population grid 2020, 100 m (GHS-POP R2023A)
+summary: 'Residents per 100 m cell for the whole world, epoch 2020, from the Global Human Settlement Layer (census counts disaggregated onto built-up area); one GeoTIFF per 10-degree tile, Mollweide (ESRI:54009). The denominator for people under a footprint anywhere.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [demographics]
+  use_for: [normalization, coverage-footprint, density-surface]
+  avoid_for: [legal-boundary, parcel-level, site-precision]
+  scale: [national, regional, state, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [derived]
+use_when:
+- People under a coverage footprint, a buffer or a market outside the United States are counted (raster_zonal sum), or a count is wanted finer than any boundary layer offers.
+- Population must be comparable across countries on one map; the grid is built the same way everywhere.
+avoid_when:
+- The area is in the United States and ACS block groups or tracts are at hand; ref.statistic.us.acs5.population is the census authority and carries margins of error.
+- A figure for a single building or block is wanted; a 100 m cell holds a model's share of a census unit, not a count of residents there.
+- The year matters; the grid is the 2020 epoch of a 1975 to 2030 series, interpolated between censuses.
+pairs_with: [ref.statistic.world.population.worldpop, ref.boundary.world.country.geoboundaries]
+distinct_from: [ref.statistic.world.population.worldpop, ref.statistic.us.acs5.population]
+join:
+  key: none
+  type: raster
+  note: 'No join: the value is read under polygons with raster_io.zonal (sum, all_touched false) and the partial-pixel policy is written into the provenance.'
+delivery:
+  mode: fetch
+  url_template: https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_POP_GLOBE_R2023A/GHS_POP_E2020_GLOBE_R2023A_54009_100/V1-0/tiles/GHS_POP_E2020_GLOBE_R2023A_54009_100_V1_0_R{row}_C{col}.zip
+  tiling: '10-degree tiles in Mollweide, rows 1 to 18 from the north and columns 1 to 36 from the west; R6_C9 covers the south-western United States and northern Mexico (16.7 MB zipped). The whole world in one file is GHS_POP_E2020_GLOBE_R2023A_54009_100_V1_0.zip (5.1 GB) at the parent folder.'
+  format: GeoTIFF float32 inside a zip, ESRI:54009 (World Mollweide), 100 m cells, nodata -200
+  alt_template: https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_POP_GLOBE_R2023A/GHS_POP_E2020_GLOBE_R2023A_4326_3ss/V1-0/tiles/GHS_POP_E2020_GLOBE_R2023A_4326_3ss_V1_0_R{row}_C{col}.zip
+  alt_note: 'The same epoch at 3 arc-seconds (about 90 m) in EPSG:4326, for a map that must stay in degrees; R6_C9 is 188 MB.'
+  note: Not bundled. geo-find-data or terrain-analysis fetches the tile a window needs, records its sha256 and keeps it under .geo-mapping/fetch/.
+source:
+  publisher: European Commission, Joint Research Centre (JRC)
+  product: GHS-POP R2023A, GHS population grid multitemporal (1975-2030), epoch 2020, 100 m, Mollweide
+  url: https://ghsl.jrc.ec.europa.eu/download.php?ds=pop
+  catalogue: https://data.jrc.ec.europa.eu/dataset/2ff68a52-5b5b-4a22-8f40-c41da8332cfe
+  doi: 10.2905/2FF68A52-5B5B-4A22-8F40-C41DA8332CFE
+url_verified_on: '2026-11-04'
+vintage:
+  current: 'R2023A, epoch 2020'
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Population: GHS-POP R2023A, European Commission, Joint Research Centre (JRC), 2023, CC BY 4.0. Schiavina, M., Freire, S., Carioli, A., MacManus, K. (2023), GHS-POP R2023A, doi:10.2905/2FF68A52-5B5B-4A22-8F40-C41DA8332CFE.'
+  note: 'The JRC data catalogue links the European Commission reuse notice (Decision 2011/833/EU), which the GHSL download page states as CC BY 4.0. The download page is rendered by script and its licence sentence could not be read from the build environment; the catalogue record and the tile download were. Credit the JRC and cite the DOI.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_head
+    url: https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_POP_GLOBE_R2023A/GHS_POP_E2020_GLOBE_R2023A_54009_100/V1-0/tiles/GHS_POP_E2020_GLOBE_R2023A_54009_100_V1_0_R6_C9.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Verified by HEAD from the build environment: the 100 m Mollweide tile R6_C9 (HTTP 200, 16,653,343 bytes), the 3-arc-second tile R6_C9 (200, 187,892,270 bytes), the whole-world 100 m zip (200, 5.1 GB) and the JRC catalogue record. No tile was downloaded or bundled (M12).'

@@ -1,0 +1,70 @@
+id: ref.public-service.ca-on.transit.octranspo
+type: public-service
+rev: 1
+status: draft
+title: OC Transpo (Ottawa) GTFS and GTFS-realtime
+summary: Ottawa bus and O-Train schedules (GTFS, public since 2008) and GTFS-realtime for registered developers.
+tags:
+  geography:
+  - ca-on
+  level:
+  - site
+  - line
+  domain:
+  - transport
+  use_for:
+  - site-map
+  - context-basemap
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - authoritative
+use_when:
+- An Ottawa O-Train or bus map from the GTFS file the person downloads.
+avoid_when:
+- Feed addresses and key delivery are not in the developers page's text (2026-11-07); contact octranspo-dev@ottawa.ca for GTFS-RT.
+- 'Accuracy guarantees: OC Transpo states it cannot guarantee accuracy or completeness.'
+delivery:
+  mode: user-supplied
+  format: GTFS (zip); GTFS-realtime (protobuf)
+  note: API 2.0 retired 30 April 2025. GTFS-RT for registered developers, allowed for commercial and non-commercial use (developers FAQ, read 2026-11-07).
+source:
+  publisher: City of Ottawa, OC Transpo
+  product: GTFS and GTFS-realtime
+  url: https://www.octranspo.com/en/plan-your-trip/travel-tools/developers
+url_verified_on: '2026-11-07'
+vintage:
+  current: current GTFS
+  cadence: irregular
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Source: OC Transpo.'
+  note: 'FAQ: registered developers may use GTFS-RT for non-commercial and commercial purposes; the full terms were not read.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): the developers page read on 2026-11-07 (commercial use allowed for registered developers); feed addresses
+      and key delivery not stated.'

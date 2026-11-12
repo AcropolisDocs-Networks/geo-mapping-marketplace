@@ -1,0 +1,72 @@
+id: ref.context.world.land.osm-simplified
+type: context
+rev: 1
+status: active
+title: OpenStreetMap simplified land polygons (osmdata.openstreetmap.de)
+summary: Every land area of the world (continents and islands) from the OpenStreetMap coastline, simplified for zoom levels 0 to 9; the ground of
+  regional maps between 1:10,000,000 and 1:1,500,000, with the water as its inverse in the window.
+tags:
+  geography: [world]
+  level: [water, line]
+  domain: [general]
+  use_for: [context-basemap]
+  avoid_for: [engineering-grade, legal-boundary, site-precision, parcel-level]
+  scale: [national, regional, state, metro]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [live]
+  tier: [T1, T2]
+  license_class: [share-alike]
+  quality: [community]
+use_when: ['A regional map (1:10,000,000 to 1:1,500,000) whose coast should be closer than the Natural Earth 1:10m coast; fetched once (24 MB), then cached.']
+avoid_when: ['A city map finer than 1:1,500,000: the polygons are simplified for zoom 9 (about 300 m); use Overture or TIGER ground.']
+pairs_with: [ref.context.world.lakes.ne10]
+distinct_from:
+- {id: ref.context.world.ocean.ne10, why: 'Natural Earth 1:10m, public domain, bundled; coarser'}
+- {id: ref.context.world.ground.overture, why: 'the same OSM coastline at full detail, read per window'}
+crs: EPSG:3857
+delivery:
+  mode: fetch
+  format: Shapefile (zip), Web Mercator
+  size_mb: 24.5
+  note: The file is rebuilt from OpenStreetMap every day, so no hash is recorded; the fetch records the SHA-256 and date of the copy it took.
+    The licence page gives no attribution wording of its own beyond the ODbL credit (read 2026-11-10).
+source:
+  publisher: OpenStreetMap Data (osmdata.openstreetmap.de, FOSSGIS)
+  product: Simplified land polygons, complete, Web Mercator (simplified-land-polygons-complete-3857.zip)
+  url: https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip
+url_verified_on: '2026-11-10'
+vintage:
+  current: daily build
+  cadence: daily
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: © OpenStreetMap contributors
+  note: 'osmdata.openstreetmap.de/info/license.html (read 2026-11-10): derived from OpenStreetMap, available under the ODbL like the original; a
+    mention of the site is welcome but not required.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-11-10'
+  check:
+    kind: http_head
+    url: https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-10'
+    note: 'Added for global ground (1.5.0, R3-GND): the download (24.5 MB) and the licence page read 2026-11-10.'
+attribution:
+  corner: © OpenStreetMap contributors
+  links:
+  - {text: © OpenStreetMap contributors, href: 'https://www.openstreetmap.org/copyright'}
+  full: © OpenStreetMap contributors (ODbL 1.0), via osmdata.openstreetmap.de
+  required_on_map: true
+  collapse: after_interaction
+  short: © OSM
+  export: {text: © OpenStreetMap contributors (openstreetmap.org/copyright)}
+  terms_read: '2026-11-10'

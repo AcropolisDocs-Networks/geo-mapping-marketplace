@@ -1,0 +1,31 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-04 from the build environment.
+profile: ca-geoportal
+type: arcgis-rest
+base_url: https://services3.arcgis.com/uknczv4rpevve42E/arcgis/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 2000
+  server_max_features: 2000
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: open
+  confidential: false
+  attribution: 'Source: California State Geoportal (gis.data.ca.gov).'
+host_visibility: shown
+host_confirmed_on: '2026-11-04'
+verified_on: '2026-11-04'
+notes: 'California State Geoportal (California Department of Technology) hosted services. 167 hosted feature services (state boundary, counties,
+  census tracts, districts, broadband and evacuation layers). Discovery: gis.data.ca.gov (ArcGIS Hub, orgId uknczv4rpevve42E). Licence varies
+  by layer: read each item''s terms before external use. Shipped with the plugin (M13), read-only: a profile of the same name saved in the working
+  folder overrides it.'

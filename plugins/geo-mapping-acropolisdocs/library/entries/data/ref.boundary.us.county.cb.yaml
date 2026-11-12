@@ -1,0 +1,108 @@
+id: ref.boundary.us.county.cb
+type: boundary
+rev: 3
+status: active
+title: US counties, generalized (Census cartographic boundary)
+summary: Generalized county polygons for national, regional, and state thematic maps.
+tags:
+  geography:
+  - us
+  level:
+  - county
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  avoid_for:
+  - parcel-level
+  - engineering-grade
+  - legal-boundary
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  detail:
+  - generalized
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T0
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Rolling a metric up by county on a state, regional, or national map.
+- A choropleth that joins to a client table on the five-digit county code.
+avoid_when:
+- The map needs exact legal boundaries or site-level precision.
+- Shoreline detail matters; generalized files are clipped to the coast.
+- The map is of a single metro area; the 1:20,000,000 outlines look blocky when zoomed in.
+pairs_with:
+- ref.boundary.us.state.cb20m
+join:
+  key: GEOID
+  type: string
+  width: 5
+  note: Keep leading zeros. Never cast to integer. Includes Puerto Rico and the island areas that the Bureau publishes at this scale.
+  pattern: ^\d{5}$
+crs: EPSG:4269
+delivery:
+  mode: bundled
+  path: assets/basemaps/us_counties_cb.parquet
+  sha256: 6b40c08718ead86598796d6d1af9bec33dd9b559544fc87b5516385b60b90a2e
+  size_mb: 0.49
+  format: GeoParquet (zstd)
+  features: 3222
+  columns:
+  - GEOID
+  - STATEFP
+  - COUNTYFP
+  - STUSPS
+  - STATE_NAME
+  - NAME
+  - NAMELSAD
+  - ALAND
+  - AWATER
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, Counties, 1:20,000,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_county_20m.zip
+  file_sha256: 745a193ddcb63337befa83a55c031c0fdd0c16a66fd12b56e2f274829624bb65
+url_verified_on: 2026-11-02
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-02
+  verify_by: 2027-11-02
+  check:
+    kind: feature_count_and_hash
+    features: 3222
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 2
+    date: 2026-11-02
+    note: Activated with a verified 2025 payload (3,222 features); replaces the draft seed that carried no payload.
+  - rev: 3
+    date: '2026-11-02'
+    note: Adds join.pattern so the join check can tell a numeric code from a postal abbreviation.

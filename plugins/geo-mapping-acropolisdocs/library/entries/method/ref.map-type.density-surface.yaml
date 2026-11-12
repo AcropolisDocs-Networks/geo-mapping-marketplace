@@ -1,0 +1,41 @@
+id: ref.map-type.density-surface
+type: map-type
+rev: 1
+status: draft
+title: Density surface (heat)
+summary: A smoothed surface from point density, for patterns in many points.
+tags:
+  use_for:
+  - density-surface
+  avoid_for: []
+use_when:
+- There are thousands of points and the pattern matters more than any one.
+avoid_when:
+- The points are few; show them as symbols.
+- The reader needs values; a smoothed surface has none.
+pairs_with: []
+chooses_when:
+  message_type:
+  - distribution
+  - pattern
+  data_shape:
+  - point-dense
+requires:
+  data_shape: see chooses_when
+  join_key: false
+recommended: {}
+guarded_by: []
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check: none yet; the renderer does not build this map type
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the renderer does not build this map type yet; the entry records when to choose it so selection can say it is not available.'

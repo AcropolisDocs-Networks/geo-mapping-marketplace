@@ -1,0 +1,88 @@
+id: ref.public-service.world.earthquake.usgs
+type: public-service
+rev: 1
+status: active
+title: USGS earthquake catalog and ShakeMap services
+summary: Earthquake events worldwide from the USGS FDSN event web service (GeoJSON with magnitude, depth and time) and the ShakeMap map service, for seismic-hazard
+  context on a site or program map.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - hazard
+  use_for:
+  - site-map
+  - density-surface
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Recent or historical earthquakes above a magnitude within a bbox around a market (query starttime, minmagnitude, minlatitude and so on).
+- ShakeMap intensity contours for one event under a site map, from the sm_ShakeMap map service.
+avoid_when:
+- 'Seismic design values are implied: the catalog lists events; the National Seismic Hazard Model (2023 NSHM) gives hazard, from USGS downloads.'
+- 'More than 20,000 events are requested at once: the FDSN service caps a query at 20,000; page by time.'
+delivery:
+  mode: user-supplied
+  format: GeoJSON from the FDSN event query (read directly by geo-convert)
+  note: 'GET https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2016-01-01&minmagnitude=4&minlatitude=31&maxlatitude=37&minlongitude=-115&maxlongitude=-109
+    (the format=geojson&limit=1 form verified 2026-11-04, application/json; 20,000 events per query). ShakeMap: https://earthquake.usgs.gov/arcgis/rest/services/eq/sm_ShakeMap/MapServer
+    (verified).'
+  columns:
+  - id
+  - mag
+  - place
+  - time
+  - depth
+  - url
+  - type
+  - geometry
+source:
+  publisher: US Geological Survey, Earthquake Hazards Program
+  product: FDSN Event Web Service and ShakeMap map service
+  url: https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit=1
+url_verified_on: '2026-11-04'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Geological Survey, Earthquake Hazards Program.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-02-04'
+  check:
+    kind: http_get
+    url: https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit=1
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the FDSN event query (GeoJSON) and the sm_ShakeMap ArcGIS service on 2026-11-04. The GeoJSON is read as a file; no profile is needed.

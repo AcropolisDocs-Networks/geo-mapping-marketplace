@@ -1,0 +1,25 @@
+id: editorial
+version: 1
+title: Editorial
+intent: Newspaper-style explainers and social posts; a serif headline, quiet context, the data and the callouts carry the story.
+palette: brand-derived
+fonts: own
+derive:
+  chroma_cap: 0.11
+  context_desaturate: 0.6
+  ground: white
+ramps: pack
+type:
+  title: {family: Source Serif 4, file: 'fonts/SourceSerif4-opsz-wght.ttf', sha256: 97b2d4da6e3cb494b5a1e66ae176914d852ccabef49e0c02c0df25f3e39aca0b, style: normal, generic: serif, licence: LICENSES/OFL-SourceSerif4.txt, licence_id: OFL-1.1,
+          upstream: 'https://github.com/google/fonts/tree/main/ofl/sourceserif4'}
+  label: {family: Inter}
+  body: {family: Inter}
+elements:
+  frame: {style: single}
+  title: {box: plain}
+  callouts: {weight: strong}
+  title_area: large
+web: full
+files:
+  'LICENSES/OFL-SourceSerif4.txt': 5f94c3fd3a23131a417ab5a0c8452de57e70c3cfb9f604d88241f7065ebf9fd9
+  'fonts/SourceSerif4-opsz-wght.ttf': 97b2d4da6e3cb494b5a1e66ae176914d852ccabef49e0c02c0df25f3e39aca0b

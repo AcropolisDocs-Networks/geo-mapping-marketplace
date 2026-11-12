@@ -1,0 +1,44 @@
+id: ref.context.world.lakes.ne110
+type: context
+rev: 1
+status: active
+title: World lakes, 110m (Natural Earth)
+summary: The largest lakes, drawn on world maps so that great lakes do not read as land.
+tags:
+  geography: [world]
+  level: [water]
+  domain: [general]
+  use_for: [context-basemap, locator-inset, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A world map shows the Great Lakes, Lake Victoria and other large lakes as water.']
+avoid_when: [The map is regional or smaller; only 24 lakes are included and smaller bodies of water are missing.]
+pairs_with: [ref.context.world.coastline.ne110]
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_110m_lakes.parquet
+  sha256: 268b72cf484326957653432c9e6621dd88c685659bd660e93cb3f9c48b65dd2d
+  size_mb: 0.02
+  format: GeoParquet (zstd)
+  features: 24
+  columns: [name, admin, scalerank, label, min_label, ne_id]
+source: {publisher: Natural Earth, product: 'Lakes + Reservoirs, 110m', url: 'https://naciscdn.org/naturalearth/110m/physical/ne_110m_lakes.zip',
+  file_sha256: f2eed3c738a93010770acb0ba44273ea6a83b053641588bc902d9d6fd1cdafcb}
+url_verified_on: 2026-11-02
+vintage: {current: Natural Earth 5.0.0, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-02
+  verify_by: 2027-11-02
+  check: {kind: feature_count_and_hash, features: 24, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-02, note: Bundled payload built and verified (M1).}

@@ -1,0 +1,1424 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MapSpec v1 (spec 6.1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mapspec_version",
+    "id",
+    "message",
+    "layers"
+  ],
+  "properties": {
+    "mapspec_version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "brand": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,39}$"
+    },
+    "template": {
+      "description": "A template name (templates/<name>.yaml: landscape and portrait letter, tabloid and Arch D, A4 and A3 both ways, 16x9-slide, story, square-social, portrait-social (4:5, 1.2.0)), or a custom sheet {custom: {w_mm, h_mm}} from 100 to 1500 mm a side and at most 3:1, scaled from the nearest built-in template (M16).",
+      "oneOf": [
+        {"type": "string"},
+        {"type": "object", "additionalProperties": false, "required": ["custom"],
+         "properties": {"custom": {"type": "object", "additionalProperties": false, "required": ["w_mm", "h_mm"],
+                                   "properties": {"w_mm": {"type": "number", "minimum": 100, "maximum": 1500},
+                                                  "h_mm": {"type": "number", "minimum": 100, "maximum": 1500}}}}}
+      ]
+    },
+    "focus": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "0.18.0: the study area stands out. Under style.look auto a choropleth or grid that covers a region turns it on: the land outside the study area fades back (the page colour over it), the study area gets a soft shadow, and names outside it are drawn in a quieter neutral. Off under classic.",
+      "properties": {
+        "mask": {"enum": ["auto", true, false], "description": "auto (default): on when a choropleth or grid layer is drawn; true: on (needs area or a choropleth/grid layer); false: off"},
+        "area": {"type": "string", "description": "the id of the polygon layer whose outline is the study area (default: the union of the choropleth and grid layers)"},
+        "lift": {"type": "boolean", "description": "a soft shadow under the study area (default true)"}
+      }
+    },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "0.17.0: the map's look. auto (the default): class colours generated from the brand colour over the full range of tints and shades, context drawn lighter and thinner than the data, casings under data lines and points, point sizes by feature count; 0.22.0: auto resolves to a named look (focus: mask and lift on areas; clean: points and sites; network: roads fainter and a dot at each line end; terrain: heavier contours; surface: the context see-through over a surface); bold: everything a quarter larger with a wider ramp; dark: a dark ground with the ramp running up from it. classic: exactly the 0.16 look.",
+      "properties": {
+        "look": {"enum": ["auto", "classic", "focus", "clean", "network", "terrain", "surface", "bold", "dark"], "description": "auto (the default) picks focus, clean, network, terrain or surface from the map's main data (0.22.0); bold and dark only when asked for; classic is the 0.16 look"},
+        "pack": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,30}$", "description": "1.4.0 (R2-PACK): the style pack (palette, type, ornaments, treatments) the whole map is built in; default (a normal map: the brand's palette and Inter) unless named. Fixed when the build starts: changing it builds the map again from its kept data"},
+        "treatments": {"type": "object", "additionalProperties": false, "description": "1.4.0 (R2-TREAT): treatments for this map whatever its pack; they override the pack's own key by key",
+          "properties": {"paper": {"type": ["object", "boolean"]}, "water_lining": {"type": ["object", "boolean"]}, "hill_glyphs": {"type": ["object", "boolean"]},
+                         "place_glyphs": {"type": ["object", "boolean"]}, "line_character": {"type": ["object", "boolean"]}, "grid": {"type": ["object", "boolean"]}}}
+      }
+    },
+    "theme": {
+      "enum": [
+        "light",
+        "dark"
+      ],
+      "description": "light (the default) uses the brand's print colors; dark uses its screen colors on a very dark grey ground. Use dark only when the person asks for it."
+    },
+    "map_type": {
+      "type": "string"
+    },
+    "audience": {
+      "enum": [
+        "any",
+        "internal",
+        "external",
+        "regulatory"
+      ]
+    },
+    "task": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "message": {
+      "type": "string",
+      "minLength": 8
+    },
+    "extent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "fit_layers",
+            "bbox",
+            "place",
+            "preset"
+          ]
+        },
+        "bbox": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "place": {
+          "type": "string"
+        },
+        "preset": {
+          "type": "string"
+        },
+        "padding_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 50
+        },
+        "fit": {"enum": ["auto", "overlay", "shrink"], "description": "1.3.0: how the map makes room for its elements. auto (default): move the map first, then slide elements whose position is auto, and shrink only when the elements together still cover more than fit_cover_pct of the focus area; overlay: move and slide, never shrink (MAP-SPEC-010 when over the limit); shrink: the 1.2.0 rule (1.5% of the data cells, strips, no move). style.look classic keeps shrink"},
+        "fit_cover_pct": {"type": "number", "minimum": 0, "maximum": 50, "description": "1.3.0: how much of the map's focus area (the focus.area layer, else the data) the map elements together may overlap before the map is shrunk (default 5)"},
+        "fit_pan_mm": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "1.3.0: a fixed move of the data on the sheet [right, down] in mm, set by an atlas or a sheet so every page or panel takes one fit"}
+      }
+    },
+    "locale": {"enum": ["auto", "en-US", "en-GB", "iso"], "default": "auto", "description": "1.5.0: the date stamp's form: November 10, 2026 (en-US), 10 November 2026 (en-GB), 2026-11-10 (iso). auto: en-US in the US, Liberia and Myanmar, en-GB elsewhere (the country under the map's centre, data/countries.yaml); the brand may set its own default. Map text stays English"},
+    "crs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prefer": {"anyOf": [{"enum": ["utm", "state_plane", "state-plane", "national", "auto"]}, {"type": "string", "pattern": "^(EPSG|ESRI):[0-9]+$"}], "description": "0.15.0: with display auto on a local US map, state_plane picks the NAD83 State Plane zone that holds the whole extent (UTM, with a note, when the extent leaves one zone); utm is the default rule. 1.5.0: national (the default outside the US) takes the country's preset (data/national-crs.yaml) when the window is inside one country that has one, and ETRS89-LAEA (EPSG:3035) for a map across Europe; auto keeps the centred LAEA; an EPSG code is used as asked"},
+        "display": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "datum_note": {
+          "type": "string",
+          "description": "Acknowledges that layers and the display CRS use different datums (for example WGS84 points on a NAD83 projection); at least 12 characters, copied into the methods note."
+        },
+        "alignment_check": {
+          "type": "boolean",
+          "default": true,
+          "description": "after every layer is reprojected to the display CRS, check that the layers line up (MAP-CRS-007: a layer that touches no other, or one that mostly falls outside the outline it sits in). Set false only when layers lie apart on purpose."
+        },
+        "measure": {
+          "type": "string",
+          "description": "the projected CRS every layer op measures in (buffers, grids, overlaps; for example EPSG:26912, UTM 12N). Unset, each op picks one from the data (the layer's own metric CRS, else UTM, Conus Albers or an equal-area projection). A geographic CRS is refused (MAP-OPS-001). Area and length fields are geodesic either way."
+        }
+      }
+    },
+    "basemap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "enum": [
+            "none",
+            "bundled",
+            "carto-positron",
+            "pmtiles",
+            "osm",
+            "esri",
+            "maptiler",
+            "mapbox",
+            "usgs",
+            "nasa-gibs",
+            "google-maps",
+            "bing-maps",
+            "protomaps"
+          ]
+        },
+        "style": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "static"
+          ],
+          "description": "static: a print map draws a prepared tile composite (basemap_render) and never fetches while building"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(mbtiles|dir|pmtiles):.+",
+          "description": "tiles you supply: mbtiles:FILE or dir:FOLDER (read by basemap_render, not by the build), or pmtiles:FILE, a vector basemap the MapLibre web page draws (M14)"
+        },
+        "treatment": {"enum": ["none", "muted", "knockout"], "description": "0.20.0: how a tile basemap sits behind the data on a print map. muted (the default under style.look auto): desaturated and pulled toward the brand land colour; knockout: further still; none (the classic default): the tiles as fetched"},
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "attribution": {
+          "type": "string"
+        },
+        "time": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "0.16.0: the day a daily imagery basemap (nasa-gibs MODIS or VIIRS true colour) shows; two days ago when not given"},
+        "terms_acknowledged": {
+          "type": "boolean",
+          "description": "older MapSpecs only (before 0.23.0): counts as the person's one acknowledgment for this map. New maps never set it: a customization beyond the defaults (OpenStreetMap's light-use servers) needs the acknowledgment the person makes once with map-services; a keyed provider needs only their key"
+        },
+        "zoom": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 22,
+          "description": "the tile zoom for a print basemap, set outright (kept within the source's own zoom range). Leave unset to let basemap.detail choose."
+        },
+        "ground": {
+          "enum": ["auto", "us-tiger", "global-overture", "global-osm-simplified", "bundled-ne"],
+          "description": "1.5.0: the ground provider (data/ground-providers.yaml). auto (default): the finest provider whose coverage holds the whole window, whose scales include the map's and whose files are cached (MAP-GND-001); naming one restricts the choice to it, with Natural Earth when it cannot be drawn"
+        },
+        "ground_detail": {
+          "type": "boolean",
+          "description": "0.11.0: false keeps the bundled Natural Earth ground on a US map finer than 1:1,500,000, where the Census 1:500,000 land and TIGER water (ground_detail.py prepare) would otherwise be drawn from the cache"
+        },
+        "detail": {
+          "enum": [
+            "legible",
+            "sharp"
+          ],
+          "description": "how a print basemap's zoom is chosen. legible: the highest zoom whose labels print at 6 pt or more (the default for a style with labels). sharp: the lowest zoom whose pixels reach the export dpi, capped at 200 (the default for a style without labels); labels then print at about 4 pt."
+        },
+        "scheme": {
+          "enum": [
+            "xyz",
+            "tms"
+          ],
+          "description": "row order of a tile folder (source: dir:FOLDER). xyz counts rows from the top, tms from the bottom; found by trying both when unset."
+        }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "role"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {"type": "string", "description": "the layer's name in the web page's Layers tab (1.1.0); else the legend label, a unique legend title, or the id in words"},
+          "source": {
+            "type": "object",
+            "anyOf": [{"required": ["type"]}, {"required": ["cds"]}],
+            "if": {
+              "properties": {"mode": {"const": "image"}},
+              "required": ["mode"]
+            },
+            "then": {
+              "properties": {"protocol": {"enum": ["wms", "arcgis"]}}
+            },
+            "properties": {
+              "cds": {"type": "object", "required": ["job", "variable"], "additionalProperties": false,
+                      "properties": {"job": {"type": "string"}, "variable": {"type": "string"}, "time": {"type": ["string", "integer"]}},
+                      "description": "1.3.0: a fetched Copernicus CDS job's variable (and one time: its band), read as a raster layer; the job's record supplies the credit"},
+              "type": {
+                "enum": [
+                  "file",
+                  "ref",
+                  "service",
+                  "user-run",
+                  "geocode"
+                ]
+              },
+              "mode": {
+                "enum": [
+                  "image",
+                  "live"
+                ],
+                "description": "image: a WMS GetMap or ArcGIS MapServer export picture fetched for the map's window at plan time (cached) and drawn as a raster layer (role raster). live (0.15.0, web pages only): the viewer's browser draws the layer from its saved, public, host-confirmed profile (protocol wms, wmts, xyz, mvt or wfs; profile, layers or layer, url_template, source_layer, geometry, time, legend, popup, popup_fields, conditions, max_features, cors_checked, min_zoom, max_zoom); a printed map refuses it (MAP-SVC-014)."
+              },
+              "url": {
+                "type": "string",
+                "description": "mode image: the WMS endpoint or the MapServer address (public hosts only)"
+              },
+              "protocol": {
+                "type": "string",
+                "description": "the service protocol of a saved profile (wfs, ogcapi, arcgis, wms); with mode image it is wms (GetMap, tiled at 1,024 px) or arcgis (MapServer export, tiled at 2,048 px), found from the URL when unset"
+              },
+              "layers": {
+                "type": [
+                  "array",
+                  "string",
+                  "integer"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ]
+                },
+                "description": "mode image: the WMS layer names, or the MapServer layer ids to show"
+              },
+              "styles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "version": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              },
+              "crs": {
+                "type": "string",
+                "description": "mode image: the CRS the picture is requested in (default EPSG:3857, which every server draws); it is warped into the map's own"
+              },
+              "legend": {
+                "type": "boolean",
+                "description": "mode image: false leaves the service's legend out of the map legend"
+              },
+              "terms_acknowledged": {
+                "type": "boolean",
+                "description": "older MapSpecs only (before 0.23.0); ignored: the Terrarium credit is printed for you"
+              }
+            },
+            "allOf": [
+              {
+                "if": {"properties": {"type": {"const": "geocode"}}, "required": ["type"]},
+                "then": {
+                  "description": "a table of site, venue or business addresses geocoded into points (M13, map_sources.load_geocode); the points and the geocoding record are cached in the working folder, so a rebuild sends no request",
+                  "required": ["table", "address"],
+                  "properties": {
+                    "table": {"type": "string", "description": "CSV, TSV or XLSX beside the MapSpec (or an absolute path)"},
+                    "address": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}], "description": "one full-address column, or street, city, state, ZIP columns in that order"},
+                    "provider": {"enum": ["census", "nominatim"], "default": "census"},
+                    "purpose": {"enum": ["sites", "venues", "businesses"], "description": "required by the privacy gate (MAP-SVC-035); private individuals' addresses are never geocoded"},
+                    "country": {"type": "string", "default": "us"},
+                    "terms_acknowledged": {"type": "boolean", "description": "older MapSpecs only (before 0.23.0): counts as the one acknowledgment for this map. Nominatim is a customization: the person makes the acknowledgment once with map-services (MAP-SVC-036)"},
+                    "id_column": {"type": "string", "description": "the column that names each row in the unmatched list"},
+                    "sheet": {"type": ["string", "integer"], "description": "XLSX sheet"},
+                    "refresh": {"type": "boolean", "description": "geocode again instead of reading the cached result"}
+                  }
+                }
+              }
+            ]
+          },
+          "role": {
+            "enum": [
+              "choropleth",
+              "points",
+              "lines",
+              "polygons",
+              "labels",
+              "context",
+              "heat",
+              "hexbin",
+              "grid",
+              "proportional",
+              "raster",
+              "hillshade",
+              "contour",
+              "buildings"
+            ],
+            "description": "buildings (0.24.0): footprints as polygons, extruded on a 3D page from height, then num_floors x 3.5 m, then 9 m, legend title Buildings; hexbin: the layer's points counted into H3 hexagons (the `hexbin` block) and drawn as a choropleth of the count; grid: the same with square cells (the `grid` block); heat: an alias of hexbin at automatic resolution (hex density; no kernel density surface is made); raster: a GeoTIFF (or a library raster, or a WMS / MapServer picture with source mode image) coloured on the brand's ramp (the `raster` block), with a ramp or class legend; hillshade: relief from a DEM drawn above the land and under every layer, never in the legend or the extent; contour: contour lines through a DEM (the `contours` block), thin neutral lines with labelled index lines (M12)"
+          },
+          "bivariate": {
+            "type": "object",
+            "description": "role choropleth only (M15): shade two fields at once on a 3 x 3 (classes: 3) or 2 x 2 grid of colours computed from the brand's diverging ramp. x and y are a field name or {field, title, method, breaks, format, rounding}; patterns: auto (default) | true | false hatches the rows when colour alone fails the CVD check; swap_colors: true exchanges the hues. No value_field is needed.",
+            "required": ["x", "y"],
+            "properties": {
+              "x": {"anyOf": [{"type": "string"}, {"type": "object", "required": ["field"]}]},
+              "y": {"anyOf": [{"type": "string"}, {"type": "object", "required": ["field"]}]},
+              "classes": {"enum": [2, 3]},
+              "patterns": {"anyOf": [{"type": "boolean"}, {"const": "auto"}]},
+              "swap_colors": {"type": "boolean"}
+            }
+          },
+          "extrude": {"type": "object", "additionalProperties": false, "description": "a polygon layer drawn as 3D blocks on a 3D web page (M15): heights in metres above the ground; a slab at a height with at_field or at_m and slab_m (sector wedges at antenna height)", "properties": {"height_field": {"type": "string"}, "height_m": {"type": "number"}, "base_field": {"type": "string"}, "base_m": {"type": "number"}, "floors_field": {"type": "string"}, "floor_m": {"type": "number", "minimum": 1, "maximum": 10}, "default_m": {"type": "number"}, "at_field": {"type": "string"}, "at_m": {"type": "number"}, "slab_m": {"type": "number", "minimum": 0.5, "maximum": 50}, "lod": {"enum": ["auto", "off"], "description": "1.6.0: auto (default): a tiled layer carries every footprint from the top zoom (at most page zoom 16) and a level-of-detail pyramid of blocks below it; off: the 1.5.0 tiling"}, "merge_gap_m": {"type": "number", "minimum": 0, "maximum": 50, "description": "1.6.0: footprints this close (or half a pixel of the zoom, when wider) are dissolved into one block (default 1)"}, "height_band_m": {"type": "number", "exclusiveMinimum": 0, "description": "1.6.0: only footprints whose heights fall in the same band of this many metres are merged (default 3)"}, "lod_height": {"enum": ["max", "mean"], "description": "1.6.0: a block's height: its highest footprint (default) or the area-weighted mean"}, "min_zoom": {"anyOf": [{"const": "auto"}, {"type": "integer", "minimum": 1, "maximum": 17}], "description": "1.6.0: the lowest page zoom with blocks (auto: the page's minimum)"}}},
+          "lod": {"type": "object", "additionalProperties": false, "description": "1.6.0: a level-of-detail pyramid for any large polygon layer on a web page (as extrude's lod keys)", "properties": {"lod": {"enum": ["auto", "off"], "description": "1.6.0: auto (default): a tiled layer carries every footprint from the top zoom (at most page zoom 16) and a level-of-detail pyramid of blocks below it; off: the 1.5.0 tiling"}, "merge_gap_m": {"type": "number", "minimum": 0, "maximum": 50, "description": "1.6.0: footprints this close (or half a pixel of the zoom, when wider) are dissolved into one block (default 1)"}, "height_band_m": {"type": "number", "exclusiveMinimum": 0, "description": "1.6.0: only footprints whose heights fall in the same band of this many metres are merged (default 3)"}, "lod_height": {"enum": ["max", "mean"], "description": "1.6.0: a block's height: its highest footprint (default) or the area-weighted mean"}, "min_zoom": {"anyOf": [{"const": "auto"}, {"type": "integer", "minimum": 1, "maximum": 17}], "description": "1.6.0: the lowest page zoom with blocks (auto: the page's minimum)"}}},
+          "mast": {"type": "object", "additionalProperties": false, "description": "a point layer of sites drawn as masts on a 3D web page (M15): a thin column to the antenna height, in metres above the ground", "properties": {"height_field": {"type": "string"}, "height_m": {"type": "number"}, "default_m": {"type": "number"}}},
+          "time": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["at"],
+            "properties": {
+              "at": {"type": ["string", "integer"], "description": "the period to show: 2026-06, 2026-Q2, 2026, or a named period"},
+              "cumulative": {"type": "boolean", "description": "true: everything up to and including that period; false (default): that period only"},
+              "unit": {"enum": ["auto", "day", "month", "quarter", "year"]}
+            },
+            "description": "1.0.0: a single map of one period of the layer's time_field (the atlas makes one map per period)"
+          },
+          "time_field": {
+            "type": "string",
+            "description": "a column of dates, years, months (2026-03), quarters (2026-Q1) or named periods; map-atlas by: time makes one map per period (M15)"
+          },
+          "time_order": {
+            "type": "array",
+            "description": "named periods in order (Phase 1, Phase 2, ...) when they are not dates; otherwise natural order (M15)"
+          },
+          "id_field": {
+            "type": "string",
+            "description": "the layer's key column: the duplicate check (MAP-DATA-005) reads only this one. Without it every id-like column (..._id, ..._code, fips, key) is checked, which warns on columns shared by design, such as a fare zone or an agency id. A GTFS layer names its own key (route_id, shape_id, stop_id)."
+          },
+          "draw": {
+            "type": "boolean",
+            "default": true,
+            "description": "false makes a helper layer: loaded, joined, repaired and available to other layers' ops by its id, but never drawn, never in the legend, the extent, the web page or the data package. Its source still goes in the source note and the methods page."
+          },
+          "ops": {
+            "type": "array",
+            "description": "geoprocessing steps run on the layer after its join and repair, in order (geo_ops): a buffer, a clip by another layer, an overlay, a spatial join, nearest feature, population covered, a hex or grid aggregation. `layer:` and `clip_layer:` name another layer of this spec, which is loaded first. raster_zonal sums (or averages) a raster under each polygon; line_of_sight draws clear and obstructed links between sites over a bare-earth DEM; viewshed draws the ground visible from each site (M12).",
+            "items": {
+              "type": "object",
+              "anyOf": [{"required": ["op"]}, {"required": ["as_of"]}],
+              "properties": {
+                "as_of": {"type": ["string", "integer"], "description": "1.3.0: short form of {op: as_of, date: DATE}"},
+                "op": {
+                  "enum": [
+                    "buffer",
+                    "centroid",
+                    "representative_point",
+                    "clip",
+                    "intersect",
+                    "intersection",
+                    "union",
+                    "difference",
+                    "symmetric_difference",
+                    "spatial_join",
+                    "nearest",
+                    "dissolve",
+                    "explode",
+                    "dedupe",
+                    "repair",
+                    "make_valid",
+                    "simplify",
+                    "antimeridian_split",
+                    "convex_hull",
+                    "concave_hull",
+                    "voronoi",
+                    "area",
+                    "length",
+                    "count_in",
+                    "sum_in",
+                    "population_covered",
+                    "coverage_share",
+                    "overlap",
+                    "grid",
+                    "hexbin",
+                    "raster_zonal",
+                    "line_of_sight",
+                    "viewshed",
+                    "geocode",
+                    "as_of"
+                  ]
+                },
+                "layer": {
+                  "type": "string",
+                  "description": "the id of another layer of this spec the op works against"
+                },
+                "clip_layer": {
+                  "type": "string",
+                  "description": "voronoi: the id of a polygon layer the cells are cut to"
+                },
+                "to": {
+                  "type": "string",
+                  "description": "line_of_sight: the id of the layer of far-end sites (unset: every pair of this layer's sites)"
+                },
+                "raster": {
+                  "type": "string",
+                  "description": "raster_zonal: a GeoTIFF path or a library raster id"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "hexbin": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "for role hexbin (and heat): how the points are aggregated into H3 cells. The cells carry `count` and, with value and agg, `<value>_<agg>`; the map classes that field on the sequential ramp.",
+            "properties": {
+              "resolution": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15
+                  },
+                  {
+                    "const": "auto"
+                  }
+                ],
+                "description": "H3 resolution 0 to 15, or auto (from the data extent: 8 for a market, 9 for a venue cluster)"
+              },
+              "value": {
+                "type": "string",
+                "description": "a numeric field aggregated per cell (with agg); without it the cells carry the count"
+              },
+              "agg": {
+                "enum": [
+                  "count",
+                  "sum",
+                  "mean",
+                  "median",
+                  "max",
+                  "min"
+                ]
+              },
+              "min_count": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "cells with fewer features are left out"
+              }
+            }
+          },
+          "grid": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "for role grid: square cells of `size` laid in the measurement CRS over the layer, with `count` and `<value>_<agg>` per cell",
+            "properties": {
+              "size": {
+                "type": [
+                  "number",
+                  "string"
+                ],
+                "description": "cell side, a number with units (or a string such as \"1 km\")"
+              },
+              "units": {
+                "enum": [
+                  "m",
+                  "km",
+                  "mi",
+                  "ft"
+                ]
+              },
+              "value": {
+                "type": "string"
+              },
+              "agg": {
+                "enum": [
+                  "count",
+                  "sum",
+                  "mean",
+                  "median",
+                  "max",
+                  "min"
+                ]
+              },
+              "min_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "extent": {
+                "description": "layer (the default) or a bbox minx miny maxx maxy in the layer's CRS"
+              }
+            }
+          },
+          "confidentiality": {
+            "enum": [
+              "public",
+              "internal",
+              "client-confidential",
+              "restricted-license"
+            ]
+          },
+          "legend": {
+            "type": "object"
+          },
+          "join": {
+            "type": "object",
+            "required": [
+              "table",
+              "left",
+              "right"
+            ],
+            "properties": {
+              "table": {
+                "type": ["string", "object"],
+                "description": "a table file, or (1.3.0) {library: ENTRY_ID, params: {level, state, ...}, derive: {name: expression}}: a library values entry (an ACS table, the FCC BDC summary) fetched by its tool and cached"
+              },
+              "sheet": {
+                "type": "string"
+              },
+              "left": {
+                "type": "string"
+              },
+              "right": {
+                "type": "string"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "pad": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "numeric": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "table columns read as numbers whatever their names look like (a value column called zip_rate). The planner adds the layer's value_field and the classification's denominator on its own; other code-like columns (ids, FIPS, ZIP) stay text so leading zeros survive."
+              }
+            }
+          },
+          "privacy": {
+            "type": "object",
+            "required": [
+              "meters"
+            ],
+            "properties": {
+              "method": {
+                "enum": [
+                  "precision",
+                  "jitter"
+                ]
+              },
+              "meters": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 50000
+              },
+              "seed": {
+                "type": "integer"
+              }
+            }
+          },
+          "wedges": {
+            "type": "object",
+            "properties": {
+              "azimuth": {
+                "type": "string"
+              },
+              "beamwidth": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "radius_field": {
+                "type": "string",
+                "description": "a column with each sector's drawing radius in metres (0.25.0); radius_m is used where it is empty"
+              },
+              "radius_m": {
+                "type": "number",
+                "minimum": 50,
+                "maximum": 50000
+              }
+            }
+          },
+          "highlight": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["column", "in"],
+            "description": "0.22.0: emphasis by contrast: the features where column is one of the values are drawn at full colour and a fifth larger; the rest of the layer is desaturated and drawn at 30 percent",
+            "properties": {"column": {"type": "string"}, "in": {"type": "array", "minItems": 1}}
+          },
+          "filter": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "column",
+                  "in"
+                ],
+                "properties": {
+                  "column": {
+                    "type": "string"
+                  },
+                  "in": {
+                    "type": "array",
+                    "minItems": 1
+                  }
+                }
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "column",
+                    "in"
+                  ],
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "in": {
+                      "type": "array",
+                      "minItems": 1
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "centroids": {
+            "type": "boolean"
+          },
+          "repair": {
+            "type": "boolean",
+            "description": "repair the layer's geometry after loading (make_valid, geometry collections reduced to their polygons, lines or points, empty geometry dropped): the same repair as geo-convert --repair, logged with the area change. A repair that moves more than 1 percent of the area blocks the build (MAP-DATA-002) because it is a data problem to look at, not something to fix quietly."
+          },
+          "engine": {
+            "enum": ["auto", "pandas", "duckdb"],
+            "description": "M16: what runs this layer's large-table work: its join table read, the count_in, sum_in, spatial_join and grid ops, and a hexbin or grid role's cells. auto (the default) uses DuckDB above the row thresholds in duck_engine.AUTO_ROWS when it is installed; pandas keeps the plugin's own path; duckdb asks for DuckDB and falls back to pandas, with the reason in provenance, when a step cannot run there. The results are the same either way."
+          },
+          "thin": {
+            "type": "boolean",
+            "description": "M16: a point layer only. Of the points of one class that fall within half a symbol width of each other on the sheet, draw the first. Never applied unless asked; the number not drawn is in the methods note and provenance."
+          },
+          "classification": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "type": "string"
+              },
+              "keep_absent": {
+                "type": "boolean",
+                "description": "categorical with order: every category of the order keeps its place, colour and legend line even where no feature has it (an atlas shares its categories this way, 0.24.0)"
+              },
+              "denominator": {
+                "type": "string",
+                "description": "a column the value_field is divided by (a rate); the join reads it as a number"
+              },
+              "normalize": {
+                "enum": [
+                  "area_km2",
+                  "area_mi2",
+                  "area_m2",
+                  "area_ha",
+                  "area_acre"
+                ],
+                "description": "divide value_field by each feature's geodesic area, in place of a denominator column; the legend reads per km² (per sq mi, per m², per hectare, per acre). Choose this or denominator, not both."
+              },
+              "midpoint": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "const": "auto"
+                  }
+                ],
+                "description": "the value a diverging palette turns on. auto: 0 when the values run below and above zero, else the median. A number is used as given. Not for a categorical method."
+              }
+            }
+          },
+          "dem": {
+            "type": "string",
+            "description": "hillshade or contour: the DEM file (the same as source: {type: file, path: ...})"
+          },
+          "raster": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "role raster: how the raster is read and coloured. Colours are the brand's ramps (never a hex); nodata is transparent.",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "the GeoTIFF (shorthand for source: {type: file, path: ...})"
+              },
+              "ref": {
+                "type": "string",
+                "description": "a library raster (ref.statistic.world.population.ghsl or .worldpop: fetched for the map's window and cached)"
+              },
+              "band": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "ramp": {
+                "enum": [
+                  "sequential",
+                  "diverging",
+                  "categorical"
+                ],
+                "description": "the brand's sequential ramp (the default), its diverging ramp (centred on midpoint), or its categorical colours (one per distinct value, at most the palette's length)"
+              },
+              "vmin": {
+                "type": "number",
+                "description": "the value at the ramp's start (default: the 2nd percentile in the window)"
+              },
+              "vmax": {
+                "type": "number",
+                "description": "the value at the ramp's end (default: the 98th percentile in the window)"
+              },
+              "midpoint": {
+                "type": "number",
+                "description": "ramp diverging: the value the ramp turns on (default 0 when the values run below and above it, else the median)"
+              },
+              "classes": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 1,
+                "description": "ascending break values: a classed raster with a box legend instead of a continuous bar"
+              },
+              "labels": {
+                "description": "class labels (a list, one per class) or, for ramp categorical, a mapping value -> label"
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "resampling": {
+                "enum": [
+                  "nearest",
+                  "bilinear",
+                  "cubic",
+                  "average",
+                  "mode",
+                  "max",
+                  "min",
+                  "med",
+                  "q1",
+                  "q3",
+                  "sum",
+                  "rms",
+                  "lanczos",
+                  "cubic_spline",
+                  "gauss"
+                ]
+              },
+              "nodata": {
+                "type": "number",
+                "description": "a value drawn transparent when the file declares none (or as well as it: 0 for a population grid)"
+              },
+              "reverse": {
+                "type": "boolean"
+              },
+              "unit": {
+                "type": "string",
+                "description": "the unit added to the legend title (people per km², dBm)"
+              },
+              "from_land": {
+                "type": "boolean",
+                "description": "ramp sequential: the continuous ramp starts at the land colour so low values fade into the ground (default true)"
+              }
+            }
+          },
+          "hillshade": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "role hillshade: relief drawn in two brand neutrals",
+            "properties": {
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "default 0.35"
+              },
+              "exaggeration": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "const": "auto"
+                  }
+                ],
+                "description": "vertical exaggeration; auto by scale (local 1.5, metro 2, regional 3)"
+              }
+            }
+          },
+          "contours": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "role contour: contour lines through the DEM for the map's window",
+            "properties": {
+              "interval": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "const": "auto"
+                  }
+                ],
+                "description": "metres between lines; auto gives about 12 levels over the window's relief"
+              },
+              "index_every": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "every Nth line is an index line, heavier and labelled (default 5; 4 for a 25 or 250 m interval)"
+              },
+              "labels": {
+                "type": "boolean",
+                "description": "label index lines with their elevation along the line (default true)"
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "role": {
+                  "enum": [
+                    "raster",
+                    "hillshade",
+                    "contour"
+                  ]
+                }
+              },
+              "required": [
+                "role"
+              ]
+            },
+            "then": {
+              "anyOf": [
+                {
+                  "required": [
+                    "source"
+                  ]
+                },
+                {
+                  "required": [
+                    "raster"
+                  ],
+                  "properties": {
+                    "raster": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "path"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "ref"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "dem"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "required": [
+                "source"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "names": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Place, water and admin names from the bundled Natural Earth 10m gazetteer, drawn after the data labels (lower priority) and tiered by the map's scale. On for every template; `elements.names: {on: false}` is the same toggle.",
+      "properties": {
+        "on": {
+          "type": "boolean",
+          "default": true
+        },
+        "places": {
+          "enum": [
+            "auto",
+            "none",
+            "capitals",
+            "major",
+            "all"
+          ],
+          "description": "auto: the tier the scale allows (world: scalerank 2, continental 4, regional 6, local all above min_pop); capitals: national and state capitals only; major: capitals and cities of a million or more; all: every place the scale allows"
+        },
+        "water": {
+          "type": "boolean",
+          "default": true,
+          "description": "lake and river names, oblique in the water label colour"
+        },
+        "admin": {
+          "type": "boolean",
+          "default": true,
+          "description": "state or province names, uppercase and letter-spaced, when the map is regional and the area covers at least 4 percent of the frame"
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "at most this many place names (the highest tiers first)"
+        },
+        "min_pop": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "on a local map (larger than 1:2,000,000) only places with at least this population; default 0"
+        },
+        "exclude": {
+          "type": "array",
+          "description": "place names left off the map: a whole name, or a pattern with * and ? such as 'Fort *' (0.23.0), case ignored",
+          "items": {
+            "type": "string"
+          },
+          "description": "names never drawn (a client site that must not be named, a town the data layer already labels)"
+        },
+        "language": {"type": "string", "pattern": "^(auto|local|en|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$", "description": "1.5.0: the names' language. auto: local names in Latin, Greek and Cyrillic scripts, English otherwise; local; en; or a BCP 47 code read from the source's name_<lang> column (Natural Earth name_el, name_ja, ...). A script with no font or shaper here falls back to English (MAP-LOC-003)"},
+        "second_line": {"enum": ["none", "local", "en"], "default": "none", "description": "1.5.0: a second, smaller line under each place name: the local name (when the first line is English) or the English one"}
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The bundled context pack (Natural Earth 10m urban areas, lakes, rivers and North American roads) drawn under the data layers and above the land. Never in the legend, never part of the extent. `elements.context: {on: false}` is the same toggle.",
+      "properties": {
+        "on": {
+          "type": "boolean",
+          "default": true
+        },
+        "preset": {
+          "enum": [
+            "auto",
+            "none",
+            "roads",
+            "urban",
+            "water",
+            "full",
+            "terrain"
+          ],
+          "description": "auto: full under point, line and proportional layers (site maps), water when a choropleth or polygon layer is present (roads off to keep the fills readable), none under a tile basemap composite; terrain: relief only (no vector context). full also draws relief on regional, metro and local sheets when a DEM is reachable or given (terrain); auto never does"
+        },
+        "roads": {
+          "oneOf": [{"type": "boolean"}, {"enum": ["tiger", "tiger-prisec"]}],
+          "description": "highways in a muted grey, only when the scale is larger than 1:5,000,000. true: the bundled Natural Earth roads (North America, highways); tiger: the Census TIGER primary roads, tiger-prisec: primary and secondary (US; fetched once into the library cache with ref_fetch.py, and the Natural Earth roads are drawn while they are not cached); 0.25.0"
+        },
+        "urban": {
+          "type": "boolean",
+          "description": "built-up areas as a light tint of the land colour"
+        },
+        "water": {
+          "type": "boolean",
+          "description": "lakes and rivers in the water colour, rivers tiered by scalerank"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "terrain": {
+          "type": "boolean",
+          "description": "relief under the map as part of the context (regional, metro and local sheets); false keeps it off whatever the preset says"
+        }
+      }
+    },
+    "terrain": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Relief (and contours) under the map from a DEM: USGS 3DEP in the United States, the AWS Terrain Tiles elsewhere (attribution required), or a DEM file. Off unless on: true (or context preset full on a regional to local sheet). Fetched at plan time and cached; a failed fetch leaves the map without relief and says so. `elements.terrain: {on: false}` is the same toggle.",
+      "properties": {
+        "on": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string",
+          "description": "auto (USGS 3DEP inside the United States; elsewhere, from 1.5.0, the Copernicus DEM GLO-30 from the keyless AWS Open Data bucket, GLO-90 where a 30 m tile is absent), 3dep, copernicus, terrarium, or the path of a DEM GeoTIFF (nothing is fetched)"
+        },
+        "terms_acknowledged": {
+          "type": "boolean",
+          "description": "older MapSpecs only (before 0.23.0); ignored: Terrarium is the default outside the US and its credit is printed for you"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "default 0.35 (relief under data stays between 30 and 40 percent)"
+        },
+        "exaggeration": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "const": "auto"
+            }
+          ]
+        },
+        "resolution_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "the DEM's cell size to fetch (default: the ground size of an output pixel, never finer than 10 m)"
+        },
+        "provenance": {
+          "type": "object",
+          "description": "1.2.0: when source is a DEM file, how it is credited: {publisher ({name, product} or a name), product, source, license, attribution}; without it the note reads 'DEM supplied by the person (file name)'"
+        },
+        "contours": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "on": {
+              "type": "boolean"
+            },
+            "interval": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "const": "auto"
+                }
+              ]
+            },
+            "index_every": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "labels": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "elements": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "on": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "const": "auto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "on"
+        ]
+      }
+    },
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "flythrough": {"type": "object", "additionalProperties": false, "description": "1.6.0: a video flown over the 3D web page, made through map-run's flythrough pipeline (draft first, the final after confirming)",
+          "properties": {"mode": {"enum": ["path", "chapters", "orbit"]}, "path": {"type": "string", "description": "the line layer to follow"},
+                         "duration": {"type": "number", "minimum": 2, "maximum": 600}, "fps": {"type": "number", "minimum": 5, "maximum": 60},
+                         "size": {"enum": ["1280x720", "1920x1080", "1080x1350"]}, "marker": {"type": "string"}, "hud": {"enum": ["on", "off"]},
+                         "smooth_m": {"type": "number", "minimum": 0}, "lookahead_m": {"type": "number", "minimum": 50}, "time_field": {"type": "string"}}},
+        "formats": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "png",
+              "pdf",
+              "svg",
+              "webmap",
+              "html",
+              "geopdf",
+              "geotiff"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "dpi": {
+          "type": "integer",
+          "minimum": 72,
+          "maximum": 1200
+        },
+        "bleed_mm": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 25,
+          "description": "Print PDF: the page grows by this much on every side, the page colour runs into it, TrimBox and BleedBox are set (M16; 3 is usual)."
+        },
+        "crop_marks": {"type": "boolean", "description": "Print PDF: crop marks on the paper outside the bleed (M16)."},
+        "transparent": {"enum": [false, true, "page", "all"], "description": "PNG: no page fill outside the map frame (true or page); all also drops the frame's own background (M16)."},
+        "pdfa": {"type": "boolean", "description": "PDF/A-2b (M16)."},
+        "inkscape": {"type": "boolean", "description": "SVG: the layer and furniture groups as Inkscape layers (M16)."},
+        "outline_text": {"type": "boolean", "description": "Also an SVG with every text drawn as Inter outlines, its words kept as each group's name and in the metadata (M16)."},
+        "social": {"type": "boolean", "description": "Also <stem>_social.png: 2160 px wide and under 5 MB for X and other social sites, full colour when it fits, else a 256-colour palette (1.2.0)."},
+        "data_package": {
+          "type": "object"
+        },
+        "georeference": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allow_confidential": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "webmap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "enum": [
+            "auto",
+            "leaflet",
+            "maplibre"
+          ],
+          "description": "auto (default): MapLibre when the page carries more than 20,000 features, a layer goes in as tiles, the basemap is vector tiles, or the time slider or swipe compare is on; Leaflet otherwise"
+        },
+        "theme": {
+          "enum": [
+            "light",
+            "dark"
+          ]
+        },
+        "delivery": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "file",
+              "artifact"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "basemaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "description": "providers offered by the basemap switcher, first is the default"
+        },
+        "basemap_switcher": {
+          "type": "boolean"
+        },
+        "initial_view": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "enum": [
+                "fit_layers",
+                "bbox"
+              ]
+            },
+            "bbox": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              },
+              "minItems": 4,
+              "maxItems": 4
+            },
+            "min_zoom": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 22
+            },
+            "max_zoom": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 22
+            }
+          }
+        },
+        "controls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title_panel": {
+              "type": "boolean"
+            },
+            "legend": {
+              "type": "boolean"
+            },
+            "layer_switcher": {
+              "type": "boolean"
+            },
+            "basemap_switcher": {
+              "type": "boolean"
+            },
+            "popups": {
+              "type": "boolean"
+            },
+            "scale": {
+              "type": "boolean"
+            },
+            "compass": {
+              "type": "boolean"
+            },
+            "search": {
+              "type": "boolean"
+            },
+            "fullscreen": {
+              "type": "boolean"
+            },
+            "data_download": {
+              "type": "boolean"
+            },
+            "share_state_in_url": {
+              "type": "boolean"
+            },
+            "print_view": {
+              "type": "boolean"
+            },
+            "error_banners": {
+              "type": "boolean"
+            },
+            "logo": {
+              "type": "boolean"
+            },
+            "opacity": {
+              "type": "boolean",
+              "description": "an opacity slider beside every layer in the layer list (M14)"
+            },
+            "cluster": {
+              "type": "boolean",
+              "description": "point layers of more than 300 points drawn as numbered clusters until their points stand apart (MapLibre; M14)"
+            },
+            "measure": {
+              "type": "boolean",
+              "description": "measure a geodesic distance or area in the scale bar's units (M14)"
+            },
+            "time_slider": {
+              "type": "boolean",
+              "description": "the time slider, when webmap.time is set (M14)"
+            },
+            "compare": {
+              "type": "boolean",
+              "description": "the swipe divider, when webmap.compare is set (M14)"
+            },
+            "export_image": {
+              "type": "boolean",
+              "description": "save the view as a PNG with title, legend and credits (MapLibre; the Leaflet page saves through Print) (M14)"
+            }
+          }
+        },
+        "time": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "the time slider (M14): the layers with a time_field (or the field named here) are filtered to one period at a time; the legend classes stay fixed",
+          "properties": {
+            "field": {"type": "string"},
+            "step": {"type": ["number", "string"], "description": "a number for a numeric field (default 1); day, week, month, quarter or year for dates (default month)"},
+            "mode": {"enum": ["period", "cumulative"]},
+            "play": {"type": "boolean"},
+            "interval_ms": {"type": "integer", "minimum": 200, "maximum": 10000},
+            "start": {"type": "integer", "minimum": 0},
+            "decimals": {"type": "integer", "minimum": 0, "maximum": 6, "description": "decimals of a numeric period in the playback label (1.1.0)"},
+            "format": {"type": "string", "description": "strftime format of a date period in the playback label (1.1.0)"},
+            "order": {"type": "array", "items": {"type": ["string", "number"]}, "minItems": 1, "description": "1.3.0: the order of named periods (\"Phase 1\", \"Phase 2\"); else the layer's time_order, else natural order. Values it leaves out are hidden while the slider is on (MAP-WEB-043)"},
+            "labels": {"type": "object", "additionalProperties": {"type": "string"}, "description": "1.3.0: {value: label} renames periods for display; a story chapter's time still names the value"},
+            "label_format": {"type": "string", "description": "1.3.0: the display of a numeric period, e.g. \"km {value:.1f}\"; only {value} with a format spec is allowed"}
+          }
+        },
+        "compare": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "the swipe compare (M14): left layers show left of a draggable divider, right layers right of it; unlisted layers show on both sides",
+          "properties": {
+            "left": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "right": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "left_label": {"type": "string"},
+            "right_label": {"type": "string"},
+            "position": {"type": "number", "minimum": 0.05, "maximum": 0.95}
+          }
+        },
+        "basemap_file": {
+          "enum": ["embed", "beside"],
+          "description": "a PMTiles basemap file (basemap.source: pmtiles:FILE) embedded in the page (default; files over 40 MB go beside it) or served beside it"
+        },
+        "search_field": {
+          "type": "string"
+        },
+        "fallbacks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "static_image": {
+              "type": "boolean"
+            },
+            "error_banners": {
+              "type": "boolean"
+            }
+          }
+        },
+        "confirm_publish": {
+          "type": "boolean"
+        },
+        "view": {"type": "object", "additionalProperties": false, "description": "the page's camera (M15): a pitch (0 to 85 degrees) or a bearing makes the page 3D (MapLibre)", "properties": {"pitch": {"type": "number", "minimum": 0, "maximum": 85}, "bearing": {"type": "number", "minimum": -360, "maximum": 360}}},
+        "3d": {"description": "3D on the MapLibre page (M15): terrain from the print relief's DEM, extruded layers, masts and line-of-sight links in the air; false keeps the page flat", "oneOf": [{"type": "boolean"}, {"type": "object", "additionalProperties": false, "properties": {"terrain": {"oneOf": [{"type": "boolean"}, {"type": "object", "additionalProperties": false, "properties": {"exaggeration": {"oneOf": [{"const": "auto"}, {"type": "number", "minimum": 0.1, "maximum": 10}]}, "max_mb": {"type": "number", "minimum": 0.5, "maximum": 12}}}]}, "exaggeration": {"oneOf": [{"const": "auto"}, {"type": "number", "minimum": 0.1, "maximum": 10}], "description": "auto: 1 on site and local maps, 1.5 on metro maps, 2 on coarser ones"}, "max_dem_mb": {"type": "number", "minimum": 0.5, "maximum": 12, "description": "the cap on the embedded terrain tiles (default 4 MB)"}, "toggle": {"type": "boolean", "description": "the 2D/3D button (default true)"}, "start": {"enum": ["3d", "2d"]}, "sky": {"oneOf": [{"enum": ["auto", "on", "off"]}, {"type": "boolean"}], "description": "1.6.0: a sky and haze from the page's colours above the horizon; auto (default) when the page's pitch is over 30 degrees"}}}]},
+        "frame": {"type": "object", "additionalProperties": false, "description": "the frame around the map (1.1.0, webmap-controls): one panel (title, story, legend, layers, details, about), one control rail, one playback dock, the brand chip and the credits corner; auto shows an element only when the page has content for it", "properties": {
+          "preset": {"enum": ["auto", "standard", "story", "minimal", "presentation", "embed"]},
+          "panel": {"type": "object", "additionalProperties": false, "properties": {"show": {"enum": ["on", "off", "auto", true, false]}, "side": {"enum": ["left", "right"]}, "width": {"type": "integer", "minimum": 320, "maximum": 440}, "start": {"enum": ["open", "collapsed"]}, "remember": {"type": "boolean"}, "tabs": {"type": "array", "items": {"enum": ["story", "legend", "layers", "details", "about"]}, "uniqueItems": true, "maxItems": 5}, "default_tab": {"enum": ["auto", "story", "legend", "layers", "details", "about"]}}},
+          "title_chip": {"enum": ["on", "off", "auto", true, false]},
+          "controls": {"type": "object", "additionalProperties": false, "description": "the control rail; reset view is always on", "properties": {"zoom": {"enum": ["on", "off", "auto", true, false]}, "compass": {"enum": ["on", "off", "auto", true, false]}, "dimension": {"enum": ["on", "off", "auto", true, false]}, "fullscreen": {"enum": ["on", "off", "auto", true, false]}}},
+          "playback": {"type": "object", "additionalProperties": false, "properties": {"show": {"enum": ["on", "off", "auto", true, false]}, "mode": {"enum": ["full", "slider", "hidden"]}, "position": {"enum": ["map", "panel"]}, "label": {"type": "string", "description": "the period as the dock shows it; tokens {start} {end} {value}, e.g. \"km {end}\""}, "speeds": {"type": "array", "minItems": 1, "items": {"type": "number", "exclusiveMinimum": 0, "maximum": 16}}, "loop": {"type": "boolean"}, "autoplay": {"type": "boolean"}}},
+          "legend": {"type": "object", "additionalProperties": false, "properties": {"float": {"enum": ["on", "off", "auto", true, false]}, "toggles": {"type": "boolean"}}},
+          "brand": {"type": "object", "additionalProperties": false, "properties": {"show": {"enum": ["chip", "mark", "off"]}, "reason": {"type": "string"}, "co_brand": {"type": ["object", "null"], "additionalProperties": false, "required": ["name"], "properties": {"name": {"type": "string"}, "url": {"type": "string"}, "logo_svg": {"type": "string"}}}}},
+          "attribution": {"description": "collapse: auto (each credit's own rule; a phone after the first interaction) or never; the corner cannot be switched off (MAP-WEB-031)", "type": ["object", "string", "boolean"], "properties": {"collapse": {"enum": ["auto", "never", "off"]}, "show": {}}},
+          "scale_bar": {"enum": ["on", "off", "auto", true, false]}, "locator": {"enum": ["on", "off", "auto", true, false]}, "search": {"enum": ["on", "off", "auto", true, false]}, "popups": {"enum": ["auto", "popup", "panel", "off"]},
+          "tools": {"type": "array", "uniqueItems": true, "items": {"enum": ["measure", "save_image", "print", "copy_link", "download"]}},
+          "shortcuts": {"enum": ["on", "off", "auto", true, false]}}},
+        "story": {"type": "object", "additionalProperties": false, "required": ["chapters"], "description": "a scrollytelling page (M15): one map and a column of chapters; each chapter flies the map to its view and shows its layers and period", "properties": {"chapters": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "properties": {"title": {"type": "string"}, "text": {"type": "string"}, "view": {"type": "object", "additionalProperties": false, "properties": {"center": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}, "zoom": {"type": "number", "minimum": 0, "maximum": 22}, "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4}, "pitch": {"type": "number", "minimum": 0, "maximum": 85}, "bearing": {"type": "number", "minimum": -360, "maximum": 360}}}, "layers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}, "time": {"type": ["string", "integer", "number"], "description": "a period of the time slider: a value in it (wins) or its label; an integer that is no value of the slider is read as an index (1.1.0)"}, "time_index": {"type": "integer", "minimum": 0, "description": "the period by its index on the slider (1.1.0)"}, "select": {"type": "object", "required": ["layer", "field", "in"], "properties": {"layer": {"type": "string"}, "field": {"type": "string"}, "in": {"type": "array", "minItems": 1}, "label": {"type": "string"}}}}}},
+          "print_dpi": {"type": "integer", "minimum": 72, "maximum": 300, "description": "the resolution of a chapter's print picture when it goes into the page as a PNG (a chapter whose SVG is over 1.5 MB, usually because of relief): 96 by default, 150 for a print-quality page (each picture about 2.5 times the bytes); 0.25.0"},
+          "cards": {"enum": ["compact", "full"], "description": "compact (default): the active chapter expanded, the others one line; full: every chapter expanded (1.1.0)"},
+          "navigation": {"enum": ["buttons", "scroll", "both"], "description": "Previous/Next, the dots and the arrow keys (buttons, default), scrolling the Story tab, or both (1.1.0)"},
+          "follow_time": {"type": "boolean", "description": "playing the time slider activates the chapter whose period it reaches, and the camera flies to it (1.1.0)"},
+          "print_pictures": {"enum": ["on", "off", "first", true, false], "description": "a static picture per chapter for the print view (about 1.3 MB each on a 3D page): on, off or first (1.1.0)"}}},
+        "panel": {"type": "object", "additionalProperties": false, "required": ["fields"], "description": "a KPI side panel (M15): the fields of the clicked feature, or totals over a story chapter's selection; a joined table's columns count", "properties": {"title": {"type": "string"}, "hint": {"type": "string"}, "fields": {"type": "array", "minItems": 1, "items": {"oneOf": [{"type": "string"}, {"type": "object", "required": ["field"], "additionalProperties": false, "properties": {"field": {"type": "string"}, "label": {"type": "string"}, "unit": {"type": "string"}, "decimals": {"type": "integer", "minimum": 0, "maximum": 6}, "agg": {"enum": ["sum", "mean", "min", "max"]}}}]}}}}
+      }
+    }
+  }
+}

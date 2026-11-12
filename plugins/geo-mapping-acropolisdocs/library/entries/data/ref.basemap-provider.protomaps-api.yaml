@@ -1,0 +1,109 @@
+id: ref.basemap-provider.protomaps-api
+type: basemap-provider
+rev: 5
+status: active
+title: Protomaps basemap API (vector tiles)
+summary: 'OpenStreetMap vector tiles from the hosted Protomaps API, drawn by the MapLibre web page in the brand''s colours; a key is required
+  and the free tier is for non-commercial use.'
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- A web map page that needs streets, water and place names under the data, drawn in the brand's own colours rather than a provider's raster style.
+- A non-commercial page, or one whose owner holds a Protomaps paid plan, with the key restricted to the page's site.
+avoid_when:
+- A client deliverable on the free tier; the free tier is for non-commercial use only. Use your own PMTiles basemap file instead.
+- A page opened from a file or shared by e-mail; the key's site restriction (CORS) answers only pages served from the sites named on the account.
+- A printed map; this is a live vector source for the web page only.
+delivery:
+  mode: fetch
+  requires_credential:
+    name: protomaps
+    kind: apikey
+    class: browser
+    class_allowed: [browser]
+    host: api.protomaps.com
+    inject: {query: key}
+    reject: {status: [401, 403]}
+    signup_url: https://protomaps.com/account
+    probe: https://api.protomaps.com/tiles/v4/0/0/0.mvt
+    free: true
+    limits: 'Read 2026-11-08: free for non-commercial use; commercial use needs a GitHub sponsorship; a soft limit of 1,000,000 tile requests a month (About and FAQ, read 2026-11-08); going over is not shut off automatically; allowed sites are set per key.'
+  note: The key is a browser key (it goes into the page, restricted to the page's sites on the Protomaps account), registered with
+    map-credentials add protomaps --class browser; never from chat.
+source:
+  publisher: Protomaps LLC
+  product: Basemap API (vector tiles, schema v4)
+  url: https://protomaps.com/api
+license:
+  class: share-alike
+  external_ok: true
+  attribution_text: © OpenStreetMap
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: false
+  note: 'Protomaps API page (read 2026-11-05): "The Protomaps Tile API is free for non-commercial use"; commercial use needs a GitHub
+    Sponsorship; a key is required and its allowed sites are set on the account; requests must carry an Origin header unless the key''s CORS
+    setting is *; zoom up to 15; the attribution asked for is "© OpenStreetMap" linked to openstreetmap.org/copyright. The site terms
+    (protomaps.com/terms) forbid scraping and harvesting. The data is OpenStreetMap''s, under the ODbL: OSMF attribution guidelines (read
+    2026-11-05) ask for "OpenStreetMap" (or "© OpenStreetMap contributors") in a corner of the map, visible without interaction, linked to
+    openstreetmap.org/copyright, and that URL printed in full on a printed or exported picture.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-08'
+  verify_by: '2027-05-05'
+  changelog:
+  - rev: 1
+    date: '2026-11-05'
+    note: 'Seed (M14): read the API page (tile URL, key, CORS, non-commercial free tier, zoom 15, attribution) and the site terms; the
+      usage-limit FAQ was not read. Non-commercial only unless the person sets terms_acknowledged.'
+  - rev: 2
+    date: '2026-11-08'
+    note: 'Key details (0.23.0): the API page re-read on 2026-11-08 (free for non-commercial use, commercial use by GitHub sponsorship, allowed sites set per key on the account portal; no request limit stated). The key is the person''s own acceptance of the terms: no terms_acknowledged is asked any more.'
+  - rev: 3
+    date: '2026-11-08'
+    note: 'Limits (0.24.0): the About and FAQ page read on 2026-11-08: the demo API has a soft limit of 1,000,000 tile requests a month; going over is not shut off automatically, and heavy sponsored use is asked to move to its own deployment.'
+  - rev: 4
+    date: '2026-11-08'
+    note: 'Probe address (0.26.0): one tile, api.protomaps.com/tiles/v4/0/0/0.mvt, so credentials check --probe can test a tile key (the key is added at send time).'
+  - rev: 5
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+url_template: https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key={key}
+provider:
+  attribution_html: <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a>
+  tile_format: mvt
+  schema: protomaps-v4
+  max_zoom: 15
+  tile_size: 512
+  bulk_ok: false
+  cache_ok: true
+  print_ok: false
+  commercial_ok: false
+url_verified_on: '2026-11-08'
+attribution:
+  corner: © OpenStreetMap
+  links:
+  - text: © OpenStreetMap
+    href: https://www.openstreetmap.org/copyright
+  required_on_map: true
+  collapse: after_interaction
+  export:
+    text: © OpenStreetMap (openstreetmap.org/copyright)
+  terms_read: '2026-11-09'

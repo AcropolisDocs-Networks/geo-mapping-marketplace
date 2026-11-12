@@ -1,0 +1,51 @@
+id: ref.map-type.site-map
+type: map-type
+rev: 1
+status: active
+title: Site map (points by category)
+summary: Marks each site as a point, colored and shaped by a category such as technology, band or site type.
+tags:
+  use_for:
+  - site-map
+  avoid_for:
+  - choropleth
+use_when:
+- The reader needs to see where sites are and what kind each one is.
+- The points are a client's sites or a public registry.
+avoid_when:
+- The sites are private individuals' homes or other locations that must not be shown (MAP-LIC-008).
+- There are so many points that they overplot; aggregate or use a density surface.
+pairs_with:
+- ref.palette.categorical
+- ref.symbol-set.basic-shapes
+chooses_when:
+  message_type:
+  - locate
+  - inventory
+  data_shape:
+  - point-category
+requires:
+  data_shape: one category per point
+  join_key: false
+recommended:
+  palette_kind: categorical
+  max_categories: 7
+  shape_redundancy: true
+guarded_by:
+- MAP-CART-011
+- MAP-A11Y-001
+- MAP-LIC-007
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  check: map-create builds categorical points and lines in one map (tests/test_map_render.py::test_points_and_categorical_and_lines_in_one_map)
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Active: categorical points render with shape redundancy and the confidentiality banner rule applies.'

@@ -1,0 +1,97 @@
+id: ref.public-service.world.geocoder.geoapify
+type: public-service
+rev: 1
+status: active
+title: Geoapify geocoding, routing and isochrones
+summary: Worldwide geocoding, routing and isochrones on OpenStreetMap data from Geoapify, with a free key (3,000 credits a day; commercial use allowed on
+  the free plan).
+tags:
+  geography:
+  - world
+  level:
+  - site
+  - line
+  domain:
+  - geocoding
+  - routing
+  use_for:
+  - site-map
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - commercial
+use_when:
+- Geocoding a few thousand addresses outside the US, or drive-time areas, for a commercial deliverable within the free quota, with the person's own key
+  (map-credentials add geoapify).
+avoid_when:
+- 'More than 3,000 credits a day or 5 requests a second: a paid plan.'
+- 'The map cannot carry the credit: the free plan requires Geoapify and data-source attribution.'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: geoapify
+    kind: apikey
+    class: secret
+    host: api.geoapify.com
+    inject:
+      query: apiKey
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://myprojects.geoapify.com/
+    free: true
+    limits: 'Free plan: "3,000 credits / day", up to 5 requests per second, commercial use allowed within the quota (pricing page, read 2026-11-07)'
+  request: https://api.geoapify.com/v1/geocode/search?text={text}&format=json
+  requests:
+    geocode: https://api.geoapify.com/v1/geocode/search?text={text}&format=json
+    isoline: https://api.geoapify.com/v1/isoline?lat={lat}&lon={lon}&type=time&mode={mode}&range={seconds}
+  note: Without a key the API answers 401 "Invalid apiKey" (2026-11-07), which confirms the parameter name. Caching of results was not stated on the pricing
+    page.
+source:
+  publisher: Geoapify GmbH
+  product: Geoapify Location Platform
+  url: https://www.geoapify.com/pricing/
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: Powered by Geoapify | © OpenStreetMap contributors
+  note: 'Pricing FAQ (read 2026-11-07): the free plan may be used for commercial projects in production within its limits; Geoapify and data-source attribution
+    are required.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  check:
+    kind: http_get
+    url: https://www.geoapify.com/pricing/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions, P2): pricing read on 2026-11-07 (3,000 credits a day, 5 a second, commercial use allowed, attribution); the
+      API answered 401 Invalid apiKey without a key.'

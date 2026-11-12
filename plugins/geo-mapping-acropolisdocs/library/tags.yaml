@@ -1,0 +1,1125 @@
+# Controlled vocabulary for the reference library (spec 9.3.4). Entries may use only these terms or their aliases.
+# Vocabulary changes are made here only, through the review step (spec 9.3.7). A rename keeps the old term as an alias.
+version: 3
+facets:
+  geography:
+    hierarchical: true
+    # Hierarchy: world > north-america > us | ca | mx > us-<state postal> | ca-<province postal> (each value names its parent).
+    # world > europe > uk | fi | se | no | dk | nl | be | de | fr | es | cz (2026-11-07, reference library additions spec 5.1).
+    # US Census regions (us/region/<name>) sit beside the states and list their members. The old spelling us/state/<xx> is an alias of us-<xx>.
+    patterns: ['^us/region/[a-z-]+$', '^[a-z]{2}-[a-z0-9]{1,3}$']   # 1.5.0: ISO 3166-2 subdivisions, parent = the country
+    values:
+      world: {definition: "Valid worldwide."}
+      north-america: {definition: "Valid across North America (United States, Canada, Mexico); matches a request for any of the three or their subdivisions.", parent: world, members: [us, ca, mx]}
+      us: {definition: "Valid across the United States; matches a request for any state or region.", parent: north-america}
+      ca: {definition: "Valid across Canada; matches a request for any province or territory.", parent: north-america}
+      mx: {definition: "Valid across Mexico; matches a request for any Mexican state.", parent: north-america}
+      us/region/northeast: {definition: "US Northeast Census region.", parent: us, members: [CT, ME, MA, NH, RI, VT, NJ, NY, PA]}
+      us/region/midwest: {definition: "US Midwest Census region.", parent: us, members: [IL, IN, MI, OH, WI, IA, KS, MN, MO, NE, ND, SD]}
+      us/region/south: {definition: "US South Census region.", parent: us, members: [DE, DC, FL, GA, MD, NC, SC, VA, WV, AL, KY, MS, TN, AR, LA, OK, TX]}
+      us/region/west: {definition: "US West Census region.", parent: us, members: [AZ, CO, ID, MT, NV, NM, UT, WY, AK, CA, HI, OR, WA]}
+      us/region/southwest: {definition: "US Southwest (informal region used in telecom market reporting; overlaps the Census South and West).", parent: us, members: [AZ, NM, OK, TX]}
+      us-al: {definition: "Alabama (US state or equivalent).", parent: us}
+      us-ak: {definition: "Alaska (US state or equivalent).", parent: us}
+      us-az: {definition: "Arizona (US state or equivalent).", parent: us}
+      us-ar: {definition: "Arkansas (US state or equivalent).", parent: us}
+      us-ca: {definition: "California (US state or equivalent).", parent: us}
+      us-co: {definition: "Colorado (US state or equivalent).", parent: us}
+      us-ct: {definition: "Connecticut (US state or equivalent).", parent: us}
+      us-de: {definition: "Delaware (US state or equivalent).", parent: us}
+      us-dc: {definition: "District of Columbia (US state or equivalent).", parent: us}
+      us-fl: {definition: "Florida (US state or equivalent).", parent: us}
+      us-ga: {definition: "Georgia (US state or equivalent).", parent: us}
+      us-hi: {definition: "Hawaii (US state or equivalent).", parent: us}
+      us-id: {definition: "Idaho (US state or equivalent).", parent: us}
+      us-il: {definition: "Illinois (US state or equivalent).", parent: us}
+      us-in: {definition: "Indiana (US state or equivalent).", parent: us}
+      us-ia: {definition: "Iowa (US state or equivalent).", parent: us}
+      us-ks: {definition: "Kansas (US state or equivalent).", parent: us}
+      us-ky: {definition: "Kentucky (US state or equivalent).", parent: us}
+      us-la: {definition: "Louisiana (US state or equivalent).", parent: us}
+      us-me: {definition: "Maine (US state or equivalent).", parent: us}
+      us-md: {definition: "Maryland (US state or equivalent).", parent: us}
+      us-ma: {definition: "Massachusetts (US state or equivalent).", parent: us}
+      us-mi: {definition: "Michigan (US state or equivalent).", parent: us}
+      us-mn: {definition: "Minnesota (US state or equivalent).", parent: us}
+      us-ms: {definition: "Mississippi (US state or equivalent).", parent: us}
+      us-mo: {definition: "Missouri (US state or equivalent).", parent: us}
+      us-mt: {definition: "Montana (US state or equivalent).", parent: us}
+      us-ne: {definition: "Nebraska (US state or equivalent).", parent: us}
+      us-nv: {definition: "Nevada (US state or equivalent).", parent: us}
+      us-nh: {definition: "New Hampshire (US state or equivalent).", parent: us}
+      us-nj: {definition: "New Jersey (US state or equivalent).", parent: us}
+      us-nm: {definition: "New Mexico (US state or equivalent).", parent: us}
+      us-ny: {definition: "New York (US state or equivalent).", parent: us}
+      us-nc: {definition: "North Carolina (US state or equivalent).", parent: us}
+      us-nd: {definition: "North Dakota (US state or equivalent).", parent: us}
+      us-oh: {definition: "Ohio (US state or equivalent).", parent: us}
+      us-ok: {definition: "Oklahoma (US state or equivalent).", parent: us}
+      us-or: {definition: "Oregon (US state or equivalent).", parent: us}
+      us-pa: {definition: "Pennsylvania (US state or equivalent).", parent: us}
+      us-ri: {definition: "Rhode Island (US state or equivalent).", parent: us}
+      us-sc: {definition: "South Carolina (US state or equivalent).", parent: us}
+      us-sd: {definition: "South Dakota (US state or equivalent).", parent: us}
+      us-tn: {definition: "Tennessee (US state or equivalent).", parent: us}
+      us-tx: {definition: "Texas (US state or equivalent).", parent: us}
+      us-ut: {definition: "Utah (US state or equivalent).", parent: us}
+      us-vt: {definition: "Vermont (US state or equivalent).", parent: us}
+      us-va: {definition: "Virginia (US state or equivalent).", parent: us}
+      us-wa: {definition: "Washington (US state or equivalent).", parent: us}
+      us-wv: {definition: "West Virginia (US state or equivalent).", parent: us}
+      us-wi: {definition: "Wisconsin (US state or equivalent).", parent: us}
+      us-wy: {definition: "Wyoming (US state or equivalent).", parent: us}
+      us-pr: {definition: "Puerto Rico (US state or equivalent).", parent: us}
+      ca-ab: {definition: "Alberta (Canadian province or territory).", parent: ca}
+      ca-bc: {definition: "British Columbia (Canadian province or territory).", parent: ca}
+      ca-mb: {definition: "Manitoba (Canadian province or territory).", parent: ca}
+      ca-nb: {definition: "New Brunswick (Canadian province or territory).", parent: ca}
+      ca-nl: {definition: "Newfoundland and Labrador (Canadian province or territory).", parent: ca}
+      ca-ns: {definition: "Nova Scotia (Canadian province or territory).", parent: ca}
+      ca-nt: {definition: "Northwest Territories (Canadian province or territory).", parent: ca}
+      ca-nu: {definition: "Nunavut (Canadian province or territory).", parent: ca}
+      ca-on: {definition: "Ontario (Canadian province or territory).", parent: ca}
+      ca-pe: {definition: "Prince Edward Island (Canadian province or territory).", parent: ca}
+      ca-qc: {definition: "Quebec (Canadian province or territory).", parent: ca}
+      ca-sk: {definition: "Saskatchewan (Canadian province or territory).", parent: ca}
+      ca-yt: {definition: "Yukon (Canadian province or territory).", parent: ca}
+      europe: {definition: "Valid across Europe (EU, EFTA and candidate countries as Eurostat GISCO draws them); matches a request for any European country.", parent: world, members: [uk, fi, se, "no", dk, nl, be, de, fr, es, cz]}
+      uk: {definition: "Valid across United Kingdom.", parent: europe}
+      fi: {definition: "Valid across Finland.", parent: europe}
+      se: {definition: "Valid across Sweden.", parent: europe}
+      "no": {definition: "Valid across Norway.", parent: europe}
+      dk: {definition: "Valid across Denmark.", parent: europe}
+      nl: {definition: "Valid across Netherlands.", parent: europe}
+      be: {definition: "Valid across Belgium.", parent: europe}
+      de: {definition: "Valid across Germany.", parent: europe}
+      fr: {definition: "Valid across France.", parent: europe}
+      es: {definition: "Valid across Spain.", parent: europe}
+      cz: {definition: "Valid across Czechia.", parent: europe}
+      # >>> generated by tools/make_geo_vocab.py (1.5.0): UN M49 regions and every ISO 3166-1 country. Do not edit by hand.
+      africa: {definition: "Valid across Africa (UN M49 region).", parent: world}
+      americas: {definition: "Valid across Americas (UN M49 region).", parent: world}
+      asia: {definition: "Valid across Asia (UN M49 region).", parent: world}
+      oceania: {definition: "Valid across Oceania (UN M49 region).", parent: world}
+      australia-and-new-zealand: {definition: "Valid across Australia and New Zealand (UN M49 sub-region).", parent: oceania}
+      central-asia: {definition: "Valid across Central Asia (UN M49 sub-region).", parent: asia}
+      eastern-asia: {definition: "Valid across Eastern Asia (UN M49 sub-region).", parent: asia}
+      eastern-europe: {definition: "Valid across Eastern Europe (UN M49 sub-region).", parent: europe}
+      latin-america-and-the-caribbean: {definition: "Valid across Latin America and the Caribbean (UN M49 sub-region).", parent: americas}
+      melanesia: {definition: "Valid across Melanesia (UN M49 sub-region).", parent: oceania}
+      micronesia: {definition: "Valid across Micronesia (UN M49 sub-region).", parent: oceania}
+      northern-africa: {definition: "Valid across Northern Africa (UN M49 sub-region).", parent: africa}
+      northern-america: {definition: "Valid across Northern America (UN M49 sub-region).", parent: americas}
+      northern-europe: {definition: "Valid across Northern Europe (UN M49 sub-region).", parent: europe}
+      polynesia: {definition: "Valid across Polynesia (UN M49 sub-region).", parent: oceania}
+      south-eastern-asia: {definition: "Valid across South-eastern Asia (UN M49 sub-region).", parent: asia}
+      southern-asia: {definition: "Valid across Southern Asia (UN M49 sub-region).", parent: asia}
+      southern-europe: {definition: "Valid across Southern Europe (UN M49 sub-region).", parent: europe}
+      sub-saharan-africa: {definition: "Valid across Sub-Saharan Africa (UN M49 sub-region).", parent: africa}
+      western-asia: {definition: "Valid across Western Asia (UN M49 sub-region).", parent: asia}
+      western-europe: {definition: "Valid across Western Europe (UN M49 sub-region).", parent: europe}
+      ad: {definition: "Valid across Andorra (ISO 3166-1 AD).", parent: southern-europe}
+      ae: {definition: "Valid across United Arab Emirates (ISO 3166-1 AE).", parent: western-asia}
+      af: {definition: "Valid across Afghanistan (ISO 3166-1 AF).", parent: southern-asia}
+      ag: {definition: "Valid across Antigua and Barbuda (ISO 3166-1 AG).", parent: latin-america-and-the-caribbean}
+      ai: {definition: "Valid across Anguilla (ISO 3166-1 AI).", parent: latin-america-and-the-caribbean}
+      al: {definition: "Valid across Albania (ISO 3166-1 AL).", parent: southern-europe}
+      am: {definition: "Valid across Armenia (ISO 3166-1 AM).", parent: western-asia}
+      ao: {definition: "Valid across Angola (ISO 3166-1 AO).", parent: sub-saharan-africa}
+      aq: {definition: "Valid across Antarctica (ISO 3166-1 AQ).", parent: world}
+      ar: {definition: "Valid across Argentina (ISO 3166-1 AR).", parent: latin-america-and-the-caribbean}
+      as: {definition: "Valid across American Samoa (ISO 3166-1 AS).", parent: polynesia}
+      at: {definition: "Valid across Austria (ISO 3166-1 AT).", parent: western-europe}
+      au: {definition: "Valid across Australia (ISO 3166-1 AU).", parent: australia-and-new-zealand}
+      aw: {definition: "Valid across Aruba (ISO 3166-1 AW).", parent: latin-america-and-the-caribbean}
+      ax: {definition: "Valid across Åland Islands (ISO 3166-1 AX).", parent: northern-europe}
+      az: {definition: "Valid across Azerbaijan (ISO 3166-1 AZ).", parent: western-asia}
+      ba: {definition: "Valid across Bosnia and Herzegovina (ISO 3166-1 BA).", parent: southern-europe}
+      bb: {definition: "Valid across Barbados (ISO 3166-1 BB).", parent: latin-america-and-the-caribbean}
+      bd: {definition: "Valid across Bangladesh (ISO 3166-1 BD).", parent: southern-asia}
+      bf: {definition: "Valid across Burkina Faso (ISO 3166-1 BF).", parent: sub-saharan-africa}
+      bg: {definition: "Valid across Bulgaria (ISO 3166-1 BG).", parent: eastern-europe}
+      bh: {definition: "Valid across Bahrain (ISO 3166-1 BH).", parent: western-asia}
+      bi: {definition: "Valid across Burundi (ISO 3166-1 BI).", parent: sub-saharan-africa}
+      bj: {definition: "Valid across Benin (ISO 3166-1 BJ).", parent: sub-saharan-africa}
+      bl: {definition: "Valid across Saint Barthélemy (ISO 3166-1 BL).", parent: latin-america-and-the-caribbean}
+      bm: {definition: "Valid across Bermuda (ISO 3166-1 BM).", parent: northern-america}
+      bn: {definition: "Valid across Brunei Darussalam (ISO 3166-1 BN).", parent: south-eastern-asia}
+      bo: {definition: "Valid across Bolivia, Plurinational State of (ISO 3166-1 BO).", parent: latin-america-and-the-caribbean}
+      bq: {definition: "Valid across Bonaire, Sint Eustatius and Saba (ISO 3166-1 BQ).", parent: latin-america-and-the-caribbean}
+      br: {definition: "Valid across Brazil (ISO 3166-1 BR).", parent: latin-america-and-the-caribbean}
+      bs: {definition: "Valid across Bahamas (ISO 3166-1 BS).", parent: latin-america-and-the-caribbean}
+      bt: {definition: "Valid across Bhutan (ISO 3166-1 BT).", parent: southern-asia}
+      bv: {definition: "Valid across Bouvet Island (ISO 3166-1 BV).", parent: latin-america-and-the-caribbean}
+      bw: {definition: "Valid across Botswana (ISO 3166-1 BW).", parent: sub-saharan-africa}
+      by: {definition: "Valid across Belarus (ISO 3166-1 BY).", parent: eastern-europe}
+      bz: {definition: "Valid across Belize (ISO 3166-1 BZ).", parent: latin-america-and-the-caribbean}
+      cc: {definition: "Valid across Cocos (Keeling) Islands (ISO 3166-1 CC).", parent: australia-and-new-zealand}
+      cd: {definition: "Valid across Congo, Democratic Republic of the (ISO 3166-1 CD).", parent: sub-saharan-africa}
+      cf: {definition: "Valid across Central African Republic (ISO 3166-1 CF).", parent: sub-saharan-africa}
+      cg: {definition: "Valid across Congo (ISO 3166-1 CG).", parent: sub-saharan-africa}
+      ch: {definition: "Valid across Switzerland (ISO 3166-1 CH).", parent: western-europe}
+      ci: {definition: "Valid across Côte d'Ivoire (ISO 3166-1 CI).", parent: sub-saharan-africa}
+      ck: {definition: "Valid across Cook Islands (ISO 3166-1 CK).", parent: polynesia}
+      cl: {definition: "Valid across Chile (ISO 3166-1 CL).", parent: latin-america-and-the-caribbean}
+      cm: {definition: "Valid across Cameroon (ISO 3166-1 CM).", parent: sub-saharan-africa}
+      cn: {definition: "Valid across China (ISO 3166-1 CN).", parent: eastern-asia}
+      co: {definition: "Valid across Colombia (ISO 3166-1 CO).", parent: latin-america-and-the-caribbean}
+      cr: {definition: "Valid across Costa Rica (ISO 3166-1 CR).", parent: latin-america-and-the-caribbean}
+      cu: {definition: "Valid across Cuba (ISO 3166-1 CU).", parent: latin-america-and-the-caribbean}
+      cv: {definition: "Valid across Cabo Verde (ISO 3166-1 CV).", parent: sub-saharan-africa}
+      cw: {definition: "Valid across Curaçao (ISO 3166-1 CW).", parent: latin-america-and-the-caribbean}
+      cx: {definition: "Valid across Christmas Island (ISO 3166-1 CX).", parent: australia-and-new-zealand}
+      cy: {definition: "Valid across Cyprus (ISO 3166-1 CY).", parent: western-asia}
+      dj: {definition: "Valid across Djibouti (ISO 3166-1 DJ).", parent: sub-saharan-africa}
+      dm: {definition: "Valid across Dominica (ISO 3166-1 DM).", parent: latin-america-and-the-caribbean}
+      do: {definition: "Valid across Dominican Republic (ISO 3166-1 DO).", parent: latin-america-and-the-caribbean}
+      dz: {definition: "Valid across Algeria (ISO 3166-1 DZ).", parent: northern-africa}
+      ec: {definition: "Valid across Ecuador (ISO 3166-1 EC).", parent: latin-america-and-the-caribbean}
+      ee: {definition: "Valid across Estonia (ISO 3166-1 EE).", parent: northern-europe}
+      eg: {definition: "Valid across Egypt (ISO 3166-1 EG).", parent: northern-africa}
+      eh: {definition: "Valid across Western Sahara (ISO 3166-1 EH).", parent: northern-africa}
+      er: {definition: "Valid across Eritrea (ISO 3166-1 ER).", parent: sub-saharan-africa}
+      et: {definition: "Valid across Ethiopia (ISO 3166-1 ET).", parent: sub-saharan-africa}
+      fj: {definition: "Valid across Fiji (ISO 3166-1 FJ).", parent: melanesia}
+      fk: {definition: "Valid across Falkland Islands (Malvinas) (ISO 3166-1 FK).", parent: latin-america-and-the-caribbean}
+      fm: {definition: "Valid across Micronesia, Federated States of (ISO 3166-1 FM).", parent: micronesia}
+      fo: {definition: "Valid across Faroe Islands (ISO 3166-1 FO).", parent: northern-europe}
+      ga: {definition: "Valid across Gabon (ISO 3166-1 GA).", parent: sub-saharan-africa}
+      gd: {definition: "Valid across Grenada (ISO 3166-1 GD).", parent: latin-america-and-the-caribbean}
+      ge: {definition: "Valid across Georgia (ISO 3166-1 GE).", parent: western-asia}
+      gf: {definition: "Valid across French Guiana (ISO 3166-1 GF).", parent: latin-america-and-the-caribbean}
+      gg: {definition: "Valid across Guernsey (ISO 3166-1 GG).", parent: northern-europe}
+      gh: {definition: "Valid across Ghana (ISO 3166-1 GH).", parent: sub-saharan-africa}
+      gi: {definition: "Valid across Gibraltar (ISO 3166-1 GI).", parent: southern-europe}
+      gl: {definition: "Valid across Greenland (ISO 3166-1 GL).", parent: northern-america}
+      gm: {definition: "Valid across Gambia (ISO 3166-1 GM).", parent: sub-saharan-africa}
+      gn: {definition: "Valid across Guinea (ISO 3166-1 GN).", parent: sub-saharan-africa}
+      gp: {definition: "Valid across Guadeloupe (ISO 3166-1 GP).", parent: latin-america-and-the-caribbean}
+      gq: {definition: "Valid across Equatorial Guinea (ISO 3166-1 GQ).", parent: sub-saharan-africa}
+      gr: {definition: "Valid across Greece (ISO 3166-1 GR).", parent: southern-europe}
+      gs: {definition: "Valid across South Georgia and the South Sandwich Islands (ISO 3166-1 GS).", parent: latin-america-and-the-caribbean}
+      gt: {definition: "Valid across Guatemala (ISO 3166-1 GT).", parent: latin-america-and-the-caribbean}
+      gu: {definition: "Valid across Guam (ISO 3166-1 GU).", parent: micronesia}
+      gw: {definition: "Valid across Guinea-Bissau (ISO 3166-1 GW).", parent: sub-saharan-africa}
+      gy: {definition: "Valid across Guyana (ISO 3166-1 GY).", parent: latin-america-and-the-caribbean}
+      hk: {definition: "Valid across Hong Kong (ISO 3166-1 HK).", parent: eastern-asia}
+      hm: {definition: "Valid across Heard Island and McDonald Islands (ISO 3166-1 HM).", parent: australia-and-new-zealand}
+      hn: {definition: "Valid across Honduras (ISO 3166-1 HN).", parent: latin-america-and-the-caribbean}
+      hr: {definition: "Valid across Croatia (ISO 3166-1 HR).", parent: southern-europe}
+      ht: {definition: "Valid across Haiti (ISO 3166-1 HT).", parent: latin-america-and-the-caribbean}
+      hu: {definition: "Valid across Hungary (ISO 3166-1 HU).", parent: eastern-europe}
+      id: {definition: "Valid across Indonesia (ISO 3166-1 ID).", parent: south-eastern-asia}
+      ie: {definition: "Valid across Ireland (ISO 3166-1 IE).", parent: northern-europe}
+      il: {definition: "Valid across Israel (ISO 3166-1 IL).", parent: western-asia}
+      im: {definition: "Valid across Isle of Man (ISO 3166-1 IM).", parent: northern-europe}
+      in: {definition: "Valid across India (ISO 3166-1 IN).", parent: southern-asia}
+      io: {definition: "Valid across British Indian Ocean Territory (ISO 3166-1 IO).", parent: sub-saharan-africa}
+      iq: {definition: "Valid across Iraq (ISO 3166-1 IQ).", parent: western-asia}
+      ir: {definition: "Valid across Iran, Islamic Republic of (ISO 3166-1 IR).", parent: southern-asia}
+      is: {definition: "Valid across Iceland (ISO 3166-1 IS).", parent: northern-europe}
+      it: {definition: "Valid across Italy (ISO 3166-1 IT).", parent: southern-europe}
+      je: {definition: "Valid across Jersey (ISO 3166-1 JE).", parent: northern-europe}
+      jm: {definition: "Valid across Jamaica (ISO 3166-1 JM).", parent: latin-america-and-the-caribbean}
+      jo: {definition: "Valid across Jordan (ISO 3166-1 JO).", parent: western-asia}
+      jp: {definition: "Valid across Japan (ISO 3166-1 JP).", parent: eastern-asia}
+      ke: {definition: "Valid across Kenya (ISO 3166-1 KE).", parent: sub-saharan-africa}
+      kg: {definition: "Valid across Kyrgyzstan (ISO 3166-1 KG).", parent: central-asia}
+      kh: {definition: "Valid across Cambodia (ISO 3166-1 KH).", parent: south-eastern-asia}
+      ki: {definition: "Valid across Kiribati (ISO 3166-1 KI).", parent: micronesia}
+      km: {definition: "Valid across Comoros (ISO 3166-1 KM).", parent: sub-saharan-africa}
+      kn: {definition: "Valid across Saint Kitts and Nevis (ISO 3166-1 KN).", parent: latin-america-and-the-caribbean}
+      kp: {definition: "Valid across Korea, Democratic People's Republic of (ISO 3166-1 KP).", parent: eastern-asia}
+      kr: {definition: "Valid across Korea, Republic of (ISO 3166-1 KR).", parent: eastern-asia}
+      kw: {definition: "Valid across Kuwait (ISO 3166-1 KW).", parent: western-asia}
+      ky: {definition: "Valid across Cayman Islands (ISO 3166-1 KY).", parent: latin-america-and-the-caribbean}
+      kz: {definition: "Valid across Kazakhstan (ISO 3166-1 KZ).", parent: central-asia}
+      la: {definition: "Valid across Lao People's Democratic Republic (ISO 3166-1 LA).", parent: south-eastern-asia}
+      lb: {definition: "Valid across Lebanon (ISO 3166-1 LB).", parent: western-asia}
+      lc: {definition: "Valid across Saint Lucia (ISO 3166-1 LC).", parent: latin-america-and-the-caribbean}
+      li: {definition: "Valid across Liechtenstein (ISO 3166-1 LI).", parent: western-europe}
+      lk: {definition: "Valid across Sri Lanka (ISO 3166-1 LK).", parent: southern-asia}
+      lr: {definition: "Valid across Liberia (ISO 3166-1 LR).", parent: sub-saharan-africa}
+      ls: {definition: "Valid across Lesotho (ISO 3166-1 LS).", parent: sub-saharan-africa}
+      lt: {definition: "Valid across Lithuania (ISO 3166-1 LT).", parent: northern-europe}
+      lu: {definition: "Valid across Luxembourg (ISO 3166-1 LU).", parent: western-europe}
+      lv: {definition: "Valid across Latvia (ISO 3166-1 LV).", parent: northern-europe}
+      ly: {definition: "Valid across Libya (ISO 3166-1 LY).", parent: northern-africa}
+      ma: {definition: "Valid across Morocco (ISO 3166-1 MA).", parent: northern-africa}
+      mc: {definition: "Valid across Monaco (ISO 3166-1 MC).", parent: western-europe}
+      md: {definition: "Valid across Moldova, Republic of (ISO 3166-1 MD).", parent: eastern-europe}
+      me: {definition: "Valid across Montenegro (ISO 3166-1 ME).", parent: southern-europe}
+      mf: {definition: "Valid across Saint Martin (French part) (ISO 3166-1 MF).", parent: latin-america-and-the-caribbean}
+      mg: {definition: "Valid across Madagascar (ISO 3166-1 MG).", parent: sub-saharan-africa}
+      mh: {definition: "Valid across Marshall Islands (ISO 3166-1 MH).", parent: micronesia}
+      mk: {definition: "Valid across North Macedonia (ISO 3166-1 MK).", parent: southern-europe}
+      ml: {definition: "Valid across Mali (ISO 3166-1 ML).", parent: sub-saharan-africa}
+      mm: {definition: "Valid across Myanmar (ISO 3166-1 MM).", parent: south-eastern-asia}
+      mn: {definition: "Valid across Mongolia (ISO 3166-1 MN).", parent: eastern-asia}
+      mo: {definition: "Valid across Macao (ISO 3166-1 MO).", parent: eastern-asia}
+      mp: {definition: "Valid across Northern Mariana Islands (ISO 3166-1 MP).", parent: micronesia}
+      mq: {definition: "Valid across Martinique (ISO 3166-1 MQ).", parent: latin-america-and-the-caribbean}
+      mr: {definition: "Valid across Mauritania (ISO 3166-1 MR).", parent: sub-saharan-africa}
+      ms: {definition: "Valid across Montserrat (ISO 3166-1 MS).", parent: latin-america-and-the-caribbean}
+      mt: {definition: "Valid across Malta (ISO 3166-1 MT).", parent: southern-europe}
+      mu: {definition: "Valid across Mauritius (ISO 3166-1 MU).", parent: sub-saharan-africa}
+      mv: {definition: "Valid across Maldives (ISO 3166-1 MV).", parent: southern-asia}
+      mw: {definition: "Valid across Malawi (ISO 3166-1 MW).", parent: sub-saharan-africa}
+      my: {definition: "Valid across Malaysia (ISO 3166-1 MY).", parent: south-eastern-asia}
+      mz: {definition: "Valid across Mozambique (ISO 3166-1 MZ).", parent: sub-saharan-africa}
+      nam: {definition: "Valid across Namibia (ISO 3166-1 NA).", parent: sub-saharan-africa}
+      nc: {definition: "Valid across New Caledonia (ISO 3166-1 NC).", parent: melanesia}
+      ne: {definition: "Valid across Niger (ISO 3166-1 NE).", parent: sub-saharan-africa}
+      nf: {definition: "Valid across Norfolk Island (ISO 3166-1 NF).", parent: australia-and-new-zealand}
+      ng: {definition: "Valid across Nigeria (ISO 3166-1 NG).", parent: sub-saharan-africa}
+      ni: {definition: "Valid across Nicaragua (ISO 3166-1 NI).", parent: latin-america-and-the-caribbean}
+      np: {definition: "Valid across Nepal (ISO 3166-1 NP).", parent: southern-asia}
+      nr: {definition: "Valid across Nauru (ISO 3166-1 NR).", parent: micronesia}
+      nu: {definition: "Valid across Niue (ISO 3166-1 NU).", parent: polynesia}
+      nz: {definition: "Valid across New Zealand (ISO 3166-1 NZ).", parent: australia-and-new-zealand}
+      om: {definition: "Valid across Oman (ISO 3166-1 OM).", parent: western-asia}
+      pa: {definition: "Valid across Panama (ISO 3166-1 PA).", parent: latin-america-and-the-caribbean}
+      pe: {definition: "Valid across Peru (ISO 3166-1 PE).", parent: latin-america-and-the-caribbean}
+      pf: {definition: "Valid across French Polynesia (ISO 3166-1 PF).", parent: polynesia}
+      pg: {definition: "Valid across Papua New Guinea (ISO 3166-1 PG).", parent: melanesia}
+      ph: {definition: "Valid across Philippines (ISO 3166-1 PH).", parent: south-eastern-asia}
+      pk: {definition: "Valid across Pakistan (ISO 3166-1 PK).", parent: southern-asia}
+      pl: {definition: "Valid across Poland (ISO 3166-1 PL).", parent: eastern-europe}
+      pm: {definition: "Valid across Saint Pierre and Miquelon (ISO 3166-1 PM).", parent: northern-america}
+      pn: {definition: "Valid across Pitcairn (ISO 3166-1 PN).", parent: polynesia}
+      pr: {definition: "Valid across Puerto Rico (ISO 3166-1 PR).", parent: latin-america-and-the-caribbean}
+      ps: {definition: "Valid across Palestine, State of (ISO 3166-1 PS).", parent: western-asia}
+      pt: {definition: "Valid across Portugal (ISO 3166-1 PT).", parent: southern-europe}
+      pw: {definition: "Valid across Palau (ISO 3166-1 PW).", parent: micronesia}
+      py: {definition: "Valid across Paraguay (ISO 3166-1 PY).", parent: latin-america-and-the-caribbean}
+      qa: {definition: "Valid across Qatar (ISO 3166-1 QA).", parent: western-asia}
+      re: {definition: "Valid across Réunion (ISO 3166-1 RE).", parent: sub-saharan-africa}
+      ro: {definition: "Valid across Romania (ISO 3166-1 RO).", parent: eastern-europe}
+      rs: {definition: "Valid across Serbia (ISO 3166-1 RS).", parent: southern-europe}
+      ru: {definition: "Valid across Russian Federation (ISO 3166-1 RU).", parent: eastern-europe}
+      rw: {definition: "Valid across Rwanda (ISO 3166-1 RW).", parent: sub-saharan-africa}
+      sa: {definition: "Valid across Saudi Arabia (ISO 3166-1 SA).", parent: western-asia}
+      sb: {definition: "Valid across Solomon Islands (ISO 3166-1 SB).", parent: melanesia}
+      sc: {definition: "Valid across Seychelles (ISO 3166-1 SC).", parent: sub-saharan-africa}
+      sd: {definition: "Valid across Sudan (ISO 3166-1 SD).", parent: northern-africa}
+      sg: {definition: "Valid across Singapore (ISO 3166-1 SG).", parent: south-eastern-asia}
+      sh: {definition: "Valid across Saint Helena, Ascension and Tristan da Cunha (ISO 3166-1 SH).", parent: sub-saharan-africa}
+      si: {definition: "Valid across Slovenia (ISO 3166-1 SI).", parent: southern-europe}
+      sj: {definition: "Valid across Svalbard and Jan Mayen (ISO 3166-1 SJ).", parent: northern-europe}
+      sk: {definition: "Valid across Slovakia (ISO 3166-1 SK).", parent: eastern-europe}
+      sl: {definition: "Valid across Sierra Leone (ISO 3166-1 SL).", parent: sub-saharan-africa}
+      sm: {definition: "Valid across San Marino (ISO 3166-1 SM).", parent: southern-europe}
+      sn: {definition: "Valid across Senegal (ISO 3166-1 SN).", parent: sub-saharan-africa}
+      so: {definition: "Valid across Somalia (ISO 3166-1 SO).", parent: sub-saharan-africa}
+      sr: {definition: "Valid across Suriname (ISO 3166-1 SR).", parent: latin-america-and-the-caribbean}
+      ss: {definition: "Valid across South Sudan (ISO 3166-1 SS).", parent: sub-saharan-africa}
+      st: {definition: "Valid across Sao Tome and Principe (ISO 3166-1 ST).", parent: sub-saharan-africa}
+      sv: {definition: "Valid across El Salvador (ISO 3166-1 SV).", parent: latin-america-and-the-caribbean}
+      sx: {definition: "Valid across Sint Maarten (Dutch part) (ISO 3166-1 SX).", parent: latin-america-and-the-caribbean}
+      sy: {definition: "Valid across Syrian Arab Republic (ISO 3166-1 SY).", parent: western-asia}
+      sz: {definition: "Valid across Eswatini (ISO 3166-1 SZ).", parent: sub-saharan-africa}
+      tc: {definition: "Valid across Turks and Caicos Islands (ISO 3166-1 TC).", parent: latin-america-and-the-caribbean}
+      td: {definition: "Valid across Chad (ISO 3166-1 TD).", parent: sub-saharan-africa}
+      tf: {definition: "Valid across French Southern Territories (ISO 3166-1 TF).", parent: sub-saharan-africa}
+      tg: {definition: "Valid across Togo (ISO 3166-1 TG).", parent: sub-saharan-africa}
+      th: {definition: "Valid across Thailand (ISO 3166-1 TH).", parent: south-eastern-asia}
+      tj: {definition: "Valid across Tajikistan (ISO 3166-1 TJ).", parent: central-asia}
+      tk: {definition: "Valid across Tokelau (ISO 3166-1 TK).", parent: polynesia}
+      tl: {definition: "Valid across Timor-Leste (ISO 3166-1 TL).", parent: south-eastern-asia}
+      tm: {definition: "Valid across Turkmenistan (ISO 3166-1 TM).", parent: central-asia}
+      tn: {definition: "Valid across Tunisia (ISO 3166-1 TN).", parent: northern-africa}
+      to: {definition: "Valid across Tonga (ISO 3166-1 TO).", parent: polynesia}
+      tr: {definition: "Valid across Türkiye (ISO 3166-1 TR).", parent: western-asia}
+      tt: {definition: "Valid across Trinidad and Tobago (ISO 3166-1 TT).", parent: latin-america-and-the-caribbean}
+      tv: {definition: "Valid across Tuvalu (ISO 3166-1 TV).", parent: polynesia}
+      tw: {definition: "Valid across Taiwan, Province of China (ISO 3166-1 TW).", parent: eastern-asia}
+      tz: {definition: "Valid across Tanzania, United Republic of (ISO 3166-1 TZ).", parent: sub-saharan-africa}
+      ua: {definition: "Valid across Ukraine (ISO 3166-1 UA).", parent: eastern-europe}
+      ug: {definition: "Valid across Uganda (ISO 3166-1 UG).", parent: sub-saharan-africa}
+      um: {definition: "Valid across United States Minor Outlying Islands (ISO 3166-1 UM).", parent: micronesia}
+      uy: {definition: "Valid across Uruguay (ISO 3166-1 UY).", parent: latin-america-and-the-caribbean}
+      uz: {definition: "Valid across Uzbekistan (ISO 3166-1 UZ).", parent: central-asia}
+      va: {definition: "Valid across Holy See (ISO 3166-1 VA).", parent: southern-europe}
+      vc: {definition: "Valid across Saint Vincent and the Grenadines (ISO 3166-1 VC).", parent: latin-america-and-the-caribbean}
+      ve: {definition: "Valid across Venezuela, Bolivarian Republic of (ISO 3166-1 VE).", parent: latin-america-and-the-caribbean}
+      vg: {definition: "Valid across Virgin Islands (British) (ISO 3166-1 VG).", parent: latin-america-and-the-caribbean}
+      vi: {definition: "Valid across Virgin Islands (U.S.) (ISO 3166-1 VI).", parent: latin-america-and-the-caribbean}
+      vn: {definition: "Valid across Viet Nam (ISO 3166-1 VN).", parent: south-eastern-asia}
+      vu: {definition: "Valid across Vanuatu (ISO 3166-1 VU).", parent: melanesia}
+      wf: {definition: "Valid across Wallis and Futuna (ISO 3166-1 WF).", parent: polynesia}
+      ws: {definition: "Valid across Samoa (ISO 3166-1 WS).", parent: polynesia}
+      ye: {definition: "Valid across Yemen (ISO 3166-1 YE).", parent: western-asia}
+      yt: {definition: "Valid across Mayotte (ISO 3166-1 YT).", parent: sub-saharan-africa}
+      za: {definition: "Valid across South Africa (ISO 3166-1 ZA).", parent: sub-saharan-africa}
+      zm: {definition: "Valid across Zambia (ISO 3166-1 ZM).", parent: sub-saharan-africa}
+      zw: {definition: "Valid across Zimbabwe (ISO 3166-1 ZW).", parent: sub-saharan-africa}
+      # <<< generated geography values
+    aliases:
+      usa: us
+      united states: us
+      canada: ca
+      mexico: mx
+      méxico: mx
+      na: north-america
+      north america: north-america
+      us/state/al: us-al
+      alabama: us-al
+      us/state/ak: us-ak
+      alaska: us-ak
+      us/state/az: us-az
+      arizona: us-az
+      us/state/ar: us-ar
+      arkansas: us-ar
+      us/state/ca: us-ca
+      california: us-ca
+      us/state/co: us-co
+      colorado: us-co
+      us/state/ct: us-ct
+      connecticut: us-ct
+      us/state/de: us-de
+      delaware: us-de
+      us/state/dc: us-dc
+      district of columbia: us-dc
+      us/state/fl: us-fl
+      florida: us-fl
+      us/state/ga: us-ga
+      georgia: us-ga
+      us/state/hi: us-hi
+      hawaii: us-hi
+      us/state/id: us-id
+      idaho: us-id
+      us/state/il: us-il
+      illinois: us-il
+      us/state/in: us-in
+      indiana: us-in
+      us/state/ia: us-ia
+      iowa: us-ia
+      us/state/ks: us-ks
+      kansas: us-ks
+      us/state/ky: us-ky
+      kentucky: us-ky
+      us/state/la: us-la
+      louisiana: us-la
+      us/state/me: us-me
+      maine: us-me
+      us/state/md: us-md
+      maryland: us-md
+      us/state/ma: us-ma
+      massachusetts: us-ma
+      us/state/mi: us-mi
+      michigan: us-mi
+      us/state/mn: us-mn
+      minnesota: us-mn
+      us/state/ms: us-ms
+      mississippi: us-ms
+      us/state/mo: us-mo
+      missouri: us-mo
+      us/state/mt: us-mt
+      montana: us-mt
+      us/state/ne: us-ne
+      nebraska: us-ne
+      us/state/nv: us-nv
+      nevada: us-nv
+      us/state/nh: us-nh
+      new hampshire: us-nh
+      us/state/nj: us-nj
+      new jersey: us-nj
+      us/state/nm: us-nm
+      new mexico: us-nm
+      us/state/ny: us-ny
+      new york: us-ny
+      us/state/nc: us-nc
+      north carolina: us-nc
+      us/state/nd: us-nd
+      north dakota: us-nd
+      us/state/oh: us-oh
+      ohio: us-oh
+      us/state/ok: us-ok
+      oklahoma: us-ok
+      us/state/or: us-or
+      oregon: us-or
+      us/state/pa: us-pa
+      pennsylvania: us-pa
+      us/state/ri: us-ri
+      rhode island: us-ri
+      us/state/sc: us-sc
+      south carolina: us-sc
+      us/state/sd: us-sd
+      south dakota: us-sd
+      us/state/tn: us-tn
+      tennessee: us-tn
+      us/state/tx: us-tx
+      texas: us-tx
+      us/state/ut: us-ut
+      utah: us-ut
+      us/state/vt: us-vt
+      vermont: us-vt
+      us/state/va: us-va
+      virginia: us-va
+      us/state/wa: us-wa
+      washington: us-wa
+      us/state/wv: us-wv
+      west virginia: us-wv
+      us/state/wi: us-wi
+      wisconsin: us-wi
+      us/state/wy: us-wy
+      wyoming: us-wy
+      us/state/pr: us-pr
+      puerto rico: us-pr
+      ca/province/ab: ca-ab
+      alberta: ca-ab
+      ca/province/bc: ca-bc
+      british columbia: ca-bc
+      ca/province/mb: ca-mb
+      manitoba: ca-mb
+      ca/province/nb: ca-nb
+      new brunswick: ca-nb
+      ca/province/nl: ca-nl
+      newfoundland and labrador: ca-nl
+      ca/province/ns: ca-ns
+      nova scotia: ca-ns
+      ca/province/nt: ca-nt
+      northwest territories: ca-nt
+      ca/province/nu: ca-nu
+      nunavut: ca-nu
+      ca/province/on: ca-on
+      ontario: ca-on
+      ca/province/pe: ca-pe
+      prince edward island: ca-pe
+      ca/province/qc: ca-qc
+      quebec: ca-qc
+      ca/province/sk: ca-sk
+      saskatchewan: ca-sk
+      ca/province/yt: ca-yt
+      yukon: ca-yt
+      québec: ca-qc
+      eu: europe
+      european union: europe
+      gb: uk
+      united kingdom: uk
+      great britain: uk
+      finland: fi
+      sweden: se
+      norway: "no"
+      denmark: dk
+      netherlands: nl
+      belgium: be
+      germany: de
+      deutschland: de
+      france: fr
+      spain: es
+      españa: es
+      czechia: cz
+      czech republic: cz
+      # >>> generated by tools/make_geo_vocab.py (1.5.0): English names of the generated values
+      "australia and new zealand": australia-and-new-zealand
+      "central asia": central-asia
+      "eastern asia": eastern-asia
+      "eastern europe": eastern-europe
+      "latin america and the caribbean": latin-america-and-the-caribbean
+      "northern africa": northern-africa
+      "northern america": northern-america
+      "northern europe": northern-europe
+      "south-eastern asia": south-eastern-asia
+      "southern asia": southern-asia
+      "southern europe": southern-europe
+      "sub-saharan africa": sub-saharan-africa
+      "western asia": western-asia
+      "western europe": western-europe
+      "andorra": ad
+      "and": ad
+      "united arab emirates": ae
+      "are": ae
+      "afghanistan": af
+      "afg": af
+      "antigua and barbuda": ag
+      "atg": ag
+      "anguilla": ai
+      "aia": ai
+      "albania": al
+      "alb": al
+      "armenia": am
+      "arm": am
+      "angola": ao
+      "ago": ao
+      "antarctica": aq
+      "ata": aq
+      "argentina": ar
+      "arg": ar
+      "american samoa": as
+      "asm": as
+      "austria": at
+      "aut": at
+      "australia": au
+      "aus": au
+      "aruba": aw
+      "abw": aw
+      "åland islands": ax
+      "ala": ax
+      "azerbaijan": az
+      "aze": az
+      "bosnia and herzegovina": ba
+      "bih": ba
+      "barbados": bb
+      "brb": bb
+      "bangladesh": bd
+      "bgd": bd
+      "burkina faso": bf
+      "bfa": bf
+      "bulgaria": bg
+      "bgr": bg
+      "bahrain": bh
+      "bhr": bh
+      "burundi": bi
+      "bdi": bi
+      "benin": bj
+      "ben": bj
+      "saint barthélemy": bl
+      "blm": bl
+      "bermuda": bm
+      "bmu": bm
+      "brunei darussalam": bn
+      "brn": bn
+      "bolivia, plurinational state of": bo
+      "bol": bo
+      "bonaire, sint eustatius and saba": bq
+      "bes": bq
+      "brazil": br
+      "bra": br
+      "bahamas": bs
+      "bhs": bs
+      "bhutan": bt
+      "btn": bt
+      "bouvet island": bv
+      "bvt": bv
+      "botswana": bw
+      "bwa": bw
+      "belarus": by
+      "blr": by
+      "belize": bz
+      "blz": bz
+      "cocos (keeling) islands": cc
+      "cck": cc
+      "congo, democratic republic of the": cd
+      "cod": cd
+      "central african republic": cf
+      "caf": cf
+      "congo": cg
+      "cog": cg
+      "switzerland": ch
+      "che": ch
+      "côte d'ivoire": ci
+      "civ": ci
+      "cook islands": ck
+      "cok": ck
+      "chile": cl
+      "chl": cl
+      "cameroon": cm
+      "cmr": cm
+      "china": cn
+      "chn": cn
+      "colombia": co
+      "col": co
+      "costa rica": cr
+      "cri": cr
+      "cuba": cu
+      "cub": cu
+      "cabo verde": cv
+      "cpv": cv
+      "curaçao": cw
+      "cuw": cw
+      "christmas island": cx
+      "cxr": cx
+      "cyprus": cy
+      "cyp": cy
+      "djibouti": dj
+      "dji": dj
+      "dominica": dm
+      "dma": dm
+      "dominican republic": do
+      "dom": do
+      "algeria": dz
+      "dza": dz
+      "ecuador": ec
+      "ecu": ec
+      "estonia": ee
+      "est": ee
+      "egypt": eg
+      "egy": eg
+      "western sahara": eh
+      "esh": eh
+      "eritrea": er
+      "eri": er
+      "ethiopia": et
+      "eth": et
+      "fiji": fj
+      "fji": fj
+      "falkland islands (malvinas)": fk
+      "flk": fk
+      "micronesia, federated states of": fm
+      "fsm": fm
+      "faroe islands": fo
+      "fro": fo
+      "gabon": ga
+      "gab": ga
+      "grenada": gd
+      "grd": gd
+      "geo": ge
+      "french guiana": gf
+      "guf": gf
+      "guernsey": gg
+      "ggy": gg
+      "ghana": gh
+      "gha": gh
+      "gibraltar": gi
+      "gib": gi
+      "greenland": gl
+      "grl": gl
+      "gambia": gm
+      "gmb": gm
+      "guinea": gn
+      "gin": gn
+      "guadeloupe": gp
+      "glp": gp
+      "equatorial guinea": gq
+      "gnq": gq
+      "greece": gr
+      "grc": gr
+      "south georgia and the south sandwich islands": gs
+      "sgs": gs
+      "guatemala": gt
+      "gtm": gt
+      "guam": gu
+      "gum": gu
+      "guinea-bissau": gw
+      "gnb": gw
+      "guyana": gy
+      "guy": gy
+      "hong kong": hk
+      "hkg": hk
+      "heard island and mcdonald islands": hm
+      "hmd": hm
+      "honduras": hn
+      "hnd": hn
+      "croatia": hr
+      "hrv": hr
+      "haiti": ht
+      "hti": ht
+      "hungary": hu
+      "hun": hu
+      "indonesia": id
+      "idn": id
+      "ireland": ie
+      "irl": ie
+      "israel": il
+      "isr": il
+      "isle of man": im
+      "imn": im
+      "india": in
+      "ind": in
+      "british indian ocean territory": io
+      "iot": io
+      "iraq": iq
+      "irq": iq
+      "iran, islamic republic of": ir
+      "irn": ir
+      "iceland": is
+      "isl": is
+      "italy": it
+      "ita": it
+      "jersey": je
+      "jey": je
+      "jamaica": jm
+      "jam": jm
+      "jordan": jo
+      "jor": jo
+      "japan": jp
+      "jpn": jp
+      "kenya": ke
+      "ken": ke
+      "kyrgyzstan": kg
+      "kgz": kg
+      "cambodia": kh
+      "khm": kh
+      "kiribati": ki
+      "kir": ki
+      "comoros": km
+      "com": km
+      "saint kitts and nevis": kn
+      "kna": kn
+      "korea, democratic people's republic of": kp
+      "prk": kp
+      "korea, republic of": kr
+      "kor": kr
+      "kuwait": kw
+      "kwt": kw
+      "cayman islands": ky
+      "cym": ky
+      "kazakhstan": kz
+      "kaz": kz
+      "lao people's democratic republic": la
+      "lao": la
+      "lebanon": lb
+      "lbn": lb
+      "saint lucia": lc
+      "lca": lc
+      "liechtenstein": li
+      "lie": li
+      "sri lanka": lk
+      "lka": lk
+      "liberia": lr
+      "lbr": lr
+      "lesotho": ls
+      "lso": ls
+      "lithuania": lt
+      "ltu": lt
+      "luxembourg": lu
+      "lux": lu
+      "latvia": lv
+      "lva": lv
+      "libya": ly
+      "lby": ly
+      "morocco": ma
+      "mar": ma
+      "monaco": mc
+      "mco": mc
+      "moldova, republic of": md
+      "mda": md
+      "montenegro": me
+      "mne": me
+      "saint martin (french part)": mf
+      "maf": mf
+      "madagascar": mg
+      "mdg": mg
+      "marshall islands": mh
+      "mhl": mh
+      "north macedonia": mk
+      "mkd": mk
+      "mali": ml
+      "mli": ml
+      "myanmar": mm
+      "mmr": mm
+      "mongolia": mn
+      "mng": mn
+      "macao": mo
+      "mac": mo
+      "northern mariana islands": mp
+      "mnp": mp
+      "martinique": mq
+      "mtq": mq
+      "mauritania": mr
+      "mrt": mr
+      "montserrat": ms
+      "msr": ms
+      "malta": mt
+      "mlt": mt
+      "mauritius": mu
+      "mus": mu
+      "maldives": mv
+      "mdv": mv
+      "malawi": mw
+      "mwi": mw
+      "malaysia": my
+      "mys": my
+      "mozambique": mz
+      "moz": mz
+      "namibia": nam
+      "new caledonia": nc
+      "ncl": nc
+      "niger": ne
+      "ner": ne
+      "norfolk island": nf
+      "nfk": nf
+      "nigeria": ng
+      "nga": ng
+      "nicaragua": ni
+      "nic": ni
+      "nepal": np
+      "npl": np
+      "nauru": nr
+      "nru": nr
+      "niue": nu
+      "niu": nu
+      "new zealand": nz
+      "nzl": nz
+      "oman": om
+      "omn": om
+      "panama": pa
+      "pan": pa
+      "peru": pe
+      "per": pe
+      "french polynesia": pf
+      "pyf": pf
+      "papua new guinea": pg
+      "png": pg
+      "philippines": ph
+      "phl": ph
+      "pakistan": pk
+      "pak": pk
+      "poland": pl
+      "pol": pl
+      "saint pierre and miquelon": pm
+      "spm": pm
+      "pitcairn": pn
+      "pcn": pn
+      "pri": pr
+      "palestine, state of": ps
+      "pse": ps
+      "portugal": pt
+      "prt": pt
+      "palau": pw
+      "plw": pw
+      "paraguay": py
+      "pry": py
+      "qatar": qa
+      "qat": qa
+      "réunion": re
+      "reu": re
+      "romania": ro
+      "rou": ro
+      "serbia": rs
+      "srb": rs
+      "russian federation": ru
+      "rus": ru
+      "rwanda": rw
+      "rwa": rw
+      "saudi arabia": sa
+      "sau": sa
+      "solomon islands": sb
+      "slb": sb
+      "seychelles": sc
+      "syc": sc
+      "sudan": sd
+      "sdn": sd
+      "singapore": sg
+      "sgp": sg
+      "saint helena, ascension and tristan da cunha": sh
+      "shn": sh
+      "slovenia": si
+      "svn": si
+      "svalbard and jan mayen": sj
+      "sjm": sj
+      "slovakia": sk
+      "svk": sk
+      "sierra leone": sl
+      "sle": sl
+      "san marino": sm
+      "smr": sm
+      "senegal": sn
+      "sen": sn
+      "somalia": so
+      "som": so
+      "suriname": sr
+      "sur": sr
+      "south sudan": ss
+      "ssd": ss
+      "sao tome and principe": st
+      "stp": st
+      "el salvador": sv
+      "slv": sv
+      "sint maarten (dutch part)": sx
+      "sxm": sx
+      "syrian arab republic": sy
+      "syr": sy
+      "eswatini": sz
+      "swz": sz
+      "turks and caicos islands": tc
+      "tca": tc
+      "chad": td
+      "tcd": td
+      "french southern territories": tf
+      "atf": tf
+      "togo": tg
+      "tgo": tg
+      "thailand": th
+      "tha": th
+      "tajikistan": tj
+      "tjk": tj
+      "tokelau": tk
+      "tkl": tk
+      "timor-leste": tl
+      "tls": tl
+      "turkmenistan": tm
+      "tkm": tm
+      "tunisia": tn
+      "tun": tn
+      "tonga": to
+      "ton": to
+      "türkiye": tr
+      "tur": tr
+      "trinidad and tobago": tt
+      "tto": tt
+      "tuvalu": tv
+      "tuv": tv
+      "taiwan, province of china": tw
+      "twn": tw
+      "tanzania, united republic of": tz
+      "tza": tz
+      "ukraine": ua
+      "ukr": ua
+      "uganda": ug
+      "uga": ug
+      "united states minor outlying islands": um
+      "umi": um
+      "uruguay": uy
+      "ury": uy
+      "uzbekistan": uz
+      "uzb": uz
+      "holy see": va
+      "vat": va
+      "saint vincent and the grenadines": vc
+      "vct": vc
+      "venezuela, bolivarian republic of": ve
+      "ven": ve
+      "virgin islands (british)": vg
+      "vgb": vg
+      "virgin islands (u.s.)": vi
+      "vir": vi
+      "viet nam": vn
+      "vnm": vn
+      "vanuatu": vu
+      "vut": vu
+      "wallis and futuna": wf
+      "wlf": wf
+      "samoa": ws
+      "wsm": ws
+      "yemen": ye
+      "yem": ye
+      "mayotte": yt
+      "myt": yt
+      "south africa": za
+      "zaf": za
+      "zambia": zm
+      "zmb": zm
+      "zimbabwe": zw
+      "zwe": zw
+      # <<< generated geography aliases
+
+  level:
+    values:
+      country: {definition: "National boundary."}
+      state: {definition: "State, province or equivalent first-level division."}
+      county: {definition: "County or equivalent."}
+      county-subdivision: {definition: "County subdivision (town, township, census county division); TIGER COUSUB."}
+      cbsa: {definition: "Core-based statistical area."}
+      zcta: {definition: "ZIP Code Tabulation Area."}
+      tract: {definition: "Census tract."}
+      block-group: {definition: "Census block group."}
+      license-area/cma: {definition: "FCC cellular market area."}
+      license-area/bta: {definition: "FCC basic trading area."}
+      license-area/mta: {definition: "FCC major trading area."}
+      license-area/ea: {definition: "FCC economic area."}
+      license-area/pea: {definition: "FCC partial economic area."}
+      dma: {definition: "Designated Market Area (television market); a licensed geography."}
+      site: {definition: "A single cell site or facility point."}
+      sector: {definition: "A single antenna sector."}
+      line: {definition: "A linear feature such as a road, fiber route or coastline."}
+      place: {definition: "A populated place (city or town) as a point."}
+      water: {definition: "A water body such as a lake, as a polygon."}
+      grid: {definition: "A regular raster grid of cells (an elevation, population or signal surface), not features."}
+      # >>> generated by tools/make_geo_vocab.py (1.5.0): admin levels 0 to 4 and their crosswalk
+      admin0: {definition: "Country (ISO 3166-1); the same as country.", equivalent: [country]}
+      admin1: {definition: "First-level division (state, province, region, prefecture, ...; the country's word is in data/countries.yaml); the same as state.", equivalent: [state]}
+      admin2: {definition: "Second-level division (county, district, department, municipality, ...); the same as county.", equivalent: [county]}
+      admin3: {definition: "Third-level division (a county subdivision, commune or ward); the same as county-subdivision.", equivalent: [county-subdivision]}
+      admin4: {definition: "Fourth-level division (a village, neighbourhood or ward where a country has one).", equivalent: []}
+      # <<< generated levels
+    aliases:
+      designated market area: dma
+      cellular market area: license-area/cma
+      cma: license-area/cma
+      msa: cbsa
+      metropolitan statistical area: cbsa
+      zip code tabulation area: zcta
+  domain:
+    values:
+      general: {definition: "General reference geography."}
+      demographics: {definition: "People and households."}
+      telecom: {definition: "Wireless and wireline telecom."}
+      transport: {definition: "Roads, rail, air, water."}
+      hazard: {definition: "Natural hazard and risk."}
+      energy: {definition: "Power and fuel infrastructure."}
+      program: {definition: "Program and project delivery geography."}
+      weather: {definition: "Weather observations, forecasts, alerts and climate records."}
+      routing: {definition: "Routes, travel times and isochrones on a street or transit network."}
+      geocoding: {definition: "Addresses and place names turned into points, and back."}
+      imagery: {definition: "Street-level, aerial or satellite pictures."}
+  use_for:
+    values: &use_for_values
+      choropleth: {definition: "Shaded areas by a normalized rate."}
+      proportional-symbol: {definition: "Symbols sized by a count or amount."}
+      dot-density: {definition: "Dots representing a quantity per area."}
+      density-surface: {definition: "Continuous surface from point density."}
+      site-map: {definition: "Points for sites with attributes."}
+      coverage-footprint: {definition: "Areas served or covered."}
+      rag-status: {definition: "Red, amber, green status maps."}
+      flow-line: {definition: "Lines between places sized by flow."}
+      market-rollup: {definition: "Aggregation of a metric to a market geography."}
+      context-basemap: {definition: "Quiet reference layer under data."}
+      label-reference: {definition: "Names and label priorities."}
+      join-key: {definition: "Provides the key to join tables to geometry."}
+      normalization: {definition: "Denominator for turning counts into rates."}
+      locator-inset: {definition: "Small map placing the main map in context."}
+      atlas: {definition: "Repeated maps across a series of places."}
+      historical-boundaries: {definition: "Boundaries as of a past date (not today's)."}
+  avoid_for:
+    values:
+      <<: *use_for_values
+      parcel-level: {definition: "Property-parcel precision."}
+      engineering-grade: {definition: "RF design or engineering accuracy."}
+      legal-boundary: {definition: "Legally exact boundaries."}
+      site-precision: {definition: "Positions that must be exact at a site."}
+  scale:
+    values:
+      world: {definition: "World map."}
+      national: {definition: "Whole-country map."}
+      regional: {definition: "Multi-state region."}
+      state: {definition: "One state."}
+      metro: {definition: "One metropolitan area."}
+      local: {definition: "City or neighborhood."}
+      site: {definition: "One site."}
+  detail:
+    values:
+      generalized: {definition: "Heavily simplified, clipped to the coast."}
+      simplified: {definition: "Moderately simplified."}
+      detailed: {definition: "Full-resolution geometry."}
+  audience:
+    values:
+      any: {definition: "Any audience."}
+      internal: {definition: "Internal use only."}
+      external: {definition: "May be shown to people outside the organization."}
+      regulatory: {definition: "Suitable for regulatory filings."}
+  confidentiality:
+    values:
+      public: {definition: "Public information."}
+      internal: {definition: "Internal."}
+      client-confidential: {definition: "Client-confidential; banner and publish gates apply."}
+      restricted-license: {definition: "Redistribution limited by license."}
+  freshness:
+    values:
+      static: {definition: "Does not change."}
+      annual: {definition: "Updated about once a year."}
+      quarterly: {definition: "Updated about every quarter."}
+      monthly: {definition: "Updated about monthly."}
+      live: {definition: "Continuously updated."}
+      irregular: {definition: "Updated without a fixed schedule."}
+  tier:
+    values:
+      T0: {definition: "Reachable with no network (bundled)."}
+      T1: {definition: "Reachable from the workspace after fetch or staging."}
+      T2: {definition: "Reachable from the user's computer."}
+      W: {definition: "Reachable from the viewer's browser."}
+  license_class:
+    values:
+      public-domain: {definition: "No restrictions."}
+      open: {definition: "Open license without attribution duty."}
+      attribution: {definition: "Attribution required."}
+      share-alike: {definition: "Derivatives carry the same license."}
+      restricted: {definition: "Use limited by terms."}
+      licensed: {definition: "Paid or contract license."}
+  quality:
+    values:
+      authoritative: {definition: "Published by the authority for the data."}
+      derived: {definition: "Computed from authoritative sources."}
+      community: {definition: "Community maintained."}
+      commercial: {definition: "Commercial provider."}

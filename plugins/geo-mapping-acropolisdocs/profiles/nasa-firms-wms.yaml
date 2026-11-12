@@ -1,0 +1,34 @@
+# Shipped service profile (read-only; see service_registry.py). Address from the FIRMS WMS info page, read 2026-11-09 (1.0.2).
+profile: nasa-firms-wms
+type: ogc-generic
+base_url: https://firms.modaps.eosdis.nasa.gov/mapserver/wms/fires/{key}/
+protocols:
+  wms: 1.3.0
+auth:
+  method: credential
+  credentials: cred:nasa-firms
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 1
+  server_max_features: 1
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: false
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: public-domain
+  confidential: false
+  attribution: 'Source: NASA FIRMS.'
+host_visibility: shown
+host_confirmed_on: '2026-11-09'
+notes: 'NASA FIRMS global active-fire WMS (the fires service: fires_viirs_*, fires_modis_*, fires_landsat_*, time-since-detection and WMS-Time
+  layers). Your own MAP_KEY, registered as cred:nasa-firms (map-credentials add nasa-firms), fills the {key} slot at send time; the address keeps
+  the trailing slash FIRMS documents. A key in the address is never used on a web page, so this profile is for print maps and captures. 5,000
+  transactions per 10 minutes per MAP_KEY. Shipped with the plugin (1.0.2), read-only: a profile of the same name saved in the working folder
+  overrides it.'

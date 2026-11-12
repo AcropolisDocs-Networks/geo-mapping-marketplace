@@ -1,0 +1,51 @@
+id: ref.boundary.world.state.ne50
+type: boundary
+rev: 1
+status: active
+title: World first-level divisions, 50m (Natural Earth)
+summary: States, provinces and equivalents worldwide (Canada, Mexico, and a few dozen other countries) for national and regional context.
+tags:
+  geography: [world]
+  level: [state]
+  domain: [general]
+  use_for: [context-basemap, choropleth, locator-inset, atlas, join-key]
+  avoid_for: [engineering-grade, legal-boundary, site-precision, parcel-level]
+  scale: [national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: [A regional map includes Canadian provinces or Mexican states beside US states., A multi-country map needs first-level divisions
+    as context.]
+avoid_when: ['The map is US-only and joins to Census data; use ref.boundary.us.state.cb20m, which carries FIPS codes.', The map needs
+    exact boundaries; 50m outlines are generalized., 'Every country must have divisions; Natural Earth covers only some, and the rest
+    appear as a single area or are absent.']
+pairs_with: [ref.context.world.coastline.ne110]
+distinct_from:
+- {id: ref.boundary.us.state.cb20m, why: 'US only, with FIPS codes for joining Census statistics'}
+join: {key: adm1_code, type: string, width: 8, note: 'Natural Earth''s own code, such as USA-3514. iso_3166_2 is empty for some entries.'}
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_50m_admin1.parquet
+  sha256: 8a388ca7ccca4d6a0e96d6c664b0a848f142e0340f39062105106fff23577375
+  size_mb: 0.72
+  format: GeoParquet (zstd)
+  features: 294
+  columns: [name, admin, adm0_a3, adm1_code, iso_3166_2, iso_a2, postal, type_en, region, latitude, longitude, min_label, max_label,
+    ne_id]
+source: {publisher: Natural Earth, product: 'Admin 1 - States, Provinces, 50m', url: 'https://naciscdn.org/naturalearth/50m/cultural/ne_50m_admin_1_states_provinces.zip',
+  file_sha256: 61f79e6705e62a55d6bcf698394295a589af5e24a4b2684c6519dd35c1300bf6}
+url_verified_on: 2026-11-02
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-02
+  verify_by: 2027-11-02
+  check: {kind: feature_count_and_hash, features: 294, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-02, note: Bundled payload built and verified (M1).}

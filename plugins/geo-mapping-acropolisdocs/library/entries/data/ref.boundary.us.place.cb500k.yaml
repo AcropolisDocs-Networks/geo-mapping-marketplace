@@ -1,0 +1,111 @@
+id: ref.boundary.us.place.cb500k
+type: boundary
+rev: 1
+status: active
+title: US incorporated places and CDPs, 1:500,000 (Census cartographic boundary)
+summary: City, town and census designated place polygons simplified to 1:500,000, for labelling and rolling up metrics by place.
+tags:
+  geography:
+  - us
+  level:
+  - place
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - label-reference
+  - context-basemap
+  avoid_for:
+  - parcel-level
+  - engineering-grade
+  - legal-boundary
+  - site-precision
+  scale:
+  - state
+  - metro
+  - local
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A metro or state map that shades or labels cities and towns, with the Census place GEOID as the join key.
+- Rolling a site count or a client metric up to the city a site falls in.
+avoid_when:
+- The map needs the full-resolution city limits for a legal or parcel question; the TIGER/Line place file holds those.
+- 'A national map: 32,629 polygons are heavy at that scale; label from the gazetteer instead.'
+pairs_with:
+- ref.boundary.us.county.cb500k
+- ref.gazetteer.world.place.ne10
+distinct_from:
+- id: ref.boundary.us.urban-area.cb2020-500k
+  why: urban areas are statistical footprints that cross city limits
+- id: ref.boundary.us.aiannh.cb500k
+  why: tribal areas, not municipalities
+join:
+  key: GEOID
+  type: string
+  width: 7
+  note: State FIPS plus five-digit place FIPS as text; keep leading zeros. NAMELSAD carries the legal description (city, town, CDP).
+  pattern: ^\d{7}$
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 21.99
+  features: 32629
+  columns:
+  - STATEFP
+  - PLACEFP
+  - PLACENS
+  - GEOIDFQ
+  - GEOID
+  - NAME
+  - NAMELSAD
+  - STUSPS
+  - STATE_NAME
+  - LSAD
+  - ALAND
+  - AWATER
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, Places, 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_place_500k.zip
+  file_sha256: ce0e4019ecd4123d03d53aaa936eed0459b82e3e14b89a3dcd4d5e8b3308627d
+url_verified_on: '2026-11-04'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: feature_count_and_hash
+    features: 32629
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the 2025 national archive (32,629 features, 23,057,021 bytes, SHA-256 recorded; read with pyogrio). Fetched on demand; not bundled.

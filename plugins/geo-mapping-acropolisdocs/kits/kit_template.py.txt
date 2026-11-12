@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+"""geo-mapping request kit @@KIT_ID@@: READ ONLY (GET only). Standard library only; Python 3.10 or newer.
+
+Run it where you can reach the service:   python kit.py [OUTPUT_FOLDER]
+Credentials, if the service needs them, are read from YOUR environment (never paste them into a chat):
+    GEO_USER and GEO_PASS (HTTP Basic, sent only over https)      GEO_CACERT = path to a CA file for a private certificate authority
+    GEO_NETRC = path to a netrc file with a "machine HOST login USER password PASS" entry (used when GEO_USER/GEO_PASS are not set)
+    GEO_MAX_TIME = seconds per request (default 60)
+    GEO_MAX_SECONDS = stop after this many seconds in total, keep state.json and exit 4; run it again with the same folder to carry on
+TLS verification is always on. Redirects are not followed. Then send the output folder back (the manifest.yaml inside lets the plugin check it).
+"""
+import base64
+import datetime
+import hashlib
+import json
+import os
+import platform
+import re
+import ssl
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+REQ = json.loads(r'''@@REQUEST_JSON@@''')
+UA = "geo-mapping-request-kit/1 (read-only)"
+EXIT_AUTH = 5
+
+
+@@MANIFEST_WRITER@@
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+def build_opener():
+    cafile = os.environ.get("GEO_CACERT")
+    ctx = ssl.create_default_context(cafile=cafile) if cafile else ssl.create_default_context()
+    return urllib.request.build_opener(NoRedirect, urllib.request.HTTPSHandler(context=ctx))
+
+
+def netrc_login(path, host):
+    """(login, password) for HOST from a netrc file: whitespace-separated words, read literally (a quote or backslash in a password is part of it)."""
+    words, cur, found, i = open(path, encoding="utf-8").read().split(), None, {}, 0
+    while i < len(words):
+        w = words[i]
+        if w == "machine" and i + 1 < len(words):
+            cur = words[i + 1]
+            found.setdefault(cur, {})
+            i += 2
+        elif w == "default":
+            cur = "default"
+            found.setdefault(cur, {})
+            i += 1
+        elif w in ("login", "password") and cur and i + 1 < len(words):
+            found[cur][w] = words[i + 1]
+            i += 2
+        else:
+            i += 1
+    e = found.get(host) or found.get("default") or {}
+    if not (e.get("login") and e.get("password")):
+        raise ValueError("no entry")
+    return e["login"], e["password"]
+
+
+def headers():
+    h = {"User-Agent": UA, "Accept": "*/*"}
+    user, pw = os.environ.get("GEO_USER"), os.environ.get("GEO_PASS")
+    nrc = os.environ.get("GEO_NETRC")
+    if nrc and not (user and pw):
+        try:
+            user, pw = netrc_login(nrc, urllib.parse.urlsplit(REQ["endpoint"]).hostname)
+        except Exception:
+            sys.exit("the netrc file could not be read (it needs an entry for this host: machine HOST login USER password PASS)")
+    if user and pw:
+        if not REQ["endpoint"].lower().startswith("https://"):
+            sys.exit("credentials are only sent over https; this endpoint is not https")
+        h["Authorization"] = "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()
+    return h
+
+
+OPENER = build_opener()
+TIMEOUT = float(os.environ.get("GEO_MAX_TIME", "60"))
+
+
+def get(url, params=None, expect="json"):
+    full = url + (("&" if "?" in url else "?") + urllib.parse.urlencode(params, safe=":,'()=*") if params else "")
+    for attempt in range(4):
+        try:
+            with OPENER.open(urllib.request.Request(full, headers=headers(), method="GET"), timeout=TIMEOUT) as r:
+                body = r.read(200_000_000)
+                ctype = r.headers.get("content-type", "")
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                sys.exit(f"the service answered {e.code}: authentication failed (not retried, to avoid locking the account)")
+            if e.code in (429, 500, 502, 503, 504) and attempt < 3:
+                wait = e.headers.get("Retry-After", "")
+                time.sleep(min(float(wait), 30) if wait.replace(".", "").isdigit() else 2 ** attempt)
+                continue
+            if 300 <= e.code < 400:
+                sys.exit("the service redirected the request; redirects are not followed. Check the address")
+            sys.exit(f"the service answered {e.code}")
+        if re.match(rb"\s*(<!doctype html|<html)", body[:200], re.I) or "text/html" in ctype.lower():
+            sys.exit("the service returned a web page instead of data (an error page, or a login page)")
+        return body
+    sys.exit("the service kept failing after 4 tries")
+
+
+def wfs_params(start=None, count=None, hits=False):
+    v2 = str(REQ.get("version", "2.0.0")).startswith("2")
+    p = {"service": "WFS", "version": REQ.get("version", "2.0.0"), "request": "GetFeature", "typeNames" if v2 else "typeName": REQ["layer"], "srsName": REQ.get("srs") or "EPSG:4326"}
+    if REQ.get("cql_filter"):
+        p["CQL_FILTER"] = REQ["cql_filter"]
+    if REQ.get("bbox"):
+        b = REQ["bbox"]
+        if REQ.get("cql_filter") and REQ.get("geometry_field"):
+            p["CQL_FILTER"] = "(%s) AND BBOX(%s,%s,%s,%s,%s,'%s')" % (REQ["cql_filter"], REQ["geometry_field"], b[0], b[1], b[2], b[3], p["srsName"])
+        else:
+            p["bbox"] = ",".join(str(v) for v in b) + "," + p["srsName"]
+    if hits:
+        p["resultType"] = "hits"
+        return p
+    p.update({"outputFormat": REQ.get("output_format") or "application/json", ("count" if v2 else "maxFeatures"): count, "startIndex": start})
+    if REQ.get("sort_by"):
+        p["sortBy"] = REQ["sort_by"]
+    if REQ.get("properties"):
+        p["propertyName"] = ",".join(REQ["properties"])
+    return p
+
+
+def count_hits():
+    proto, ep = REQ["protocol"], REQ["endpoint"]
+    if proto == "wfs":
+        m = re.search(rb'(?:numberMatched|numberOfFeatures)="(\d+)"', get(ep, wfs_params(hits=True), "xml"))
+        return int(m.group(1)) if m else None
+    if proto == "arcgis":
+        p = {"where": REQ.get("cql_filter") or "1=1", "returnCountOnly": "true", "f": "json"}
+        if REQ.get("bbox"):
+            p.update({"geometry": ",".join(str(v) for v in REQ["bbox"]), "geometryType": "esriGeometryEnvelope", "inSR": "4326", "spatialRel": "esriSpatialRelIntersects"})
+        n = json.loads(get(ep + "/query", p)).get("count")
+        return n if isinstance(n, int) else None
+    d = json.loads(get(ep + "/collections/" + urllib.parse.quote(REQ["layer"], safe="") + "/items", {"f": "json", "limit": 1}))
+    return d.get("numberMatched") if isinstance(d.get("numberMatched"), int) else None
+
+
+def page_request(start, want):
+    proto, ep = REQ["protocol"], REQ["endpoint"]
+    if proto == "wfs":
+        return get(ep, wfs_params(start, want))
+    if proto == "arcgis":
+        p = {"where": REQ.get("cql_filter") or "1=1", "outFields": ",".join(REQ["properties"]) if REQ.get("properties") else "*", "returnGeometry": "true", "outSR": "4326", "f": "geojson",
+             "orderByFields": REQ.get("sort_by") or REQ.get("oid_field") or "OBJECTID", "resultOffset": start, "resultRecordCount": want}
+        if REQ.get("bbox"):
+            p.update({"geometry": ",".join(str(v) for v in REQ["bbox"]), "geometryType": "esriGeometryEnvelope", "inSR": "4326", "spatialRel": "esriSpatialRelIntersects"})
+        return get(ep + "/query", p)
+    p = {"f": "json", "limit": want, "offset": start}     # offset paging only: a "next" link from the service is never followed (it could point anywhere)
+    if REQ.get("bbox"):
+        p["bbox"] = ",".join(str(v) for v in REQ["bbox"])
+    if REQ.get("cql_filter"):
+        p.update({"filter": REQ["cql_filter"], "filter-lang": "cql2-text"})
+    return get(ep + "/collections/" + urllib.parse.quote(REQ["layer"], safe="") + "/items", p)
+
+
+def main():
+    out = sys.argv[1] if len(sys.argv) > 1 else REQ["kit_id"] + "-out"
+    os.makedirs(os.path.join(out, "pages"), exist_ok=True)
+    t0 = time.time()
+    budget = float(os.environ.get("GEO_MAX_SECONDS", "0")) or None
+    sp = os.path.join(out, "state.json")
+    st = None
+    if os.path.isfile(sp):
+        with open(sp, encoding="utf-8") as f:
+            st = json.load(f)
+        if st.get("kit_id") != REQ["kit_id"]:
+            sys.exit("this folder holds the state of another kit; use a fresh folder")
+        print(f"resuming after page {st['n']} ({st['received']} features so far)")
+    started = st["started"] if st else now()
+    hits = st["hits"] if st else count_hits()
+    cap = REQ.get("max_features") or hits
+    if hits is None and not REQ.get("max_features"):
+        sys.exit("the service does not say how many features match; set max_features in the plan, or narrow the filter")
+    if not st:
+        print(f"expected features: {hits if hits is not None else 'unknown (capped at %s)' % cap}")
+    page = int(st["page"]) if st else int(REQ.get("page_size") or 1000)
+    received, start, n, truncated = (st["received"], st["start"], st["n"], False) if st else (0, 0, 0, False)
+    first = True
+    while cap is None or received < cap:
+        if budget and not first and time.time() - t0 > budget:
+            with open(sp, "w", encoding="utf-8") as f:
+                json.dump({"kit_id": REQ["kit_id"], "started": started, "hits": hits, "page": page, "received": received, "start": start, "n": n}, f)
+            print(f"time budget reached after page {n} ({received} so far): run the same command again to carry on")
+            return 4
+        first = False
+        n += 1
+        want = page if cap is None else min(page, cap - received)
+        body = page_request(start, want)
+        doc = json.loads(body)
+        feats = doc.get("features")
+        if not isinstance(feats, list):
+            sys.exit("the response is not GeoJSON: " + re.sub(r"\s+", " ", body[:200].decode("utf-8", "replace")))
+        with open(os.path.join(out, "pages", "page_%04d.json" % n), "wb") as f:
+            f.write(body)
+        received += len(feats)
+        print(f"page {n}: {len(feats)} features ({received} so far)")
+        if not feats:
+            break
+        if len(feats) < want and hits is not None and received < hits:
+            page = len(feats)                    # the server's own page limit: keep going in steps of that size
+        start += len(feats)
+        if hits is None and len(feats) < want:
+            break
+        if n > 5000:
+            break
+    if hits is not None and received < hits and not (REQ.get("max_features") and received >= REQ["max_features"]):
+        truncated = True
+        print(f"WARNING: received {received} of {hits}; the manifest records this")
+    feats_all = []
+    for i in range(1, n + 1):
+        with open(os.path.join(out, "pages", "page_%04d.json" % i), "rb") as f:
+            feats_all += json.loads(f.read())["features"]
+    with open(os.path.join(out, "result.geojson"), "w", encoding="utf-8") as f:
+        json.dump({"type": "FeatureCollection", "features": feats_all}, f)
+    write_manifest(out, REQ, hits, truncated, started, now())
+    if os.path.isfile(sp):
+        os.remove(sp)
+    print(f"done: {received} features; send back the folder '{out}'")
+    return 0 if not truncated else 3
+
+
+if __name__ == "__main__":
+    sys.exit(main())

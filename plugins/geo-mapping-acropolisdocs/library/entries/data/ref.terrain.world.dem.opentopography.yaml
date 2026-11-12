@@ -1,0 +1,106 @@
+id: ref.terrain.world.dem.opentopography
+type: terrain
+rev: 2
+status: active
+title: OpenTopography global DEMs (SRTM, Copernicus, ALOS, NASADEM)
+summary: Global elevation models clipped to a box (SRTM 30 and 90 m, Copernicus 30 and 90 m, ALOS World 3D, NASADEM, GEBCO and others) as GeoTIFF from the
+  OpenTopography API, with a free key.
+tags:
+  geography:
+  - world
+  level:
+  - grid
+  domain:
+  - general
+  - telecom
+  use_for:
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  scale:
+  - regional
+  - state
+  - metro
+  - local
+  - site
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- A 30 m DEM outside the United States for a terrain profile, line of sight or hillshade (terrain-analysis takes a GeoTIFF), with the person's own key (map-credentials
+  add opentopography).
+avoid_when:
+- 'Inside the United States: USGS 3DEP (ref.terrain.us.dem.3dep) is finer and keyless.'
+- 'More than 50 calls a day on a non-academic key, or a commercial integration: OpenTopography asks for a Plus or Enterprise key.'
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: GeoTIFF
+  requires_credential:
+    name: opentopography
+    kind: apikey
+    class: secret
+    host: portal.opentopography.org
+    inject:
+      query: API_Key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://portal.opentopography.org/myopentopo
+    free: true
+    limits: 'Free key: 200 calls per 24 hours academic, 50 non-academic; 450,000 km2 a request for 30 m datasets, 4,050,000 km2 for 90 m (developers page,
+      read 2026-11-07)'
+  request: https://portal.opentopography.org/API/globaldem?demtype={demtype}&south={south}&north={north}&west={west}&east={east}&outputFormat=GTiff
+  note: Without a key the API answers 401 "API Key required for access" (2026-11-07); the parameter name API_Key is from the earlier register and the Swagger
+    reference (portal.opentopography.org/apidocs). demtype values include SRTMGL1, SRTMGL3, COP30, COP90, AW3D30, NASADEM, SRTM15Plus.
+source:
+  publisher: OpenTopography (San Diego Supercomputer Center, UC San Diego)
+  product: Global Datasets API
+  url: https://opentopography.org/developers
+url_verified_on: '2026-11-07'
+vintage:
+  current: per dataset
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: false
+  bulk_ok: false
+  attribution_text: 'Elevation data via OpenTopography; dataset credit per the source (for example SRTM: NASA/USGS; Copernicus DEM: ESA).'
+  note: 'Developers page (read 2026-11-07): data under open and permissible licences per dataset; commercial integration needs an Enterprise key; API Agreement
+    in opentopography.org/usageterms (not read).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-11-07'
+  check:
+    kind: http_get
+    url: https://opentopography.org/developers
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions, P2): the developers page read on 2026-11-07 (limits, area caps, DEM types, licensing note); the API answered
+      401 without a key.'
+  - rev: 2
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+attribution:
+  corner: 'Elevation: OpenTopography'
+  full: 'Elevation data via OpenTopography; dataset credit per the source (for example SRTM: NASA/USGS; Copernicus DEM: ESA).'
+  required_on_map: true
+  collapse: allowed
+  note: 'Copernicus DEM GLO-30 through OpenTopography: the layer''s own provenance.credit gives the short form ''Copernicus DEM GLO-30'' and the full required
+    statement.'
+  terms_read: '2026-11-09'

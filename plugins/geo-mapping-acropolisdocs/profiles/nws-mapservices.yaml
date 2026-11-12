@@ -1,0 +1,31 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-04 from the build environment.
+profile: nws-mapservices
+type: arcgis-rest
+base_url: https://mapservices.weather.noaa.gov/eventdriven/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 4000
+  server_max_features: 4000
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: public-domain
+  confidential: false
+  attribution: 'Source: NOAA National Weather Service.'
+host_visibility: shown
+host_confirmed_on: '2026-11-04'
+verified_on: '2026-11-04'
+notes: 'NOAA National Weather Service map services. Event-driven services: WWA/watch_warn_adv/MapServer/1 (WatchesWarnings polygons, fields phenom,
+  sig, event, wfo, onset, ends, url; maxRecordCount 4000). The JSON API api.weather.gov (alerts/active?area=AZ, GeoJSON) is the alternative; it
+  asks for an identifying User-Agent. Shipped with the plugin (M13), read-only: a profile of the same name saved in the working folder overrides
+  it.'

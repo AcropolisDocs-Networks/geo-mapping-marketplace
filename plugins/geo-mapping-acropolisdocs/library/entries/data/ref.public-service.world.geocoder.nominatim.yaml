@@ -1,0 +1,85 @@
+id: ref.public-service.world.geocoder.nominatim
+type: public-service
+rev: 2
+status: active
+title: Nominatim (OpenStreetMap geocoder)
+summary: Keyless worldwide geocoding and reverse geocoding on OpenStreetMap data from the OSM Foundation's Nominatim server, under a strict
+  usage policy (one request a second, no bulk).
+tags:
+  geography:
+  - world
+  level:
+  - site
+  - place
+  domain:
+  - geocoding
+  use_for:
+  - site-map
+  - label-reference
+  avoid_for:
+  - site-precision
+  - parcel-level
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- A short list of venue or site addresses outside the United States (geocode-addresses skill, provider nominatim, at most 1,000 rows a run).
+avoid_when:
+- 'United States addresses: the Census geocoder (ref.public-service.us.geocoder.census) takes batches with no policy limits.'
+- 'Bulk or recurring geocoding: "bulk geocoding of larger amounts of data is not encouraged"; recurring scripts are held to 4 requests a minute.'
+- 'Search-as-you-type in a web page: autocomplete on the public server is forbidden.'
+delivery:
+  mode: service
+  protocol: rest-json
+  request: https://nominatim.openstreetmap.org/search?q={query}&format=jsonv2&limit=1
+  requests:
+    search: https://nominatim.openstreetmap.org/search?q={query}&format=jsonv2&limit=1
+    reverse: https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=jsonv2
+  note: 'No key. geocode.py sends one request a second with a User-Agent naming the application and needs the person''s one acknowledgment for customizations (map-services, MAP-SVC-036).
+    The status endpoint answered on 2026-11-07.'
+source:
+  publisher: OpenStreetMap Foundation
+  product: Nominatim public server
+  url: https://operations.osmfoundation.org/policies/nominatim/
+url_verified_on: '2026-11-07'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: © OpenStreetMap contributors, ODbL 1.0
+  note: 'Usage policy (read 2026-11-07): "an absolute maximum of 1 request per second"; a valid Referer or User-Agent identifying the
+    application; results must be cached; clear attribution; no client-side autocomplete; bulk discouraged.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-08'
+  verify_by: '2027-02-07'
+  check:
+    kind: http_get
+    url: https://nominatim.openstreetmap.org/status?format=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions): the OSMF usage policy read and the status endpoint answered on 2026-11-07; documents the server
+      geocode.py already uses.'
+  - rev: 2
+    date: '2026-11-08'
+    note: 'Wording (0.23.0): Nominatim is a customization beyond the default geocoder; the person''s one acknowledgment (map-services) replaces terms_acknowledged.'

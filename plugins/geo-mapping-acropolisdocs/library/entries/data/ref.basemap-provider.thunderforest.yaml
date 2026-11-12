@@ -1,0 +1,115 @@
+id: ref.basemap-provider.thunderforest
+type: basemap-provider
+rev: 4
+status: active
+title: Thunderforest basemaps (Transport, Outdoors, Cycle)
+summary: OpenStreetMap raster basemaps from Thunderforest, including the Transport style with transit lines; a key is required and the free Hobby plan allows
+  150,000 tiles a month.
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - commercial
+use_when:
+- A transit-focused basemap (Transport style) under a printed or static map, with the person's own key (the thunderforest credential).
+avoid_when:
+- 'A web page: the key is secret here, so the tiles are fetched host-side for print and static maps only.'
+- 'Offline or bulk tiles: bulk downloading is allowed only on Small Business plans or higher.'
+url_template: https://tile.thunderforest.com/{style}/{z}/{x}/{y}.png?apikey={key}
+provider:
+  attribution_html: Maps © <a href="https://www.thunderforest.com/">Thunderforest</a>, Data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap
+    contributors</a>
+  max_zoom: 22
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: false
+  print_ok: true
+  styles:
+  - transport
+  - transport-dark
+  - outdoors
+  - cycle
+  - landscape
+  - atlas
+delivery:
+  mode: fetch
+  requires_credential:
+    name: thunderforest
+    kind: apikey
+    class: secret
+    class_allowed:
+    - secret
+    host: tile.thunderforest.com
+    inject:
+      query: apikey
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://manage.thunderforest.com/users/sign_up
+    probe: https://tile.thunderforest.com/transport/0/0/0.png
+    free: true
+    limits: 'Hobby Project: 150,000 tile requests per month (pricing page, read 2026-11-07)'
+  note: Tile address and the apikey parameter from xyzservices. Without a key the tile host still returned a PNG on 2026-11-07 (likely a marked tile); the
+    attribution may not be removed (pricing FAQ). Terms (read 2026-11-10) - tiles may be cached in-browser and on-device only, never by a caching proxy;
+    honest Referer or User-Agent headers; no bulk or pre-downloading below the Small Business plan.
+source:
+  publisher: Gravitystorm Ltd (Thunderforest)
+  product: Thunderforest map tiles
+  url: https://www.thunderforest.com/pricing/
+url_verified_on: '2026-11-10'
+license:
+  class: restricted
+  external_ok: true
+  attribution_text: Maps © Thunderforest, Data © OpenStreetMap contributors
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  note: Terms of service read 2026-11-10 (thunderforest.com/terms) - commercial use is permitted and encouraged; each map image is CC-BY-SA 4.0,
+    the map data ODbL; credit Thunderforest and OpenStreetMap contributors with working links, or on printed media 'Maps © www.thunderforest.com,
+    Data © www.osm.org/copyright'. The free plan is offered at Thunderforest's discretion.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-10'
+  verify_by: '2027-05-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Draft (reference library additions, P2): pricing read on 2026-11-07 (150,000 tiles a month, no bulk below Small Business, attribution kept);
+      terms not read.'
+  - rev: 2
+    date: '2026-11-08'
+    note: 'Probe address (0.26.0): one tile, tile.thunderforest.com/transport/0/0/0.png, so credentials check --probe can test a tile key (the key is added at send time).'
+  - rev: 3
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+  - rev: 4
+    date: '2026-11-10'
+    note: 'Active: the terms of service read 2026-11-10 - commercial use permitted, map images CC-BY-SA 4.0, printed media credited as Maps © www.thunderforest.com,
+      Data © www.osm.org/copyright (now the export wording), no caching proxies or bulk downloads below Small Business; the person holds a key.'
+attribution:
+  corner: Maps © Thunderforest, Data © OpenStreetMap contributors
+  links:
+  - text: Maps © Thunderforest
+    href: https://www.thunderforest.com/
+  - text: © OpenStreetMap contributors
+    href: https://www.openstreetmap.org/copyright
+  required_on_map: true
+  collapse: after_interaction
+  export:
+    text: Maps © www.thunderforest.com, Data © www.osm.org/copyright
+  terms_read: '2026-11-10'

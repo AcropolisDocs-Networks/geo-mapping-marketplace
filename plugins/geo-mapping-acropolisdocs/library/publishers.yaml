@@ -1,0 +1,74 @@
+# Publisher aliases for the consolidated source line (0.19.0; project spec spec-consolidated-source-credits-2026-11-07, section 3.4).
+# Each organization is named once on the map's footer, with the products used from it in parentheses. A credit item (a layer, a basemap
+# piece, the relief, a context layer) is filed under the first publisher here whose `ids` (library entry id globs) or `match` (case-insensitive
+# substrings of the item's publisher name or source text) fit; an item that fits none is printed under its own publisher name or source text.
+#
+#   name      the name printed on the line
+#   match     substrings that identify the publisher in a publisher name or source text
+#   ids       library entry ids (fnmatch globs) that belong to it
+#   products  [{match: text, product: name}]: the product printed in the parentheses when the item's source or product names it (as a whole
+#             word or phrase since 1.2.0, so "ACS" does not match inside "places"); the first rule that matches wins;
+#             `products: none` prints the organization alone (Natural Earth's dozens of themes are one credit)
+#   inline    true: one product follows the name with no parentheses ("USGS 3DEP")
+#   key       the short id a layer's provenance.derived_from may name (an isochrone layer's walk times derive from osm)
+#
+# A licence's required wording (attribution_text of a library entry, provenance.attribution of a layer whose licence is not public domain
+# or CC0) is never rewritten: it is printed as written, and the check after the line is built (MAP-LIC-014) adds any required credit the line
+# does not contain.
+publishers:
+  - name: U.S. Census Bureau
+    match: ["Census Bureau", "US Census", "U.S. Census", "TIGER", "Cartographic Boundary", "American Community Survey", "P.L. 94-171", "Decennial Census"]
+    products:                     # 1.2.0 (Day 9 issue 3): the survey before the census, so "ACS ... by 2020 census tract" is the ACS
+      - {match: "American Community Survey", product: "American Community Survey"}
+      - {match: "ACS", product: "American Community Survey"}
+      - {match: "P.L. 94-171", product: "2020 Census"}
+      - {match: "2020 Census", product: "2020 Census"}
+      - {match: "Decennial", product: "2020 Census"}
+      - {match: "TIGER", product: "TIGER/Line"}
+      - {match: "Cartographic Boundary", product: "Cartographic Boundary Files"}
+      - {match: "LEHD", product: "LEHD"}
+  - name: USGS
+    match: ["US Geological Survey", "U.S. Geological Survey", "USGS", "3DEP", "The National Map"]
+    ids: ["ref.terrain.us.dem.3dep", "ref.basemap-provider.usgs-*"]
+    inline: true
+    products:
+      - {match: "3DEP", product: "3DEP"}
+      - {match: "3D Elevation", product: "3DEP"}
+      - {match: "National Map", product: "The National Map"}
+      - {match: "Gap Analysis", product: "Gap Analysis Project"}
+      - {match: "Earthquake", product: "Earthquake Hazards Program"}
+  - name: Natural Earth
+    match: ["Natural Earth", "naturalearth", "ne_10m", "ne_50m", "ne_110m"]
+    ids: ["ref.*.ne10", "ref.*.ne50", "ref.*.ne110"]
+    products: none
+  - name: © OpenStreetMap contributors
+    key: osm
+    match: ["OpenStreetMap", "OSM contributors", "Overpass", "Geofabrik"]
+    products: none
+  - name: Overture Maps
+    match: ["Overture"]
+    products: none
+  - name: FCC
+    match: ["Federal Communications Commission", "FCC"]
+    products:
+      - {match: "Broadband Data Collection", product: "Broadband Data Collection"}
+      - {match: "BDC", product: "Broadband Data Collection"}
+      - {match: "ULS", product: "ULS"}
+      - {match: "ASR", product: "Antenna Structure Registration"}
+  - name: NOAA
+    match: ["NOAA", "National Weather Service", "National Oceanic"]
+    products:
+      - {match: "National Weather Service", product: "National Weather Service"}
+  - name: NASA
+    match: ["NASA", "GIBS", "Earthdata"]
+    products:
+      - {match: "GIBS", product: "GIBS"}
+  - name: Sound Transit
+    match: ["Sound Transit"]
+    products: none
+  - name: City of Seattle
+    match: ["City of Seattle", "SDOT", "Seattle Transportation Plan"]
+    products: none
+  - name: Statistics Canada
+    match: ["Statistics Canada", "StatCan"]
+    products: none

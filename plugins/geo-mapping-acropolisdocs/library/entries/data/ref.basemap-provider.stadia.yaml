@@ -1,0 +1,128 @@
+id: ref.basemap-provider.stadia
+type: basemap-provider
+rev: 5
+status: active
+title: Stadia Maps basemaps (Alidade Smooth, Stamen Toner and Terrain, Outdoors)
+summary: OpenStreetMap raster basemaps from Stadia Maps, including the Stamen styles; a free account and key are required and the free plan is for non-commercial
+  use.
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  - W
+  license_class:
+  - restricted
+  quality:
+  - commercial
+use_when:
+- A non-commercial web map page that wants a quiet OpenStreetMap basemap (Alidade Smooth or its dark version) or a Stamen Toner or Terrain look.
+- A page served from a domain the person has put on the Stadia domain allowlist, so the browser-class key is restricted to that site.
+avoid_when:
+- 'A client or other commercial deliverable on the free plan: the pricing page lists "Commercial use not allowed" for Free. Use the bundled basemap or a
+  paid plan (the key is the person''s own acceptance of the terms; their plan decides).'
+- 'A printed map or a cached picture: printing and persistent caching come with paid subscriptions only.'
+- 'No key is registered: the plugin never asks for a key in chat (map-credentials add stadia).'
+delivery:
+  mode: fetch
+  requires_credential:
+    name: stadia
+    kind: apikey
+    class: browser
+    class_allowed:
+    - browser
+    - secret
+    host: tiles.stadiamaps.com
+    inject:
+      query: api_key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://client.stadiamaps.com/signup/
+    probe: https://tiles.stadiamaps.com/tiles/alidade_smooth/0/0/0.png
+    free: true
+    limits: 'Free plan: "200,000 credits per month", no overage, "Commercial use not allowed" (stadiamaps.com/pricing, read 2026-11-07)'
+    note: 'Two forms: query api_key, or the Authorization header with the Stadia-Auth prefix (0.14.0: header name Authorization, prefix Stadia-Auth). The query
+      form is used because a browser-class key rides in the page''s tile addresses; a domain allowlist can stand in for the key on a served page.'
+  note: 'Authentication (docs.stadiamaps.com/authentication, read 2026-11-07): query parameter api_key, or a header with the Stadia-Auth prefix; domain-based
+    authentication checks Origin and Referer. A development server on the local machine may call tiles without a key under strict rate limits. The tile
+    host answered 401 without a key on 2026-11-07.'
+source:
+  publisher: Stadia Maps
+  product: Raster map tiles
+  url: https://docs.stadiamaps.com/authentication/
+license:
+  class: restricted
+  external_ok: true
+  attribution_text: © Stadia Maps © OpenMapTiles © OpenStreetMap contributors
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: false
+  note: Free plan non-commercial (pricing page, read 2026-11-07); caching static maps and printing (up to 5,000 copies) are tied to a paid subscription.
+    Stamen styles also credit Stamen Design. The data is OpenStreetMap's, under the ODbL.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-08'
+  verify_by: '2027-05-07'
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions): the authentication page and the pricing page read on 2026-11-07 (query api_key, Stadia-Auth header, domain
+      allowlist, 200,000 credits a month, free plan non-commercial); the tile host answered 401 without a key.'
+  - rev: 2
+    date: '2026-11-07'
+    note: 'Note only (0.14.0): the header form with the Stadia-Auth prefix is now sendable; the entry keeps the query form for its browser-class tile key
+      (rule R6 names both).'
+  - rev: 3
+    date: '2026-11-08'
+    note: 'Wording (0.23.0): the key is the person''s own acceptance of Stadia''s terms; the plugin no longer asks for terms_acknowledged. The free plan is still non-commercial.'
+  - rev: 4
+    date: '2026-11-08'
+    note: 'Probe address (0.26.0): one tile, tiles.stadiamaps.com/tiles/alidade_smooth/0/0/0.png, so credentials check --probe can test a tile key (the key is added at send time).'
+  - rev: 5
+    date: '2026-11-09'
+    note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+url_template: https://tiles.stadiamaps.com/tiles/{style}/{z}/{x}/{y}.png?api_key={key}
+provider:
+  attribution_html: <a href="https://stadiamaps.com/">© Stadia Maps</a> <a href="https://openmaptiles.org/">© OpenMapTiles</a> <a href="https://www.openstreetmap.org/copyright">©
+    OpenStreetMap</a>
+  max_zoom: 20
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: false
+  print_ok: false
+  commercial_ok: false
+  styles:
+  - alidade_smooth
+  - alidade_smooth_dark
+  - outdoors
+  - stamen_toner
+  - stamen_terrain
+  - osm_bright
+url_verified_on: '2026-11-07'
+attribution:
+  corner: © Stadia Maps © OpenMapTiles © OpenStreetMap contributors
+  links:
+  - text: © Stadia Maps
+    href: https://stadiamaps.com/
+  - text: © OpenMapTiles
+    href: https://openmaptiles.org/
+  - text: © OpenStreetMap contributors
+    href: https://www.openstreetmap.org/copyright
+  required_on_map: true
+  collapse: after_interaction
+  export:
+    text: © Stadia Maps © OpenMapTiles © OpenStreetMap contributors (openstreetmap.org/copyright)
+  note: Stamen styles add © Stamen Design.
+  terms_read: '2026-11-09'

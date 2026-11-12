@@ -1,0 +1,112 @@
+id: ref.infrastructure.us.hifld.cell-tower
+type: infrastructure
+rev: 2
+status: active
+title: Cellular towers (FCC ULS cellular licences, HIFLD layer re-hosted on GeoPlatform)
+summary: Point locations of licensed cellular (Part 22) transmitter sites with licensee, call sign and structure heights, from the HIFLD Cellular Towers
+  layer as re-hosted by the GeoPlatform Federal User Community.
+tags:
+  geography:
+  - us
+  level:
+  - site
+  domain:
+  - telecom
+  use_for:
+  - site-map
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - derived
+use_when:
+- A context layer of licensed cellular sites for a market map, labelled by licensee.
+- A density map of cellular licence locations by county or hexagon.
+avoid_when:
+- 'The map should show all towers or all carriers'' sites: this is only the cellular (Part 22) licence subset of ULS, about 24,000 points, not PCS, AWS
+  or 5G sites.'
+- The map needs a client's own sites or exact positions; filed coordinates are as submitted.
+pairs_with:
+- ref.infrastructure.us.license.fcc-uls
+- ref.boundary.us.county.cb
+crs: EPSG:3857
+delivery:
+  mode: service
+  profile: hifld-geoplatform
+  protocol: arcgis
+  layer: Cellular_Towers_in_the_United_States/FeatureServer/0
+  max_record_count: 2000
+  geometry: point
+  features: 24148
+  columns:
+  - OBJECTID
+  - UniqSysID
+  - Licensee
+  - Callsign
+  - LocNum
+  - LocAdd
+  - LocCity
+  - LocCounty
+  - LocState
+  - TowReg
+  - SupStruc
+  - AllStruc
+  - StrucType
+  - LicStatus
+  - latdec
+  - londec
+  - url
+  request: service_query.py fetch --profile hifld-geoplatform --layer Cellular_Towers_in_the_United_States/FeatureServer/0 --protocol arcgis
+  note: 24,148 points (returnCountOnly, 2026-11-04); maxRecordCount 2000 with pagination, so a national pull is 13 pages. Filter by LocState for one state.
+    latdec and londec hold decimal degrees. The former HIFLD Open address (services1.arcgis.com/Hp6G80Pky0om7QvQ/.../Cellular_Towers) now answers 'Invalid
+    URL'; the GeoPlatform Federal User Community copy (item 84617c4387cb4554bdfe5bdc1ef7d22b, data edited 2025-08-25) is the one served.
+source:
+  publisher: DHS HIFLD (from FCC ULS), re-hosted by the GeoPlatform Federal User Community
+  product: Cellular Towers in the United States
+  url: https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/Cellular_Towers_in_the_United_States/FeatureServer/0
+url_verified_on: '2026-11-04'
+vintage:
+  current: 2025-08-25 (data last edited)
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: DHS HIFLD Cellular Towers (FCC ULS), via GeoPlatform.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-05-04'
+  check:
+    kind: http_get
+    url: https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/Cellular_Towers_in_the_United_States/FeatureServer/0?f=json
+    expect: 200
+    features: 24148
+    against: returnCountOnly=true on the layer
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the HIFLD open data site answers, but its current availability and license terms were not read in this review.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: served from the GeoPlatform Federal User Community feature service (24,148 points, 27 fields, maxRecordCount 2000, pagination; read 2026-11-04).
+      The HIFLD Open address was withdrawn, so the entry names the re-host and marks quality derived. The summary now says what the layer is: cellular licence
+      locations, not every tower.'

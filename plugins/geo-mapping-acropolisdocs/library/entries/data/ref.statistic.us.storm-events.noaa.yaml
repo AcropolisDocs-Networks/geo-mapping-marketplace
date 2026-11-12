@@ -1,0 +1,127 @@
+id: ref.statistic.us.storm-events.noaa
+type: statistic
+rev: 2
+status: active
+title: NOAA Storm Events Database (bulk CSV)
+summary: Every recorded storm event since 1950 (type, begin and end points, damage, injuries) as one gzipped CSV per year from NCEI, for program-risk and
+  outage-history maps.
+tags:
+  geography:
+  - us
+  level:
+  - county
+  - site
+  domain:
+  - hazard
+  - program
+  use_for:
+  - site-map
+  - density-surface
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A map of tornado, hail, flood or wind events over the last N years near a client's sites, as points (BEGIN_LAT, BEGIN_LON), or a county choropleth built
+  by counting rows per county (STATE_FIPS + CZ_FIPS for CZ_TYPE C) and joining ref.boundary.us.county.cb.
+- A program-risk brief that compares event frequency across candidate markets.
+avoid_when:
+- 'Events are drawn as footprints: most rows carry a begin point and a county zone, not an area.'
+- 'The latest months are read as complete: NCEI publishes with a lag of about 75 days and revises files (the c-date in the file name changes).'
+pairs_with:
+- ref.boundary.us.county.cb
+- ref.public-service.us.weather.nws
+join:
+  key: STATE_FIPS,CZ_FIPS
+  type: string
+  note: Two-digit state FIPS and three-digit county (CZ_TYPE C) or forecast zone (CZ_TYPE Z) code; build the five-digit county GEOID only for CZ_TYPE C
+    rows.
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: CSV (gzip), one details file per year; the file name carries the creation date
+  delimiter: ','
+  geometry_columns:
+    lon: BEGIN_LON
+    lat: BEGIN_LAT
+  features: 72360
+  size_mb: 12.0
+  note: 'ref_fetch.py fetch ref.statistic.us.storm-events.noaa downloads the 2025 details file StormEvents_details-ftp_v1.0_d2025_c20260819.csv.gz
+    (12.6 MB, hash-checked, 72,360 events, 51 columns), decompresses it and caches the events as points at BEGIN_LON/BEGIN_LAT; the 28,443 zone and
+    county events without coordinates are kept as rows without geometry, for the county-zone count by STATE_FIPS + CZ_FIPS. NCEI replaces a year''s
+    file under a new creation date when it revises it, so this address answers 404 after a revision: ref-library verify reports it and the entry is
+    refreshed to the new name. Other years (the directory https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/ lists them) are supplied by
+    the person and read with ref_fetch.py read ref.statistic.us.storm-events.noaa FILE.'
+  columns:
+  - EPISODE_ID
+  - EVENT_ID
+  - STATE
+  - STATE_FIPS
+  - YEAR
+  - EVENT_TYPE
+  - CZ_TYPE
+  - CZ_FIPS
+  - CZ_NAME
+  - BEGIN_DATE_TIME
+  - END_DATE_TIME
+  - INJURIES_DIRECT
+  - DEATHS_DIRECT
+  - DAMAGE_PROPERTY
+  - MAGNITUDE
+  - BEGIN_LAT
+  - BEGIN_LON
+  - END_LAT
+  - END_LON
+source:
+  publisher: NOAA National Centers for Environmental Information
+  product: Storm Events Database, bulk CSV files
+  url: https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/StormEvents_details-ftp_v1.0_d2025_c20260819.csv.gz
+  file_sha256: d9b46b4c6aae554723cadbb9691f3d5258371c02e530ba815d6fe41e4550149f
+  directory: https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/
+url_verified_on: '2026-11-05'
+vintage:
+  current: 2025 events (details file created 2026-08-19); the 2026 file (created 2026-10-26) is partial
+  cadence: monthly
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: NOAA National Centers for Environmental Information, Storm Events Database.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-05'
+  verify_by: '2027-11-05'
+  check:
+    kind: http_head
+    url: https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/StormEvents_details-ftp_v1.0_d2025_c20260819.csv.gz
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: Verified the csvfiles directory listing on 2026-11-04 (latest details files d2024_c20260728, d2025_c20260819, d2026_c20261026). User-supplied
+      until the fetch reader handles gzip and the moving file name.
+  - rev: 2
+    date: '2026-11-05'
+    note: 'Fetch: ref_fetch reads gzip and declared coordinate columns (M13 integration). The 2025 details file (d2025_c20260819) downloaded on 2026-11-05:
+      12,585,209 bytes, 72,360 events, SHA-256 recorded; 43,917 carry BEGIN_LAT/BEGIN_LON. The check now asks for that file, so a revision under a new
+      name shows up as a failed check.'

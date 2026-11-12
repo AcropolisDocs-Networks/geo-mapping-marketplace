@@ -1,0 +1,76 @@
+id: ref.infrastructure.us.tower.fcc-asr
+type: infrastructure
+rev: 2
+status: draft
+title: FCC Antenna Structure Registration (towers)
+summary: Registered antenna structures (towers and masts) with height and location, for tower context maps. The file is downloaded from the FCC by the person;
+  the plugin reads it once supplied.
+tags:
+  geography:
+  - us
+  level:
+  - site
+  domain:
+  - telecom
+  use_for:
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A map of registered towers in a market, as context for coverage or site planning.
+- Counting registered structures by county or state.
+avoid_when:
+- The map needs a client's own sites; ASR holds only structures that required FAA or FCC registration.
+- Positions must be exact for engineering; registered coordinates are as filed.
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: zip of pipe-delimited tables (RA, CO, EN; no header row)
+  note: 'Download r_tower.zip from the ULS ''complete'' download page at data.fcc.gov/download/pub/uls/complete/ in a browser, then supply the zip. The
+    RA table carries registration number, status and structure height; CO carries coordinates in degrees, minutes, seconds with N/S and E/W flags: convert
+    to decimal before mapping. Field layouts are in the ULS public access database definitions (pa_ddef) on the same page.'
+  size_mb: about 60 (varies weekly)
+source:
+  publisher: FCC
+  product: Antenna Structure Registration database (ULS complete download r_tower.zip)
+vintage:
+  current: weekly complete file
+  cadence: monthly
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: FCC Antenna Structure Registration.'
+  note: Public domain; the download host refuses automated requests, so the file is supplied by the person.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-05-04'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the FCC site refused automated requests from the build environment (HTTP 403); the download location and layout are not verified.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Still draft: The FCC web hosts (fcc.gov, data.fcc.gov, broadbandmap.fcc.gov) refuse automated requests from the build environment (HTTP 403 on
+      2026-11-04), so the r_tower.zip download could not be verified. The route and the table layout are recorded so the person can download it; delivery
+      is user-supplied until a reachable copy exists.'

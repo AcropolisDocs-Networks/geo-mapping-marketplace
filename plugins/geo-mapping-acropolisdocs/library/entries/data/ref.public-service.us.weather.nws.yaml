@@ -1,0 +1,96 @@
+id: ref.public-service.us.weather.nws
+type: public-service
+rev: 2
+status: active
+title: NOAA National Weather Service watches, warnings and advisories
+summary: Live watch, warning and advisory polygons from the NWS event-driven map service, with the api.weather.gov alerts feed as the JSON alternative,
+  for a weather-event overlay on a network map.
+tags:
+  geography:
+  - us
+  level:
+  - place
+  domain:
+  - hazard
+  use_for:
+  - context-basemap
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A weather event overlay (warnings by phenomenon and significance) on a network or market map, stamped with the capture time.
+- Counting sites inside active warning polygons for an outage or readiness brief.
+avoid_when:
+- 'The map will be read later as current: the layer changes by the minute, so the capture time must be in the title or a note.'
+- 'The map needs historical events: this is the active set only; NOAA Storm Events (ref.statistic.us.storm-events.noaa) holds history.'
+delivery:
+  mode: service
+  profile: nws-mapservices
+  protocol: arcgis
+  layer: WWA/watch_warn_adv/MapServer/1
+  max_record_count: 4000
+  geometry: polygon
+  columns:
+  - prod_type
+  - msg_type
+  - phenom
+  - sig
+  - event
+  - wfo
+  - onset
+  - ends
+  - expiration
+  - issuance
+  - url
+  - cap_id
+  request: service_query.py fetch --profile nws-mapservices --layer WWA/watch_warn_adv/MapServer/1 --protocol arcgis
+  note: 'Layer 1 ''WatchesWarnings'' (702 active polygons at the 2026-11-04 read; maxRecordCount 4000, pagination). JSON alternative: https://api.weather.gov/alerts/active?area=AZ
+    returns GeoJSON (application/geo+json) and asks for an identifying User-Agent header.'
+source:
+  publisher: NOAA, National Weather Service
+  product: Watches, Warnings and Advisories (event-driven map service) and the NWS API
+  url: https://mapservices.weather.noaa.gov/eventdriven/rest/services/WWA/watch_warn_adv/MapServer/1
+url_verified_on: '2026-11-04'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: NOAA National Weather Service.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-02-04'
+  check:
+    kind: http_get
+    url: https://mapservices.weather.noaa.gov/eventdriven/rest/services/WWA/watch_warn_adv/MapServer/1?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Draft: the NWS GIS page answers, but the service endpoints and terms were not verified; M4b verifies public services one at a time.'
+  - rev: 2
+    date: '2026-11-04'
+    note: 'Active: the event-driven WWA map service (layer 1, polygon, maxRecordCount 4000) and api.weather.gov/alerts/active (GeoJSON) both answered on
+      2026-11-04; weather.gov/disclaimer and weather.gov/gis read (public domain). Served through the shipped nws-mapservices profile.'

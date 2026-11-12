@@ -1,0 +1,108 @@
+id: ref.boundary.us.state.cb20m
+type: boundary
+rev: 2
+status: active
+title: US states, generalized (Census cartographic boundary)
+summary: Generalized state polygons, with the District of Columbia and Puerto Rico, for national and regional thematic maps.
+tags:
+  geography:
+  - us
+  level:
+  - state
+  domain:
+  - general
+  - demographics
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  - join-key
+  - context-basemap
+  - locator-inset
+  - atlas
+  avoid_for:
+  - parcel-level
+  - engineering-grade
+  - legal-boundary
+  - site-precision
+  scale:
+  - national
+  - regional
+  detail:
+  - generalized
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T0
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Rolling a metric up by state on a national or regional map.
+- A choropleth that joins to a client table on the two-digit state FIPS code or the postal abbreviation.
+avoid_when:
+- The map needs exact legal boundaries or shoreline detail; the 1:20,000,000 files are generalized and clipped to the coast.
+- The map is of one state or a metro area; use counties or detailed boundaries.
+pairs_with:
+- ref.boundary.us.county.cb
+distinct_from:
+- id: ref.boundary.world.state.ne50
+  why: worldwide, lower fidelity, no FIPS codes
+join:
+  key: GEOID
+  type: string
+  width: 2
+  note: Keep leading zeros. STUSPS holds the two-letter postal code. Includes DC (11) and Puerto Rico (72).
+  pattern: ^\d{2}$
+crs: EPSG:4269
+delivery:
+  mode: bundled
+  path: assets/basemaps/us_states_cb.parquet
+  sha256: a6b5d5aa3c6262a29bd9233d64a37354610b6e88bc4a982bc5ddd56f5dbddcc1
+  size_mb: 0.15
+  format: GeoParquet (zstd)
+  features: 52
+  columns:
+  - GEOID
+  - STATEFP
+  - STUSPS
+  - NAME
+  - ALAND
+  - AWATER
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, States, 1:20,000,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_state_20m.zip
+  file_sha256: 9340b6d995e971b2b4230518f4fa85e6cd9e7fe6811afabc90a6a8b1191530f6
+url_verified_on: 2026-11-02
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-02
+  verify_by: 2027-11-02
+  check:
+    kind: feature_count_and_hash
+    features: 52
+    against: the source archive's SHA-256 above
+  changelog:
+  - rev: 1
+    date: 2026-11-02
+    note: Bundled payload built and verified (M1).
+  - rev: 2
+    date: '2026-11-02'
+    note: Adds join.pattern so the join check can tell a numeric code from a postal abbreviation.

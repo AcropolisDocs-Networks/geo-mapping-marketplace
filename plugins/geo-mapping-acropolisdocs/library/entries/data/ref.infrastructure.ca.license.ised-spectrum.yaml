@@ -1,0 +1,103 @@
+id: ref.infrastructure.ca.license.ised-spectrum
+type: infrastructure
+rev: 2
+status: active
+title: ISED spectrum licence and site data (Canada)
+summary: Spectrum licence site data and radio authorizations for Canadian operators from ISED's Spectrum Management System, as monthly ZIP extracts
+  (CSV with latitude and longitude) under the Open Government Licence - Canada; the person downloads the extract.
+tags:
+  geography:
+  - ca
+  level:
+  - site
+  domain:
+  - telecom
+  use_for:
+  - site-map
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- A Canadian market map of licensed sites or licence areas (Tier 1 to Tier 5 service areas) for one operator, once the SMS extract is supplied.
+avoid_when:
+- 'A quick map from the files alone: the site extract is about 71 MB zipped and the plugin does not fetch it; the person downloads it and supplies the CSV.'
+- 'Positions must be exact: licensed coordinates are as filed.'
+pairs_with:
+- ref.boundary.ca.province.statcan2021
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: ZIP of CSV (points from LATITUDE and LONGITUDE, EPSG:4326)
+  columns:
+  - LICENSEE
+  - SERVICE
+  - TRANSMIT_FREQ
+  - TRANSMIT_LOWER
+  - TRANSMIT_UPPER
+  - LOCATION
+  - PROV
+  - LATITUDE
+  - LONGITUDE
+  - SITE_ELEV
+  - STUCT_HT
+  - TX_ANT_HT
+  - TX_ANT_AZIM
+  - TX_ANT_GAIN
+  note: 'Files verified from the user''s computer on 2026-11-07: Terrestrial Spectrum Licence Site Data Extract
+    www.ic.gc.ca/engineering/SMS_TAFL_Files/Site_Data_Extract_FX.zip (70,995,189 bytes, modified 2026-11-03) and the radio authorization extract
+    (all services) TAFL_LTAF.zip in the same folder (63,775,565 bytes). Other extracts by service (land mobile, fixed, satellite, broadcast) and field
+    description PDFs are listed on the download page (ised-isde.canada.ca/site/spectrum-management-system/en/download-sms-data). Column names are
+    as in the hosted copy below and the field descriptions; the tier service-area boundaries are a separate download. An ArcGIS feature service
+    "Spectrum_Licences_Site_Data" on services.arcgis.com (843,979 points, credited to ISED, maxRecordCount 1000) carries the same site extract,
+    but its owning organization was not confirmed as ISED, so it is not the recorded route.'
+source:
+  publisher: Innovation, Science and Economic Development Canada
+  product: Spectrum Management System data extracts
+  url: https://ised-isde.canada.ca/site/spectrum-management-system/en/download-sms-data
+url_verified_on: '2026-11-07'
+vintage:
+  current: monthly extracts (2026-11-03 files)
+  cadence: monthly
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: Innovation, Science and Economic Development Canada, Spectrum Management System data (Open Government Licence - Canada).'
+  note: 'Open Government Licence - Canada: the SMS Authorization Data Extract dataset on open.canada.ca (ISED, Spectrum and Telecommunications Sector;
+    updated monthly), read 2026-11-07. The site data extract sits on the same ISED download page, which states no licence of its own.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-05-07'
+  check:
+    kind: http_head
+    url: https://www.ic.gc.ca/engineering/SMS_TAFL_Files/Site_Data_Extract_FX.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: the SMS data page answered (HTTP 200, 2026-11-04; the old sms-sgs.ic.gc.ca address redirects there) but no extract file or its layout
+      was verified.'
+  - rev: 2
+    date: '2026-11-07'
+    note: 'Active (reference library additions, section 7): the site data and authorization extracts answered from the user''s computer on
+      2026-11-07 with sizes and dates recorded; the Open Government Licence - Canada read on the open.canada.ca dataset page. Still user-supplied.'

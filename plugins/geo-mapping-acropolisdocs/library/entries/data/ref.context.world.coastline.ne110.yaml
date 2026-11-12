@@ -1,0 +1,44 @@
+id: ref.context.world.coastline.ne110
+type: context
+rev: 1
+status: active
+title: World coastline, 110m (Natural Earth)
+summary: A thin coastline for world maps and locator insets.
+tags:
+  geography: [world]
+  level: [line]
+  domain: [general]
+  use_for: [context-basemap, locator-inset, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: [A world map needs land and sea to read at a glance.]
+avoid_when: [The map is regional or smaller; the 110m line is far too coarse and will not match other layers.]
+pairs_with: [ref.boundary.world.country.ne110]
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_110m_coastline.parquet
+  sha256: 2dac13dbd3fa05f8030b1e8461fdc227fca0e1c1413bbe90dfcc445e562b3235
+  size_mb: 0.09
+  format: GeoParquet (zstd)
+  features: 134
+  columns: [scalerank, featurecla, min_zoom]
+source: {publisher: Natural Earth, product: 'Coastline, 110m', url: 'https://naciscdn.org/naturalearth/110m/physical/ne_110m_coastline.zip',
+  file_sha256: 664449b39070027e882abb295974d182afec18ca21107273d17e9e8bf6f64817}
+url_verified_on: 2026-11-02
+vintage: {current: Natural Earth 4.1.0, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-02
+  verify_by: 2027-11-02
+  check: {kind: feature_count_and_hash, features: 134, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-02, note: Bundled payload built and verified (M1).}

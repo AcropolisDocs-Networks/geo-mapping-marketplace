@@ -1,0 +1,30 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-04 from the build environment.
+profile: tigerweb
+type: arcgis-rest
+base_url: https://tigerweb.geo.census.gov/arcgis/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 5000
+  server_max_features: 100000
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: public-domain
+  confidential: false
+  attribution: 'Source: U.S. Census Bureau, TIGERweb.'
+host_visibility: shown
+host_confirmed_on: '2026-11-04'
+verified_on: '2026-11-04'
+notes: 'US Census Bureau TIGERweb. MapServer layers under TIGERweb/ (tigerWMS_Current: 80 States, 82 Counties, 28 Incorporated Places, 36 Federal
+  American Indian Reservations, 88 Urban Areas; Transportation; Hydro; AIANNHA). maxRecordCount 100000, pagination supported. Shipped with the
+  plugin (M13), read-only: a profile of the same name saved in the working folder overrides it.'

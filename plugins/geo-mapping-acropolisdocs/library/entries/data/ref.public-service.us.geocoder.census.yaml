@@ -1,0 +1,82 @@
+id: ref.public-service.us.geocoder.census
+type: public-service
+rev: 1
+status: active
+title: US Census Bureau Geocoder
+summary: Free, keyless geocoding of United States addresses to points (one line or batches of up to 10,000 rows) and reverse lookup of the
+  census geographies at a point, from the Census Bureau; the plugin's default geocoder for US site and venue lists.
+tags:
+  geography:
+  - us
+  level:
+  - site
+  domain:
+  - geocoding
+  use_for:
+  - site-map
+  - join-key
+  avoid_for:
+  - site-precision
+  - parcel-level
+  - engineering-grade
+  scale:
+  - national
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - quarterly
+  tier:
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A list of US store, venue or site addresses to plot (geocode-addresses skill, provider census).
+- The county, tract or block group at a set of points (reverse lookup with the geographies endpoint).
+avoid_when:
+- 'Addresses outside the United States: use Nominatim (ref.public-service.world.geocoder.nominatim).'
+- 'Addresses of private individuals: the plugin never geocodes them.'
+- 'Rooftop accuracy matters: matches are interpolated along address ranges; check the match quality column.'
+delivery:
+  mode: service
+  protocol: rest-json
+  request: https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address={address}&benchmark=Public_AR_Current&format=json
+  requests:
+    oneline: https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address={address}&benchmark=Public_AR_Current&format=json
+    batch: https://geocoding.geo.census.gov/geocoder/locations/addressbatch
+    reverse: https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x={lon}&y={lat}&benchmark=Public_AR_Current&vintage=Current_Current&format=json
+  note: 'No key. Batch takes an uploaded CSV of up to 10,000 rows (the one POST geocode.py sends). The benchmarks endpoint answered on 2026-11-07.
+    Used by scripts/geocode.py --provider census.'
+source:
+  publisher: US Census Bureau
+  product: Census Geocoder
+  url: https://geocoding.geo.census.gov/geocoder/benchmarks
+url_verified_on: '2026-11-07'
+vintage:
+  current: Public_AR_Current benchmark
+  cadence: quarterly
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Geocoding: US Census Bureau Geocoder.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-07'
+  verify_by: '2027-02-07'
+  check:
+    kind: http_get
+    url: https://geocoding.geo.census.gov/geocoder/benchmarks
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-07'
+    note: 'Seed (reference library additions): documents the geocoder the plugin already uses (geocode.py); the benchmarks endpoint answered on
+      2026-11-07. The documentation page was not re-read.'

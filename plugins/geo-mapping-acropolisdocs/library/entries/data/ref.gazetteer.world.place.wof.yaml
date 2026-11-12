@@ -1,0 +1,82 @@
+id: ref.gazetteer.world.place.wof
+type: gazetteer
+rev: 1
+status: draft
+title: Who's On First gazetteer
+summary: An open gazetteer of places with stable ids, hierarchies and concordances to other id systems (GeoNames, Wikidata, Quattroshapes), published as
+  per-country SQLite databases and GeoJSON; CC BY 4.0 with per-source terms.
+tags:
+  geography:
+  - world
+  level:
+  - place
+  - country
+  - state
+  - county
+  domain:
+  - general
+  use_for:
+  - label-reference
+  - join-key
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - world
+  - national
+  - regional
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - community
+use_when:
+- Crosswalking place ids between GeoNames, Wikidata and a client's naming once the per-country database is supplied.
+avoid_when:
+- 'Nothing is verified beyond the licence page: the distribution host (data.geocode.earth/wof/dist) answered 404 and github.com 403 from the build environment.'
+pairs_with:
+- ref.gazetteer.world.place.geonames
+- ref.public-service.world.wikidata
+join:
+  key: wof:id
+  type: integer
+  note: Who's On First id; wof:concordances carries gn:id (GeoNames) and wd:id (Wikidata).
+delivery:
+  mode: user-supplied
+  format: SQLite database per country (whosonfirst-data-admin-<cc>) or GeoJSON per record
+  note: See https://whosonfirst.org/docs/licenses/ (verified 2026-11-04) and the project's download page for the current distribution; the admin-us, admin-ca
+    and admin-mx databases are the relevant ones. Supply the file.
+source:
+  publisher: Who's On First (Geocode Earth)
+  product: Who's On First administrative gazetteer
+  url: https://whosonfirst.org/docs/licenses/
+url_verified_on: '2026-11-04'
+vintage:
+  current: not verified
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Data from Who's On First (whosonfirst.org), CC BY 4.0, with per-source licences.
+  note: The licences page lists CC BY 4.0 for the WOF data itself and the licence of each upstream source.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-04'
+  verify_by: '2027-11-04'
+  check:
+    kind: http_head
+    url: https://whosonfirst.org/docs/licenses/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-04'
+    note: 'Draft: the licences page answered (HTTP 200, 2026-11-04); the distribution addresses did not (404 and 403), so no file is recorded.'

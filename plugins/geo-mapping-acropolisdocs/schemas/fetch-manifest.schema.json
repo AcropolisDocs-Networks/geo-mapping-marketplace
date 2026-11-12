@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acropolisdocs.com/schemas/fetch-manifest.schema.json",
+  "title": "Request-kit fetch manifest (manifest.yaml)",
+  "type": "object",
+  "required": ["manifest_version", "kit_id", "created_by", "service", "request", "run", "result", "attestation"],
+  "additionalProperties": false,
+  "properties": {
+    "manifest_version": {"const": 1},
+    "kit_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,80}$"},
+    "created_by": {"enum": ["plugin-kit", "user-curl", "approved-curl"]},
+    "service": {
+      "type": "object", "required": ["type"], "additionalProperties": false,
+      "properties": {"type": {"enum": ["wfs", "ogcapi", "arcgis"]}, "version": {"type": ["string", "null"]}, "host_class": {"enum": ["public", "internal", "unknown"]}}
+    },
+    "request": {
+      "type": "object", "required": ["layer"], "additionalProperties": false,
+      "properties": {
+        "operation": {"type": "string"}, "layer": {"type": "string", "minLength": 1}, "filter": {"type": ["string", "null"]},
+        "bbox": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+        "srs": {"type": ["string", "null"]}, "properties": {"type": ["array", "null"], "items": {"type": "string"}},
+        "sort_by": {"type": ["string", "null"]}, "page_size": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "run": {
+      "type": "object", "additionalProperties": true,
+      "properties": {"started_at": {"type": ["string", "null"]}, "finished_at": {"type": ["string", "null"]}, "tool": {"type": ["object", "string", "null"]}}
+    },
+    "result": {
+      "type": "object", "required": ["total_features", "pages", "truncated", "files"], "additionalProperties": false,
+      "properties": {
+        "hits_expected": {"type": ["integer", "null"], "minimum": 0},
+        "total_features": {"type": "integer", "minimum": 0},
+        "pages": {"type": "integer", "minimum": 0},
+        "truncated": {"type": "boolean"},
+        "shortfall_note": {"type": ["string", "null"]},
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["name", "bytes", "sha256"], "additionalProperties": false,
+            "properties": {
+              "name": {"type": "string", "minLength": 1, "maxLength": 200}, "bytes": {"type": "integer", "minimum": 0},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "feature_count": {"type": ["integer", "null"], "minimum": 0}, "crs": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "attestation": {"type": "object", "additionalProperties": true, "properties": {"by": {"enum": ["user", "plugin"]}, "note": {"type": ["string", "null"]}}}
+  }
+}

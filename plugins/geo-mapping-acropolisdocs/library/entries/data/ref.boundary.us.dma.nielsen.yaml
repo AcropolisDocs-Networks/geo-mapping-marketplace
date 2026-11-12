@@ -1,0 +1,72 @@
+id: ref.boundary.us.dma.nielsen
+type: boundary
+rev: 1
+status: active
+title: Designated Market Areas (Nielsen), user-supplied
+summary: 'Television market boundaries used in media and some telecom market reporting. Licensed: the plugin never bundles or fetches them.'
+tags:
+  geography:
+  - us
+  level:
+  - dma
+  domain:
+  - general
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  avoid_for:
+  - legal-boundary
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  audience:
+  - internal
+  confidentiality:
+  - restricted-license
+  freshness:
+  - annual
+  tier:
+  - T2
+  license_class:
+  - licensed
+  quality:
+  - commercial
+use_when:
+- The client reports performance by Designated Market Area and holds a license for the boundary file.
+- An internal market review where DMA is the agreed market definition.
+avoid_when:
+- The map goes to an external audience; the license does not allow redistribution of the boundaries.
+- County or metro areas serve the reader as well; use the public Census geographies instead.
+join:
+  key: dma_code
+  type: string
+  width: 3
+  note: Three-digit DMA code as the client's license file states it; confirm the field name in the supplied file.
+crs: unknown
+delivery:
+  mode: user-supplied
+  format: as licensed (Shapefile or GeoPackage)
+source:
+  publisher: Nielsen
+  product: Designated Market Area boundaries (licensed)
+vintage:
+  current: as supplied
+  cadence: annual
+license:
+  class: licensed
+  attribution_text: DMA boundaries licensed from the data owner; attribution as the license states.
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: false
+  note: External use needs written permission from the license holder.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-02'
+  verify_by: '2027-11-02'
+  changelog:
+  - rev: 1
+    date: '2026-11-02'
+    note: 'Seed: describes how to use user-supplied licensed boundaries; no data is held.'

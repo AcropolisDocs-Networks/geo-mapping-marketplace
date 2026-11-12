@@ -1,0 +1,30 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-04 from the build environment.
+profile: mrlc-wms
+type: geoserver
+base_url: https://www.mrlc.gov/geoserver
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 1
+  server_max_features: 1
+  max_concurrency: 1
+  timeout_s: 60
+  max_bytes: 50000000
+  max_total_features: 200000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: public-domain
+  confidential: false
+  attribution: 'Source: Multi-Resolution Land Characteristics Consortium (MRLC), National Land Cover Database.'
+host_visibility: shown
+host_confirmed_on: '2026-11-04'
+verified_on: '2026-11-04'
+notes: 'MRLC Consortium GeoServer (NLCD land cover WMS). WMS only: mrlc_display/NLCD_2021_Land_Cover_L48/wms answered GetCapabilities (text/xml)
+  on 2026-11-04; the Annual NLCD layers are listed in the same capabilities. Use GetMap for a print image (M12 raster path); there is no feature
+  layer to query. Shipped with the plugin (M13), read-only: a profile of the same name saved in the working folder overrides it.'
