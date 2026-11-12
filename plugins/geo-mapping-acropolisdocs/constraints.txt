@@ -1,17 +1,18 @@
-# 1.8.0: the versions the 1.8.0 test suite ran with (2026-11-11, Python 3.13); 1.12.1 (2026-11-12): pillow 13.0.0 and pypdf 6.21.4 after pip-audit named known
-# vulnerabilities in 12.3.0 and 6.17.0. The first-run install uses them (pip -c) so every computer
-# gets the tested set; if one of them cannot be installed on a computer, the installer says so and installs the newest that fit instead.
+# The newest versions that passed the test suite (1.12.2, 2026-11-12, Python 3.13). The first-run install uses them (pip -c) so every computer gets the
+# tested set; if one of them cannot be installed on a computer, the installer says so and installs the newest that fit instead.
+# A pin must never be older than what a computer already has: tools/release.py check --audit fails a pin that is behind the newest release (R8) or has a
+# known vulnerability (R7). To hold one back on purpose, add a line  # hold NAME: the reason  and R8 skips it.
 # mcp/requirements.txt pins the data server's own packages exactly and is not repeated here.
-numpy==2.5.3
-pandas==3.0.5
+numpy==2.5.4
+pandas==3.1.1
 pyproj==3.8.0
 matplotlib==3.11.2
 pillow==13.0.0
 weasyprint==70.0
-pikepdf==10.16.0
-pypdf==6.21.4
-pypdfium2==5.13.0
-fonttools==4.67.0
+pikepdf==10.18.0
+pypdf==7.0.1
+pypdfium2==5.15.2
+fonttools==4.68.0
 brotli==1.2.1
 topojson==2.2
 python-pptx==1.0.2
