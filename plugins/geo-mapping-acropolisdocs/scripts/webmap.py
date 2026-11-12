@@ -1345,6 +1345,17 @@ def _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, c
                 n = len(col["features"])
                 pts = d["kind"] == "point"
                 cluster_on = bool(ctl["cluster"]) and pts and n > wml.CLUSTER_MIN_POINTS and not d.get("time")
+                periods = None
+                if bool(ctl["cluster"]) and pts and d.get("time") and not d["context"] and wml.needs_tiles(col):
+                    # 1.11.0: a tiled point layer on the time slider is clustered too: one cluster set per period
+                    tt = [int(f["properties"].get("_t", -1)) for f in col["features"]]
+                    n_per = max(tt) + 1 if tt else 0
+                    if n_per >= 1 and n * n_per <= wml.PERIOD_CLUSTER_MAX:
+                        periods = {"t": tt, "n": n_per, "cumulative": str((cfg["time"] or {}).get("mode") or "period") == "cumulative"}
+                        cluster_on = True
+                    elif n_per >= 1:
+                        notes.append(f"layer '{d['id']}': not clustered on the time slider ({n:,} points over {n_per} periods is past the "
+                                     f"{wml.PERIOD_CLUSTER_MAX:,} the page bakes); its points show from the zoom where a tile holds them")
                 has_classes = any("_c" in f["properties"] for f in col["features"][:50])
                 cl_fill = t["emphasis"] if has_classes else d["style"]["fill"]
                 cl_text = t["legend_bg"] if contrast(t["legend_bg"], cl_fill) >= contrast(t["label"], cl_fill) else t["label"]
@@ -1354,7 +1365,7 @@ def _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, c
                     lcfg = (lod_.config(lspec["extrude"]) if isinstance(lspec.get("extrude"), dict) else
                             lod_.config(lspec["lod"]) if isinstance(lspec.get("lod"), dict) else None)    # 1.6.0 (R4-BLD): a level-of-detail pyramid
                     tl = wml.tile_layer(d["id"], col, d["kind"], zmin=zmin_ml, zmax=zmax_ml, cluster=cluster_on, scratch=scratch, attribution=d.get("credit"),
-                                        lod_cfg=lcfg)
+                                        lod_cfg=lcfg, periods=periods)
                     for z_, r_ in ((tl.get("lod") or {}).get("report") or {}).items():
                         if r_["area_kept"] < lod_.KEEP_AREA_MIN:     # MAP-WEB-018 extended: the share of the footprint area each zoom keeps
                             findings.append(finding("MAP-WEB-018", "WARN", f"layer '{d['id']}': at zoom {z_ + 1} its blocks keep {r_['area_kept']:.1%} of the footprint "
@@ -1384,6 +1395,9 @@ def _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, c
                     collections[d["id"]] = {"type": "FeatureCollection", "features": []}
                     if cluster_on:
                         clusters[d["id"]] = {"points_zoom": tl["points_zoom"], "fill": cl_fill, "stroke": t["legend_bg"], "text": cl_text}
+                        if periods:
+                            clusters[d["id"]].update(periods=True, period0=0)
+                            notes.append(f"layer '{d['id']}': clustered on the time slider, one cluster set for each of its {periods['n']} periods")
                 elif cluster_on:
                     lon = [f["geometry"]["coordinates"][0] for f in col["features"]]
                     lat = [f["geometry"]["coordinates"][1] for f in col["features"]]

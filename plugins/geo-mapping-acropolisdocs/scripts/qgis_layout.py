@@ -9,8 +9,12 @@ Why: some teams finish maps in QGIS. The kit is the plugin's decisions written d
 sources, the confidentiality banner - and a fixed PyQGIS script lays them out, so the QGIS map and the plugin's own SVG map match.
 `run` also leaves layout.qgz, a project with the layout in it, that opens in QGIS for further editing.
 
-What it does not do: it never draws web basemap tiles (no network), never reads credentials, and never changes the MapSpec.
-The legend, scale bar and north arrow are QGIS items placed in the three least-covered corners; check for overlap. After every
+1.11.0, the whole sheet: the ground (land, water, border lines, relief), raster layers and a prepared tile composite as layers under the
+data in the SVG path's drawing order; the locator as the plugin's own picture; the labels and place names placed by the plugin's label
+engine and pinned in a `Labels` layer.
+
+What it does not do: it never fetches anything (a tile basemap is drawn only from tiles prepared beforehand), never reads credentials, and
+never changes the MapSpec. The legend, scale bar and north arrow are QGIS items placed in the least-covered corners; check for overlap. After every
 run the files are verified (page size, Inter embedded, dimensions) and the hidden accreditation is stamped. PNG and SVG outputs
 from this path are labeled experimental in qgis_report.json, and the plugin's own renderer remains the supported path.
 """
@@ -109,6 +113,46 @@ def _wrap_fit(lines: list[str], width: float, pt: float, floor: float, height: f
         pt = round(pt - 0.5, 2)
 
 
+def _label_rows(svg: str, frame) -> tuple[list[dict], int]:
+    """The <text> elements of the plugin's label markup as rows in map coordinates: the anchor point, the words, size in points, the fill, the
+    halo (from the stroked copy under each label), the anchor side and a rotation. -> (rows, labels that are not plain text)."""
+    from lxml import etree
+    root = etree.fromstring(f'<g xmlns="http://www.w3.org/2000/svg">{svg}</g>'.encode("utf-8"), etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=True))
+    ns = "{http://www.w3.org/2000/svg}"
+    rows: list[dict] = []
+    halos: dict = {}
+    skipped = len(root.findall(f".//{ns}textPath")) + len([p for p in root.iter(f"{ns}g") if "gm-script" in (p.get("class") or "")])
+    for el in root.iter(f"{ns}text"):
+        if el.find(f"{ns}textPath") is not None:
+            continue
+        s = "".join(el.itertext())
+        if not s.strip():
+            continue
+        try:
+            x, y, size = float(el.get("x")), float(el.get("y")), float(el.get("font-size"))
+        except (TypeError, ValueError):
+            skipped += 1
+            continue
+        key = (round(x, 3), round(y, 3), s)
+        if el.get("stroke") not in (None, "none"):
+            halos[key] = (el.get("stroke"), float(el.get("stroke-width") or 0))
+            continue
+        tr = el.get("transform") or ""
+        m = re.match(r"rotate\(([-\d.]+)", tr)
+        italic = "skewX" in tr                           # a water name: the SVG path slants Inter; QGIS sets the face oblique
+        if tr and not m and not italic:
+            skipped += 1
+            continue
+        mx, my = frame.to_display(x, y)
+        h = halos.get(key)
+        rows.append({"text": s.upper() if "uppercase" in (el.get("style") or "") else s, "size_pt": round(size / PT, 2), "color": el.get("fill") or "black",
+                     "halo": h[0] if h else "", "halo_mm": round(h[1] / 2, 3) if h else 0.0,
+                     "hali": {"start": "Left", "middle": "Center", "end": "Right"}.get(el.get("text-anchor") or "start", "Left"),
+                     "rotation": -float(m.group(1)) if m else 0.0, "weight": int(float(el.get("font-weight") or 400)), "x": float(mx), "y": float(my),
+                     "italic": int(italic), "spacing_pt": round(float(el.get("letter-spacing") or 0) / PT, 3)})
+    return rows, skipped
+
+
 def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | None = None) -> dict:
     """Write the kit for a MapSpec. Returns {'dir', 'layout', 'layers', 'notes'}; nothing is rendered."""
     import geopandas as gpd
@@ -121,14 +165,30 @@ def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | N
     import scalebar as sbm
     from label_engine import Rect
 
-    plan = mp.prepare(spec_path, mode="print", brand=brand, template=template, use_tiles=False, classic_layout=True)
+    plan = mp.prepare(spec_path, mode="print", brand=brand, template=template, use_tiles=True, classic_layout=True)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     spec, tpl, t = plan.spec, plan.tpl, plan.tokens
     W, H = tpl["size_mm"]
     fonts = dict(tpl["fonts"])
     els = spec.get("elements") or {}
-    notes: list[str] = ["web basemap tiles are not drawn in the QGIS path"]
+    notes: list[str] = []
+    pictures: list[dict] = []
+
+    def picture(pid: str, title: str, png: bytes, bbox, opacity: float = 1.0) -> dict:
+        """1.11.0: a picture the map draws (a raster layer's window, the relief, a prepared tile composite) as a PNG with a world file beside
+        it, in the map's CRS, for a QGIS raster layer."""
+        from PIL import Image
+        import io
+        name = f"picture_{_safe(pid)}.png"
+        (out / name).write_bytes(png)
+        w_px, h_px = Image.open(io.BytesIO(png)).size
+        x0, y0, x1, y1 = (float(v) for v in bbox)
+        px, py = (x1 - x0) / w_px, (y1 - y0) / h_px
+        (out / name).with_suffix(".pgw").write_text(f"{px!r}\n0.0\n0.0\n{-py!r}\n{x0 + px / 2!r}\n{y1 - py / 2!r}\n", encoding="utf-8")
+        rec = {"id": pid, "title": title, "file": name, "bbox": [x0, y0, x1, y1], "pixels": [w_px, h_px], "opacity": float(opacity)}
+        pictures.append(rec)
+        return rec
 
     def on(name, default=True):
         return (els.get(name) or {}).get("on", default)
@@ -149,7 +209,10 @@ def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | N
     data_geoms: list = []
     label_cfg = {lb["layer"]: lb for lb in (plan.spec.get("labels") or [])}
     for i, l in enumerate(plan.layers):
-        if l.kind == "raster":               # a raster picture is not a vector table; the QGIS project does not carry it yet (M12, TODO)
+        if l.kind == "raster":               # 1.11.0: the window the map drew, as a picture layer in the map's colours
+            im = (l.raster or {}).get("image")
+            if im and im.get("png"):
+                picture(l.id, l.title, im["png"], im["bbox"], float(im.get("opacity", 1.0)))
             continue
         gdf = l.gdf
         if gdf.crs is not None and CRS.from_user_input(gdf.crs) != crs_obj:
@@ -190,6 +253,62 @@ def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | N
             L["label"] = {"field": lb["field"], "size_pt": float(lb.get("size", fonts["label"]))}
         layers_json.append(L)
 
+    # ---- the ground (1.11.0): the land, water, border lines, relief and prepared tiles the SVG path draws under the data, in its order
+    ground: list[dict] = []
+    for i, b in enumerate(plan.basemap):
+        kind_ = b.get("kind")
+        if kind_ == "tiles":
+            import map_look
+            im = b["image"]
+            raw = Path(im["path"]).read_bytes()
+            how = map_look.tile_treatment(spec, getattr(plan, "look", "classic"))
+            if how != "none":
+                raw = map_look.treat_tiles(raw, t["land"], how)
+            op = (spec.get("basemap") or {}).get("opacity")
+            rec = picture(f"ground{i}_tiles", "Basemap tiles", raw, im.get("bbox") or im["bbox_3857"], float(op) if op is not None else 1.0)
+            ground.append({"id": rec["id"], "picture": True})
+            continue
+        if kind_ == "hillshade":
+            im = b.get("image") or {}
+            if im.get("png"):
+                rec = picture(f"ground{i}_relief", "Relief", im["png"], im["bbox"], float(im.get("opacity", 1.0)))
+                ground.append({"id": rec["id"], "picture": True})
+            continue
+        gdf = b.get("gdf")
+        if gdf is None or not len(gdf):
+            continue
+        if gdf.crs is not None and CRS.from_user_input(gdf.crs) != crs_obj:
+            gdf = gdf.to_crs(crs_obj)
+        slim = gpd.GeoDataFrame({"geometry": list(gdf.geometry.values)}, crs=gdf.crs if gdf.crs is not None else crs_obj)
+        slim = slim[((~slim.geometry.is_empty) & slim.geometry.notna()).to_numpy()]
+        if not len(slim):
+            continue
+        table = f"G{i}_{_safe(str(kind_))}"
+        slim.to_file(gp, layer=table, driver="GPKG")
+        if kind_ == "boundary":
+            st_ = {"kind": "line", "fill": None, "stroke": t["frame"], "stroke_w_mm": 0.16 if b.get("class") == "country" else 0.12}
+        elif kind_ in ("lake", "ocean"):
+            st_ = {"kind": "polygon", "fill": t["water"], "stroke": t["water"], "stroke_w_mm": 0.1}
+        elif kind_ == "land":
+            st_ = {"kind": "polygon", "fill": t["land"], "stroke": None, "stroke_w_mm": 0.0}
+        else:
+            st_ = {"kind": "polygon", "fill": t["land"], "stroke": t["frame"], "stroke_w_mm": 0.14 if kind_ == "state" else 0.16}
+        ground.append({"id": table, "table": table, "title": {"land": "Land", "lake": "Water", "ocean": "Water", "country": "Countries", "state": "States",
+                                                              "boundary": "Borders"}.get(str(kind_), str(kind_)), **st_})
+    if (spec.get("basemap") or {}).get("provider", "none") not in ("none", "bundled") and not any(g.get("picture") and "tiles" in g["id"] for g in ground) \
+            and not plan.vector_ground:
+        notes.append("the tile basemap is not in this layout: no prepared tiles cover the map (basemap-render prepares them; nothing is fetched here)")
+
+    # ---- the locator (1.11.0): the same inset the SVG path draws, as a picture item
+    inset_cfg = els.get("inset_map") or {}
+    inset_on = inset_cfg.get("on", "auto")
+    locator = None
+    if inset_on is not False:
+        try:
+            locator = mr.build_inset(plan, inset_cfg, tpl, force=(inset_on is True))
+        except Exception as ex:  # noqa: BLE001 - the layout is still made; the note says the locator is missing
+            notes.append(f"the locator could not be prepared ({type(ex).__name__}); it is not in this layout")
+
     # ---- overlays go to the least-covered corners (the same occupancy test the SVG path uses); when the legend would cover data, the data
     #      is fitted with a strip kept free beside it, as the SVG path does
     legend_ids = [l.id for l in plan.layers if l.role not in ("context", "labels", "contour") and l.kind != "raster" and (l.spec.get("legend") or {}).get("include", True) is not False
@@ -214,10 +333,11 @@ def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | N
         bar_ = info_.get("bar") if on("scale_bar") else None
         if bar_ and not bar_.get("segments"):
             bar_ = None
-        sizes_ = {"legend": leg_wh, "scale": (((bar_["length_mm"] + 14.0) if bar_ else 0.0), 9.0), "north": (na_size, na_size + 1.0), "bivariate_key": bv_wh}
+        sizes_ = {"legend": leg_wh, "scale": (((bar_["length_mm"] + 14.0) if bar_ else 0.0), 9.0), "north": (na_size, na_size + 1.0), "bivariate_key": bv_wh,
+                  "inset": ((float(locator["w"]), float(locator["h"])) if locator else (0.0, 0.0))}
         north_ = bool(on("north_arrow")) and bool((info_.get("north") or {}).get("show", True))
         want_ = [k for k, v in (("legend", bool(legend_ids) and on("legend")), ("bivariate_key", biv is not None and on("legend")), ("scale", bool(bar_)),
-                                ("north", north_)) if v]
+                                ("north", north_), ("inset", locator is not None)) if v]
         taken_: set[str] = set()
         placed_: dict = {}
         fr_rect = Rect(map_rect.x0, map_rect.y0 + banner_h, map_rect.x1, map_rect.y1)
@@ -271,6 +391,34 @@ def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | N
         c, r, cov = placed["north"]
         overlays["north"] = {"x": round(r.x0, 3), "y": round(r.y0, 3), "size": round(na_size, 3), "rotation_hint": info["north"].get("rotation", 0.0),
                              "covered": round(float(cov), 4)}
+    if "inset" in placed:
+        c, r, cov = placed["inset"]
+        body_ = mr.draw_inset(locator, 0.0, 0.0, t, frame.visible, float(fonts["label"]), highlight=inset_cfg.get("highlight") or {})
+        import svg_draw as sd
+        (out / "inset.svg").write_text(sd.sheet_open(float(locator["w"]), float(locator["h"]), "Locator map") + "<style>text{font-family:Inter,sans-serif}</style>"
+                                       + body_ + "</" + "svg>", encoding="utf-8")
+        overlays["inset"] = {"file": "inset.svg", "x": round(r.x0, 3), "y": round(r.y0, 3), "w": round(float(locator["w"]), 3), "h": round(float(locator["h"]), 3),
+                             "covered": round(float(cov), 4)}
+
+    # ---- labels (1.11.0): placed by the plugin's own label engine on this frame (the data's labels, then the place, water and admin names),
+    #      written as points with their text, size, colours and anchor, so QGIS draws each where the SVG path would
+    placed_labels = None
+    try:
+        obstacles_ = [r_.grown(1.0) for _c, r_, _cov in placed.values()]
+        lab_svg, _lst, taken_ = mr.draw_labels(plan, frame, obstacles_, fonts, tpl)
+        names_svg, _nst = mr.draw_names(plan, frame, taken_, [], fonts, tpl)
+        rows, skipped = _label_rows(lab_svg + names_svg, frame)
+        if rows:
+            lg_ = gpd.GeoDataFrame({k: [r_[k] for r_ in rows] for k in ("text", "size_pt", "color", "halo", "halo_mm", "hali", "rotation", "weight", "x", "y", "italic", "spacing_pt")},
+                                   geometry=gpd.points_from_xy([r_["x"] for r_ in rows], [r_["y"] for r_ in rows]), crs=crs_obj)
+            lg_.to_file(gp, layer="placed_labels", driver="GPKG")
+            placed_labels = {"table": "placed_labels", "count": len(rows)}
+            for L in layers_json:
+                L.pop("label", None)                       # QGIS' own placement is not used when the plugin's placements travel
+        if skipped:
+            notes.append(f"{skipped} label(s) drawn as outlines or along a curve by the SVG path are not in this layout")
+    except Exception as ex:  # noqa: BLE001 - QGIS places the labels itself then, as before 1.11.0
+        notes.append(f"the plugin's label placements could not be carried over ({type(ex).__name__}); QGIS places the labels itself")
     for k, (c, r, cov) in placed.items():
         if cov > 0.12:
             notes.append(f"the {k} sits over {cov:.0%} of the data in the corner with least cover; move it in QGIS")
@@ -340,8 +488,12 @@ def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | N
         "crs": plan.crs, "crs_wkt": crs_obj.to_wkt(), "extent": [round(float(v), 6) for v in vis],
         "map": {"x": map_rect.x0, "y": map_rect.y0, "w": map_rect.w, "h": map_rect.h},
         "font": {"family": "Inter"},
-        "colors": {"label": t["label"], "background": t["background"], "frame": t["frame"]},
-        "neatline": bool(on("neatline")), "draw_order": [L["id"] for L in layers_json], "layers": layers_json,
+        "colors": {"label": t["label"], "background": t["background"], "frame": t["frame"], "water": t["water"], "land": t["land"],
+                   "map_background": t["water"] if plan.basemap else t["background"]},
+        "neatline": bool(on("neatline")),
+        # bottom to top: the ground, then the layers in the SVG path's drawing order (pictures, context, contours, data)
+        "draw_order": [g["id"] for g in ground] + [l.id for l in mp.draw_order(plan.layers) if l.id in {L["id"] for L in layers_json} | {p_["id"] for p_ in pictures}],
+        "layers": layers_json, "ground": ground, "pictures": pictures, "placed_labels": placed_labels,
         "title": ttl, "footer": footer, "overlays": overlays, "notes": notes,
     }
     (out / "layout.json").write_text(json.dumps(layout, indent=1), encoding="utf-8")

@@ -15,7 +15,8 @@ Two entries are known (their download patterns are in the library entries):
                                             at the window's centre). A window over two countries takes the centre's country and says so (GHSL is the one grid).
 
 Rules: every request goes through ogc_http.SafeHTTP (public hosts, GET, the plugin's User-Agent, at most 200 MB a file: the client's ceiling, so the
-WorldPop file for the United States, 494 MB, is refused with the GHSL alternative named). Files are kept under `<workdir>/fetch/rasters/<entry>/` with a
+WorldPop file for the United States, 494 MB, is not fetched whole: since 1.11.0 the map's window is read from it by HTTP byte range, through
+the same client, and kept as a small GeoTIFF; a server that sends no ranges gets the old refusal with the GHSL alternative named). Files are kept under `<workdir>/fetch/rasters/<entry>/` with a
 JSON record beside each; a second call for the same tile or country reads nothing from the network. GMAP_OFFLINE=1 refuses a fetch that is not cached.
 """
 from __future__ import annotations
@@ -196,6 +197,175 @@ def _one(url: str, dest: Path, http, zipped: bool) -> tuple[dict, bool]:
     return rec, False
 
 
+# --------------------------------------------------------------------------------------------------------------- a window of a large file
+RANGE_BLOCK = 1 << 20                    # byte ranges are asked for in whole 1 MB blocks, neighbours in one request
+RANGE_MAX_REQUESTS = 400                 # a window that needs more requests than this is refused (the file is not laid out for ranged reads)
+WINDOW_PAD_DEG = 0.05                    # the window kept is the one asked for plus this margin, so a small move of the map reads the cache
+
+
+class RangedFile:
+    """A read-only file whose bytes are fetched as HTTP byte ranges through SafeHTTP (public hosts, GET, the plugin's User-Agent), in whole
+    blocks kept in memory. GDAL reads the GeoTIFF's directory and only the strips or tiles of the window through it, so a 500 MB country file
+    costs the megabytes the window needs. The total fetched is held under MAX_BYTES and RANGE_MAX_REQUESTS."""
+
+    def __init__(self, url: str, size: int, http):
+        self.url, self.size, self.http = url, int(size), http
+        self.pos = 0
+        self.blocks: dict[int, bytes] = {}
+        self.requests = 0
+        self.fetched = 0
+        self.final_url = url
+
+    def _fetch(self, b0: int, b1: int) -> None:
+        if self.requests >= RANGE_MAX_REQUESTS or self.fetched > MAX_BYTES:
+            raise RasterFetchError(f"reading this window of {Path(self.url).name} needs more than {RANGE_MAX_REQUESTS} requests or {MAX_BYTES // 1_000_000} MB; "
+                                   f"use a smaller window or the GHSL tiles ({GHSL})")
+        lo, hi = b0 * RANGE_BLOCK, min(self.size, (b1 + 1) * RANGE_BLOCK) - 1
+        try:
+            r = self.http.get(self.url, None, expect="any", headers={"Range": f"bytes={lo}-{hi}"}, max_bytes=hi - lo + 1 + 1024)
+        except oh.ServiceError as e:
+            raise RasterFetchError(f"a part of the raster could not be fetched: {oh.untrusted(e, 200)}") from None
+        if r.status != 206 or len(r.content) != hi - lo + 1:
+            raise RasterFetchError(f"the server did not send the byte range asked for (HTTP {r.status}); {Path(self.url).name} cannot be read by window")
+        self.requests += 1
+        self.fetched += len(r.content)
+        self.final_url = r.url
+        for i, b in enumerate(range(b0, b1 + 1)):
+            self.blocks[b] = r.content[i * RANGE_BLOCK:(i + 1) * RANGE_BLOCK]
+
+    def read(self, n: int = -1) -> bytes:
+        if n is None or n < 0:
+            n = self.size - self.pos
+        n = max(0, min(n, self.size - self.pos))
+        if not n:
+            return b""
+        b0, b1 = self.pos // RANGE_BLOCK, (self.pos + n - 1) // RANGE_BLOCK
+        need = [b for b in range(b0, b1 + 1) if b not in self.blocks]
+        while need:                                                   # neighbouring missing blocks go in one request
+            a = z = need[0]
+            while z + 1 in need:
+                z += 1
+            self._fetch(a, z)
+            need = [b for b in need if b > z]
+        out = b"".join(self.blocks[b] for b in range(b0, b1 + 1))
+        off = self.pos - b0 * RANGE_BLOCK
+        self.pos += n
+        return out[off:off + n]
+
+    def seek(self, off: int, whence: int = 0) -> int:
+        self.pos = off if whence == 0 else self.pos + off if whence == 1 else self.size + off
+        return self.pos
+
+    def tell(self) -> int:
+        return self.pos
+
+    def close(self) -> None:
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def view(self) -> "RangedFile":
+        """Another handle on the same file: its own position, the same blocks and counters (GDAL opens a file more than once)."""
+        v = _RangedView.__new__(_RangedView)
+        v.parent, v.pos, v.size, v.url = self, 0, self.size, self.url
+        return v
+
+    def opener(self, name: str):
+        """A rasterio opener for the one file: sidecar names GDAL probes for (.aux.xml, .msk, .ovr) are not there."""
+        def open_(path, mode="rb", **kw):
+            if Path(str(path)).name != name or "r" not in mode:
+                raise FileNotFoundError(str(path))
+            return self.view()
+        return open_
+
+
+class _RangedView(RangedFile):
+    def read(self, n: int = -1) -> bytes:
+        self.parent.pos = self.pos
+        out = RangedFile.read(self.parent, n)
+        self.pos = self.parent.pos
+        return out
+
+
+def remote_size(url: str, http) -> int | None:
+    """The file's size, when the server serves byte ranges (asked with a one-byte range: the answer's Content-Range carries the total)."""
+    if offline():
+        return None
+    try:
+        r = http.get(url, None, expect="any", headers={"Range": "bytes=0-0"}, max_bytes=4096)
+    except oh.ServiceError:
+        return None
+    cr = str(r.headers.get("content-range") or "")
+    if r.status != 206 or "/" not in cr:
+        return None
+    try:
+        return int(cr.rsplit("/", 1)[1])
+    except ValueError:
+        return None
+
+
+def _window_cached(root: Path, stem: str, bounds) -> tuple[Path, dict] | None:
+    for rp in sorted(root.glob(f"{stem}_window_*.json")):
+        try:
+            rec = json.loads(rp.read_text())
+        except ValueError:
+            continue
+        w = rec.get("window_wgs84") or []
+        tif = rp.with_suffix(".tif")
+        if len(w) == 4 and tif.is_file() and w[0] <= bounds[0] and w[1] <= bounds[1] and w[2] >= bounds[2] and w[3] >= bounds[3] and rec.get("sha256") == _sha(tif):
+            return tif, rec
+    return None
+
+
+def window_download(url: str, size: int, bounds_wgs84, root: Path, http) -> tuple[Path, dict]:
+    """The window of a remote GeoTIFF as a local GeoTIFF: full resolution, the file's own CRS, nodata and compression kept. -> (path, record)."""
+    rasterio = rio._rasterio()
+    from rasterio.windows import from_bounds as window_from_bounds
+    if offline():
+        raise RasterFetchError(f"offline (GMAP_OFFLINE=1): this window of {Path(url).name} is not in the cache and nothing is fetched")
+    b = (float(bounds_wgs84[0]) - WINDOW_PAD_DEG, float(bounds_wgs84[1]) - WINDOW_PAD_DEG, float(bounds_wgs84[2]) + WINDOW_PAD_DEG, float(bounds_wgs84[3]) + WINDOW_PAD_DEG)
+    rf_ = RangedFile(url, size, http)
+    stem = Path(url).stem
+    try:
+        with rasterio.open(Path(url).name, opener=rf_.opener(Path(url).name)) as src:
+            if src.crs is None or src.crs.to_epsg() != 4326:
+                raise RasterFetchError(f"{Path(url).name} is not in EPSG:4326; it cannot be read by window here")
+            sb = src.bounds
+            bb = (max(b[0], sb.left), max(b[1], sb.bottom), min(b[2], sb.right), min(b[3], sb.top))
+            if bb[0] >= bb[2] or bb[1] >= bb[3]:
+                raise RasterFetchError(f"the window is outside {Path(url).name}")
+            import math
+            from rasterio.windows import Window
+            w0 = window_from_bounds(*bb, transform=src.transform)
+            c0, r0 = max(0, math.floor(w0.col_off)), max(0, math.floor(w0.row_off))
+            c1, r1 = min(src.width, math.ceil(w0.col_off + w0.width)), min(src.height, math.ceil(w0.row_off + w0.height))
+            win = Window(c0, r0, c1 - c0, r1 - r0)
+            data = src.read(window=win)
+            prof = src.profile.copy()
+            prof.update(driver="GTiff", height=data.shape[1], width=data.shape[2], transform=src.window_transform(win), compress="deflate", tiled=True,
+                        blockxsize=256, blockysize=256)
+            prof.pop("photometric", None)
+            wb = rasterio.windows.bounds(win, src.transform)
+            layout = "tiled" if src.profile.get("tiled") else "strips"
+    except RasterFetchError:
+        raise
+    except Exception as ex:  # noqa: BLE001 - GDAL's message through the opener; the reason is passed on
+        raise RasterFetchError(f"this window of {Path(url).name} could not be read by byte range ({type(ex).__name__}: {str(ex)[:160]})") from None
+    key = hashlib.sha256(json.dumps([round(v, 5) for v in wb]).encode()).hexdigest()[:12]
+    dest = root / f"{stem}_window_{key}.tif"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with rasterio.open(dest, "w", **prof) as dst:
+        dst.write(data)
+    rec = {"url": oh.redact_url(rf_.final_url), "bytes": rf_.fetched, "file_bytes": int(size), "requests": rf_.requests, "ranged": True, "layout": layout,
+           "window_wgs84": [float(v) for v in wb], "pixels": [int(data.shape[2]), int(data.shape[1])], "sha256": _sha(dest), "retrieved_at": today()}
+    dest.with_suffix(".json").write_text(json.dumps(rec, indent=2))
+    return dest, rec
+
+
 # --------------------------------------------------------------------------------------------------------------- the one call
 def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, variant: str | None = None) -> dict:
     """A local GeoTIFF of the library raster covering the window. -> {path, record, findings, entry}."""
@@ -247,12 +417,23 @@ def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, varian
         if variant == "unadj" or variant == "UNadj":
             url = url.replace("_ppp_2020_constrained", "_ppp_2020_UNadj_constrained")
         path = root / Path(url).name
-        r, cached = _one(url, path, h, zipped=False)
+        win = None if _cached(path) else _window_cached(root, Path(url).stem, bounds_wgs84)
+        size = None if (win or _cached(path)) else remote_size(url, h)
+        if win:                                            # 1.11.0: a window of a large country file, read by byte range earlier
+            path, r, cached = win[0], win[1], True
+        elif size is not None and size > MAX_BYTES:
+            path, r = window_download(url, size, bounds_wgs84, root, h)
+            cached = False
+            findings.append({"id": "MAP-TER-005", "severity": "INFO", "detail": {"file_bytes": size, "fetched_bytes": r["bytes"], "requests": r["requests"]},
+                             "message": f"the WorldPop file for {iso3} is {size / 1e6:,.0f} MB, more than a fetch may take whole; the map's window was read from it by "
+                                        f"byte range ({r['bytes'] / 1e6:,.1f} MB in {r['requests']} request(s))"})
+        else:
+            r, cached = _one(url, path, h, zipped=False)
         fetched_from_cache.append(cached)
         rec = {"entry": entry_id, "country": iso3, "files": [{**r, "cached": cached}]}
     rec.update({"retrieved_at": today() if not all(fetched_from_cache) else (rec["files"][0].get("retrieved_at") or today()),
                 "cached": all(fetched_from_cache), "attribution": lic.get("attribution_text"), "license": lic.get("class"),
-                "request_count": sum(0 if f.get("cached") else 1 for f in rec["files"]), "request_bytes": sum(0 if f.get("cached") else int(f.get("bytes", 0)) for f in rec["files"]),
+                "request_count": sum(0 if f.get("cached") else int(f.get("requests") or 1) for f in rec["files"]), "request_bytes": sum(0 if f.get("cached") else int(f.get("bytes", 0)) for f in rec["files"]),
                 "sha256": _sha(path), "path": str(path), "bounds_wgs84": [float(v) for v in bounds_wgs84]})
     return {"path": str(path), "record": rec, "findings": findings, "entry": e}
 

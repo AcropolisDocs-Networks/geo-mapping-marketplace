@@ -164,19 +164,27 @@ def spec_extent(spec_path):
     import map_plan as mp
     import layout as lo
 
+    spec0 = gc.load_mapspec(Path(spec_path))
+    named = str((spec0.get("crs") or {}).get("display") or "auto")
+    own = named not in ("auto", "EPSG:3857", "epsg:3857")          # 1.11.0: a map in a projection of its own; the composite is warped to it
+
     def edit(s):
         s["basemap"] = {"provider": "bundled"}
-        s.setdefault("crs", {})["display"] = "EPSG:3857"
-    spec0 = gc.load_mapspec(Path(spec_path))
+        if not own:
+            s.setdefault("crs", {})["display"] = "EPSG:3857"
     plan = mp.prepare(str(spec_path), spec_edit=edit)
     win = mp.plan_visible_pad(plan)
+    if own and plan.crs != "EPSG:3857":
+        win = mp.box_to_crs(win, plan.crs, "EPSG:3857")
+        if win is None:
+            raise ValueError(f"the map window in {plan.crs} has no Web Mercator image (it reaches a pole or the far side of the projection)")
     from pyproj import Transformer
     t = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
     lo_, la_ = t.transform([win[0], win[2]], [win[1], win[3]])
     rect = lo.rect_of(plan.tpl["map"])
     dpi = float(spec0.get("export", {}).get("dpi") or plan.tpl.get("raster_default_dpi") or 150)
     return {"merc": tuple(win), "wgs84": (min(lo_), min(la_), max(lo_), max(la_)), "width_mm": float(rect.w), "dpi": min(dpi, 200.0), "map_id": plan.spec["id"],
-            "audience": plan.spec.get("audience") or "external", "spec": spec0}
+            "audience": plan.spec.get("audience") or "external", "spec": spec0, "display_crs": plan.crs if own else "EPSG:3857"}
 
 
 def provider_rules(entry: dict, tier: str, source_kind: str) -> tuple[int, list[dict]]:
@@ -202,11 +210,22 @@ def plan_render(spec_path, provider: str | None = None, *, tier: str = "T1", max
     """Everything decided before a single tile is read: provider gates, extent, zoom, tile list. Returns {ok, findings, plan}."""
     import ref_library as rl
     spec_path = Path(spec_path)
-    ex = spec_extent(spec_path)
+    try:
+        ex = spec_extent(spec_path)
+    except ValueError as exc:
+        return {"ok": False, "findings": [finding("MAP-CRS-002", "BLOCK", f"{exc}; a tile basemap cannot be drawn under this map")]}
     wgs, w_mm, dpi, mid, audience, spec = ex["wgs84"], ex["width_mm"], ex["dpi"], ex["map_id"], ex["audience"], ex["spec"]
-    crs_req = (spec.get("crs") or {}).get("display")
-    if crs_req and crs_req not in ("auto", "EPSG:3857", "epsg:3857"):
-        return {"ok": False, "findings": [finding("MAP-CRS-002", "BLOCK", f"tiles are published in Web Mercator, but the MapSpec sets crs.display to {crs_req}; remove it or set EPSG:3857 to use a tile basemap")]}
+    warp_note = []
+    if ex["display_crs"] != "EPSG:3857":
+        # 1.11.0: tiles are published in Web Mercator; for a map in another projection the window's tiles are fetched as usual and the
+        # composite is warped to the map's CRS by the build (needs rasterio). Words in the tiles are warped with it.
+        try:
+            import rasterio  # noqa: F401
+        except ImportError:
+            return {"ok": False, "findings": [finding("MAP-CRS-002", "BLOCK", f"the MapSpec sets crs.display to {ex['display_crs']}; warping the tiles to it needs the rasterio "
+                                                      "package (python3 -m pip install rasterio). Without it, remove crs.display to draw the map in Web Mercator")]}
+        warp_note = [finding("MAP-CRS-002", "INFO", f"tiles are published in Web Mercator; the composite is warped to {ex['display_crs']}, the map's own projection. "
+                             "Place names inside the tiles turn and stretch with it: a style without labels reads best", {"display_crs": ex["display_crs"]})]
     bm = spec.get("basemap") or {}
     provider = provider or bm.get("provider")
     style = style or bm.get("style")
@@ -218,7 +237,7 @@ def plan_render(spec_path, provider: str | None = None, *, tier: str = "T1", max
         return {"ok": False, "findings": [finding("MAP-TILE-001", "BLOCK", f"basemap.detail is legible or sharp, not {detail}")]}
     if scheme not in (None, "xyz", "tms"):
         return {"ok": False, "findings": [finding("MAP-TILE-003", "BLOCK", f"basemap.scheme is xyz or tms, not {scheme}")]}
-    fs: list[dict] = []
+    fs: list[dict] = list(warp_note)
     if not provider or provider in ("bundled", "none"):
         return {"ok": False, "findings": [finding("MAP-WEB-015", "BLOCK", "the MapSpec asks for no tile basemap; set basemap: {provider: carto-positron, mode: static} or name a provider")]}
     entries = entries if entries is not None else rl.all_entries("all")
@@ -334,7 +353,7 @@ def plan_render(spec_path, provider: str | None = None, *, tier: str = "T1", max
                               "Set basemap.scheme to override", det))
     return {"ok": True, "findings": fs, "plan": {"map_id": mid, "provider": provider, "kind": kind, "source": src_info, "entry": entry, "tier": tier, "cap": cap, "zoom": g["z"], "ideal_zoom": g["ideal_zoom"],
                                                   "tile_size": tile_size, "tiles": g["tiles"], "cols": len(g["cols"]), "rows": len(g["rows"]), "bbox_3857": list(g["bbox"]),
-                                                  "bbox_wgs84": list(wgs), "dpi": dpi, "effective_px": g["effective_px"], "audience": audience,
+                                                  "bbox_wgs84": list(wgs), "dpi": dpi, "effective_px": g["effective_px"], "audience": audience, "display_crs": ex["display_crs"],
                                                   "detail": g["detail"], "label_pt": g.get("label_pt"), "paper_dpi": g.get("paper_dpi"), "min_zoom": min_zoom, "max_zoom": max_zoom,
                                                   "terms_acknowledged": bool(kind == "http" and r.get("terms_acknowledged")),
                                                   "customization": (r.get("customization") or "") if kind == "http" else ""}}
@@ -532,7 +551,7 @@ def render(spec_path, provider: str | None = None, *, tier: str = "T1", max_tile
     rec = {"composite_version": 1, "map_id": pl["map_id"], "provider": pl["provider"], "entry": entry.get("id"), "entry_rev": entry.get("rev"), "source": pl["kind"], "style": pl["source"].get("style"),
            "zoom": pl["zoom"], "detail": pl.get("detail"), "label_pt": pl.get("label_pt"), "paper_dpi": pl.get("paper_dpi"), "zoom_range": [pl.get("min_zoom"), pl.get("max_zoom")],
            "scheme": pl["source"].get("scheme") if pl["kind"] == "dir" else ("tms" if pl["kind"] == "mbtiles" else "xyz"), "tile_size": size, "tiles": len(pl["tiles"]), "fetched": getattr(src, "fetched", 0), "from_cache": getattr(src, "cached", 0), "missing": missing,
-           "bbox_3857": pl["bbox_3857"], "bbox_wgs84": pl["bbox_wgs84"], "pixels": [img.width, img.height], "attribution": attribution, "license": (entry.get("license") or {}).get("class"),
+           "bbox_3857": pl["bbox_3857"], "bbox_wgs84": pl["bbox_wgs84"], "display_crs": pl.get("display_crs") or "EPSG:3857", "pixels": [img.width, img.height], "attribution": attribution, "license": (entry.get("license") or {}).get("class"),
            "retrieved_at": dt.date.today().isoformat() if not __import__("os").environ.get("GMAP_FIXED_DATE") else __import__("os").environ["GMAP_FIXED_DATE"],
            "sha256": hashlib.sha256(png.read_bytes()).hexdigest(), "tier": tier, "terms_acknowledged": bool(pl.get("terms_acknowledged")), "customization": pl.get("customization") or "", "title": entry.get("title") or (pl["source"].get("meta") or {}).get("name")}
     (d / "composite.json").write_text(json.dumps(rec, indent=2))

@@ -795,7 +795,7 @@ def draw_tiles(plan: mp.Plan, frame: lo.Frame, b: dict) -> str:
     """The prepared tile composite, placed by its Web Mercator box. It is embedded, so the file has no outside links."""
     import base64
     im = b["image"]
-    x0, y0, x1, y1 = im["bbox_3857"]
+    x0, y0, x1, y1 = im.get("bbox") or im["bbox_3857"]           # 1.11.0: `bbox` is a composite warped to the map's own CRS
     mx0, my1 = frame.to_mm(x0, y0)
     mx1, my0 = frame.to_mm(x1, y1)
     raw = Path(im["path"]).read_bytes()
@@ -1698,7 +1698,8 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
         grown = lo.fit_footer(trial, draw_footer(plan, trial, fonts, {}, [], [], logo_in_map=tpl.get("layout") == "in-map")[1]["need_mm"])
         if grown:
             vis = lo.Frame.fit(lo.rect_of(trial["map"]), plan.extent, float((spec.get("extent") or {}).get("padding_pct", 5))).visible
-            bb = (tiles_[0].get("image") or {}).get("bbox_3857")
+            im_ = tiles_[0].get("image") or {}
+            bb = im_.get("bbox") or im_.get("bbox_3857")
             if bb and bb[0] <= vis[0] and bb[1] <= vis[1] and bb[2] >= vis[2] and bb[3] >= vis[3]:
                 tpl.clear()
                 tpl.update(trial)

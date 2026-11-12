@@ -59,7 +59,7 @@ the classify-and-color rules apply (round breaks, at most seven classes, the leg
 | `ref.terrain.us.dem.3dep` | USGS 3DEP ImageServer, bare earth, 10 m (1 m with lidar), the US only | Public domain; credit "3DEP data courtesy of the U.S. Geological Survey" | one exportImage up to 4096 x 4096 px; a wider window comes back coarser (MAP-TER-003) |
 | `ref.terrain.world.dem.terrarium` | AWS Terrain Tiles, Terrarium PNG, world, about 30 m | **Attribution required** to every source in the tilezen attribution document; the block is in the record and printed with the map, so there is nothing to acknowledge (0.23.0) | 64 tiles per fetch, 4 at a time, zoom lowered to fit; raw tiles cached |
 | `ref.statistic.world.population.ghsl` | GHS-POP R2023A, 2020, 100 m, Mollweide, 10-degree tiles from the JRC | CC BY 4.0 (JRC reuse notice); cite the DOI | a tile is 17 MB zipped; fetched per window, never bundled |
-| `ref.statistic.world.population.worldpop` | WorldPop constrained 2020, 100 m, one GeoTIFF per country in degrees | CC BY 4.0; cite the country dataset | the US file is 494 MB; fetched per country, never bundled |
+| `ref.statistic.world.population.worldpop` | WorldPop constrained 2020, 100 m, one GeoTIFF per country in degrees | CC BY 4.0; cite the country dataset | fetched per country, never bundled; a file over 200 MB (the US one is 494 MB) is not fetched whole: the map's window is read from it by byte range (1.11.0) |
 
 `terrain_fetch.dem_for(bounds_wgs84, target_m_per_px, source="auto", cache_dir, dem_path=None)` picks 3DEP inside
 the US and Terrarium elsewhere (MAP-TER-001 says which and why), caches by source, window and resolution (MAP-TER-002 on a hit), and
@@ -82,4 +82,4 @@ The MapSpec draws all of this without a script: `role: raster` (a file, a librar
 `source: {type: service, mode: image}`), `role: hillshade` and `role: contour` (a DEM file or a 3DEP or Terrarium ref), the `terrain:` block
 (relief, and contours, as context), and the `raster_zonal`, `line_of_sight` and `viewshed` ops. Every window is read in the plan step for the
 map's own frame at the export's pixel size (at most 4,096 px), so the build is offline after the first fetch; `GMAP_OFFLINE=1` fetches nothing.
-The population rasters come through `scripts/raster_fetch.py` (GHSL tiles, WorldPop country files; cached, at most 200 MB a file).
+The population rasters come through `scripts/raster_fetch.py` (GHSL tiles, WorldPop country files; cached, at most 200 MB a fetch: a larger country file gives its window by byte range).

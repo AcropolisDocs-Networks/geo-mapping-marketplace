@@ -19,17 +19,29 @@ def sha256_file(p: Path) -> str:
     return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
 
+_PACKS: dict = {}
+
+
 def load_pack(slug: str) -> dict:
+    """The brand pack's three files. 1.11.0: read once per process while the files are unchanged (a build asked for the pack a dozen times,
+    a quarter of a second of YAML each map); every caller gets its own copy."""
+    import copy
     d = gc.brand_dir(slug)
     if not (d / "PACK.json").is_file():
         raise BrandError(f"There is no brand '{slug}' here. {available_note()}")
-    return {
-        "slug": slug,
-        "dir": d,
-        "brand": json.loads((d / "brand.json").read_text()),
-        "pack": json.loads((d / "PACK.json").read_text()),
-        "tokens": gc.load_yaml(d / "map-tokens.yaml"),
-    }
+    files = [d / "brand.json", d / "PACK.json", d / "map-tokens.yaml"]
+    try:
+        key = (str(d),) + tuple((f.stat().st_mtime_ns, f.stat().st_size) for f in files)
+    except OSError:
+        key = None
+    if key is None or key not in _PACKS:
+        got = {"slug": slug, "dir": d, "brand": json.loads(files[0].read_text()), "pack": json.loads(files[1].read_text()), "tokens": gc.load_yaml(files[2])}
+        if key is None:
+            return got
+        for k in [k for k in _PACKS if k[0] == str(d)]:
+            del _PACKS[k]
+        _PACKS[key] = got
+    return copy.deepcopy(_PACKS[key])
 
 
 def available(manifest: dict | None = None) -> list[str]:

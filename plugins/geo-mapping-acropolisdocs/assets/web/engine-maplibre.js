@@ -449,7 +449,8 @@
       style.layers.forEach(function (l) {
         var d = defs[(l.metadata || {})["gm:layer"]];
         if (!d || !d.time) return;
-        var f = l.filter ? ["all", l.filter, tf] : tf;
+        // 1.11.0: a cluster layer of a layer on the slider holds one cluster set per period; the slider picks the set
+        var f = (l.metadata || {})["gm:period"] ? ["==", ["get", "_per"], i] : (l.filter ? ["all", l.filter, tf] : tf);
         maps.forEach(function (m) { if (m.getLayer(l.id)) m.setFilter(l.id, f); });
       });
     };

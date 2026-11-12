@@ -1901,6 +1901,11 @@ def run(pipeline: str, inputs: dict, options: dict | None = None, *, confirm: st
     started = now()
     stages, status = [], "ok"
     t_all = time.monotonic()
+    import contextlib
+    import map_plan as _mp
+    # 1.11.0: an atlas's pages and an animation's frames share one ground and one read of each library layer (map_plan.frame_session)
+    session = _mp.frame_session() if pipeline == "map-atlas-run" else contextlib.nullcontext()
+    session.__enter__()
     for sid, what, fn in reg["stages"]:
         t0 = time.monotonic()
         try:
@@ -1914,6 +1919,7 @@ def run(pipeline: str, inputs: dict, options: dict | None = None, *, confirm: st
         if not r["ok"]:
             status = "blocked" if blocked(r["findings"]) else "failed"
             break
+    session.__exit__(None, None, None)
     outputs = []
     seen = set()
     for f in c.files:

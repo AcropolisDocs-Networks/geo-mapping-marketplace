@@ -6,6 +6,8 @@ no color is computed there. Findings from the spec, data and CRS lints are colle
 """
 from __future__ import annotations
 
+import contextlib
+import json
 import re
 import sys
 from dataclasses import dataclass, field
@@ -415,7 +417,38 @@ def library_entry(entry_id: str) -> dict:
     raise PlanError(f"MAP-REF-001: the reference library has no entry '{entry_id}'; run geo-find-data or ref-library list", gc.EXIT_USAGE)
 
 
+# ---------------------------------------------------------------------------------------------------------------- one plan for many frames
+_SESSION: dict | None = None
+
+
+@contextlib.contextmanager
+def frame_session():
+    """1.11.0: maps built inside this block share what does not change from one to the next: a library layer is read from disk once
+    (load_ref_layer), and the ground of a frame (load_basemap: the land cut from the ocean, the detailed ground, the prepared tiles) is
+    worked out once per projection, window and basemap settings. An animation's frames and an atlas's pages differ in their data only, so
+    every frame after the first skips that work. Nothing is kept after the block."""
+    global _SESSION
+    outer = _SESSION
+    _SESSION = outer if outer is not None else {"ref": {}, "ground": {}, "hits": {"ref": 0, "ground": 0}}
+    try:
+        yield _SESSION
+    finally:
+        _SESSION = outer
+
+
 def load_ref_layer(entry_id: str, variant: str | None = None):
+    if _SESSION is None:
+        return _load_ref_layer(entry_id, variant)
+    key = (entry_id, variant)
+    if key not in _SESSION["ref"]:
+        _SESSION["ref"][key] = _load_ref_layer(entry_id, variant)
+    else:
+        _SESSION["hits"]["ref"] += 1
+    gdf, e = _SESSION["ref"][key]
+    return gdf.copy(), e
+
+
+def _load_ref_layer(entry_id: str, variant: str | None = None):
     e = library_entry(entry_id)
     st = e.get("status")
     if st in ("blocked", "retired", "draft"):
@@ -1188,7 +1221,8 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
             pre_notes.append(f"template auto: kept {tpl_value} ({type(ex).__name__})")
     tiles_rec, tiles_notes = prepared_tiles(spec, use_tiles, wgs, base)
     choice = ce.choose_display(wgs, "thematic" if area_stat else "reference", area_stat=area_stat or None, tiles=bool(tiles_rec), prefer=crs_spec.get("prefer"))
-    cs = ce.mapspec_crs(choice, "EPSG:3857" if tiles_rec else crs_spec.get("display"))
+    tiles_own_crs = bool(tiles_rec) and crs_spec.get("display") not in (None, "auto", "EPSG:3857")     # 1.11.0: the composite is warped to it
+    cs = ce.mapspec_crs(choice, "EPSG:3857" if tiles_rec and not tiles_own_crs else crs_spec.get("display"))
     display = cs["display"]
     crs_info = {"display": display, "rationale": cs["rationale"], "name": choice["name"], "equal_area": ce.is_equal_area(display),
                 "antimeridian": choice.get("antimeridian", False)}
@@ -1986,8 +2020,12 @@ def prepared_tiles(spec: dict, use_tiles: bool, wgs, base: Path | None = None) -
     if vector_source(spec, base) is not None:
         return None, []                                  # 1.10.0: a vector tile file is read as the ground itself (load_vector_ground), in any projection
     crs_req = (spec.get("crs") or {}).get("display")
-    if crs_req and crs_req not in ("auto", "EPSG:3857"):
-        return None, [f"basemap provider '{prov}' needs Web Mercator, but crs.display is {crs_req}; drawing the bundled basemap instead"]
+    own = bool(crs_req) and crs_req not in ("auto", "EPSG:3857")     # 1.11.0: the composite is warped to the map's own projection
+    if own:
+        try:
+            import rasterio  # noqa: F401
+        except ImportError:
+            return None, [f"basemap provider '{prov}': warping tiles to {crs_req} needs the rasterio package; drawing the bundled basemap instead"]
     import basemap_render as br
     rec = br.load_prepared(spec.get("id", ""))
     hint = f"run basemap_render.py render --spec <map>.yaml to prepare the '{prov}' tiles"
@@ -2106,6 +2144,30 @@ def load_vector_ground(plan: Plan, path: Path) -> bool:
 
 
 def load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = False, vector_file: Path | None = None) -> None:
+    if _SESSION is None:
+        return _load_basemap(plan, tiles_rec, explained, vector_file)
+    import map_raster
+    rect = lo.rect_of(plan.tpl["map"])
+    key = json.dumps([plan.crs, [round(float(v), 4) for v in plan.extent], [rect.x0, rect.y0, rect.w, rect.h], plan.spec.get("basemap"), plan.spec.get("context"),
+                      (plan.spec.get("elements") or {}).get("context"), (plan.spec.get("extent") or {}).get("padding_pct"),
+                      ["points" if l.wedge_info else l.role for l in plan.layers], bool(map_raster.needs_ground(plan.spec)), (tiles_rec or {}).get("sha256"),
+                      str(vector_file) if vector_file else None, bool(explained)], sort_keys=True, default=str)
+    hit = _SESSION["ground"].get(key)
+    if hit is None:
+        n0, f0, c0 = len(plan.notes), len(plan.findings), dict(plan.crs_info)
+        _load_basemap(plan, tiles_rec, explained, vector_file)
+        _SESSION["ground"][key] = {"basemap": list(plan.basemap), "notes": plan.notes[n0:], "findings": plan.findings[f0:],
+                                   "crs_info": {k: v for k, v in plan.crs_info.items() if k not in c0 or c0[k] is not v}, "vector_ground": plan.vector_ground}
+        return
+    _SESSION["hits"]["ground"] += 1
+    plan.basemap += [dict(b) for b in hit["basemap"]]
+    plan.notes += list(hit["notes"])
+    plan.findings += [dict(f) for f in hit["findings"]]
+    plan.crs_info.update(hit["crs_info"])
+    plan.vector_ground = hit["vector_ground"]
+
+
+def _load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = False, vector_file: Path | None = None) -> None:
     bm = (plan.spec.get("basemap") or {})
     prov = bm.get("provider", "none")
     if vector_file is not None and not tiles_rec:
@@ -2127,13 +2189,23 @@ def load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = Fa
     if tiles_rec:
         vis = lo.Frame.fit(lo.rect_of(plan.tpl["map"]), plan.extent, float((plan.spec.get("extent") or {}).get("padding_pct", 5))).visible
         bb = tiles_rec["bbox_3857"]
-        if bb[0] <= vis[0] and bb[1] <= vis[1] and bb[2] >= vis[2] and bb[3] >= vis[3]:
+        vis_m = vis if plan.crs == "EPSG:3857" else box_to_crs(vis, plan.crs, "EPSG:3857")
+        item = None
+        why = "the prepared tiles do not cover the whole map window"
+        if vis_m is not None and bb[0] <= vis_m[0] and bb[1] <= vis_m[1] and bb[2] >= vis_m[2] and bb[3] >= vis_m[3]:
             item = tiles_item(tiles_rec, plan)
+            if plan.crs != "EPSG:3857":
+                try:
+                    warp_tiles(item, plan)
+                except Exception as ex:  # noqa: BLE001 - rasterio's own message is the reason; the bundled ground is drawn
+                    item, why = None, f"the tiles could not be warped to {crs_label(plan.crs)} ({type(ex).__name__}: {str(ex)[:120]})"
+        if item is not None:
             plan.basemap.append(item)
             size = f" (labels about {tiles_rec['label_pt']:g} pt, {tiles_rec.get('paper_dpi')} dpi on paper)" if tiles_rec.get("label_pt") else ""
-            plan.notes.append(f"basemap: {tiles_rec.get('title') or tiles_rec['provider']} tiles, zoom {tiles_rec['zoom']}{size}, prepared {tiles_rec.get('retrieved_at')}")
+            warped = f", warped from Web Mercator to {crs_label(plan.crs)}" if item["image"].get("warped") else ""
+            plan.notes.append(f"basemap: {tiles_rec.get('title') or tiles_rec['provider']} tiles, zoom {tiles_rec['zoom']}{size}{warped}, prepared {tiles_rec.get('retrieved_at')}")
             return
-        plan.notes.append("the prepared tiles do not cover the whole map window; drawing the bundled basemap instead (prepare them again)")
+        plan.notes.append(f"{why}; drawing the bundled basemap instead (prepare them again)")
         plan.crs_info["tiles_unused"] = True
     elif prov != "bundled" and not explained:
         plan.notes.append(f"basemap provider '{prov}': tiles are loaded by the web page itself; the bundled basemap is the fallback")
@@ -2343,6 +2415,56 @@ def gd_units(crs) -> float:
         return float(c.axis_info[0].unit_conversion_factor or 1.0)
     except Exception:  # noqa: BLE001
         return 1.0
+
+
+def box_to_crs(b, src: str, dst: str, n: int = 24):
+    """The box (x0, y0, x1, y1) of a box of `src` in `dst`: its edges and inside are sampled, since a straight edge in one projection is a
+    curve in another. None when a sample has no image there."""
+    from pyproj import Transformer
+    t = Transformer.from_crs(src, dst, always_xy=True)
+    X, Y = np.meshgrid(np.linspace(b[0], b[2], n), np.linspace(b[1], b[3], n))
+    x, y = t.transform(X.ravel(), Y.ravel())
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    if not (np.isfinite(x).all() and np.isfinite(y).all()):
+        return None
+    return (float(x.min()), float(y.min()), float(x.max()), float(y.max()))
+
+
+def warp_tiles(item: dict, plan: Plan) -> None:
+    """1.11.0: a prepared composite (Web Mercator) warped to the map's own CRS for the map window: a PNG beside the composite, see-through
+    where the composite has no pixels, named by the CRS and the window so a rebuild reads it again. The item's image then carries `bbox`
+    (display CRS) and `warped`."""
+    import hashlib
+    import rasterio
+    from PIL import Image
+    from rasterio.transform import from_bounds
+    from rasterio.warp import Resampling, reproject
+    im = item["image"]
+    src = Path(im["path"])
+    win = plan_visible_pad(plan)
+    key = hashlib.sha256(f"{im.get('sha256')}|{plan.crs}|{[round(v, 3) for v in win]}".encode()).hexdigest()[:16]
+    out = src.with_name(f"composite-warped-{key}.png")
+    sx0, sy0, sx1, sy1 = im["bbox_3857"]
+    sw, sh = im["pixels"]
+    # as many pixels across the window as the composite has across the same ground (never more than 6,000 a side)
+    mw = box_to_crs(win, plan.crs, "EPSG:3857")
+    share = min(1.0, (mw[2] - mw[0]) / (sx1 - sx0)) if mw else 1.0
+    w = int(max(64, min(6000, round(sw * share))))
+    h = int(max(64, min(6000, round(w * (win[3] - win[1]) / (win[2] - win[0])))))
+    if not out.is_file():
+        a = np.asarray(Image.open(src).convert("RGB"))
+        dst = np.zeros((4, h, w), dtype=np.uint8)
+        st = from_bounds(sx0, sy0, sx1, sy1, sw, sh)
+        dt_ = from_bounds(win[0], win[1], win[2], win[3], w, h)
+        for i in range(3):
+            reproject(a[:, :, i], dst[i], src_transform=st, src_crs="EPSG:3857", dst_transform=dt_, dst_crs=plan.crs, resampling=Resampling.bilinear)
+        reproject(np.full((sh, sw), 255, dtype=np.uint8), dst[3], src_transform=st, src_crs="EPSG:3857", dst_transform=dt_, dst_crs=plan.crs,
+                  resampling=Resampling.nearest)
+        Image.fromarray(np.moveaxis(dst, 0, 2), "RGBA").save(out, optimize=True)
+    im["source_path"], im["path"] = str(src), str(out)
+    im["bbox"] = [float(v) for v in win]
+    im["warped"] = {"from": "EPSG:3857", "to": plan.crs, "pixels": [w, h], "resampling": "bilinear"}
+    _ = rasterio
 
 
 def tiles_item(rec: dict, plan: Plan) -> dict:

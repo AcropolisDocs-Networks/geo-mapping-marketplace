@@ -427,12 +427,21 @@ def _read_tiled(path: Path, lid: str, t: dict) -> list[dict]:
     for name, e in want.items():
         if name in missing:
             continue
-        cols = ["point_count", "mvt_id"] if e.get("cluster") else None
+        per = e.get("by_period") if e.get("cluster") else None
+        cols = (["point_count", "mvt_id"] + (["_per"] if per else [])) if e.get("cluster") else None
         df = pyogrio.read_dataframe(path, layer=name, ZOOM_LEVEL=str(e["maxzoom"]), read_geometry=False, columns=cols)
         if e.get("cluster"):
             # a cluster near a tile edge is also in the neighbouring tile's buffer: count each cluster once, by its feature id
             if "mvt_id" in df.columns and df["mvt_id"].notna().any():
                 df = df.drop_duplicates("mvt_id")
+            if per:                                    # 1.11.0: a layer on the time slider: one cluster set per period, each counting that period's points
+                got = {str(int(k)): int(v) for k, v in df.groupby("_per")["point_count"].sum().items()} if "_per" in df.columns else {}
+                want_p = {str(k): int(v) for k, v in per.items()}
+                bad = sorted(k for k in set(got) | set(want_p) if got.get(k) != want_p.get(k))
+                if bad or max(want_p.values(), default=0) > src_n:
+                    out.append(finding("MAP-WEB-018", "BLOCK", f"layer '{lid}': the clusters at zoom {e['maxzoom'] + 1} do not count what their periods show "
+                                       f"(period(s) {', '.join(bad[:6]) or 'over the layer total'})", {"layer": name, "found": got, "expected": want_p}))
+                continue
             n = int(df["point_count"].sum()) if "point_count" in df.columns else -1
             if n != src_n:
                 out.append(finding("MAP-WEB-018", "BLOCK", f"layer '{lid}': the clusters at zoom {e['maxzoom'] + 1} count {n:,} points; the layer has {src_n:,}", {"layer": name, "found": n, "expected": src_n}))

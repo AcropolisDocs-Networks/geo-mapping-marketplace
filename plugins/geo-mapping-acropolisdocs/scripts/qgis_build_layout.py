@@ -41,7 +41,7 @@ def main(argv: list[str]) -> int:
                            QgsLayoutItemLabel, QgsLayoutItemLegend, QgsLayoutItemMap, QgsLayoutItemPicture, QgsLayoutItemScaleBar,
                            QgsLayoutItemShape,
                            QgsLayoutPoint, QgsLayoutSize, QgsLineSymbol, QgsMarkerSymbol, QgsPalLayerSettings, QgsPrintLayout, QgsProject,
-                           QgsProperty, QgsRectangle, QgsRendererCategory, QgsSingleSymbolRenderer, QgsSymbol, QgsTextFormat,
+                           QgsProperty, QgsRasterLayer, QgsRectangle, QgsRendererCategory, QgsSingleSymbolRenderer, QgsSymbol, QgsTextFormat,
                            QgsVectorLayer, QgsVectorLayerSimpleLabeling)
     from qgis.PyQt.QtCore import Qt
     from qgis.PyQt.QtGui import QColor, QFont, QFontDatabase
@@ -99,6 +99,35 @@ def main(argv: list[str]) -> int:
             return s
 
         qlayers = {}
+        # ---- the ground and the pictures (1.11.0): land, water, border lines; the relief, raster windows and prepared tiles as raster layers
+        pics = {p["id"]: p for p in spec.get("pictures") or []}
+        for p in pics.values():
+            rl = QgsRasterLayer(str(kit / p["file"]), p["title"], "gdal")
+            if not rl.isValid():
+                result["warnings"].append(f"the picture '{p['id']}' could not be read; it is not in the layout")
+                continue
+            rl.setCrs(crs)
+            if float(p.get("opacity", 1.0)) < 1:
+                rl.renderer().setOpacity(float(p["opacity"]))
+            project.addMapLayer(rl)
+            qlayers[p["id"]] = rl
+        for G in spec.get("ground") or []:
+            if G.get("picture"):
+                continue
+            gl_ = QgsVectorLayer(f"{gpkg}|layername={G['table']}", G["title"], "ogr")
+            if not gl_.isValid():
+                raise RuntimeError(f"ground layer '{G['id']}' could not be read from layers.gpkg")
+            if G["kind"] == "line":
+                gs = QgsLineSymbol.createSimple({"line_color": G["stroke"], "line_width": str(G["stroke_w_mm"]), "line_width_unit": "MM", "capstyle": "round",
+                                                 "joinstyle": "round"})
+            else:
+                gs = QgsFillSymbol.createSimple({"color": G["fill"], "outline_color": G.get("stroke") or "0,0,0,0", "outline_width": str(G["stroke_w_mm"]),
+                                                 "outline_width_unit": "MM", "outline_style": "solid" if G.get("stroke") else "no", "joinstyle": "round"})
+            gl_.setRenderer(QgsSingleSymbolRenderer(gs))
+            project.addMapLayer(gl_)
+            qlayers[G["id"]] = gl_
+        if spec.get("ground") or pics:
+            result["items"].append("ground")
         for L in spec["layers"]:
             vl = QgsVectorLayer(f"{gpkg}|layername={L['table']}", L["title"], "ogr")
             if not vl.isValid():
@@ -139,6 +168,42 @@ def main(argv: list[str]) -> int:
                 vl.setLabelsEnabled(True)
             project.addMapLayer(vl)
             qlayers[L["id"]] = vl
+
+        # ---- the plugin's own label placements (1.11.0): a point per label, drawn at its point with its own size, colours, side and angle
+        PL = spec.get("placed_labels")
+        if PL:
+            ll = QgsVectorLayer(f"{gpkg}|layername={PL['table']}", "Labels", "ogr")
+            if not ll.isValid():
+                result["warnings"].append("the placed labels could not be read; the map has no labels")
+            else:
+                from qgis.core import QgsNullSymbolRenderer
+                ll.setRenderer(QgsNullSymbolRenderer())
+                ps = QgsPalLayerSettings()
+                ps.fieldName = "text"
+                tf = QgsTextFormat()
+                tf.setFont(QFont(font_name))
+                tf.setSize(7.0)
+                tf.setSizeUnit(_unit("Points"))
+                buf = tf.buffer()
+                buf.setEnabled(True)
+                buf.setSizeUnit(_unit("Millimeters"))
+                tf.setBuffer(buf)
+                ps.setFormat(tf)
+                ps.displayAll = True
+                P_ = QgsPalLayerSettings
+                props = ps.dataDefinedProperties()
+                for key, expr in ((P_.Size, '"size_pt"'), (P_.Color, '"color"'), (P_.BufferColor, '"halo"'), (P_.BufferSize, '"halo_mm"'),
+                                  (P_.BufferDraw, 'length("halo") > 0'), (P_.PositionX, '"x"'), (P_.PositionY, '"y"'), (P_.Hali, '"hali"'),
+                                  (P_.Vali, "'Base'"), (P_.LabelRotation, '"rotation"'), (P_.Bold, '"weight" >= 600'), (P_.Italic, '"italic" = 1'),
+                                  (P_.FontLetterSpacing, '"spacing_pt"')):
+                    props.setProperty(key, QgsProperty.fromExpression(expr))
+                ps.setDataDefinedProperties(props)
+                ll.setLabeling(QgsVectorLayerSimpleLabeling(ps))
+                ll.setLabelsEnabled(True)
+                project.addMapLayer(ll)
+                qlayers["__labels"] = ll
+                result["items"].append("labels")
+                result["labels"] = int(PL["count"])
 
         # ---- page and map
         layout = QgsPrintLayout(project)
@@ -193,11 +258,11 @@ def main(argv: list[str]) -> int:
         layout.addLayoutItem(mp_)
         place(mp_, mr["x"], mr["y"], mr["w"], mr["h"])
         mp_.setCrs(crs)
-        mp_.setLayers([qlayers[i] for i in reversed(spec["draw_order"])])
+        mp_.setLayers(([qlayers["__labels"]] if "__labels" in qlayers else []) + [qlayers[i] for i in reversed(spec["draw_order"]) if i in qlayers])
         mp_.setKeepLayerSet(True)
         ex = spec["extent"]
         mp_.zoomToExtent(QgsRectangle(ex[0], ex[1], ex[2], ex[3]))
-        mp_.setBackgroundColor(QColor(bgc))
+        mp_.setBackgroundColor(QColor(spec["colors"].get("map_background") or bgc))
         mp_.setBackgroundEnabled(True)
         if spec.get("neatline"):
             mp_.setFrameEnabled(True)
@@ -317,6 +382,15 @@ def main(argv: list[str]) -> int:
             result["items"].append("north_arrow")
             if not ok:
                 result["warnings"].append("QGIS' default north arrow image was not found; the arrow may be blank")
+        ins = ov.get("inset")
+        if ins and (kit / ins["file"]).is_file():        # 1.11.0: the locator, the picture the SVG path draws
+            pic = QgsLayoutItemPicture(layout)
+            pic.setId("inset")
+            pic.setPicturePath(str(kit / ins["file"]))
+            pic.setResizeMode(QgsLayoutItemPicture.Stretch if hasattr(QgsLayoutItemPicture, "Stretch") else 0)
+            layout.addLayoutItem(pic)
+            place(pic, ins["x"], ins["y"], ins["w"], ins["h"])
+            result["items"].append("inset")
         ban = ov.get("banner")
         if ban:
             label(ban["text"], (mr["x"], mr["y"], mr["w"], ban["h"]), ban["pt"], ban["text_color"], True, Qt.AlignHCenter, Qt.AlignVCenter, bg=ban["color"], name="banner")

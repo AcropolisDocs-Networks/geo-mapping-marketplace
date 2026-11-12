@@ -6,12 +6,15 @@ Large layers. A layer the page carries with more than TILE_LAYER_FEATURES featur
 page as a PMTiles archive (tiles_out.write_pmtiles, GDAL's own writer), base64 in a script element, and is read in the browser through a
 PMTiles source over that in-memory buffer (`maplibregl.addProtocol('pmtiles', ...)`). Smaller layers stay GeoJSON sources.
 
+Clusters on the time slider (1.11.0). A tiled point layer on the slider gets one cluster set per period (bake_period_clusters), each cluster
+tagged with its period; the page shows the set of the period the slider is on. A GeoJSON layer on the slider is still not clustered.
+
 Clusters. A point layer with more than CLUSTER_MIN_POINTS points is clustered while the control `cluster` is on. A GeoJSON layer uses
 MapLibre's own clustering. A tiled layer cannot be clustered in the browser, so its clusters are made here the way MapLibre's clustering
 (supercluster) makes them: from the zoom below the points down, every item not yet taken gathers the items within 50 pixels, the cluster sits
 at their weighted mean, and each zoom is built from the one above, so clusters nest. One source layer per zoom carries them, with
-`point_count`; the points themselves start at the zoom where most of them stand apart (`points_zoom`). A layer with a time field is never
-clustered: the time slider filters its points.
+`point_count`; the points themselves start at the zoom where most of them stand apart (`points_zoom`). A GeoJSON layer with a time field is not
+clustered: the time slider filters its points (a tiled one is, per period: see above).
 
 Zoom numbers. The page's own zoom numbers (the configuration, the shared address, the names' `min_zoom`) are those of 256-pixel tiles, as
 Leaflet counts. MapLibre counts 512-pixel tiles, so its zoom is the page's minus one; the style below is written in MapLibre's numbers.
@@ -319,8 +322,31 @@ def lod_style(layers: list[dict], source_layer: str, lod_info: dict) -> list[dic
     return out
 
 
+PERIOD_CLUSTER_MAX = 3_000_000          # points x periods: past this a layer on the time slider is not clustered (the baking would take minutes)
+
+
+def bake_period_clusters(lon, lat, t, n_periods: int, cumulative: bool, zooms) -> dict:
+    """1.11.0: {z: GeoDataFrame} of clusters for a layer on the time slider: one cluster set per period, made from the points that period
+    shows (a cumulative slider: every point up to it), each cluster carrying `_per`, its period. The page shows the set of the period the
+    slider is on, so a count is always the count of what is on the map then."""
+    import geopandas as gpd
+    import numpy as np
+    import pandas as pd
+    lon, lat, t = np.asarray(lon, dtype=float), np.asarray(lat, dtype=float), np.asarray(t)
+    out: dict = {}
+    for p in range(int(n_periods)):
+        m = ((t >= 0) & (t <= p)) if cumulative else (t == p)
+        if not m.any():
+            continue
+        for z, g in bake_clusters(lon[m], lat[m], zooms).items():
+            g = g.copy()
+            g["_per"] = p
+            out.setdefault(z, []).append(g)
+    return {z: gpd.GeoDataFrame(pd.concat(parts, ignore_index=True), geometry="geometry", crs="EPSG:4326") for z, parts in out.items()}
+
+
 def tile_layer(lid: str, col: dict, kind: str, *, zmin: int, zmax: int, cluster: bool, scratch: Path, attribution: str | None,
-               lod_cfg: dict | None = None) -> dict:
+               lod_cfg: dict | None = None, periods: dict | None = None) -> dict:
     """Write one large layer as an embedded PMTiles archive. Returns {key, path, bytes, layers: {source layer: {features, minzoom, maxzoom,
     kind, cluster}}, points_zoom, notes}. Zooms are MapLibre zooms (512-pixel tiles). 1.6.0: a polygon layer with `lod_cfg` (its extrude block
     or its `lod` block, lod not off) gets a level-of-detail pyramid (lod_tile_layer)."""
@@ -346,7 +372,9 @@ def tile_layer(lid: str, col: dict, kind: str, *, zmin: int, zmax: int, cluster:
             pz = dz
         zooms[name] = (pz, min(zmax, pz + POINTS_EXTRA_ZOOMS))
         if cluster and pz > zmin:
-            for z, cg in bake_clusters(lon, lat, range(zmin, pz)).items():
+            baked = (bake_period_clusters(lon, lat, periods["t"], periods["n"], periods["cumulative"], range(zmin, pz)) if periods
+                     else bake_clusters(lon, lat, range(zmin, pz)))
+            for z, cg in baked.items():
                 cn = f"{name}__c{z}"
                 layers[cn] = cg
                 zooms[cn] = (z, z)
@@ -360,6 +388,8 @@ def tile_layer(lid: str, col: dict, kind: str, *, zmin: int, zmax: int, cluster:
     for k, v in rep["layers"].items():
         info[k] = {"features": int(v["features"]), "minzoom": int(v["minzoom"]), "maxzoom": int(v["maxzoom"]), "kind": v["kind"],
                    "cluster": k != name, "points": int(layers[k]["point_count"].sum()) if k != name else int(v["features"])}
+        if periods and k != name:                # per period: the counts of one period add up to the points that period shows
+            info[k]["by_period"] = {int(p): int(c) for p, c in layers[k].groupby("_per")["point_count"].sum().items()}
     notes += [n for n in rep["notes"] if "top zoom" not in n]
     return {"key": f"gm-{name}", "path": str(path), "bytes": int(rep["bytes"]), "layers": info, "points_zoom": pz, "source_layer": name,
             "zmin": min(i["minzoom"] for i in info.values()), "zmax": max(i["maxzoom"] for i in info.values()), "notes": notes}
@@ -481,11 +511,15 @@ def data_layers(d: dict, src: str, source_layer: str | None, t: dict, *, visible
                 cdefs.append((None, None, None, f"{lid}--cl"))
             for csl, zlo, zhi, cid in cdefs:
                 extra = {"source-layer": csl} if csl else {"filter": ["has", "point_count"]}
+                per = {}
+                if csl and cluster.get("periods"):   # 1.11.0: one cluster set per period; the slider picks the set (gm:period)
+                    extra["filter"] = ["==", ["get", "_per"], int(cluster.get("period0") or 0)]
+                    per = {"gm:period": 1}
                 zr = {} if zlo is None else {"minzoom": zlo, "maxzoom": zhi}
-                base.append({"id": cid, "type": "circle", "source": src, **extra, **zr, "layout": dict(vis), "metadata": _meta(lid, "cluster"),
+                base.append({"id": cid, "type": "circle", "source": src, **extra, **zr, "layout": dict(vis), "metadata": {**_meta(lid, "cluster"), **per},
                              "paint": {"circle-color": ccol, "circle-radius": steps, "circle-opacity": 0.85, "circle-stroke-color": cluster["stroke"],
                                        "circle-stroke-width": 1.5, "circle-stroke-opacity": 1}})
-                syms.append({"id": cid + "-n", "type": "symbol", "source": src, **extra, **zr, "metadata": _meta(lid, "cluster-count"),
+                syms.append({"id": cid + "-n", "type": "symbol", "source": src, **extra, **zr, "metadata": {**_meta(lid, "cluster-count"), **per},
                              "layout": {**vis, "text-field": ["get", "point_count_abbreviated"], "text-font": ["Inter SemiBold"], "text-size": 11,
                                         "text-allow-overlap": True, "text-ignore-placement": False, "icon-image": "gm-box",
                                         "icon-size": ["/", ["*", 2, steps], 8], "icon-allow-overlap": True, "icon-ignore-placement": False},

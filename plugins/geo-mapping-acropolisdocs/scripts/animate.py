@@ -117,7 +117,14 @@ def smooth_bar_filter(w: int, h: int, px: int, n: int, hold: float, last_hold: f
 
 def render_frames(specs: list[Path], size: str, work: Path, *, brand: str | None = None, collect: dict | None = None) -> tuple[list, dict, list[dict]]:
     """Each period's MapSpec drawn at one animation size. -> (frames as RGB images, the plan's tokens, findings). `collect` (1.3.0) gathers each
-    frame's provenance records and the text it shows, for the video's terms register."""
+    frame's provenance records and the text it shows, for the video's terms register. 1.11.0: the frames share one ground and one read of
+    every library layer (map_plan.frame_session), since only the data changes from period to period."""
+    import map_plan as mp
+    with mp.frame_session():
+        return _render_frames(specs, size, work, brand, collect)
+
+
+def _render_frames(specs: list[Path], size: str, work: Path, brand: str | None, collect: dict | None) -> tuple[list, dict, list[dict]]:
     import build_map as bm
     import map_plan as mp
     cfg = SIZES[size]
