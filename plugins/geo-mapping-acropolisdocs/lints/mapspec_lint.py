@@ -42,6 +42,16 @@ PLACEHOLDER_MESSAGES = {"map", "a map", "title", "untitled", "todo", "tbd", "lor
 ROLES_NEEDING_VALUE = {"choropleth"}
 
 
+# 1.13.0: layer keys the code reads that the schema does not list (the schema leaves layers open); anything else is MAP-SPEC-011
+LAYER_KEYS_OUTSIDE_SCHEMA = {"symbol", "value_field", "title", "provenance", "palette", "popup", "popup_fields", "queryable", "visible", "layout",
+                             "home_addresses_reviewed"}
+LAYER_KEY_HINTS = {"note": "legend.note", "label": "legend.label",
+                   "where": "filter: {column, in: [...]} (a file layer; source.where is for a library service layer)", "color": "symbol.color", "colour": "symbol.color", "size": "symbol.size", "width": "symbol.width",
+                   "opacity": "symbol.opacity", "max_size": "symbol.max_size", "scale_with": "symbol.scale_with", "shape": "symbol.shape",
+                   "breaks": "classification.breaks", "classes": "classification.classes", "method": "classification.method",
+                   "labels": "a labels: entry at the top of the MapSpec (labels: [{layer, field}])", "emphasise": "emphasis", "highlights": "highlight"}
+
+
 def finding(fid: str, sev: str, message: str, detail=None) -> dict:
     return {"id": fid, "severity": sev, "message": message, "detail": detail}
 
@@ -81,9 +91,21 @@ def lint_spec(spec: dict) -> list[dict]:
     for lb in spec.get("labels") or []:
         if isinstance(lb, dict) and lb.get("layer") not in ids:
             out.append(finding("MAP-SPEC-003", "BLOCK", f"a label refers to layer '{lb.get('layer')}', which does not exist", lb.get("layer")))
+    known_keys = set(((schema.get("properties") or {}).get("layers") or {}).get("items", {}).get("properties", {})) | LAYER_KEYS_OUTSIDE_SCHEMA
     for ly in layers:
         if not isinstance(ly, dict):
             continue
+        for k in ly:                          # 011 (1.13.0, Day 12 issues 1 and 5): a setting at the wrong level is ignored without a word
+            if isinstance(k, str) and not k.startswith("_") and k not in known_keys:
+                hint = LAYER_KEY_HINTS.get(k)
+                out.append(finding("MAP-SPEC-011", "WARN", f"layer '{ly.get('id')}': '{k}' is not a layer setting, so it is ignored"
+                                   + (f"; did you mean {hint}?" if hint else ""), k))
+        sw = (ly.get("symbol") or {}).get("scale_with") if isinstance(ly.get("symbol"), dict) else None
+        if sw is not None:                    # 1.13.0 (Day 12 issue 12): proportional layers on one size scale
+            roles = {x.get("id"): x.get("role") for x in layers if isinstance(x, dict)}
+            if ly.get("role") != "proportional" or roles.get(sw) != "proportional" or sw == ly.get("id"):
+                out.append(finding("MAP-SPEC-003", "BLOCK", f"layer '{ly.get('id')}': symbol.scale_with names '{sw}'; it must name another proportional "
+                                   "layer, and this layer must be proportional too", sw))
         pal = (ly.get("palette") or {}).get("name")
         if pal and pal not in PALETTES:
             out.append(finding("MAP-SPEC-003", "BLOCK", f"layer '{ly.get('id')}': palette '{pal}' is not one of {', '.join(sorted(PALETTES))}", pal))

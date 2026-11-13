@@ -20,7 +20,7 @@ if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   done
 fi
 [ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
-export GMAP_BUILD_TOKEN=...      # from map-env-probe --begin-build
+export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)   # or --token
 python3 "$GMAP_ROOT/scripts/map_brand.py" resolve --spec map.yaml [--request-brand SLUG]
 python3 "$GMAP_ROOT/scripts/map_brand.py" tokens  --spec map.yaml --mode print|screen      # print = theme light (default), screen = theme dark
 python3 "$GMAP_ROOT/scripts/map_brand.py" logo    --spec map.yaml --ground light|dark|#RRGGBB [--variant secondary]

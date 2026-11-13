@@ -141,14 +141,15 @@ def locale_finding(plan, sb_info: dict | None = None) -> list[dict]:
     loc = plan_locale(plan)
     spec = getattr(plan, "spec", None) or {}
     why_loc = (f"locale {loc}: asked" if str(spec.get("locale") or "auto") != "auto"
-               else f"locale {loc}: {'the country under the centre is ' + iso if iso else 'no country under the centre'}")
+               else f"locale {loc}: {'the country under the centre is ' + ((country(iso) or {}).get('name') or iso) if iso else 'no country under the centre'}")
     out = [{"id": "MAP-LOC-001", "severity": "INFO", "message": why_loc + (f"; units {sb_info['units']}: {sb_info['units_reason']}"
                                                                            if sb_info and sb_info.get("units_reason") else ""),
             "detail": {"country": iso, "locale": loc, "units": (sb_info or {}).get("units")}}]
     mixed = (sb_info or {}).get("units_mixed") or []
     if mixed:
+        named = [(country(c) or {}).get("name") or c for c in mixed]       # 1.13.0 (Day 12 issue 10): Canada, not CA (which reads as California)
         out.append({"id": "MAP-LOC-002", "severity": "WARN",
-                    "message": (f"the window also covers {', '.join(mixed)}, which use{'s' if len(mixed) == 1 else ''} other distance units; the scale bar "
+                    "message": (f"the window also covers {', '.join(named)}, which use{'s' if len(mixed) == 1 else ''} other distance units; the scale bar "
                                 f"is in {sb_info['units']}, the units of the country under the centre (set elements.scale_bar.units to choose)"),
                     "detail": {"other_countries": mixed}})
     return out

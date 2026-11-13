@@ -53,9 +53,11 @@ def hidden_under_fill(plan, ctx_layer) -> bool:
     at full opacity covers it, so the reader never sees its weight (1.2.0, Day 9 issue 12)."""
     try:
         import numpy as np
-        order = [l.id for l in plan.layers]
+        import map_plan as mp
+        drawn = mp.draw_order(plan.layers)                # 1.13.0 (Day 12 issue 11): the order the layers are drawn in, not the order of the list
+        order = [l.id for l in drawn]                     # (the context pack is listed after the data but drawn under it, so no fill ever covered it)
         i0 = order.index(ctx_layer.id)
-        covers = [l for l in plan.layers[i0 + 1:] if l.role in ("choropleth", "grid", "hexbin") and l.kind == "polygon"
+        covers = [l for l in drawn[i0 + 1:] if l.role in ("choropleth", "grid", "hexbin") and l.kind == "polygon"
                   and float(getattr(l, "fill_opacity", 1.0) or 1.0) >= 1.0 and float(getattr(l, "group_opacity", 1.0) or 1.0) >= 1.0]
         g = ctx_layer.gdf
         if not covers or g is None or g.empty:

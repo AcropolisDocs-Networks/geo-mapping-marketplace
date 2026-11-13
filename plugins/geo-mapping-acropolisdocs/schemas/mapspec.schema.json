@@ -47,6 +47,7 @@
       "description": "0.17.0: the map's look. auto (the default): class colours generated from the brand colour over the full range of tints and shades, context drawn lighter and thinner than the data, casings under data lines and points, point sizes by feature count; 0.22.0: auto resolves to a named look (focus: mask and lift on areas; clean: points and sites; network: roads fainter and a dot at each line end; terrain: heavier contours; surface: the context see-through over a surface); bold: everything a quarter larger with a wider ramp; dark: a dark ground with the ramp running up from it. classic: exactly the 0.16 look.",
       "properties": {
         "look": {"enum": ["auto", "classic", "focus", "clean", "network", "terrain", "surface", "bold", "dark"], "description": "auto (the default) picks focus, clean, network, terrain or surface from the map's main data (0.22.0); bold and dark only when asked for; classic is the 0.16 look"},
+        "hierarchy": {"enum": ["auto", "off", false], "description": "1.13.0: auto (the default; off under the classic look): the data layers the message names are drawn at full strength and the others quieter (each layer's emphasis); off: every layer at full strength"},
         "pack": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,30}$", "description": "1.4.0 (R2-PACK): the style pack (palette, type, ornaments, treatments) the whole map is built in; default (a normal map: the brand's palette and Inter) unless named. Fixed when the build starts: changing it builds the map again from its kept data"},
         "treatments": {"type": "object", "additionalProperties": false, "description": "1.4.0 (R2-TREAT): treatments for this map whatever its pack; they override the pack's own key by key",
           "properties": {"paper": {"type": ["object", "boolean"]}, "water_lining": {"type": ["object", "boolean"]}, "hill_glyphs": {"type": ["object", "boolean"]},
@@ -651,9 +652,15 @@
           "highlight": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["column", "in"],
-            "description": "0.22.0: emphasis by contrast: the features where column is one of the values are drawn at full colour and a fifth larger; the rest of the layer is desaturated and drawn at 30 percent",
-            "properties": {"column": {"type": "string"}, "in": {"type": "array", "minItems": 1}}
+            "required": ["column"],
+            "anyOf": [{"required": ["in"]}, {"required": ["min"]}, {"required": ["max"]}, {"required": ["top"]}],
+            "description": "0.22.0: emphasis by contrast: the features chosen are drawn at full colour and a fifth larger; the rest of the layer is desaturated and drawn at 30 percent. Choose them with in: [values], or (1.13.0) min / max (numbers at or above / at or below; both for a range) or top: N (the N largest). rest: fade keeps the rest's own colours; rest_opacity sets its strength.",
+            "properties": {"column": {"type": "string"}, "in": {"type": "array", "minItems": 1}, "min": {"type": "number"}, "max": {"type": "number"},
+                           "top": {"type": "integer", "minimum": 1}, "rest": {"enum": ["dim", "fade"]}, "rest_opacity": {"type": "number", "minimum": 0.05, "maximum": 0.95}}
+          },
+          "emphasis": {
+            "enum": ["auto", "primary", "supporting", "background"],
+            "description": "1.13.0: how strongly the layer is drawn. primary: full strength; supporting: one see-through group at 55 percent; background: 30 percent. auto (the default): a layer named in the message (its id, legend title or label shares a word with it) is primary and the other auto layers are supporting, unless no layer is named. The legend key follows. style.hierarchy: off draws every layer at full strength."
           },
           "filter": {
             "oneOf": [

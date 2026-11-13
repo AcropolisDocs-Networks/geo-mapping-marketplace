@@ -71,7 +71,10 @@ Each fact appears in exactly one element. If two say the same thing, it stays in
 
 - Legend title: the measure and its unit, sentence case, no period: *Walk time (min)*, *Sites per 100 sq mi*.
 - Legend classes: ranges with an en dash and no repeated unit (*0–5*, *5–10*); the unit lives in the legend title.
-- Callouts and labels: 1 to 5 words, a place name or a number with its unit.
+- Callouts and labels: 1 to 5 words, a place name or a number with its unit. A callout's key number goes in its `figure` (*692 MW*), set large
+  above the words (1.13.0).
+- The title block sits on the map with a soft glow of the page colour under its letters (`elements.title.halo: glow`, 1.13.0), so the title,
+  subtitle and tagline read where they cross lines and class edges; it is no reason to move the title.
 - Data table headers: 1 to 3 words, unit in brackets: *Residents (k)*.
 - Source line: one method phrase at most (*walk times by Valhalla*). A licence's required credit is never shortened.
 - Web title panel: the same title and subtitle as the static map; the About text may run to 3 sentences.

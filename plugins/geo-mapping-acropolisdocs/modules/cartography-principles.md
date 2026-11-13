@@ -22,9 +22,14 @@ supports it. MAP-CART-013 compares the title with the message. A map with two me
 | Level | What sits there | How it is held there |
 |---|---|---|
 | Figure | The data layer the message is about | The brand's data colours, full saturation, drawn last among data |
-| Supporting data | Second layers, labels of the figure | Lighter or thinner; labels in the label colour with a halo |
+| Supporting data | Second layers, labels of the figure | Drawn see-through: `emphasis: supporting` (55 percent) or `background` (30); labels in the label colour with a halo |
 | Ground | Land, water, context roads and places, relief | Brand land and water tokens, low contrast; context drawn under data |
 | Furniture | Title, legend, scale bar, north arrow, source note | Out of the map's way; the layout engine places them where data is sparse |
+
+1.13.0: the builder holds these levels by itself. The data layers the `message` names are the figure, at full strength; the other data layers
+are supporting (55 percent, their legend keys too), and the No data class fades to half. Write the message so it names what the map is about,
+or set `emphasis:` per layer; `highlight:` does the same inside one layer (`in`, `min`, `max`, `top`). MAP-CART-038 warns when three or more
+layers all stand at full strength.
 
 MAP-CART-008 checks the basemap stays subordinate; MAP-CART-015 refuses a data layer drawn in a page or text colour. A tile basemap under a
 choropleth competes with it: prefer the bundled background or `provider: none`.

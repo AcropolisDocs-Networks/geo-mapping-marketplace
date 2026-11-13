@@ -94,6 +94,9 @@ def scale_info(crs, bbox, frame_mm: float, *, units: str = "auto", rotation: flo
     else:
         out["bar"] = bar_model(ground_m_per_mm, frame_mm, unit, segments)
         out["bar_hidden"] = None
+        if not out["bar"].get("ticks"):                # 1.13.0: a frame too small for any round length (a fit candidate squeezed to nothing) has no bar
+            out["bar"] = None
+            out["bar_hidden"] = "the map frame is too small for a scale bar"
     if variation > BLOCK_VARIATION:
         sev = "block"
     elif variation > WARN_VARIATION:

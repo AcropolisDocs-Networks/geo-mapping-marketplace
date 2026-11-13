@@ -18,6 +18,7 @@ from label_engine import Rect
 PT = 25.4 / 72.0
 CALLOUT_MAX_W_MM = 42.0           # a callout's text wraps at this width
 CALLOUT_MAX_LINES = 4
+CALLOUT_FIGURE_PT = 5.0           # 1.13.0: a callout's `figure` is set this many points larger than its words, bold
 CALLOUT_PAD_MM = 1.2
 CALLOUT_RINGS_MM = (7.0, 11.0, 16.0, 22.0)   # distances from the anchor the box is tried at
 DIRECTIONS = ((1, -1), (-1, -1), (1, 1), (-1, 1), (1, 0), (-1, 0), (0, -1), (0, 1))   # ne, nw, se, sw, e, w, n, s (sheet y down)
@@ -81,7 +82,8 @@ def callout_anchor(plan, item: dict, frame) -> tuple[float, float] | None:
 
 
 def draw_callouts(plan, frame, cfg: dict, taken: list[Rect], fonts: dict) -> tuple[str, list[Rect], list[dict], list[dict]]:
-    """elements.callouts: {on, items: [{text, at | layer+where, direction?}]}. Each box is tried around its anchor (the direction asked for
+    """elements.callouts: {on, items: [{text, figure?, at | layer+where, direction?}]} (figure, 1.13.0: a key number set large and bold above
+    the words). Each box is tried around its anchor (the direction asked for
     first, then the eight directions at growing distances) and joined to it by a leader line; boxes avoid the overlays, the other callouts and
     each other. Returns (svg, rects taken, records, findings)."""
     t = plan.tokens
@@ -104,9 +106,11 @@ def draw_callouts(plan, frame, cfg: dict, taken: list[Rect], fonts: dict) -> tup
             fs.append(f("MAP-CART-026", "WARN", f"callout {i + 1} ('{txt[:40]}') points outside the map frame; it is not drawn"))
             continue
         lines = tm.wrap(txt, CALLOUT_MAX_W_MM, pt, wt)[:CALLOUT_MAX_LINES]
-        tw = max(tm.width_mm(ln, pt, wt) for ln in lines)
+        fig = str(item.get("figure") or "").strip()            # 1.13.0 (Day 12 issue 6): a key number set large above the words ("692 MW")
+        fpt = pt + CALLOUT_FIGURE_PT
+        tw = max([tm.width_mm(ln, pt, wt) for ln in lines] + ([tm.width_mm(fig, fpt, 700, tnum=True)] if fig else []))
         bw = tw + 2 * CALLOUT_PAD_MM
-        bh = len(lines) * tm.line_height_mm(pt) + 2 * CALLOUT_PAD_MM
+        bh = len(lines) * tm.line_height_mm(pt) + 2 * CALLOUT_PAD_MM + (tm.line_height_mm(fpt) if fig else 0.0)
         dirs = list(DIRECTIONS)
         want = DIR_NAMES.get(str(item.get("direction", "")).lower())
         if want:
@@ -131,13 +135,17 @@ def draw_callouts(plan, frame, cfg: dict, taken: list[Rect], fonts: dict) -> tup
         out.append(f'<circle cx="{sd.num(ax)}" cy="{sd.num(ay)}" r="0.7" fill="{t["label"]}" stroke="{t["label_halo"]}" stroke-width="0.3"/>')
         out.append(sd.rect(box.x0, box.y0, box.w, box.h, t["legend_bg"], t["label"] if strong else t["legend_frame"], 0.45 if strong else 0.2))
         y = box.y0 + CALLOUT_PAD_MM + pt * PT * 0.85
+        if fig:
+            y = box.y0 + CALLOUT_PAD_MM + fpt * PT * 0.85
+            out.append(sd.text(box.x0 + CALLOUT_PAD_MM, y, fig, fpt, t["label"], weight=700, num_cls=True, extra=' data-role="figure"'))
+            y = box.y0 + CALLOUT_PAD_MM + tm.line_height_mm(fpt) + pt * PT * 0.85
         for ln in lines:
             out.append(sd.text(box.x0 + CALLOUT_PAD_MM, y, ln, pt, t["label"], weight=wt))
             y += tm.line_height_mm(pt)
         out.append("</g>")
         rects.append(box)
         rects.append(Rect(min(ax, ex) - 0.4, min(ay, ey) - 0.4, max(ax, ex) + 0.4, max(ay, ey) + 0.4))
-        recs.append({"n": i + 1, "text": txt[:80], "anchor_mm": [round(ax, 2), round(ay, 2)], "box_mm": [round(box.x0, 2), round(box.y0, 2), round(box.x1, 2), round(box.y1, 2)]})
+        recs.append({"n": i + 1, "text": txt[:80], **({"figure": fig} if fig else {}), "anchor_mm": [round(ax, 2), round(ay, 2)], "box_mm": [round(box.x0, 2), round(box.y0, 2), round(box.x1, 2), round(box.y1, 2)]})
     return "".join(out), rects, recs, fs
 
 

@@ -41,6 +41,7 @@ PT = sd.PT
 PROP_SIZE_STEP_MM = 0.05          # 0.24.0: a very large proportional layer is drawn one path per size step of this much
 MIN_SYMBOL_MM = 0.8               # the smallest proportional symbol still has to be seen; above this size area stays proportional
 OVERLAY_COVER_OK = 0.015          # overlays may sit over up to this share of the data cells; beyond it the map is reduced to make room (fit: shrink)
+SHRINK_STEPS = (0.2, 0.4, 0.6, 0.8, 1.0)   # 1.13.0: the shares of an element's strip the fit's shrink step tries, smallest first
 FIT_COVER_PCT = 5.0              # 1.3.0 (R1-FIT, owner's decision D2): fit auto and overlay let the elements together cover this much of the focus area
 # M16 (scale). A layer with more features than LARGE_LAYER is drawn in the compact forms: round point symbols as dots (one path for the
 # outlines, one for the fills, per class), and the cells of a choropleth, hexbin or grid, or opaque lines, as one path per class. Smaller
@@ -382,6 +383,8 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
                     continue
                 fill = t["no_data"] if ci == -1 else l.colors[ci]
                 fo = l.fill_opacity * (l.class_opacity[ci] if getattr(l, "class_opacity", None) and ci >= 0 else 1.0)   # 0.20.0: value by alpha
+                if ci == -1:
+                    fo *= float(getattr(l, "nodata_opacity", 1.0) or 1.0)       # 1.13.0: no data recedes: it is not what the map is about
                 op = f' fill-opacity="{sd.num(fo)}"' if fo < 1 else ""
                 edge = fill if getattr(l, "edge_in_fill", False) else l.stroke                   # 0.22.0: the edge in the class colour
                 edge = "none" if sw_mm == 0 else edge
@@ -482,6 +485,9 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
             ok = vis & np.isfinite(vals) & (vals > 0)
             vmax = float(np.nanmax(vals[ok])) if ok.any() else 1.0
             dmax = float(l.symbol.get("max_size", 14)) * 0.3528
+            shared = prop_shared_scale(plan, l)                     # 1.13.0 (Day 12 issue 12): symbol.scale_with puts layers on one size scale
+            if shared:
+                vmax, dmax = shared
             size = np.zeros(len(vals))
             size[ok] = np.maximum(dmax * np.sqrt(vals[ok] / vmax), MIN_SYMBOL_MM)     # diameter ~ sqrt(value): AREA is proportional (MAP-CART-010)
             size = np.maximum(size, np.where(ok, 0.8, 0))
@@ -572,6 +578,42 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
     return "".join(g)
 
 
+def prop_group(plan: mp.Plan, l) -> list:
+    """The proportional layers that share one size scale with `l` (symbol.scale_with, 1.13.0): l, the layer it names, the layers that name
+    either, and so on. [l] alone when none is named."""
+    props = {p.id: p for p in plan.layers if p.role == "proportional"}
+    links: dict[str, set] = {k: set() for k in props}
+    for p in props.values():
+        o = (p.symbol or {}).get("scale_with") or ((p.spec or {}).get("symbol") or {}).get("scale_with")
+        if o in props and o != p.id:
+            links[p.id].add(o)
+            links[o].add(p.id)
+    seen, todo = set(), [l.id]
+    while todo:
+        k = todo.pop()
+        if k in seen or k not in links:
+            continue
+        seen.add(k)
+        todo.extend(links[k] - seen)
+    return [props[k] for k in props if k in seen] or [l]
+
+
+def prop_shared_scale(plan: mp.Plan, l) -> tuple[float, float] | None:
+    """(max value, max diameter mm) shared by l's scale group, or None when l is on a scale of its own. The largest value of any layer in the
+    group gets the largest symbol size any of them asks for, so a 1,200 MW plant beside 6,495 MW dams is drawn at its own size on their scale."""
+    grp = prop_group(plan, l)
+    if len(grp) < 2:
+        return None
+    vmax = 0.0
+    for p in grp:
+        v = p.gdf[p.value_field].to_numpy(dtype="float64", na_value=np.nan)
+        v = v[np.isfinite(v) & (v > 0)]
+        if len(v):
+            vmax = max(vmax, float(v.max()))
+    dmax = max(float((p.symbol or {}).get("max_size", 14)) for p in grp) * 0.3528
+    return (vmax or 1.0), dmax
+
+
 def highlight_groups(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -> list[str]:
     """A layer with `highlight:` (0.22.0): first the rest of it, its colours desaturated (map_look.dim) and the group at
     HIGHLIGHT_REST_OPACITY, then the highlighted features at full colour, symbols and lines HIGHLIGHT_SIZE larger (proportional symbols keep
@@ -590,10 +632,12 @@ def highlight_groups(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: li
             c.cls.assigned = np.asarray(l.cls.assigned)[mask]
         if rest:
             c.id = f"{l.id}--rest"
-            dim = lambda v: map_look.dim(v) if isinstance(v, str) and v.startswith("#") else v      # noqa: E731
-            c.colors = [dim(v) for v in (l.colors or [])]
-            c.fill, c.stroke = dim(l.fill), (dim(l.stroke) if l.kind == "line" else l.stroke)
-            c.group_opacity = map_look.HIGHLIGHT_REST_OPACITY
+            how = getattr(l, "highlight_rest", None) or {"dim": True, "opacity": map_look.HIGHLIGHT_REST_OPACITY}
+            if how["dim"]:
+                dim = lambda v: map_look.dim(v) if isinstance(v, str) and v.startswith("#") else v      # noqa: E731
+                c.colors = [dim(v) for v in (l.colors or [])]
+                c.fill, c.stroke = dim(l.fill), (dim(l.stroke) if l.kind == "line" else l.stroke)
+            c.group_opacity = how["opacity"] * (getattr(l, "group_opacity", 1.0) or 1.0)      # 1.13.0: a quieter layer's rest is quieter still
             c.casing = None
         else:
             k = map_look.HIGHLIGHT_SIZE
@@ -971,7 +1015,11 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                 cy += lg.BLOCK_GAP_MM
                 continue
             if b["kind"] == "bivariate" or (b["kind"] == "proportional" and b.get("nested")):     # M15 keys (legend_draw)
+                kop, k0 = float(b.get("key_opacity", 1.0)), len(out)
                 cy = (ld.bivariate_key if b["kind"] == "bivariate" else ld.nested_key)(out, b, cx, cy, lpt, t)
+                if kop < 1 and len(out) > k0:
+                    out.insert(k0, f'<g opacity="{sd.num(kop)}" data-emphasis="key">')
+                    out.append("</g>")
                 cy += lg.BLOCK_GAP_MM
                 continue
             row_h = max(lg.SWATCH_H_MM, tm.line_height_mm(lpt))
@@ -979,6 +1027,7 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                 ih = max(row_h, it.get("size_mm", 0) + 0.8)
                 mid = cy + ih / 2
                 icon_w = max(lg.SWATCH_W_MM, it.get("size_mm", 0) + 1.5)
+                k0 = len(out)
                 if b["kind"] in ("classes", "categories", "polygons"):
                     op = float(it.get("opacity", 1.0))
                     opa = f'fill-opacity="{sd.num(op)}"' if op < 1 else ""
@@ -1014,6 +1063,10 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                     out.append(f'<path d="M{sd.num(cx)} {sd.num(mid)}h{sd.num(lg.SWATCH_W_MM)}" stroke="{it["stroke"]}" stroke-width="{sd.num(it["width_mm"])}" fill="none" stroke-linecap="round"{dash}/>')
                 else:
                     out.append(f'<path d="{sd.symbol_path(it["shape"], cx + icon_w / 2, mid, it["size_mm"])}" fill="{it["fill"]}" stroke="{it["stroke"]}" stroke-width="0.12"/>')
+                kop = float(b.get("key_opacity", 1.0))
+                if kop < 1 and len(out) > k0:                # 1.13.0: a supporting or background layer's key at the layer's own strength
+                    out.insert(k0, f'<g opacity="{sd.num(kop)}" data-emphasis="key">')
+                    out.append("</g>")
                 out.append(sd.text(cx + icon_w + 2.0, mid + lpt * PT * 0.35, it["label"], lpt, t["label"], num_cls=True))
                 cy += ih + lg.ROW_GAP_MM
             if b.get("note"):                                # the block's note (a hexbin's resolution and edge length), in the room block_size reserves
@@ -1186,8 +1239,14 @@ def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
             if len(vals):
                 dmax = float(l.symbol.get("max_size", 14)) * 0.3528
                 vmax = float(vals.max())
+                shared = prop_shared_scale(plan, l)
+                if shared:
+                    vmax, dmax = shared
                 fmt = cf.number_format((l.spec.get("legend") or {}).get("format")).fmt
                 l.legend_block = lg.proportional_block(l.spec | {"title": l.title}, t, list(vals), lambda v: max(MIN_SYMBOL_MM / 2, dmax / 2 * (v / vmax) ** 0.5), lambda v: fmt(v, 0 if float(v).is_integer() else 2), l.fill)
+                import map_emphasis
+                if map_emphasis.OPACITY.get(getattr(l, "emphasis", "primary"), 1.0) < 1:
+                    l.legend_block["key_opacity"] = map_emphasis.OPACITY[l.emphasis]
                 blocks.append(l.legend_block)
     findings += lg.check_blocks(blocks, [l.spec | {"role": l.role} for l in plan.layers], classified)
     legend_on = on("legend")
@@ -1430,7 +1489,16 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
         cands = [{"left": (size, 0, 0, 0), "right": (0, 0, size, 0), "top": (0, size, 0, 0), "bottom": (0, 0, 0, size)}[side] for side, size in want.items() if size > 0]
         if want["bottom"] and want["top"]:
             cands.append((0, want["top"], 0, want["bottom"]))
-        tried = [best] + [fit_search(c) for c in cands]
+        # 1.13.0 (Day 12 issues 3 and 13): each strip is tried at a fifth of its size and up, smallest first, and the first that brings the cover
+        # to the limit is that side's answer: the map loses only the room the limit needs (1.12 reserved whole strips, so a state that filled
+        # a letter sheet went to 70 percent and the frame took in half of the next state)
+        tried = [best]
+        for c in cands:
+            for frac in SHRINK_STEPS:
+                r = fit_search(tuple(v * frac for v in c))
+                tried.append(r)
+                if r["fcover"] <= fit_limit and not r["err"]:
+                    break
         ok = [c for c in tried if c["fcover"] <= fit_limit and not c["err"] and c["frame"].scale >= 0.6 * full_scale]
         pick = max(ok, key=lambda c: c["frame"].scale) if ok else min((c for c in tried if not c["err"] and c["frame"].scale >= 0.6 * full_scale),
                                                                        key=lambda c: (c["fcover"], -c["frame"].scale), default=best)
@@ -2949,7 +3017,34 @@ def title_box(plan: mp.Plan, fonts: dict, map_rect: Rect, findings: list) -> dic
         import ornaments
         w, h = ornaments.title_block_size(text, min(size, 13.0))
         size = min(size, 13.0)
-    return {"text": text, "lines": lines, "size": size, "sub": sl, "tag": tl, "sub_pt": sp, "w": w, "h": h, "frame": fl, "frame_pt": fpt, "box": box, "pad": pad}
+    halo = str(el.get("halo") or ("thin" if getattr(plan, "look", "auto") == "classic" else "glow"))     # 1.13.0: elements.title.halo
+    if halo not in TITLE_HALOS:
+        findings.append(f("MAP-SPEC-005", "WARN", f"elements.title.halo '{halo}' is not one of {', '.join(TITLE_HALOS)}; glow is used"))
+        halo = "glow"
+    return {"text": text, "lines": lines, "size": size, "sub": sl, "tag": tl, "sub_pt": sp, "w": w, "h": h, "frame": fl, "frame_pt": fpt, "box": box, "pad": pad,
+            "halo": halo}
+
+
+TITLE_HALOS = ("glow", "crisp", "thin", "none")
+TITLE_HALO_CRISP = 0.18       # 1.13.0: the crisp halo's full stroke width as a share of the text's size (about 0.09 em shows outside the letters)
+TITLE_HALO_GLOW = ((0.62, 0.28), (0.40, 0.5))   # the glow: two wider passes (full stroke width as a share of the text's size, opacity), so
+                                                # the cloud of page colour under the letters fades out into the map instead of ending at an edge
+TITLE_HALO_MIN_MM = 0.35
+
+
+def title_halo(style: str, size_pt: float, thin_w: float) -> tuple[float, list | None]:
+    """(crisp halo width, glow) in mm for one line of the in-map title block. glow (the default): the crisp halo and a wide see-through one under
+    it, so the title, subtitle and tagline read where they lie over lines and class edges; crisp: the crisp halo alone; thin: the 0.17 to 1.12
+    halo (the classic look); none: no halo."""
+    if style == "none":
+        return 0.0, None
+    if style == "thin":
+        return thin_w, None
+    mm = size_pt * PT
+    crisp = max(TITLE_HALO_MIN_MM, mm * TITLE_HALO_CRISP)
+    if style == "crisp":
+        return crisp, None
+    return crisp, [(max(crisp * (3 - k), mm * w), op) for k, (w, op) in enumerate(TITLE_HALO_GLOW)]
 
 
 @_role("title")
@@ -2962,23 +3057,27 @@ def draw_title_box(b: dict, x: float, y: float, t: dict, cells: list | None = No
         import ornaments
         pre = ornaments.cartouche(x, y, b["w"], b["h"], t)
         x, y = x + b["pad"], y + b["pad"]
-    out = ['<g class="gm-title">' + pre]                  # no panel behind it: the text carries a thin halo so it reads over the map
+    style = b.get("halo") or "glow"
+    out = ['<g class="gm-title">' + pre]                  # no panel behind it: the text carries a halo (1.13.0: a soft glow) so it reads over the map
     ty = y + TITLE_PAD_MM + b["size"] * PT * 0.85
+    hw, gl = title_halo(style, b["size"], max(0.5, b["size"] * PT * 0.12))
     for i, ln in enumerate(b["lines"]):
-        out.append(sd.text(x + TITLE_PAD_MM, ty, ln, b["size"], t["label"], weight=700, halo=t["label_halo"], halo_w=max(0.5, b["size"] * PT * 0.12),
+        out.append(sd.text(x + TITLE_PAD_MM, ty, ln, b["size"], t["label"], weight=700, halo=t["label_halo"], halo_w=hw, glow=gl,
                            extra=' id="gm-title-text"' if i == 0 else ""))
         ty += b["size"] * PT * 1.15
     sy = ty - b["size"] * PT * 1.15 + b["sub_pt"] * PT * 1.3
+    hw, gl = title_halo(style, b["sub_pt"], 0.5)
     for ln in b["sub"]:
-        out.append(sd.text(x + TITLE_PAD_MM, sy, ln, b["sub_pt"], t["label"], weight=400, halo=t["label_halo"], halo_w=0.5))
+        out.append(sd.text(x + TITLE_PAD_MM, sy, ln, b["sub_pt"], t["label"], weight=400, halo=t["label_halo"], halo_w=hw, glow=gl))
         sy += b["sub_pt"] * PT * 1.3
     for ln in b.get("tag") or []:
-        out.append(sd.text(x + TITLE_PAD_MM, sy, ln, b["sub_pt"], t["label"], weight=400, halo=t["label_halo"], halo_w=0.5, slant=TAGLINE_SLANT_DEG,
+        out.append(sd.text(x + TITLE_PAD_MM, sy, ln, b["sub_pt"], t["label"], weight=400, halo=t["label_halo"], halo_w=hw, glow=gl, slant=TAGLINE_SLANT_DEG,
                            extra=' data-role="tagline"'))
         sy += b["sub_pt"] * PT * 1.3
     if b.get("frame"):                                     # the period of an atlas-by-time page (M15)
         fy = sy - b["sub_pt"] * PT * 1.3 + b["frame_pt"] * PT * 1.25
-        out.append(sd.text(x + TITLE_PAD_MM, fy, b["frame"], b["frame_pt"], t["label"], weight=700, halo=t["label_halo"], halo_w=0.6, num_cls=True,
+        hw, gl = title_halo(style, b["frame_pt"], 0.6)
+        out.append(sd.text(x + TITLE_PAD_MM, fy, b["frame"], b["frame_pt"], t["label"], weight=700, halo=t["label_halo"], halo_w=hw, glow=gl, num_cls=True,
                            extra=' data-role="frame-label"'))
     out.append("</g>")
     return "".join(out)

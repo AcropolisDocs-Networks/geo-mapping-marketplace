@@ -163,7 +163,18 @@ def dump_mapspec(spec) -> str:
 
 def load_mapspec_text(text: str):
     import yaml
-    return normalize_roles(yaml.load(text, Loader=_mapspec_loader()))
+    return normalize_roles(bool_keys_back(yaml.load(text, Loader=_mapspec_loader())))
+
+
+def bool_keys_back(obj):
+    """1.13.0 (Day 12 issue 7): a MapSpec written back by plain PyYAML (yaml.safe_load, then safe_dump) carries `true:` where it had `on:`,
+    because YAML 1.1 reads an unquoted on as true. No MapSpec key is ever a boolean, so a true key is read as `on` and a false one as `off`
+    again, and the spec works as it was written."""
+    if isinstance(obj, dict):
+        return {("on" if k is True else "off" if k is False else k): bool_keys_back(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [bool_keys_back(v) for v in obj]
+    return obj
 
 
 BUILDING_EXTRUDE = {"height_field": "height", "floors_field": "num_floors", "floor_m": 3.5, "default_m": 9}
@@ -179,6 +190,11 @@ def normalize_roles(spec):
     if not isinstance(spec, dict):
         return spec
     for ly in spec.get("layers") or []:
+        src = ly.get("source") if isinstance(ly, dict) else None
+        if isinstance(src, dict) and src.get("type") == "ref" and ly.get("where") and not src.get("where"):
+            # 1.13.0 (Day 12 issue 1): a library service layer's filter written beside the source, not in it; 1.12 dropped it and fetched
+            # every feature in the window. It belongs in source.where; it is read from there.
+            ly["source"] = {**src, "where": ly.pop("where")}
         if isinstance(ly, dict) and ly.get("role") == "buildings":
             ly["role"] = "polygons"
             ly.setdefault("extrude", dict(BUILDING_EXTRUDE))

@@ -17,7 +17,14 @@ template: letter-landscape         # letter-landscape | tabloid-landscape | arch
 theme: light                       # light (default) | dark; dark only when the person asks for it, never because the map is for a screen or social post
 style: {look: auto}                # auto (default) picks focus (areas), clean (points), network (lines), terrain (relief) or surface (raster) from the data;
                                    # bold (a quarter larger, for slides and social) and dark (a dark ground) only when asked; classic: the 0.16 look
-# a layer's highlight: {column: band, in: [n41]} draws those features full colour and a fifth larger, the rest of the layer greyed at 30%
+# a layer's highlight: {column: band, in: [n41]} draws those features full colour and a fifth larger, the rest of the layer greyed at 30%;
+#   1.13.0: {column: MW, min: 1000} | {max: 5} | {top: 8}, rest: fade (keep the colours), rest_opacity: 0.4
+# a layer's emphasis: primary | supporting (55%) | background (30%) | auto (default: the layers the message names are primary, the rest supporting)
+# style.hierarchy: off draws every layer at full strength; a proportional layer's symbol.scale_with: <layer id> shares that layer's size scale
+# a library service layer's filter goes in its source: {type: ref, id: ..., where: "VOLT_CLASS IN ('345','500')"}; a file layer uses filter: {column, in}
+# elements.callouts: {on: true, items: [{text: "Large-load queue", figure: "692 MW", at: [lon, lat] | layer: id, where: {field: value}}]}: the figure set large
+# elements.title.halo: glow (default: a soft cloud of the page colour under the title block) | crisp | thin | none
+# change a MapSpec with map_restyle.py --set (or gmap_common.dump_mapspec): plain PyYAML writes on: back as true: (read as on again since 1.13.0)
 focus: {mask: auto, lift: true}    # auto: a choropleth or grid fades the land around it and sits on a soft shadow; area: <layer id> picks the outline
 # elements.source_note.style: consolidated (one Sources: line, each organization once; default on slide and social) or detailed (print default)
 message: "Water makes up a small share of Arizona county area, highest along the Colorado River."

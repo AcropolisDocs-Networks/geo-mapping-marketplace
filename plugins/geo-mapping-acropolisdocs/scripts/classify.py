@@ -440,15 +440,33 @@ def classify_fixed(values, edges, decimals: int = 0, fmt: NumberFormat | None = 
 HALF_OPEN_NOTE = "class ranges include their lower value and stop below the next class's lower value"
 
 
-def classic_labels(labels: list[str]) -> list[str]:
-    """The 0.16 wording for the classic look: 'a to under b'."""
-    return [re.sub(r"^(\S+) to (\S+)$", r"\1 to under \2", x) for x in labels]
+def classic_labels(labels: list[str], integer_style: bool = False) -> list[str]:
+    """The 0.16 wording for the classic look: 'a to under b' for the inner continuous classes, 'a – b' (spaced) for the last one and for
+    integer classes; 'Under b' stays."""
+    out = []
+    for i, x in enumerate(labels):
+        parts = re.split(r"\s?–\s?", x, maxsplit=1)
+        if len(parts) != 2 or len(labels) == 1:
+            out.append(x)
+        elif integer_style or i == len(labels) - 1:
+            out.append(f"{parts[0]} – {parts[1]}")
+        else:
+            out.append(f"{parts[0]} to under {parts[1]}")
+    return out
+
+
+def dash(a: str, b: str) -> str:
+    """A range in the map-text style (1.13.0, Day 12 issue 4): an en dash with no spaces ('5–8'); spaced (' – ') when either end has a space
+    or a sign of its own, so '-5 – 0' and '1.2 M – 3 M' still read as two numbers."""
+    tight = not any(c in x for x in (a, b) for c in (" ", "-", "−", "+"))
+    return f"{a}–{b}" if tight else f"{a} – {b}"
 
 
 def range_labels(edges: list[float], d: int, fmt: NumberFormat, integer_data: bool, style: str = "auto") -> list[str]:
-    """Labels that never overlap. Integer data: 'a - b' with b = next edge - 1. Continuous data: 'Under b', 'a to b', ..., 'a – b' (1.2.0, Day 3:
-    'a to b' replaces 'a to under b'; the classes are still half-open, which the methods note says once). The classic look keeps the old words
-    (map_plan.classic_range_labels)."""
+    """Labels that never overlap. Integer data: 'a–b' with b = next edge - 1. Continuous data: 'Under b', 'a–b', ..., 'a–b' (1.2.0, Day 3:
+    no more 'a to under b'; the classes are still half-open, which the methods note says once). 1.13.0 (Day 12 issue 4): every range is
+    written the one way the map-text rule asks, an en dash ('5–8'), where 1.12 mixed '5 to 8' with '11 – 17' in one legend. The classic look
+    keeps the old words (map_plan.classic_range_labels)."""
     k = len(edges) - 1
     if k == 1 and edges[0] == edges[1]:
         return [fmt.fmt(edges[0], d)]
@@ -459,16 +477,16 @@ def range_labels(edges: list[float], d: int, fmt: NumberFormat, integer_data: bo
         last = i == k - 1
         if style == "integer":
             top = hi if last else hi - 1
-            out.append(fmt.fmt(lo, 0) if lo == top else f"{fmt.fmt(lo, 0)} – {fmt.fmt(top, 0)}")
+            out.append(fmt.fmt(lo, 0) if lo == top else dash(fmt.fmt(lo, 0), fmt.fmt(top, 0)))
         else:
             if last and lo == hi:
                 out.append(fmt.fmt(lo, d))
             elif last:
-                out.append(f"{fmt.fmt(lo, d)} – {fmt.fmt(hi, d)}")
+                out.append(dash(fmt.fmt(lo, d), fmt.fmt(hi, d)))
             elif i == 0:
                 out.append(f"Under {fmt.fmt(hi, d)}")
             else:
-                out.append(f"{fmt.fmt(lo, d)} to {fmt.fmt(hi, d)}")
+                out.append(dash(fmt.fmt(lo, d), fmt.fmt(hi, d)))
     return out
 
 

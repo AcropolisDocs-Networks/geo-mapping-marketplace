@@ -41,6 +41,9 @@ def valid_context(spec: str | None, token: str | None) -> str | None:
     """Return None when the map context is valid, else a short reason."""
     if not spec or not Path(spec).is_file():
         return "no MapSpec"
+    token = str(token or "").strip()
+    if token.startswith("GMAP_BUILD_TOKEN="):            # 1.13.0 (Day 12 issue 8): the whole line env_probe printed, exported as the value
+        token = token.split("=", 1)[1].strip()
     if not token:
         return "no build token"
     f = gc.workdir() / "run" / "tokens" / f"{re.sub(r'[^0-9a-f]', '', token)}.json"

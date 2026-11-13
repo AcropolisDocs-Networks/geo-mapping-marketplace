@@ -242,9 +242,12 @@ def dot_path(xs, ys) -> str:
 
 
 def text(x: float, y: float, s: str, size_pt: float, fill: str, *, weight: int = 400, anchor: str = "start", num_cls: bool = False,
-         halo: str | None = None, halo_w: float = 0.0, rotate: float | None = None, slant: float = 0.0, extra: str = "", tracking: float = 0.0) -> str:
+         halo: str | None = None, halo_w: float = 0.0, rotate: float | None = None, slant: float = 0.0, extra: str = "", tracking: float = 0.0,
+         glow: list | None = None) -> str:
     """A text element. With a halo it is drawn twice (stroke underneath, fill on top) because paint-order is not honored everywhere.
-    `tracking` is extra letter-spacing in mm (uppercase admin names are set loose); it goes on both passes so the halo stays under the letters."""
+    `tracking` is extra letter-spacing in mm (uppercase admin names are set loose); it goes on both passes so the halo stays under the letters.
+    `glow` (1.13.0): [(width_mm, opacity), ...], wide see-through passes in the halo colour drawn first, widest first, under the crisp halo, so the
+    text sits on a soft cloud of the page colour over a busy map. No blur filter: the PDF stays small and every renderer draws it the same."""
     size = size_pt * PT
     if not str(s).isascii():                          # 1.5.0 (R3-SCRIPT): outlined in the script's Noto face, the words in <title>
         import script_text as st
@@ -253,8 +256,13 @@ def text(x: float, y: float, s: str, size_pt: float, fill: str, *, weight: int =
             if k:
                 tr = (f"rotate({num(rotate)} {num(x)} {num(y)})" if rotate else
                       f"translate({num(x)} {num(y)}) skewX({num(-slant)}) translate({num(-x)} {num(-y)})" if slant else "")
-                return st.svg_label(s, x, y, size, k, fill, anchor=anchor, halo=halo, halo_w=halo_w, extra=extra, transform=tr, weight=weight,
-                                    tracking=tracking)
+                pre = ""
+                for gw, gop in (glow or []) if halo else []:
+                    pre += (f'<g opacity="{num(gop)}" data-halo="glow">'
+                            + st.svg_label(s, x, y, size, k, halo, anchor=anchor, halo=halo, halo_w=gw, transform=tr, weight=weight, tracking=tracking)
+                            + "</g>")
+                return pre + st.svg_label(s, x, y, size, k, fill, anchor=anchor, halo=halo, halo_w=halo_w, extra=extra, transform=tr, weight=weight,
+                                          tracking=tracking)
     cls = "gm-t" + (" gm-num" if num_cls else "")
     if tm.active_type() and tm.current_role() != "body" and tm.current_role() in tm.active_type():
         cls += f" gm-r-{tm.current_role()}"               # 1.4.0: a style pack's title or label face (map_style.font_css)
@@ -267,6 +275,10 @@ def text(x: float, y: float, s: str, size_pt: float, fill: str, *, weight: int =
         attrs += f' transform="translate({num(x)} {num(y)}) skewX({num(-slant)}) translate({num(-x)} {num(-y)})"'
     body = esc(s)
     out = ""
+    for gw, gop in (glow or []) if halo else []:
+        op = num(gop)
+        out += (f'<text {attrs} fill="{halo}" fill-opacity="{op}" stroke="{halo}" stroke-opacity="{op}" stroke-width="{num(gw)}" '
+                f'stroke-linejoin="round" data-halo="glow">{body}</text>')
     if halo and halo_w > 0:
         out += f'<text {attrs} fill="{halo}" stroke="{halo}" stroke-width="{num(halo_w)}" stroke-linejoin="round">{body}</text>'
     out += f'<text {attrs} fill="{fill}"{extra}>{body}</text>'

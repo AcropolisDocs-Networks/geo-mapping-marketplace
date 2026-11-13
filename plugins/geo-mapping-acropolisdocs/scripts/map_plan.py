@@ -345,10 +345,13 @@ class LayerPlan:
     group_opacity: float = 1.0                  # 0.17.0: the whole layer drawn as one group at this opacity (overlapping wedges do not darken)
     casing: dict | None = None                  # 0.17.0: {color, extra_mm, opacity}: a band of the land colour under a data line layer
     highlight: object = None                    # 0.22.0: a boolean per feature: the `highlight:` subset (map_render.highlight_groups)
+    highlight_rest: dict | None = None          # 1.13.0: how the rest is drawn: {dim, opacity} (highlight.rest, highlight.rest_opacity)
     edge_in_fill: bool = False                  # 0.22.0: polygons drawn see-through with the edge in each fill colour at full strength
     outline: bool = False                       # 1.2.0: a polygons layer with no fill, drawn as its edge only
     stroke_named: bool = False                  # 1.2.0: the spec names the edge colour, so it is drawn at full strength
     class_opacity: list | None = None           # 0.20.0: one opacity per class (value by alpha on a hexbin): low classes let the ground show
+    emphasis: str = "primary"                   # 1.13.0: primary | supporting | background (map_emphasis): how strongly the layer is drawn
+    nodata_opacity: float = 1.0                 # 1.13.0: the No data class drawn see-through (map_emphasis.NODATA_OPACITY) so it recedes
 
 
 @dataclass
@@ -1318,6 +1321,8 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         if l.role in RASTER_ROLES:
             continue                          # coloured from the brand when it is read for the window (map_raster.prepare)
         style_layer(plan, l)
+    import map_emphasis
+    map_emphasis.assign(plan)                 # 1.13.0: the layers the message names at full strength, the others quieter
     plan.notes += tiles_notes
     load_basemap(plan, tiles_rec, explained=bool(tiles_notes), vector_file=vector_source(spec, base) if use_tiles else None)
     add_context(plan)
@@ -1515,9 +1520,30 @@ def add_context(plan: Plan) -> None:
     if not added:
         plan.notes.append(f"context pack '{preset}': nothing of it falls inside this map")
         return
+    fit_context_weight(plan, added)
     plan.layers += added                     # after the data layers in the list (plan.layers[0] stays the first data layer); drawn first (draw_order)
     plan.notes.append(f"context pack '{preset}' at the {tier['tier']} tier (1:{den:,.0f}): " + ", ".join(what)
                       + (f"; opacity {op:g}" if op < 1 else ""))
+
+
+CONTEXT_LINE_FLOOR_MM = 0.12                 # 1.13.0: a context line is never thinned below this
+
+
+def fit_context_weight(plan: Plan, added: list) -> None:
+    """1.13.0 (Day 12 issue 11): the context pack's lines are kept inside the weight budget MAP-CART-029 checks (0.6 times the thinnest data
+    line), so the plugin's own context never trips its own check: a rate map with 1 pt transmission lines got 0.3 mm rivers beside them."""
+    data_lines = [l for l in plan.layers if l.kind == "line" and l.role not in ("context", "contour")]
+    if not data_lines or plan.look == "classic":
+        return
+    thin = min(min([float(x) for x in (l.symbol or {}).get("_widths") or []] or [float(l.stroke_w_mm or 0)]) for l in data_lines)
+    if thin <= 0:
+        return
+    cap = max(CONTEXT_LINE_FLOOR_MM, 0.6 * thin)
+    eased = [l for l in added if l.kind == "line" and float(l.stroke_w_mm or 0) > cap + 1e-9]
+    for l in eased:
+        l.stroke_w_mm = cap
+    if eased:
+        plan.notes.append(f"context lines ({', '.join(sorted({l.context_kind or l.id for l in eased}))}) thinned to {cap:.2f} mm, under the thinnest data line")
 
 
 def _context_from_tiles(plan: Plan, cfg: dict, preset: str, kinds: list) -> None:
@@ -1572,6 +1598,7 @@ def _context_from_tiles(plan: Plan, cfg: dict, preset: str, kinds: list) -> None
     if not added:
         plan.notes.append(f"context pack '{preset}': the basemap file holds none of it inside this map")
         return
+    fit_context_weight(plan, added)
     plan.layers += added
     plan.notes.append(f"context pack '{preset}' from {vg_['file']}: " + ", ".join(what) + (f"; opacity {op:g}" if op < 1 else ""))
 
@@ -1837,9 +1864,10 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
                 raise PlanError(f"layer '{l.id}': classification.colors has {len(cc)} entries but there are {res.k} categories ({', '.join(res.labels)})", gc.EXIT_USAGE)
             colors = [resolve_color(x, t, f"layer '{l.id}' class color") for x in cc]
             pk = "status"
+        integer_style = bool(getattr(res, "integer_data", False)) and int(getattr(res, "decimals", 0) or 0) == 0 and c.get("label_style") != "continuous"
         if res.kind != "categorical" and plan.look == "classic":
-            res.labels = cf.classic_labels(res.labels)       # 1.2.0: the classic look keeps "a to under b"
-        elif res.kind != "categorical" and any(" to " in x for x in res.labels) and cf.HALF_OPEN_NOTE not in l.notes:
+            res.labels = cf.classic_labels(res.labels, integer_style)       # 1.2.0: the classic look keeps "a to under b"
+        elif res.kind != "categorical" and not integer_style and res.k > 1 and cf.HALF_OPEN_NOTE not in l.notes:
             l.notes.append(cf.HALF_OPEN_NOTE)
         if res.kind != "categorical" and c.get("labels"):
             # 1.2.0 (Day 9 issue 11): numeric classes take their own labels too ("40 – 83" where the method wrote another form), one per class
@@ -1961,20 +1989,17 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
     symbology.after_classes(plan, l)          # class patterns, graduated line widths, line swatches for classed lines, nested circles (M15)
     hl = ly.get("highlight")
     if hl and l.kind in ("polygon", "line", "point") and l.role != "context":
-        col, vals = hl.get("column"), hl.get("in")
-        if col not in l.gdf.columns or not isinstance(vals, list) or not vals:
-            raise PlanError(f"layer '{l.id}': highlight needs column (one of {', '.join(c for c in l.gdf.columns if c != l.gdf.geometry.name)}) "
-                            "and a list in:", gc.EXIT_USAGE)
-        m = l.gdf[col].astype(str).isin([str(v) for v in vals]).to_numpy()
+        m, what = highlight_mask(l, hl)
         if not m.any():
-            plan.findings.append({"id": "MAP-CART-036", "severity": "WARN", "layer": l.id, "detail": {"column": col, "in": vals},
-                                  "message": f"layer '{l.id}': highlight {col} in {vals} matches no feature; the layer is drawn as usual"})
+            plan.findings.append({"id": "MAP-CART-036", "severity": "WARN", "layer": l.id, "detail": dict(hl),
+                                  "message": f"layer '{l.id}': highlight {what} matches no feature; the layer is drawn as usual"})
         elif m.all():
-            plan.notes.append(f"layer '{l.id}': highlight {col} in {vals} matches every feature; nothing is dimmed")
+            plan.notes.append(f"layer '{l.id}': highlight {what} matches every feature; nothing is dimmed")
         else:
             l.highlight = m
-            plan.notes.append(f"layer '{l.id}': {int(m.sum())} of {len(m)} feature(s) highlighted ({col} in {', '.join(map(str, vals))}); the rest "
-                              f"desaturated at {map_look.HIGHLIGHT_REST_OPACITY:.0%}")
+            l.highlight_rest = highlight_rest(hl)
+            plan.notes.append(f"layer '{l.id}': {int(m.sum())} of {len(m)} feature(s) highlighted ({what}); the rest "
+                              + ("desaturated" if l.highlight_rest["dim"] else "faded") + f" at {l.highlight_rest['opacity']:.0%}")
     if l.role == "context":
         l.legend_block = None
     if (ly.get("legend") or {}).get("include") is False:
@@ -1987,6 +2012,52 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
                             f"{('layer ' + repr(prev[-1].id)) if prev else 'none'}; list '{l.id}' right after '{cont}'", gc.EXIT_USAGE)
         l.legend_block = {**l.legend_block, "title": None, "continues": cont}
     l.provenance = layer_provenance(l)
+
+
+def highlight_mask(l: LayerPlan, hl: dict):
+    """The features a `highlight:` keeps at full strength (0.22.0; 1.13.0 adds min, max and top). -> (mask, a short description).
+    column with in: [values] (those values); min / max (numbers at or above / at or below, both for a range); top: N (the N largest)."""
+    col = hl.get("column")
+    cols = [c for c in l.gdf.columns if c != l.gdf.geometry.name]
+    keys = [k for k in ("in", "min", "max", "top") if hl.get(k) is not None]
+    if col not in l.gdf.columns or not keys:
+        raise PlanError(f"layer '{l.id}': highlight needs column (one of {', '.join(cols)}) and in: [values], min:, max: or top:", gc.EXIT_USAGE)
+    if "in" in keys:
+        vals = hl["in"]
+        if not isinstance(vals, list) or not vals:
+            raise PlanError(f"layer '{l.id}': highlight in: needs a list of values", gc.EXIT_USAGE)
+        return l.gdf[col].astype(str).isin([str(v) for v in vals]).to_numpy(), f"{col} in {vals}"
+    import pandas as pd
+    v = pd.to_numeric(l.gdf[col], errors="coerce").to_numpy(dtype="float64")
+    if not np.isfinite(v).any():
+        raise PlanError(f"layer '{l.id}': highlight min, max or top needs a numeric column; '{col}' holds no numbers", gc.EXIT_USAGE)
+    if "top" in keys:
+        n = int(hl["top"])
+        if n < 1:
+            raise PlanError(f"layer '{l.id}': highlight top: needs a whole number of at least 1", gc.EXIT_USAGE)
+        ok = np.isfinite(v)
+        order = np.argsort(-np.where(ok, v, -np.inf), kind="stable")
+        m = np.zeros(len(v), dtype=bool)
+        m[order[:n]] = True
+        return m & ok, f"the {n} largest by {col}"
+    m = np.isfinite(v)
+    parts = []
+    if hl.get("min") is not None:
+        m &= v >= float(hl["min"])
+        parts.append(f"{col} >= {hl['min']:g}" if isinstance(hl["min"], (int, float)) else f"{col} >= {hl['min']}")
+    if hl.get("max") is not None:
+        m &= v <= float(hl["max"])
+        parts.append(f"{col} <= {hl['max']:g}" if isinstance(hl["max"], (int, float)) else f"{col} <= {hl['max']}")
+    return m, " and ".join(parts)
+
+
+def highlight_rest(hl: dict) -> dict:
+    """How the rest of a highlighted layer is drawn: rest: dim (the default: desaturated and see-through) or fade (see-through, its own
+    colours), at rest_opacity (default map_look.HIGHLIGHT_REST_OPACITY)."""
+    import map_look
+    op = hl.get("rest_opacity")
+    op = map_look.HIGHLIGHT_REST_OPACITY if op is None else max(0.05, min(0.95, float(op)))
+    return {"dim": str(hl.get("rest") or "dim") != "fade", "opacity": op}
 
 
 def capture_step(cap: dict) -> str:

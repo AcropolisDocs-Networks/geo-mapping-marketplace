@@ -18,7 +18,7 @@ if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   done
 fi
 [ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
-python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml     # prints the build token; export GMAP_BUILD_TOKEN
+export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)   # the build token alone
 python3 "$GMAP_ROOT/lints/mapspec_lint.py" map.yaml                       # spec check, before any data is read
 python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --formats svg,pdf,png [--strict]
 ```
@@ -84,7 +84,7 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
    `active` are never used. Exit 4 ("no reference entry fits") hands over to `geo-find-data`; ask for a file if the web has nothing usable. A table the person
    supplies is joined on the entry's join key: read the key column as text, keep leading zeros. A service entry (FEMA flood zones, HIFLD cellular towers,
    FCC CMAs, transmission lines) is drawn the same way: the build fetches it once for the map window through its shipped profile and keeps the capture, so a
-   rebuild sends nothing; `where: "SFHA_TF = 'T'"` filters at the service. Venue, site or business addresses become points with
+   rebuild sends nothing; `source: {type: ref, id: ..., where: "SFHA_TF = 'T'"}` filters at the service (the `where` goes inside `source`). Venue, site or business addresses become points with
    `source: {type: geocode, table: venues.csv, address: [street, city, state, zip], purpose: venues}` (the `geocode-addresses` rules apply).
 4. **Pick the map type from the data**, never from habit:
    - a rate or share per area → `role: choropleth` with `value_field` (normalized: per capita, per household, per sq mi, a percent);
@@ -124,6 +124,7 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
 - **The library is checked against the audience.** A layer whose license does not allow the map's audience, or that is draft, blocked or retired, is a BLOCK (MAP-REF-002, -004).
 - **No private individuals' locations**, no API keys and no internal host names in outputs.
 - Legend text never goes below 6 pt (print) or 10 pt (slides); the builder says when a template is too small instead of shrinking it.
+- **Hierarchy.** Layers the `message` names draw full, the rest recede (`emphasis:`, `highlight:`); a key number is a callout `figure` (`mapspec-reference`).
 
 ## Tell the person
 

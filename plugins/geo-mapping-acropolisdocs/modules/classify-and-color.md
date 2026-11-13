@@ -50,11 +50,13 @@ python3 "$GMAP_ROOT/scripts/classify.py" palette --spec map.yaml --kind sequenti
   median per cell says its unit in the title ("Mean RSRP per hex (dBm)"). Never draw one hex density as a diverging ramp without a midpoint.
 - **3 to 7 classes** (MAP-CART-002). Out-of-range requests are clamped with a note; ties that collapse classes are reported.
 - **Breaks are rounded by default.** For `quantile`, `equal_interval`, `jenks` and `geometric` each interior break is moved to a round number (1, 2, 2.5 or 5 x 10^n)
-  when that shifts it by no more than a sixth of the class beside it, so a legend reads "25 – 49", not "23 – 47". Set `classification: {rounding: none}` for the exact
+  when that shifts it by no more than a sixth of the class beside it, so a legend reads "25–49", not "23–47". Set `classification: {rounding: none}` for the exact
   breaks, or `rounding: 25` to snap to multiples of 25. `pretty` is always round; `manual` is never touched. A note on the map says when breaks were rounded and that
   class sizes are then close to, not exactly, the method's.
 - **Breaks are snapped** to the decimals the labels show, so a label states exactly which values the class holds. Whole-number
-  data labels read "25 – 49"; continuous data reads "Under 12.5", "12.5 to 20.0" (1.2.0; each class includes its lower value and stops below the next class's, which the methods note says once; the classic look keeps "12.5 to under 20.0").
+  data labels read "25–49"; continuous data reads "Under 12.5", "12.5–20.0", the last class "20.0–31.4" (1.13.0: one style, an en dash with no spaces, as
+  the map-text rule asks; spaced, "-5 – 0", when a number carries a sign). Each continuous class includes its lower value and stops below the next class's,
+  which the methods note says once; the classic look keeps "12.5 to under 20.0".
 - **Class colors are generated from a brand color** (0.17.0, `style.look: auto`, the default). A sequential ramp is the full range of
   tints and shades of the brand's emphasis color (or `palette: {anchor: "@brand.categorical.1"}` on the layer), made for exactly the number
   of classes: about 70 L* from the lightest class to the darkest, hue kept, chroma highest in the middle. A diverging ramp is two such arms

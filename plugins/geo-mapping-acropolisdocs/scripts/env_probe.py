@@ -3,6 +3,7 @@
 
     env_probe.py [--offline] [--json] [--device-bridge yes|no|unknown] [--web-tools yes|no|unknown]
     env_probe.py --begin-build --spec map.yaml        # prints GMAP_BUILD_TOKEN=... for map_brand
+    env_probe.py --begin-build --spec map.yaml --value    # 1.13.0: the token alone: export GMAP_BUILD_TOKEN=$(... --value)
 
 Writes env.json into the working directory. The device bridge and web tools are properties of the
 model's tool list, not of the shell, so the calling skill passes them in.
@@ -19,6 +20,7 @@ import fnmatch
 import json
 import os
 import platform
+import re
 import ssl
 import sys
 import urllib.request
@@ -110,17 +112,83 @@ def scan_dirs() -> list[Path]:
     return dirs
 
 
+VERSION_TAIL = re.compile(r"[-_.]v?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.]+)?$")
+COPY_SEARCH_DEPTH = 4
+
+
+def edition_of(name: str) -> str:
+    """The edition a folder or package name stands for, without its version: geo-mapping-acropolisdocs_v1.12.0 -> geo-mapping-acropolisdocs.
+    1.13.0 (Day 12 issue 8): two versions of one edition side by side are one edition, not two (1.12 refused to run)."""
+    n = name[:-len(".plugin")] if name.endswith(".plugin") else name
+    return VERSION_TAIL.sub("", n)
+
+
+def version_of(name: str) -> tuple | None:
+    n = name[:-len(".plugin")] if name.endswith(".plugin") else name
+    m = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", n[len(edition_of(name)):] if edition_of(name) != n else "")
+    return tuple(int(x or 0) for x in m.groups()) if m else None
+
+
 def installed_editions(own: str) -> list[str]:
-    """Names of geo-mapping-* directories next to this plugin. Directory names only; nothing is read."""
+    """Editions of geo-mapping-* directories next to this plugin, by name without a version. Directory names only; nothing is read."""
     names = {own}
     for d in scan_dirs():
         try:
             for child in d.iterdir():
                 if fnmatch.fnmatch(child.name, gc.EDITION_GLOB) and child.is_dir():
-                    names.add(child.name)
+                    names.add(edition_of(child.name))
         except OSError:
             continue
     return sorted(names)
+
+
+def copy_search_dirs() -> list[Path]:
+    """Where another copy of this plugin may sit in a session: beside it, the working folder and its parents, and a cloud session's uploads
+    (a package staged from the person's computer)."""
+    out = list(scan_dirs())
+    cwd = Path.cwd()
+    out += [cwd] + list(cwd.parents)[:3]
+    for root in (Path("/mnt/user-data/uploads"), Path("/mnt/user-data/outputs")):
+        if root.is_dir():
+            out.append(root)
+    return out
+
+
+def newer_copies(own: str, version: str | None) -> list[dict]:
+    """1.13.0 (Day 12 issue 9): copies of this edition, as a folder or a .plugin package, with a higher version than the one running, newest
+    first: [{path, version}]. Names only, never opened. A session whose synced copy is older than the released package learns it here."""
+    mine = version_of(f"x-{version}") if version else None
+    if not mine:
+        return []
+    found: dict[str, dict] = {}
+    seen: set = set()
+
+    def walk(d: Path, depth: int):
+        if depth < 0 or d in seen:
+            return
+        seen.add(d)
+        try:
+            kids = list(d.iterdir())
+        except OSError:
+            return
+        for c in kids:
+            if edition_of(c.name) == own and c.name != own:
+                v = version_of(c.name)
+                if v and v > mine:
+                    found[str(c)] = {"path": str(c), "version": ".".join(map(str, v))}
+            elif c.is_dir() and not c.name.startswith(".") and c.name not in ("node_modules", "__pycache__", ".venv", "venv") and depth > 0:
+                walk(c, depth - 1)
+    for d in copy_search_dirs():
+        walk(d, 1 if d == Path.home() or d in Path.cwd().parents else COPY_SEARCH_DEPTH)
+    return sorted(found.values(), key=lambda r: tuple(int(x) for x in r["version"].split(".")), reverse=True)
+
+
+def newer_line(own: str, version: str | None) -> str | None:
+    nc = newer_copies(own, version)
+    if not nc:
+        return None
+    return (f"A newer copy of this plugin ({nc[0]['version']}) is at {nc[0]['path']}; this session runs {version}. "
+            "Install it (or unpack it and run its scripts) to use its fixes.")
 
 
 def classify_tier(device_bridge: str, eg: dict, web_tools: str) -> str:
@@ -170,6 +238,7 @@ def main(argv=None) -> int:
     ap.add_argument("--web-tools", choices=["yes", "no", "unknown"], default="unknown")
     ap.add_argument("--begin-build", action="store_true")
     ap.add_argument("--spec")
+    ap.add_argument("--value", action="store_true", help="with --begin-build: print the token alone (for export GMAP_BUILD_TOKEN=$(...))")
     ap.add_argument("--no-write", action="store_true")
     a = ap.parse_args(argv)
 
@@ -198,7 +267,11 @@ def main(argv=None) -> int:
         if not a.spec:
             print("--begin-build needs --spec", file=sys.stderr)
             return gc.EXIT_USAGE
-        print(f"GMAP_BUILD_TOKEN={begin_build(a.spec)}")
+        tok = begin_build(a.spec)
+        print(tok if a.value else f"GMAP_BUILD_TOKEN={tok}")
+        nl = newer_line(own, manifest.get("version"))
+        if nl:
+            print(nl, file=sys.stderr)
         return gc.EXIT_OK
 
     eg = egress(a.offline)
@@ -220,7 +293,8 @@ def main(argv=None) -> int:
         "workdir_persistence": "unverified",  # decided by spike P6 (Appendix H); see risk 36
     }
     env["tier"] = classify_tier(a.device_bridge, eg, a.web_tools)
-    env["status_line"] = status_line(env)
+    env["newer_copies"] = newer_copies(own, manifest.get("version"))
+    env["status_line"] = status_line(env) + (" " + newer_line(own, manifest.get("version")) if env["newer_copies"] else "")
     if not a.no_write:
         wd = gc.workdir(create=True)
         (wd / "env.json").write_text(json.dumps(env, indent=2))

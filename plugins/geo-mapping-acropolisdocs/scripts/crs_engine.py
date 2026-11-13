@@ -35,6 +35,8 @@ import gmap_common as gc  # noqa: E402
 WEB_MERCATOR = "EPSG:3857"
 EQUAL_AREA_METHODS = ("equal area", "equal earth", "albers", "mollweide", "sinusoidal", "eckert iv", "eckert vi")
 LOCAL_SPAN_DEG = 6.0
+STATE_SPAN_DEG = 16.0          # 1.13.0: a contiguous-US extent up to this wide and STATE_SPAN_H_DEG tall is state-sized: a centred Albers
+STATE_SPAN_H_DEG = 12.0
 POLAR_LAT = 80.0
 NAD83_UTM_ZONES = range(1, 24)       # NAD83 UTM (EPSG:269zz) exists for zones 1 to 23 north
 
@@ -462,6 +464,13 @@ def choose_display(extent, purpose: str = "thematic", *, tiles: bool = False, ar
                        True, 8857, ["ESRI:54030 Robinson (compromise, not equal-area)"])
         return out("ESRI:54030", "World_Robinson", "The extent is global and locations, not areas, are shown; Robinson balances distortion for a world view.",
                    False, None, ["EPSG:8857 Equal Earth if the map ever shows values per area"])
+    # 1.5.0 (R3-CRS): an EPSG code asked for in crs.prefer is used as asked. 1.13.0 (Day 12 issue 2): before the US families, so a state map
+    # that names its own CRS gets it (1.12 checked it after them, and a Washington map took Conus Albers whatever it asked for)
+    pref = (prefer or "").strip()
+    if re.match(r"^(EPSG|ESRI):[0-9]+$", pref):
+        c = _crs(pref)
+        return out(pref, c.name, f"{c.name} was asked for (crs.prefer)." + ("" if is_equal_area(c) else " It is not equal-area; values per area are not comparable across the map."),
+                   is_equal_area(c), int(pref.split(":")[1]) if pref.startswith("EPSG") else None)
     # United States families. An extent that crosses the antimeridian can only be Alaska's (the Aleutians) among these.
     in_conus = not anti and -125.5 <= minx and maxx <= -66 and 24 <= miny and maxy <= 49.6
     in_alaska = (165 <= minx if anti else -180 <= minx) and maxx <= -129 and 51 <= miny and maxy <= 72
@@ -469,6 +478,22 @@ def choose_display(extent, purpose: str = "thematic", *, tiles: bool = False, ar
     # "spans the US" means it reaches both Alaska or Hawaii longitudes and the lower 48: a Mexican or Caribbean box inside the same
     # window is not a US map and falls through to the local and regional rules
     spans_us = not anti and -180 <= minx <= -129 and -100 <= maxx <= -64 and 17 <= miny and maxy <= 72 and not (in_conus or in_alaska or in_hawaii)
+    if in_conus and width > LOCAL_SPAN_DEG and width <= STATE_SPAN_DEG and height <= STATE_SPAN_H_DEG:
+        # 1.13.0 (Day 12 issue 2): a state-sized US map gets an Albers equal-area centred on it, so the state stands upright (Conus Albers,
+        # centred at 96 W, turned Washington about 10 degrees). State Plane when asked for and one zone holds it.
+        if pref.replace("-", "_") == "state_plane" or purpose == "engineering":
+            whole = state_plane_for_extent(minx, miny, maxx, maxy)
+            if whole:
+                return out(whole["crs"], whole["name"], f"State Plane was asked for (crs.prefer or an engineering map): {whole['name']} holds the whole extent.",
+                           False, whole["epsg"], ["an Albers equal-area centred on the extent"])
+        lat1, lat2 = round(miny + height / 6, 2), round(maxy - height / 6, 2)
+        lon0, lat0 = round(cx, 2), round(cy, 2)
+        proj = f"+proj=aea +lat_0={lat0} +lon_0={lon0} +lat_1={lat1} +lat_2={lat2} +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs"
+        return out(proj, "Albers Equal Area (NAD83, centred on the extent)",
+                   f"The data lies in the contiguous United States at the size of a state ({width:.1f} by {height:.1f} degrees). An Albers equal-area "
+                   f"projection centred on it (central meridian {lon0}, standard parallels {lat1} and {lat2}) keeps areas true and the extent upright; "
+                   "Conus Albers would turn it by the distance from 96 W.",
+                   True, None, ["EPSG:5070 Conus Albers (the national projection)", "the State Plane zone, for engineering-grade work"])
     if in_conus and width > LOCAL_SPAN_DEG:
         return out("EPSG:5070", "NAD83 / Conus Albers", "The data lies in the contiguous United States at a regional or national scale. Conus Albers is equal-area and conforms to US federal mapping practice.",
                    True, 5070, ["EPSG:9311 for a national map that also shows Alaska and Hawaii", "UTM or state plane for one state"])
@@ -480,12 +505,7 @@ def choose_display(extent, purpose: str = "thematic", *, tiles: bool = False, ar
         return out("EPSG:9311", "NAD27 / US National Atlas Equal Area", "The data spans the United States including Alaska and/or Hawaii; the US National Atlas Equal Area keeps areas true across all of them "
                    "(EPSG:9311, the current code for the projection once listed as EPSG:2163).",
                    True, 9311, ["EPSG:5070 if only the lower 48 are shown"])
-    # 1.5.0 (R3-CRS): an EPSG code asked for in crs.prefer is used as asked
     pref = (prefer or "").strip()
-    if re.match(r"^(EPSG|ESRI):[0-9]+$", pref):
-        c = _crs(pref)
-        return out(pref, c.name, f"{c.name} was asked for (crs.prefer)." + ("" if is_equal_area(c) else " It is not equal-area; values per area are not comparable across the map."),
-                   is_equal_area(c), int(pref.split(":")[1]) if pref.startswith("EPSG") else None)
     # 1.5.0: national presets (data/national-crs.yaml) when the window is inside one country that has one; ETRS89-LAEA across Europe
     if not anti and pref.replace("-", "_") in ("", "national") and abs(cy) <= POLAR_LAT:
         nat = _national_choice(minx, miny, maxx, maxy, cx, purpose, equal_wanted, width)

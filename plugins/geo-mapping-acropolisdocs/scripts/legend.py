@@ -69,6 +69,12 @@ def class_block(layer: dict, cls, colors: list[str], tokens: dict, *, stroke: st
     return out
 
 
+def _note(layer: dict) -> str | None:
+    """legend.note under any layer's key (1.13.0, Day 12 issue 5: 1.12 drew it under class keys only)."""
+    n = (layer.get("legend") or {}).get("note")
+    return str(n) if n not in (None, "") else None
+
+
 def _single_title(layer: dict) -> str | None:
     """0.19.0 (Day 7 issue 25): a one-entry block keeps its heading when the layer gives both a legend title and an item label that differ
     (0.18 printed the label alone and dropped the title)."""
@@ -85,7 +91,7 @@ def points_block(layer: dict, tokens: dict) -> dict:
     item = {"label": (layer.get("legend") or {}).get("label") or _layer_title(layer), "shape": "pointer" if sym.get("rotate_field") else shape,
             "size_mm": float(sym["_size_mm"]) if sym.get("_size_mm") else float(sym.get("size", 3)) * 0.35,
             "fill": sym.get("_color") or tokens["emphasis"], "stroke": tokens["background"]}
-    return {"layer": layer["id"], "title": _single_title(layer), "kind": "points", "items": [item]}
+    return {"layer": layer["id"], "title": _single_title(layer), "kind": "points", "items": [item], "note": _note(layer)}
 
 
 def _ladder(e_lo: int, e_hi: int, mult=(1.0, 2.0, 5.0)) -> list[float]:
@@ -133,7 +139,7 @@ def proportional_block(layer: dict, tokens: dict, values: list[float], radius_fo
         keys = nice_key_values(lo, hi, int((layer.get("legend") or {}).get("count", 3)))
     items = [{"label": fmt(v), "shape": "circle", "size_mm": 2 * radius_for(v), "fill": color, "stroke": tokens["background"], "value": v}
              for v in keys]
-    out = {"layer": layer["id"], "title": _layer_title(layer), "kind": "proportional", "items": items}
+    out = {"layer": layer["id"], "title": _layer_title(layer), "kind": "proportional", "items": items, "note": _note(layer)}
     if (layer.get("legend") or {}).get("nested"):          # nested circles with leaders (M15)
         out["nested"] = True
         out["ring"] = tokens["label"]
@@ -145,14 +151,14 @@ def lines_block(layer: dict, tokens: dict) -> dict:
     return {"layer": layer["id"], "title": _single_title(layer), "kind": "lines",
             "items": [{"label": (layer.get("legend") or {}).get("label") or _layer_title(layer), "stroke": sym.get("_color") or tokens["emphasis"],
                        "width_mm": float(sym["_width_mm"]) if sym.get("_width_mm") and tokens.get("_look", "classic") != "classic"
-                       else float(sym.get("width", 0.8)) * 0.35, "dash": sym.get("dash")}]}
+                       else float(sym.get("width", 0.8)) * 0.35, "dash": sym.get("dash")}], "note": _note(layer)}
 
 
 def polygons_block(layer: dict, tokens: dict) -> dict:
     sym = layer.get("symbol") or {}
     return {"layer": layer["id"], "title": _single_title(layer), "kind": "polygons",
             "items": [{"label": (layer.get("legend") or {}).get("label") or _layer_title(layer), "fill": sym.get("_fill") or tokens["land"],
-                       "stroke": sym.get("_stroke") or tokens["frame"], "opacity": float(sym.get("opacity", 1.0))}]}
+                       "stroke": sym.get("_stroke") or tokens["frame"], "opacity": float(sym.get("opacity", 1.0))}], "note": _note(layer)}
 
 
 RAMP_W_MM = 42.0              # a continuous bar's length
