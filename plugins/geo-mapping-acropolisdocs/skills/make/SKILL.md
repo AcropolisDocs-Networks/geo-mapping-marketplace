@@ -1,4 +1,5 @@
 ---
+name: make
 description: Make a map with geo-mapping-acropolisdocs from a request or a file
 disable-model-invocation: true
 ---

@@ -1,4 +1,5 @@
 ---
+name: brand
 description: List, add, make or set the brand for maps made with geo-mapping-acropolisdocs
 argument-hint: "[list | set SLUG | new | add PATH | export SLUG | remove SLUG]"
 disable-model-invocation: true

@@ -46,6 +46,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import gmap_common as gc  # noqa: E402
 import redact  # noqa: E402
+from entry_skills import ENTRY_SKILLS  # noqa: E402
 
 PLUGIN_ROOT = HERE.parent
 EVIDENCE_CAP = 160
@@ -91,7 +92,8 @@ def plugin_inventory(root: Path = PLUGIN_ROOT) -> dict:
     module read falls in the window of the skill that asked for it."""
     scripts = {p.stem for d in ("scripts", "lints") for p in (root / d).glob("*.py")}
     skills, owners = {}, {}
-    pages = [(sk.parent.name, sk) for sk in sorted((root / "skills").glob("*/SKILL.md"))] + [(md.stem, md) for md in sorted((root / "modules").glob("*.md"))]
+    pages = [(sk.parent.name, sk) for sk in sorted((root / "skills").glob("*/SKILL.md")) if sk.parent.name not in ENTRY_SKILLS] + \
+            [(md.stem, md) for md in sorted((root / "modules").glob("*.md"))]
     for name, sk in pages:
         text = sk.read_text(encoding="utf-8", errors="replace")
         m = re.search(r"^description:\s*(>\s*\n((?:\s+.*\n)+)|\"?(.*)\"?\s*$)", text, re.M)
@@ -103,10 +105,13 @@ def plugin_inventory(root: Path = PLUGIN_ROOT) -> dict:
                 continue
             if s in scripts and (s not in owners or (cat == "user" and skills.get(owners[s]) != "user")):
                 owners[s] = name
-    for cmd in sorted((root / "commands").glob("*.md")):
+    for name in sorted(ENTRY_SKILLS):                 # 1.14.1: the typed entries are skills/<name>/SKILL.md (commands/ was the legacy layout)
+        cmd = root / "skills" / name / "SKILL.md"
+        if not cmd.is_file():
+            continue
         for s in set(re.findall(r"(?:scripts|lints)/([a-z0-9_]+)\.py", cmd.read_text(encoding="utf-8", errors="replace"))):
             if s != "modules":
-                owners.setdefault(s, f"/{cmd.stem}")
+                owners.setdefault(s, f"/{name}")
     return {"scripts": scripts, "skills": skills, "owners": owners}
 
 

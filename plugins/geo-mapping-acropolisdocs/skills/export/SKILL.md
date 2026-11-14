@@ -1,4 +1,5 @@
 ---
+name: export
 description: Export a map made with geo-mapping-acropolisdocs as PDF, PNG or SVG at the size and resolution asked for
 disable-model-invocation: true
 ---

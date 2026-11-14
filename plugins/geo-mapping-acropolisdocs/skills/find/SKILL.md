@@ -1,4 +1,5 @@
 ---
+name: find
 description: "Find map data (boundaries, roads, towers, population) with geo-mapping-acropolisdocs: library first, then the web"
 disable-model-invocation: true
 ---

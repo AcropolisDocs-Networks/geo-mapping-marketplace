@@ -1,4 +1,5 @@
 ---
+name: style
 description: Change how an existing map made with geo-mapping-acropolisdocs looks, then re-check and rebuild
 disable-model-invocation: true
 ---

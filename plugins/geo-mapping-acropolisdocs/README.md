@@ -1,4 +1,4 @@
-# geo-mapping-acropolisdocs 1.14.0
+# geo-mapping-acropolisdocs 1.14.1
 
 Cartographic maps from a request or your own geodata: print maps (SVG, PDF, PNG), interactive web maps (one self-contained HTML page), data
 conversion and analysis, public data services, travel-time areas and terrain, each checked before it is handed over and each with its sources.
@@ -91,7 +91,7 @@ or a folder named in `GEO_MAPPING_BRANDS`), so a plugin update never removes it.
 
 | Piece | Where |
 |---|---|
-| Skills and commands | `skills/`, `commands/` (the guide lists them) |
+| Skills and commands | `skills/` (each command is a skill of its own; the guide lists them) |
 | Reference pages the skills read | `modules/` |
 | The map engine, checks and pipelines | `scripts/`, `lints/` |
 | Data server (OGC, ArcGIS, Census, geocoding, credentials) | `.mcp.json`, `mcp/` |

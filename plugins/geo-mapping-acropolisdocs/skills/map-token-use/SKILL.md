@@ -1,4 +1,5 @@
 ---
+name: map-token-use
 description: Show where this session's tokens went and what to change, for the geo-mapping-acropolisdocs map plugin
 disable-model-invocation: true
 ---

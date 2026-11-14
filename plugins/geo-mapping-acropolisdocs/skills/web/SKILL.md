@@ -1,4 +1,5 @@
 ---
+name: web
 description: Make an interactive web map page with geo-mapping-acropolisdocs from a request or a file
 disable-model-invocation: true
 ---

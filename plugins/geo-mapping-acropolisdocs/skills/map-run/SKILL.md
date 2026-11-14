@@ -1,4 +1,5 @@
 ---
+name: map-run
 description: "Run a map pipeline after confirming its cost: map or web map build, QA, data refresh, format batch, service harvest or refresh, coverage, market, program, network analysis, atlas, library refresh"
 ---
 Start the pipeline the person named. The pipelines are `map-build`, `webmap-build`, `map-qa`, `data-refresh`, `format-batch`, `service-harvest`, `service-refresh`, `coverage-map`, `market-map`, `program-map`, `network-analysis`, `map-atlas-run`, `reference-refresh`, `climate-fetch` (a Copernicus CDS job), `fcc-fetch` (an FCC BDC file over 100 MB) and `flythrough` (a video flown over a 3D web page: a draft first, the final after you confirm); with no name, list them and ask which.

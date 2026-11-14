@@ -1,4 +1,5 @@
 ---
+name: service
 description: Get features from a data service (WFS, OGC API, ArcGIS) with geo-mapping-acropolisdocs
 disable-model-invocation: true
 ---
