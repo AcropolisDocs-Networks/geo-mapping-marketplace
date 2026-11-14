@@ -380,6 +380,9 @@ def _routes_layer(f: Feed, mode: str | None, notes: list):
                      "trips": ntrips.get(rid, 0), "shapes": len(shape_ids.get(rid, ())), "geometry_source": src})
         geoms.append(merged)
     _terminal_pairs(f, rows, notes)
+    _operating_routes(f, rows, notes)
+    for r in rows:
+        r.pop("_places", None)
     if no_shape - {r["route_id"] for r in rows if r["geometry_source"] == "shapes"}:
         drawn = [routes[x] for x in no_shape if x in sel and _route_name(routes[x]) not in unmapped]
         if drawn:
@@ -426,12 +429,140 @@ def _terminal_pairs(f: "Feed", rows: list, notes: list) -> None:
             r["terminal_a"] = r["terminal_b"] = r["route_pair"] = None
             continue
         a, b = _place(stops, seq[0]), _place(stops, seq[-1])
+        r["_places"] = [_place(stops, x) for x in seq]          # 1.15.0: the route's stops by station, for the operating-route grouping
         r["terminal_a"], r["terminal_b"] = a, b
         r["route_pair"] = " – ".join(sorted({a, b}, key=str.casefold)) if a != b else a
         pairs.add(r["route_pair"])
     if pairs and len(pairs) < len(rows):
         notes.append(_note("MAP-GTFS-010", "INFO", f"{len(rows)} routes run between {len(pairs)} terminal pairs (route_pair); dissolve by route_pair "
                            "to draw each pair once", sorted(pairs)[:20]))
+
+
+TERMINAL_MODES = ("ferry", "aerial_lift", "cable_tram", "funicular")
+
+
+def _networks(f: "Feed") -> dict:
+    """route_id -> network name from the feed's own route_networks.txt and networks.txt (GTFS Fares v2), or {}."""
+    if not f.has("route_networks.txt"):
+        return {}
+    names = {r.get("network_id", ""): (r.get("network_name") or r.get("network_id") or "").strip() for r in f.rows("networks.txt")} if f.has("networks.txt") else {}
+    return {r["route_id"]: names.get(r.get("network_id", ""), r.get("network_id", "")) for r in f.rows("route_networks.txt") if r.get("route_id")}
+
+
+def _biconnected(edges: list[tuple[str, str]]) -> list[set]:
+    """The biconnected components of an undirected graph, each as its set of edges (Tarjan, iterative). Two terminals joined only through a
+    third (Seattle to Bainbridge, Seattle to Bremerton) fall in separate components; terminals on a loop (Fauntleroy, Vashon, Southworth)
+    fall in one."""
+    adj: dict = defaultdict(set)
+    for a, b in edges:
+        if a != b:
+            adj[a].add(b)
+            adj[b].add(a)
+    disc, low, comps, t = {}, {}, [], [0]
+    estack: list = []
+    for root in sorted(adj):
+        if root in disc:
+            continue
+        disc[root] = low[root] = t[0]
+        t[0] += 1
+        stack = [(root, None, iter(sorted(adj[root])))]
+        while stack:
+            u, parent, it = stack[-1]
+            nxt = next(it, None)
+            if nxt is None:
+                stack.pop()
+                if parent is not None:
+                    low[parent] = min(low[parent], low[u])
+                    if low[u] >= disc[parent]:
+                        comp = set()
+                        while estack:
+                            e = estack.pop()
+                            comp.add(frozenset(e))
+                            if set(e) == {parent, u}:
+                                break
+                        comps.append(comp)
+                continue
+            v = nxt
+            if v == parent:
+                continue
+            if v not in disc:
+                estack.append((u, v))
+                disc[v] = low[v] = t[0]
+                t[0] += 1
+                stack.append((v, u, iter(sorted(adj[v]))))
+            elif disc[v] < disc[u]:
+                estack.append((u, v))
+                low[u] = min(low[u], disc[v])
+    return comps
+
+
+def _operating_routes(f: "Feed", rows: list, notes: list) -> None:
+    """1.15.0: `operating_route` and `operating_route_source` on every route, so dissolving by operating_route draws an agency's own routes
+    without a join table. In order: the feed's own networks (route_networks.txt), a route_short_name that several routes share, and for
+    terminal-to-terminal services (ferries, aerial lifts: every route's trip has at most three stops) the network of terminals: routes whose
+    terminals are tied by a loop of sailings are one operating route, and a terminal pair reached only through a shared terminal is its own.
+    Washington State Ferries' 38 GTFS routes become its 8 operating routes. Otherwise the route itself."""
+    if not rows:
+        return
+    nets = _networks(f)
+    short = defaultdict(list)
+    for r in rows:
+        if r.get("route_short_name"):
+            short[r["route_short_name"]].append(r)
+    shared = len(short) < sum(len(v) for v in short.values())
+    pairs = {r.get("route_pair") for r in rows if r.get("route_pair")}
+    # terminal-to-terminal service: ferries and lifts, or short routes that come in pairs (one route each way between two terminals)
+    terminal = all(r["mode"] in TERMINAL_MODES for r in rows) or (
+        all(r.get("_places") is not None and len(r["_places"]) <= 3 for r in rows) and 0 < len(pairs) < len(rows))
+    comp_of: dict = {}
+    if terminal:
+        edges = []
+        for r in rows:
+            if r["route_id"] in nets:                 # the feed names these itself; the rest are grouped by their terminals
+                continue
+            pl = r.get("_places") or []
+            edges += [(pl[i], pl[i + 1]) for i in range(len(pl) - 1) if pl[i] != pl[i + 1]]
+        comps = _biconnected(edges)
+        for comp in comps:
+            places = set().union(*comp)
+            deg = defaultdict(int)
+            for e in comp:
+                for x in e:
+                    deg[x] += 1
+            order = sorted(places, key=lambda x: (-deg[x], x.casefold()))
+            name = " – ".join(order) if len(order) <= 2 else f"{order[0]} – " + ", ".join(sorted(order[1:], key=str.casefold))
+            for e in comp:
+                comp_of[e] = name
+    for r in rows:
+        rid = r["route_id"]
+        if rid in nets:
+            r["operating_route"], r["operating_route_source"] = nets[rid], "route_networks"
+        elif shared and r.get("route_short_name") and len(short[r["route_short_name"]]) > 1:
+            r["operating_route"], r["operating_route_source"] = r["route_short_name"], "route_short_name"
+        elif comp_of and r.get("_places"):
+            pl = r["_places"]
+            votes = defaultdict(int)
+            for i in range(len(pl) - 1):
+                k = frozenset((pl[i], pl[i + 1]))
+                if k in comp_of:
+                    votes[comp_of[k]] += 1
+            name = max(sorted(votes), key=lambda n: votes[n]) if votes else None
+            r["operating_route"], r["operating_route_source"] = (name, "terminal_network") if name else (_route_name(r), "route")
+        else:
+            r["operating_route"], r["operating_route_source"] = _route_name(r), "route"
+    # a terminal group that holds one route only is that route: its own name, not a name made from its terminals
+    count = defaultdict(int)
+    for r in rows:
+        if r["operating_route_source"] == "terminal_network":
+            count[r["operating_route"]] += 1
+    for r in rows:
+        if r["operating_route_source"] == "terminal_network" and count[r["operating_route"]] == 1:
+            r["operating_route"], r["operating_route_source"] = _route_name(r), "route"
+    ops = {r["operating_route"] for r in rows if r.get("operating_route")}
+    if len(ops) < len(rows):
+        src = sorted({r["operating_route_source"] for r in rows if r["operating_route_source"] != "route"})
+        notes.append(_note("MAP-GTFS-011", "INFO", f"{len(rows)} routes are {len(ops)} operating routes (operating_route, from {', '.join(src) or 'the routes'}); "
+                           "dissolve by operating_route to draw the agency's own routes", sorted(ops)[:20]))
 
 
 def _coord_ok(s: dict) -> bool:

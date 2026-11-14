@@ -45,6 +45,14 @@ ENGINES = ("auto", "pandas", "duckdb")
 AUTO_ROWS = {"where": 20_000, "table": 200_000, "pairs": None, "grid": 1_000_000}
 # None: auto never picks DuckDB for that kind. Point-in-polygon pairs: shapely's STRtree was twice as fast as DuckDB's spatial join at 250,000
 # and at 1,000,000 points on the two-core bench machine, so DuckDB runs them only when `engine: duckdb` asks.
+# 1.15.0, measured again (DuckDB 2.0, shapely 2.2, 1,000,000 points in the 3,108 counties of the lower 48): STRtree 0.70 s on one core;
+# DuckDB 2.09 s with one thread and with two, of which loading the geometries (WKB in, serial) is 0.42 to 0.54 s and the join 1.19 s with one
+# thread, 0.68 s with two. Even a join that kept that speed-up on every added core would leave DuckDB at about 0.74 s on four cores and
+# 0.57 s on eight: no faster than the tree below a million points, under a fifth faster above. So `pairs` stays None by default, and a
+# machine decides for itself: `duck_engine.py bench-pairs` measures both on the machine it runs on and, where DuckDB wins, records the
+# smallest size it won at in the person's own .geo-mapping/engine.json, which `auto` then uses on that machine (same core count) only.
+MACHINE_FILE = "engine.json"
+BENCH_SIZES = (250_000, 1_000_000, 4_000_000)
 INSTALL_HINT = "pip install duckdb"
 SPATIAL_HINT = ("the DuckDB spatial extension is not on this machine; DuckDB downloads it only when told to (`INSTALL spatial`, once, by you), "
                 "or `pip install duckdb-extension-spatial`; without it point-in-polygon work stays on the pandas path")
@@ -129,7 +137,7 @@ def decide(engine: str | None, rows: int, kind: str, *, needs_spatial: bool = Fa
     rec = {"engine": "pandas", "rows": int(rows), "kind": kind}
     if eng == "pandas":
         return rec | {"why": "engine: pandas was asked for"}
-    limit = AUTO_ROWS.get(kind)
+    limit = auto_rows(kind)
     if eng == "auto" and limit is None:
         return rec | {"why": f"auto keeps {kind} on the pandas path, which was faster on every size measured; engine: duckdb runs it in DuckDB"}
     have = version()
@@ -404,9 +412,85 @@ def grid_table(cell, values, agg: str, val: str | None):
     return df.set_index("cell")
 
 
+def _machine_path():
+    import gmap_common as gc
+    from pathlib import Path
+    home = os.environ.get("GEO_MAPPING_HOME")
+    return (Path(home) if home else Path.home() / gc.WORKDIR_NAME) / MACHINE_FILE
+
+
+def machine_thresholds() -> dict:
+    """What `bench-pairs` measured on this machine ({kind: rows or None}), when it was measured with the cores the machine has now."""
+    p = _machine_path()
+    try:
+        d = json.loads(p.read_text())
+    except Exception:  # noqa: BLE001 - no record, or an unreadable one: the shipped thresholds
+        return {}
+    if not isinstance(d, dict) or int(d.get("cores") or 0) != (os.cpu_count() or 0):
+        return {}
+    return {k: v for k, v in (d.get("auto_rows") or {}).items() if k in AUTO_ROWS and (v is None or isinstance(v, int))}
+
+
+def auto_rows(kind: str):
+    m = machine_thresholds()
+    return m[kind] if kind in m else AUTO_ROWS.get(kind)
+
+
+def bench_pairs(sizes=BENCH_SIZES, *, polygons=None, seed: int = 1, write: bool = True, runs: int = 2) -> dict:
+    """Point-in-polygon pairs on this machine: shapely's STRtree against DuckDB's spatial join, `runs` times each (the best kept), at each
+    size. The polygons are the bundled US counties unless given. -> {cores, sizes: {n: {strtree_s, duckdb_s}}, pairs: threshold or None}."""
+    import time as _t
+    import numpy as np
+    import shapely
+    if version() is None:
+        raise EngineError(f"DuckDB is not installed; {INSTALL_HINT}")
+    if not spatial_available():
+        raise EngineError(SPATIAL_HINT)
+    if polygons is None:
+        import geopandas as gpd
+        import gmap_common as gc
+        g = gpd.read_parquet(gc.plugin_root() / "assets" / "basemaps" / "us_counties_cb.parquet").to_crs("EPSG:4326")
+        g = g[~g["STATEFP"].isin(["02", "15", "60", "66", "69", "72", "78"])]
+        polygons = np.asarray(g.geometry.values, dtype=object)
+    rng = np.random.default_rng(seed)
+    x0, y0, x1, y1 = shapely.total_bounds(polygons)
+    out: dict = {}
+    win = None
+    for n in sizes:
+        pts = shapely.points(rng.uniform(x0, x1, int(n)), rng.uniform(y0, y1, int(n)))
+        best_t = best_d = float("inf")
+        for _ in range(max(1, runs)):
+            t = _t.perf_counter()
+            tree = shapely.STRtree(polygons)
+            a, b = tree.query(pts, predicate="intersects")
+            np.lexsort((b, a))
+            best_t = min(best_t, _t.perf_counter() - t)
+            t = _t.perf_counter()
+            pip_pairs(pts, polygons)
+            best_d = min(best_d, _t.perf_counter() - t)
+        out[int(n)] = {"strtree_s": round(best_t, 3), "duckdb_s": round(best_d, 3)}
+        if win is None and best_d < best_t * 0.9:          # a tenth faster at least, or the switch is not worth it
+            win = int(n)
+    rec = {"cores": os.cpu_count(), "duckdb": version(), "measured_on": __import__("datetime").date.today().isoformat(), "sizes": out,
+           "auto_rows": {"pairs": win}}
+    if write:
+        p = _machine_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        old = {}
+        try:
+            old = json.loads(p.read_text())
+        except Exception:  # noqa: BLE001
+            pass
+        p.write_text(json.dumps({**(old if isinstance(old, dict) else {}), **rec}, indent=2))
+        rec["stored_in"] = str(p)
+    rec["pairs"] = win
+    return rec
+
+
 def status() -> dict:
     v = version()
-    out = {"duckdb": v, "install": None if v else INSTALL_HINT, "auto_rows": dict(AUTO_ROWS)}
+    out = {"duckdb": v, "install": None if v else INSTALL_HINT, "auto_rows": {k: auto_rows(k) for k in AUTO_ROWS},
+           "measured_here": machine_thresholds() or None}
     if v:
         out["spatial"] = spatial_available()
         out["spatial_source"] = _SPATIAL_STATE.get("source")
@@ -419,9 +503,19 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", help="what is installed and the thresholds auto uses")
+    b = sub.add_parser("bench-pairs", help="measure point-in-polygon pairs here (STRtree against DuckDB) and record where DuckDB wins")
+    b.add_argument("--sizes", default=",".join(str(n) for n in BENCH_SIZES))
+    b.add_argument("--no-write", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "status":
         print(json.dumps(status(), indent=2))
+    elif a.cmd == "bench-pairs":
+        try:
+            r = bench_pairs(tuple(int(x) for x in a.sizes.split(",") if x.strip()), write=not a.no_write)
+        except EngineError as ex:
+            print(str(ex), file=sys.stderr)
+            return 1
+        print(json.dumps(r, indent=2))
     return 0
 
 

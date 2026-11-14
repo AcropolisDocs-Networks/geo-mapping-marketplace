@@ -160,8 +160,9 @@ def credential_findings(e: dict, eid: str) -> list[dict]:
         out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.lifetime_days is the token's lifetime in whole days (1 to 3650), as the service states it"))
     rj = b.get("reject") or {}
     if rj and (not all(isinstance(s, int) and 300 <= s < 600 for s in rj.get("status") or []) or not all(isinstance(p, str) and p.startswith("/") for p in rj.get("redirect_path") or [])
-               or set(rj) - {"status", "redirect_path", "body"}):
-        out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.reject is {status: [HTTP codes], redirect_path: [/path, ...], body: [text, ...]}"))
+               or set(rj) - {"status", "redirect_path", "body", "content_sha256"}
+               or not all(isinstance(h, str) and len(h) == 64 and all(c in "0123456789abcdef" for c in h.lower()) for h in rj.get("content_sha256") or [])):
+        out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.reject is {status: [HTTP codes], redirect_path: [/path, ...], body: [text, ...], content_sha256: [64 hex]}"))
     body = rj.get("body")
     if body is not None and (not isinstance(body, list) or not body or not all(isinstance(x, str) and x.strip() for x in body)):
         out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.reject.body is a list of texts the service's answer carries when the key is wrong"))

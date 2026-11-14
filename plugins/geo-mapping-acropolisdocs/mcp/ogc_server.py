@@ -39,7 +39,7 @@ for _p in (HERE, HERE.parent / "scripts", HERE.parent / "lints"):
 from ssrf import Refused, check_url, public_addresses  # noqa: E402,F401
 import service_tools as st  # noqa: E402
 
-from mcp.server.mcpserver import MCPServer  # noqa: E402
+from mcp.server.mcpserver import Context, MCPServer  # noqa: E402
 
 SERVER_NAME = "geo-mapping-ogc"
 # 1.8.0: what ten tools used to repeat in their own descriptions is said once here (about 6,000 characters less in every session's tool list)
@@ -478,6 +478,72 @@ def brand_copy(slug: str, work_folder: str, direction: str = "to_project", repla
     except bp.PackError as e:
         return {"ok": False, "error": str(e)}
     return {"ok": True, "copied": res["slug"], "name": res["name"], "to": res["dir"], "direction": direction}
+
+
+# ---------------------------------------------------------------------------------------------------------------- 1.15.0: a third party's licence
+def _licence_record(entry_id: str, uses: list, how: str, licence_ref: str, valid_until: str) -> dict:
+    import licence_ack as la
+    try:
+        e = la._entry(entry_id)
+        rec = la.acknowledge(e, uses, how=how, licence_ref=licence_ref, valid_until=valid_until)
+    except la.AckError as ex:
+        return {"ok": False, "error": str(ex)}
+    return {"ok": True, "acknowledged": True, **{k: rec[k] for k in ("entry", "provider", "uses", "acknowledged_on", "stored_in") if k in rec},
+            **({"valid_until": rec["valid_until"]} if rec.get("valid_until") else {})}
+
+
+def _elicit_supported(ctx) -> bool:
+    try:
+        caps = ctx.request_context.session.client_capabilities
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(caps is not None and getattr(caps, "elicitation", None) is not None)
+
+
+@mcp.tool()
+async def licence_acknowledge(entry_id: str, ctx: Context, work_folder: str = "", answered_uses: str = "", licence_ref: str = "",
+                              valid_until: str = "") -> dict:
+    """Show the person a pop-up for a library entry whose data is under a third party's licence (a refusal or a selection names this tool):
+    do they hold that provider's licence, and which uses does it cover (internal, publication, commercial, redistribution)? Their answer is
+    kept in their own folder and decides the entry's use for them. Where this client cannot show the pop-up, the result carries
+    ask_user_question: ask it with AskUserQuestion, then call again with answered_uses= the uses they picked (comma separated); never pick for
+    them. A person who holds no licence picks none, and nothing is recorded."""
+    import licence_ack as la
+    try:
+        e = la._entry(entry_id)
+        q = la.question(e)
+    except la.AckError as ex:
+        return {"ok": False, "error": str(ex)}
+    if answered_uses.strip():
+        return st.in_work_folder(work_folder, _licence_record, entry_id, answered_uses.split(","), "asked", licence_ref, valid_until)
+    if not _elicit_supported(ctx):
+        return {"ok": False, "needs_answer": True, "message": q["message"], "terms_url": q["terms_url"], "ask_user_question": q["ask_user_question"],
+                "next": "ask the person with AskUserQuestion, then call licence_acknowledge again with answered_uses=<their picks>"}
+    props = {u: {"type": "boolean", "title": u.capitalize(), "description": f"My licence covers {d}", "default": False} for u, d in q["uses"].items()}
+    props["licence_ref"] = {"type": "string", "title": "Licence or contract reference (optional)", "description": "Not a key or password", "default": ""}
+    props["valid_until"] = {"type": "string", "title": "Licence ends (optional, YYYY-MM-DD)", "description": "The pop-up comes back after this date", "default": ""}
+    msg = q["message"] + (f"\n\nTerms: {q['terms_url']}" if q.get("terms_url") else "") + "\n\nTick each use your licence covers; tick none if you hold no licence."
+    try:
+        res = await ctx.request_context.session.elicit_form(msg, {"type": "object", "properties": props}, ctx.request_id)
+    except Exception as ex:  # noqa: BLE001 - a client that cannot show the form: the session asks instead
+        return {"ok": False, "needs_answer": True, "message": q["message"], "terms_url": q["terms_url"], "ask_user_question": q["ask_user_question"],
+                "next": f"the pop-up could not be shown ({type(ex).__name__}); ask with AskUserQuestion, then call again with answered_uses="}
+    if getattr(res, "action", "") != "accept":
+        return {"ok": True, "acknowledged": False, "answer": getattr(res, "action", "cancel"), "note": "nothing recorded; the entry stays unavailable"}
+    data = res.content or {}
+    uses = [u for u in q["uses"] if data.get(u) is True]
+    if not uses:
+        return {"ok": True, "acknowledged": False, "answer": "no licence", "note": "nothing recorded; the entry stays unavailable"}
+    lref, vu = str(data.get("licence_ref") or ""), str(data.get("valid_until") or "")
+    return st.in_work_folder(work_folder, _licence_record, entry_id, uses, "pop-up", lref, vu)
+
+
+@mcp.tool()
+@st.masked
+def licence_status(work_folder: str = "") -> dict:
+    """The third-party licences the person has acknowledged (entry, provider, uses, date, end date). work_folder=: see the server notes."""
+    import licence_ack as la
+    return st.in_work_folder(work_folder, lambda: {"ok": True, "licences": la.status()})
 
 
 if __name__ == "__main__":

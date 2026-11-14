@@ -1,7 +1,7 @@
 id: ref.infrastructure.us.license.fcc-uls
 type: infrastructure
-rev: 2
-status: draft
+rev: 3
+status: active
 title: FCC Universal Licensing System (licensed locations)
 summary: Licensed transmitter and base-station locations by radio service from the FCC ULS, for licence and site context. Downloaded by the person; the
   plugin reads the tables once supplied.
@@ -46,13 +46,12 @@ crs: EPSG:4326
 delivery:
   mode: user-supplied
   format: zip of pipe-delimited tables per radio service (LO carries locations; HD, EN, FR carry licence header, entity and frequency rows)
-  note: 'Download the per-service ''complete'' file in a browser from data.fcc.gov/download/pub/uls/complete/: l_cell.zip (cellular), l_micro.zip (microwave),
-    l_LMcomm.zip (land mobile commercial), l_paging.zip, l_coast.zip. The LO table holds latitude and longitude in degrees, minutes, seconds with N/S and
-    E/W flags; convert to decimal. For cellular licence locations a verified service copy exists: ref.infrastructure.us.hifld.cell-tower.'
+  note: 'data.fcc.gov answers automated requests again (checked 2026-11-14): fcc_uls.py fetch l_cell (or l_micro, l_LMpriv, ...) downloads a weekly complete file through the guarded client, and fcc_uls.py locations l_cell.zip OUT.gpkg [--state AZ] [--active] turns its LO locations into points with the licence''s call sign, status and radio service from HD. A zip downloaded in a browser is read the same way.'
   size_mb: 30 to 400 by service (varies weekly)
 source:
   publisher: FCC
   product: Universal Licensing System complete downloads
+url_verified_on: '2026-11-14'
 vintage:
   current: weekly complete files
   cadence: monthly
@@ -62,11 +61,11 @@ license:
   commercial_ok: true
   bulk_ok: true
   attribution_text: 'Source: FCC Universal Licensing System.'
-  note: Public domain; the download host refuses automated requests, so the file is supplied by the person.
+  note: 'Public domain. The host answered the build session on 2026-11-14; fetched with the guarded client, never bundled.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
-  verify_by: '2027-05-04'
+  reviewed_on: '2026-11-14'
+  verify_by: '2027-05-14'
   changelog:
   - rev: 1
     date: '2026-11-02'
@@ -75,3 +74,6 @@ maintenance:
     date: '2026-11-04'
     note: 'Still draft: The FCC web hosts (fcc.gov, data.fcc.gov, broadbandmap.fcc.gov) refuse automated requests from the build environment (HTTP 403 on
       2026-11-04). The per-service file names and the LO table layout are recorded so the person can download them; the cellular subset is served by ref.infrastructure.us.hifld.cell-tower.'
+  - rev: 3
+    date: '2026-11-14'
+    note: 'Active (1.15.0): data.fcc.gov answered from the build session (l_cell.zip 23.1 MB, l_micro.zip 209 MB, l_LMpriv.zip 426 MB, files of 2026-11-08); the LO layout read from l_cell (51 fields: DMS at 19 to 26, ground elevation 18, the structure registration number, support and overall heights and type at 37 to 40) and HD (call sign 4, licence status 5, radio service 6); fcc_uls.py reads them (448 active cellular locations in Arizona).'

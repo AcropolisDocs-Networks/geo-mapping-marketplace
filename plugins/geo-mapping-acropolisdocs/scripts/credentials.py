@@ -31,6 +31,7 @@ import contextlib
 import contextvars
 import datetime as dt
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -1011,6 +1012,13 @@ def effective_reject(name: str, own: dict | None, block: dict | None, store: "St
             lib = (b or {}).get("reject") or {}
         if lib.get("body"):
             rj["body"] = list(lib["body"])
+    if not rj.get("content_sha256"):             # 1.15.0: a placeholder the service sends with HTTP 200 instead of refusing (CARTO's tiles)
+        lib = (block or {}).get("reject") or {}
+        if not lib.get("content_sha256") and store is not None:
+            b, _ = library_defaults(name, _try(store.entries, []))
+            lib = (b or {}).get("reject") or {}
+        if lib.get("content_sha256"):
+            rj["content_sha256"] = [str(x).lower() for x in lib["content_sha256"]]
     return rj
 
 
@@ -1093,6 +1101,12 @@ class Resolved:
     def body_rejects(self, raw: bytes) -> bool:
         """Whether the first 4 KB of an answer, before masking, say the key is wrong: a case-insensitive substring, or /a regex/."""
         return body_matches(self.reject.get("body") or [], raw)
+
+    def content_rejects(self, raw: bytes) -> bool:
+        """1.15.0: a service that answers a wrong or missing key with HTTP 200 and a placeholder (CARTO's tile host sends one 'API KEY
+        REQUIRED' tile for every address) is caught by the placeholder's SHA-256, declared in the entry's reject.content_sha256."""
+        want = [str(x).lower() for x in (self.reject.get("content_sha256") or [])]
+        return bool(want) and hashlib.sha256(raw).hexdigest() in want
 
     def rejection_hint(self) -> str:
         return (f"If you believe the key is fine (a wrong address or layer can look like this), run /{_prefix()}:map-credentials check {self.name} --probe "

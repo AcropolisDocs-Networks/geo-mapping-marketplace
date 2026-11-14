@@ -22,7 +22,7 @@ and records the yes in `.geo-mapping/customizations.yaml`.
 | Public services the reference library lists as active | |
 
 Nothing here lifts a refusal that is not about terms: Google Maps and Bing Maps stay refused, entries whose terms are not read yet stay
-unavailable, and the privacy gate, the caps and the request limits stay on.
+unavailable, a third party's licence is asked about in its own pop-up (below), and the privacy gate, the caps and the request limits stay on.
 
 ```bash
 # Resolve this plugin's root in THIS shell call. It looks only for this plugin's own marker file.
@@ -71,6 +71,22 @@ The plugin's server on the person's computer offers the same as `services_status
 3. On a yes, run `acknowledge --yes` (or `services_acknowledge confirm=true`), then build again. On a no, use the default the refusal named.
 4. The acknowledgment is asked once. Do not ask again when it is on file; `withdraw` takes it back, and a registered key still counts for its
    own service.
+
+## A third party's licence (1.15.0)
+
+Some data is only usable under a licence the person holds with its publisher (TeleGeography's submarine cables). That is not covered by the
+one acknowledgment above, and it is never hidden or switched on quietly: the first map that uses such an entry is refused with MAP-LIC-018 (or
+a selection names `licence_acknowledge`). Call the server's `licence_acknowledge` tool with the entry id and the work folder: it shows the
+person a pop-up asking whether they hold that provider's licence and which uses it covers (internal, publication, commercial,
+redistribution). Where the pop-up cannot be shown the tool returns `ask_user_question`: ask exactly that with AskUserQuestion and call again
+with `answered_uses=` their picks. Never pick for them; no picks means no licence and nothing is recorded. `licence_status` lists what is
+on file; `licence_ack.py withdraw ENTRY` takes one back.
+
+```bash
+python3 "$GMAP_ROOT/scripts/licence_ack.py" status
+python3 "$GMAP_ROOT/scripts/licence_ack.py" ask ENTRY_ID
+python3 "$GMAP_ROOT/scripts/licence_ack.py" acknowledge ENTRY_ID --uses internal,publication --yes   # only with the person's answer
+```
 
 A refusal for want of the acknowledgment names this command. An older MapSpec that says `terms_acknowledged: true` still builds: the line
 counts as the acknowledgment for that one map. Do not add it to new MapSpecs.

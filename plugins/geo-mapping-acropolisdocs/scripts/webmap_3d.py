@@ -369,6 +369,67 @@ def tube_features(pts: list, d: np.ndarray, clear: np.ndarray, props: dict, lat:
     return out
 
 
+# ---------------------------------------------------------------------------------------------------------------- 1.15.0: a slab on its mast's ground
+def _apex(ring: list) -> tuple[float, float] | None:
+    """The mast of a sector wedge: the ring vertex every other vertex is the same distance from (a pie slice's centre). None for a ring
+    with no such vertex (a full circle, or a polygon that is not a wedge)."""
+    pts = ring[:-1] if len(ring) > 1 and ring[0] == ring[-1] else list(ring)
+    if len(pts) < 4:
+        return None
+    lat = sum(q[1] for q in pts) / len(pts)
+    kx = math.cos(math.radians(lat))
+    best, cv_best = None, 0.02
+    for i, c in enumerate(pts):
+        ds = [math.hypot((q[0] - c[0]) * kx, q[1] - c[1]) for j, q in enumerate(pts) if j != i and (q[0], q[1]) != (c[0], c[1])]
+        if len(ds) < 3:
+            continue
+        m = sum(ds) / len(ds)
+        if m <= 0:
+            continue
+        cv = (sum((x - m) ** 2 for x in ds) / len(ds)) ** 0.5 / m
+        if cv < cv_best:
+            best, cv_best = (float(c[0]), float(c[1])), cv
+    return best
+
+
+def slabs_on_masts(fc: dict, dem_path: str, exaggeration: float) -> dict:
+    """A slab at antenna height (`extrude: {at_field | at_m, slab_m}`) sits on the ground under its mast. MapLibre raises a whole extrusion
+    by the ground under the mean of its vertices, which for a sector wedge is out in the beam, metres higher or lower than the mast on a
+    slope; each wedge's heights move by the difference (exaggerated as the page's terrain is). -> {moved, largest_m}."""
+    import raster_io as rio
+    masts, cents, idx = [], [], []
+    for i, f in enumerate(fc.get("features") or []):
+        g = f.get("geometry") or {}
+        if g.get("type") != "Polygon" or not g.get("coordinates"):
+            continue
+        ring = g["coordinates"][0]
+        a = _apex(ring)
+        if a is None:
+            continue
+        pts = ring[:-1] if ring[0] == ring[-1] else ring
+        masts.append(a)
+        cents.append((sum(q[0] for q in pts) / len(pts), sum(q[1] for q in pts) / len(pts)))
+        idx.append(i)
+    if not idx:
+        return {"moved": 0, "largest_m": 0.0}
+    gm = np.asarray(rio.sample(dem_path, masts), float)
+    gc_ = np.asarray(rio.sample(dem_path, cents), float)
+    largest = 0.0
+    moved = 0
+    for k, i in enumerate(idx):
+        if not (math.isfinite(gm[k]) and math.isfinite(gc_[k])):
+            continue
+        dz = (float(gm[k]) - float(gc_[k])) * float(exaggeration)
+        pr = fc["features"][i]["properties"]
+        h, b = float(pr["_h"]) + dz, float(pr["_b"]) + dz
+        if b < 0:                                   # an extrusion cannot start below the ground MapLibre puts it on: it rests there instead
+            h, b = h - b, 0.0
+        pr["_h"], pr["_b"] = round(h, 2), round(b, 2)
+        largest = max(largest, abs(dz))
+        moved += 1
+    return {"moved": moved, "largest_m": round(largest, 1)}
+
+
 # ---------------------------------------------------------------------------------------------------------------- line of sight
 def los_op(l) -> dict | None:
     ops = [o for o in (l.spec.get("ops") or []) if isinstance(o, dict)]
@@ -386,9 +447,29 @@ def link_dem(plan, l, op: dict, bounds) -> tuple[str, dict]:
     return mp.ops_dem_resolver(plan.spec, base)(bounds, float(op.get("dem_res_m", 30)))
 
 
-def links(plan, l, col: dict, brand: str) -> tuple[list[dict], dict, list[str], list[dict]]:
-    """For a line_of_sight layer's links on the page: (tube features, {key: profile SVG}, notes, findings). Each link's profile is computed
-    again from the op's own DEM, heights, k and frequency (terrain.line_of_sight), so the 3D line and the chart show the same ray."""
+LINK_MAX_POINTS = 160                  # a link in the air is drawn through at most this many points (the profile's samples, thinned)
+
+
+def link_points(pts: list, prof: np.ndarray, base_m: float, max_points: int = LINK_MAX_POINTS) -> list[list[float]]:
+    """1.15.0: a link as the page's WebGL layer draws it: [lon, lat, ground above the page's base (m), clearance of the ray above the ground (m)]
+    at each kept sample. The page lifts each point to ground x exaggeration + clearance, so the line is the ray itself, not a stack of slabs;
+    the samples where the clearance turns (the worst point, the ridge) are always kept."""
+    n = len(pts)
+    if n == 0:
+        return []
+    keep = set(np.linspace(0, n - 1, min(n, max_points)).round().astype(int).tolist())
+    clear = prof[:, 2]
+    keep.add(int(np.argmin(clear)))
+    turns = np.where(np.diff(np.sign(np.diff(clear))) != 0)[0] + 1
+    keep |= set(int(i) for i in turns[: max_points // 4])
+    return [[round(float(pts[i][0]), 7), round(float(pts[i][1]), 7), round(float(prof[i, 1]) - base_m, 2), round(float(clear[i]), 2)] for i in sorted(keep)]
+
+
+def links(plan, l, col: dict, brand: str, base_m: float | None = None) -> tuple[list[dict], dict, list[str], list[dict]]:
+    """For a line_of_sight layer's links on the page: (link records for the page's WebGL layer, {key: profile SVG}, notes, findings). Each
+    link's profile is computed again from the op's own DEM, heights, k and frequency (terrain.line_of_sight), so the 3D line and the chart
+    show the same ray. 1.15.0: a link is a real line in the air ({key, status, c, pts}: see link_points), drawn and picked by the page's own
+    WebGL layer, not extruded segments."""
     import profile_chart as pc
     import terrain as te
     op = los_op(l) or {}
@@ -419,13 +500,13 @@ def links(plan, l, col: dict, brand: str) -> tuple[list[dict], dict, list[str], 
         p["_p"] = key
         prof = np.array(r["profile"], float)
         pts, d, _D = te.geodesic_points(tuple(a[:2]), tuple(b[:2]), len(prof))
-        keep = {kk: p[kk] for kk in ("status", "_c", "_p") if kk in p}           # the popup reads the rest from the link itself (_p)
-        feats += tube_features(pts, prof[:, 0], prof[:, 2], keep, (a[1] + b[1]) / 2)
+        base = float(base_m) if base_m is not None else float(np.min(prof[:, 1]))
+        feats.append({"key": key, "status": p.get("status"), "c": p.get("_c"), "pts": link_points(pts, prof, base)})
         names = (str(p.get("a", "A")), str(p.get("b", "B")))
         ch = pc.draw(r, brand=brand, names=names, credit=credit, size="web", chart_id=f"profile-{names[0]}-{names[1]}")
         fs += [{**x, "layer": l.id} for x in ch["findings"] if x["severity"] == "BLOCK"]
         profiles[key] = page_svg(ch["svg"], f"gmp{i}")
-    notes.append(f"layer '{l.id}': {len(profiles)} link(s) drawn in 3D between antenna tops at the ray's clearance above the ground, each with its profile "
+    notes.append(f"layer '{l.id}': {len(profiles)} link(s) drawn in 3D as lines along the ray between antenna tops, each with its profile "
                  f"chart in the popup ({_dem_label(rec, dem)}, k = {k:.3g}" + (f", {freq:g} GHz" if freq else "") + ")")
     return feats, profiles, notes, fs
 
@@ -722,17 +803,8 @@ def style_3d(st: dict, *, t: dict, s3: dict, defs: list[dict], dem: dict | None,
                 l["metadata"] = md
                 if start3d:
                     l.setdefault("layout", {})["visibility"] = "none"
-        for bi, (lo, hi, _w) in enumerate(tb["bands"]):
-            ly = {"id": f"{lid}--tube{bi}", "type": "fill-extrusion", "source": f"tube-{lid}", "filter": ["==", ["get", "_band"], bi],
-                  "layout": _vis(d["visible"] and start3d),
-                  "paint": {"fill-extrusion-color": ["coalesce", ["get", "_c"], tb["color"]], "fill-extrusion-height": ["get", "_h"],
-                            "fill-extrusion-base": ["get", "_b"], "fill-extrusion-opacity": band_opacity(lo, hi), "fill-extrusion-vertical-gradient": False},
-                  "metadata": {"gm:layer": lid, "gm:role": "extrusion", "gm:mode": "3d", "gm:part": "link"}}
-            over.append(ly)
     for k, v in masts.items():
         st["sources"][f"mast-{k}"] = {"type": "geojson", "data": {"gm": f"mast-{k}"}, "attribution": "", "tolerance": 0}
-    for k, v in tubes.items():
-        st["sources"][f"tube-{k}"] = {"type": "geojson", "data": {"gm": f"tube-{k}"}, "attribution": "", "tolerance": 0}
     st["layers"] = layers[:first_data] + under + layers[first_data:first_sym] + over + layers[first_sym:]
     st.setdefault("metadata", {})["gm:3d"] = True
 
@@ -742,7 +814,7 @@ def page(plan, s3: dict, st: dict, defs: list[dict], collections: dict, bbox, ke
     """Everything 3D on one MapLibre page: the terrain tiles, the extrusions, the masts, the links and their profiles, added to the style
     `st` and to `collections` in place. -> {cfg (the page's view3d), dem (the tiles, or None), profiles {key: svg}, notes, findings, report}."""
     import map_plan as mp
-    out = {"notes": [], "findings": [], "dem": None, "profiles": {}, "cfg": None, "report": {}}
+    out = {"notes": [], "findings": [], "dem": None, "profiles": {}, "cfg": None, "report": {}, "links3d": {}}
     tier = mp.scale_tier(mp.scale_denominator(plan))["tier"]
     ex = exaggeration(s3["exaggeration"], tier)
     s3 = dict(s3, exaggeration_value=ex)
@@ -798,6 +870,19 @@ def page(plan, s3: dict, st: dict, defs: list[dict], collections: dict, bbox, ke
         dem["sha256"] = hashlib.sha256(dem["blob"]).hexdigest()
         dem["bytes"] = len(dem["blob"])
     extruded = {d["id"]: {"color": d["style"]["fill"], "opacity": 0.92} for d in defs if d.get("d3") == "extrude"}
+    if dem and item:
+        for lid in extruded:
+            l = next((x for x in plan.layers if x.id == lid), None)
+            ex_ = (l.spec.get("extrude") or {}) if l is not None else {}
+            if (ex_.get("at_field") or ex_.get("at_m") is not None) and isinstance(collections.get(lid), dict):
+                try:
+                    r = slabs_on_masts(collections[lid], item["dem_path"], ex)
+                except Exception as e:  # noqa: BLE001 - the slabs keep MapLibre's own placement
+                    out["notes"].append(f"layer '{lid}': the slabs could not be set on their masts' ground ({str(e)[:100]})")
+                    continue
+                if r["moved"]:
+                    out["notes"].append(f"layer '{lid}': {r['moved']} slab(s) set on the ground under their mast, not under the middle of the wedge "
+                                        f"(at most {r['largest_m']:g} m on the page)")
     masts, tubes = {}, {}
     for d in defs:
         if d.get("d3") == "mast":
@@ -806,12 +891,12 @@ def page(plan, s3: dict, st: dict, defs: list[dict], collections: dict, bbox, ke
             masts[d["id"]] = {"bands": band_widths(lat, MAST_PX)}
         elif d.get("d3") == "links":
             l = next(x for x in plan.layers if x.id == d["id"])
-            feats, profs, n, f = links(plan, l, collections[d["id"]], plan.brand)
+            feats, profs, n, f = links(plan, l, collections[d["id"]], plan.brand, base_m=dem["base_m"] if dem else None)
             out["notes"] += n
             out["findings"] += f
             if feats:
-                collections[f"tube-{d['id']}"] = {"type": "FeatureCollection", "features": feats}
-                tubes[d["id"]] = {"bands": band_widths(lat, TUBE_PX), "color": d["style"]["stroke"]}
+                out["links3d"][d["id"]] = {"color": d["style"]["stroke"], "width": TUBE_PX, "links": feats}
+                tubes[d["id"]] = {"color": d["style"]["stroke"]}
                 out["profiles"].update(profs)
     style_3d(st, t=plan.tokens, s3=s3, defs=defs, dem=dem, relief_id=relief_id, relief_opacity=relief_op, masts=masts, tubes=tubes, extruded=extruded)
     out["dem"] = dem

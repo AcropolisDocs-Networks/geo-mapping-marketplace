@@ -447,6 +447,10 @@ def _read_tiled(path: Path, lid: str, t: dict) -> list[dict]:
                 out.append(finding("MAP-WEB-018", "BLOCK", f"layer '{lid}': the clusters at zoom {e['maxzoom'] + 1} count {n:,} points; the layer has {src_n:,}", {"layer": name, "found": n, "expected": src_n}))
         else:
             n = int(df["mvt_id"].nunique()) if "mvt_id" in df.columns and df["mvt_id"].notna().any() else len(df)
+            if e.get("lod"):                # 1.15.0: a level-of-detail zoom holds blocks of footprints, fewer by design; it must hold some
+                if n == 0 and src_n:
+                    out.append(finding("MAP-WEB-018", "BLOCK", f"layer '{lid}': the blocks at zoom {e['maxzoom'] + 1} are missing", {"layer": name, "found": 0}))
+                continue
             if n != src_n:
                 out.append(finding("MAP-WEB-018", "BLOCK", f"layer '{lid}': the tiles hold {n:,} of its {src_n:,} features at zoom {e['maxzoom'] + 1}", {"layer": name, "found": n, "expected": src_n}))
     if not out:

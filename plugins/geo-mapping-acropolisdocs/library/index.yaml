@@ -11,9 +11,9 @@ entries:
   file: entries/data/ref.basemap-provider.carto-positron.yaml
   type: basemap-provider
   status: active
-  rev: 5
+  rev: 6
   tags_digest: d4c20a447479
-  entry_digest: 4864c6b30db1
+  entry_digest: 6e7e1ea21387
 - id: ref.basemap-provider.esri-arcgis
   file: entries/data/ref.basemap-provider.esri-arcgis.yaml
   type: basemap-provider
@@ -521,10 +521,10 @@ entries:
 - id: ref.infrastructure.us.license.fcc-uls
   file: entries/data/ref.infrastructure.us.license.fcc-uls.yaml
   type: infrastructure
-  status: draft
-  rev: 2
+  status: active
+  rev: 3
   tags_digest: e03118fa8f01
-  entry_digest: 969a3cd9636c
+  entry_digest: 41f8eb82564b
 - id: ref.infrastructure.us.rail.tiger
   file: entries/data/ref.infrastructure.us.rail.tiger.yaml
   type: infrastructure
@@ -549,10 +549,10 @@ entries:
 - id: ref.infrastructure.us.tower.fcc-asr
   file: entries/data/ref.infrastructure.us.tower.fcc-asr.yaml
   type: infrastructure
-  status: draft
-  rev: 2
+  status: active
+  rev: 3
   tags_digest: e03118fa8f01
-  entry_digest: 05154d282a98
+  entry_digest: f428ab985afa
 - id: ref.infrastructure.us.tower.land-mobile
   file: entries/data/ref.infrastructure.us.tower.land-mobile.yaml
   type: infrastructure
@@ -591,10 +591,10 @@ entries:
 - id: ref.infrastructure.world.submarine-cable.telegeography
   file: entries/data/ref.infrastructure.world.submarine-cable.telegeography.yaml
   type: infrastructure
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: f523d79301c9
-  entry_digest: 3a949e53cf12
+  entry_digest: 1fd10c186c6b
 - id: ref.map-type.choropleth
   file: entries/method/ref.map-type.choropleth.yaml
   type: map-type
@@ -816,9 +816,9 @@ entries:
   file: entries/data/ref.public-service.us.weather.noaa-cdo.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: a8b93991cb76
-  entry_digest: 76dbf8afdf3e
+  entry_digest: 8b391d2a3e43
 - id: ref.public-service.us.weather.nws
   file: entries/data/ref.public-service.us.weather.nws.yaml
   type: public-service
@@ -893,9 +893,9 @@ entries:
   file: entries/data/ref.public-service.world.street-imagery.mapillary.yaml
   type: public-service
   status: active
-  rev: 4
+  rev: 5
   tags_digest: f677c51841c4
-  entry_digest: 37bfe652fac9
+  entry_digest: 9a0293abb7bb
 - id: ref.public-service.world.transit.transitland
   file: entries/data/ref.public-service.world.transit.transitland.yaml
   type: public-service
@@ -991,9 +991,9 @@ entries:
   file: entries/data/ref.statistic.us.coverage.fcc-nbm.yaml
   type: statistic
   status: draft
-  rev: 2
+  rev: 3
   tags_digest: 6bcdb43862da
-  entry_digest: 345119bb723a
+  entry_digest: 4650cfeae007
 - id: ref.statistic.us.lodes.lehd
   file: entries/data/ref.statistic.us.lodes.lehd.yaml
   type: statistic
@@ -1033,9 +1033,9 @@ entries:
   file: entries/data/ref.statistic.world.population.worldpop.yaml
   type: statistic
   status: active
-  rev: 1
+  rev: 2
   tags_digest: a20e6275aa2c
-  entry_digest: 8e5bb8e949ea
+  entry_digest: 0204de4ebe41
 - id: ref.statistic.world.speed.ookla
   file: entries/data/ref.statistic.world.speed.ookla.yaml
   type: statistic

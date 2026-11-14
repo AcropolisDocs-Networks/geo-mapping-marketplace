@@ -76,9 +76,22 @@ def load(ref: str, captures_root: Path | None = None):
 
 
 # ---------------------------------------------------------------------------------------------------------------- the comparison
+def _cell(v) -> str:
+    if v is None or (isinstance(v, float) and v != v):
+        return ""
+    try:
+        import pandas as pd
+        if v is pd.NA or v is pd.NaT:
+            return ""
+    except Exception:  # noqa: BLE001
+        pass
+    return str(v)
+
+
 def _row_hashes(g, cols):
     import shapely
-    attrs = g[cols].astype(str).agg("\x1f".join, axis=1) if cols else None
+    # 1.15.0 (live check, USGS NHD): under pandas 3 astype(str) keeps a missing value as a float NaN, and join failed on it
+    attrs = g[cols].astype(object).apply(lambda c: c.map(_cell)).agg("\x1f".join, axis=1) if cols else None
     wkb = shapely.to_wkb(shapely.set_precision(g.geometry.values, 1e-7), output_dimension=2)
     out = []
     for i in range(len(g)):
@@ -143,8 +156,9 @@ def drift(old_rec: dict, new_rec: dict, old, new, *, key: str | None = None, thr
             by_col: dict[str, int] = {}
             changed_ids = set()
             for c in [c for c in common if c != k]:
-                a, b = o.loc[both, c].astype(str), n.loc[both, c].astype(str)
-                diff = (a.values != b.values)
+                a = np.array([_cell(v) for v in o.loc[both, c].astype(object)], dtype=object)       # 1.15.0: a missing value is "" on both sides
+                b = np.array([_cell(v) for v in n.loc[both, c].astype(object)], dtype=object)
+                diff = (a != b)
                 if diff.any():
                     by_col[c] = int(diff.sum())
                     changed_ids |= {both[i] for i in np.where(diff)[0]}

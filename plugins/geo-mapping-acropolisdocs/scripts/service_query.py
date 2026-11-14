@@ -110,6 +110,27 @@ def explore(http, profile: dict, protocol: str | None = None, path: str = "") ->
     return oc.get_capabilities(http, profile, proto)
 
 
+_ID_NAMES = ("id", "objectid", "fid", "gid", "ident", "gml_id", "ogc_fid", "oid", "uid", "featureid", "feature_id")
+
+
+def order_field(fields: list[dict]) -> str | None:
+    """1.15.0: the field most likely to be unique, for stable WFS paging. An id by name first, then an integer field whose name ends in
+    an id (`inpoly_fid`, `site_id`), then a code that names one thing (`geoid`, `fips`), then the first field. Found against NOAA's GeoServer:
+    its counties layer starts with `state`, and paging ordered by a repeated value lost one county and repeated another."""
+    import re as _re
+    names = [f.get("name") or "" for f in fields]
+    for n in names:
+        if n.lower() in _ID_NAMES:
+            return n
+    for f in fields:
+        if f.get("type") in ("integer", "long", "int", "short") and _re.search(r"(?:^|_)(?:id|fid|gid|oid)$", (f.get("name") or "").lower()):
+            return f["name"]
+    for n in names:
+        if _re.search(r"(?:^|_)(?:id|fid|geoid|fips|guid|uuid)$", n.lower()):
+            return n
+    return names[0] if names else None
+
+
 def describe(http, profile: dict, protocol: str, layer: str, version: str | None = None) -> dict:
     if protocol == "arcgis":
         return ac.layer_info(http, profile, layer)
@@ -165,12 +186,17 @@ def make_plan(http, profile: dict, req: dict) -> dict:
         plan.extra["geometry_field"] = schema["geometry"]["name"]
     # stable paging
     if proto == "wfs" and not plan.sort_by:
-        first_id = next((f["name"] for f in schema["fields"] if f["name"].lower() in ("id", "objectid", "fid", "gid", "ident", "gml_id", "ogc_fid")), None) or (schema["fields"][0]["name"] if schema["fields"] else None)
+        first_id = order_field(schema["fields"])
         if first_id:
             plan.sort_by = first_id
+            plan.extra["auto_sort"] = True
             fs.append(finding("MAP-SVC-006", "INFO", f"paging is ordered by '{first_id}' so pages do not overlap", first_id))
         else:
             fs.append(finding("MAP-SVC-006", "WARN", "no ordering field found; paging may repeat or miss features"))
+    elif proto == "arcgis" and not plan.sort_by and schema.get("oid_field"):
+        # 1.15.0 (live check, USGS NHD): the object-id field was always sent as orderByFields, but the record said "no ordering field"
+        plan.sort_by = schema["oid_field"]
+        plan.extra["auto_sort"] = True
     # the count
     if proto == "wfs":
         n = oc.wfs_hits(http, profile, plan)
@@ -280,6 +306,29 @@ def capture_id(profile: dict, req: dict, layer_name: str) -> str:
     return f"{slug(profile['profile'])}-{slug(layer_name.split(':')[-1])}-{key}"
 
 
+def _stable_again(http, profile: dict, plan, mp: dict, outdir: Path, hits, first):
+    """1.15.0: pages ordered by a field the plugin chose repeated a feature, so the field is not unique. Fetch again, once: as one page when
+    the server allows that many features in one request, else ordered by every plain field (a repeat then needs two identical rows)."""
+    import copy
+    lim = profile.get("limits") or {}
+    one = max(int(lim.get("server_max_features") or 0), 0)
+    p2 = copy.copy(plan)
+    p2.extra = dict(plan.extra)
+    if hits and one and hits <= min(one, oc.PAGE_CEILING):
+        p2.page_size = int(hits)
+        how = f"fetched again as one page of {hits}"
+    else:
+        flds = [f["name"] for f in mp["schema"]["fields"] if f.get("type") not in ("geometry",)][:6]
+        p2.sort_by = ",".join(flds)
+        how = "fetched again ordered by " + ", ".join(flds)
+    again = oc.fetch_pages(http, profile, p2, Path(outdir) / "again", hits=hits, caps=mp["caps"], resume=False)
+    if again.duplicates < first.duplicates:
+        was = plan.sort_by
+        plan.page_size, plan.sort_by = p2.page_size, p2.sort_by
+        return again, f"pages ordered by '{was}' repeated {first.duplicates} feature(s): the field is not unique, so the layer was {how}"
+    return first, f"pages repeated {first.duplicates} feature(s); a second try ({how}) did no better"
+
+
 def capture(http, profile: dict, req: dict, *, outroot: Path | None = None, fmt: str = "gpkg", resume: bool = True, route: str = "mcp", confidential: bool | None = None) -> dict:
     """Run a request end to end. Returns {ok, record_path, result_path, record, findings}. Writes under <workdir>/captures/<id>/."""
     import service_lint as sl
@@ -296,6 +345,9 @@ def capture(http, profile: dict, req: dict, *, outroot: Path | None = None, fmt:
         res = ac.fetch_pages(http, profile, plan, outdir, hits=hits, layer=mp["schema"], resume=resume)
     else:
         res = oc.fetch_pages(http, profile, plan, outdir, hits=hits, caps=mp["caps"], resume=resume)
+        if res.duplicates and plan.extra.get("auto_sort") and plan.protocol == "wfs":
+            res, note = _stable_again(http, profile, plan, mp, outdir, hits, res)
+            fs.append(finding("MAP-SVC-006", "INFO", note))
     fs += res.findings
     result_path, g = merge(res, outdir, plan.layer.split(":")[-1], fmt, srs=plan.srs or "EPSG:4326")
     declared = (mp["layer_caps"] or {}).get("bbox") if mp["layer_caps"] else None

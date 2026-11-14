@@ -1,6 +1,6 @@
 id: ref.statistic.us.coverage.fcc-nbm
 type: statistic
-rev: 2
+rev: 3
 status: draft
 title: FCC National Broadband Map (availability data)
 summary: Broadband availability by location and provider as filed with the FCC (Broadband Data Collection), summarized to Census geographies. Downloaded
@@ -74,8 +74,8 @@ license:
   note: Public domain; the host refuses automated requests, so the file is supplied by the person.
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
-  verify_by: '2027-11-04'
+  reviewed_on: '2026-11-14'
+  verify_by: '2027-05-14'
   changelog:
   - rev: 1
     date: '2026-11-02'
@@ -84,3 +84,6 @@ maintenance:
     date: '2026-11-04'
     note: 'Still draft: The FCC web hosts (fcc.gov, data.fcc.gov, broadbandmap.fcc.gov) refuse automated requests from the build environment (HTTP 403 on
       2026-11-04); the download route and the join key are recorded, and the summary layout lives in ref.statistic.us.broadband.fcc-bdc-summary.'
+  - rev: 3
+    date: '2026-11-14'
+    note: 'Rechecked 2026-11-14 (1.15.0): broadbandmap.fcc.gov/data-download still answers 403 to automated requests, from the build session and from the owner''s own network alike, and its public map API answers 401 without the BDC key. The availability data is reached through the BDC Public Data API with the person''''s own fcc-bdc key (fcc_bdc_list, fcc_bdc_fetch; ref.public-service.us.broadband.fcc-bdc-api); this entry stays draft for the manual download route.'

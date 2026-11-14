@@ -1,7 +1,7 @@
 id: ref.infrastructure.world.submarine-cable.telegeography
 type: infrastructure
-rev: 1
-status: draft
+rev: 2
+status: active
 title: Submarine cable systems and landing points (TeleGeography Submarine Cable Map)
 summary: Routes of the world's submarine telecom cable systems (in service and planned) and their landing points, as drawn on TeleGeography's free
   Submarine Cable Map; the geocoded route data is licensed by TeleGeography for a fee.
@@ -64,15 +64,31 @@ license:
   commercial_ok: false
   bulk_ok: false
   attribution_text: 'Source: TeleGeography, Submarine Cable Map'
+  acknowledgment:
+    provider: TeleGeography
+    product: TeleGeography's geocoded submarine cable data
+    terms_url: https://www2.telegeography.com/license-geocoded-map-data
+    uses:
+    - internal
+    - publication
+    - commercial
+    - redistribution
   note: 'Read 2026-11-13: TeleGeography''s map citation page puts its publicly available maps under CC BY-SA 4.0 with TeleGeography credited, and
     says the underlying databases are for paying subscribers; the geocoded dataset page offers an annual licence for interactive maps and data
-    visualisations (price and redistribution terms not stated). external_ok and commercial_ok stay false until the licence held says otherwise.'
+    visualisations (price and redistribution terms not stated). The plugin cannot read the licence a person holds, so (1.15.0) it asks them:
+    the licence pop-up (licence_ack) records whether they hold TeleGeography''s licence and which uses it covers, and that opens external_ok,
+    commercial_ok and redistribute_ok for them alone. The flags here stay false.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-13'
-  verify_by: '2027-05-13'
+  reviewed_on: '2026-11-14'
+  verify_by: '2027-05-14'
   changelog:
   - rev: 1
     date: '2026-11-13'
     note: 'Draft (1.14.0, Day 13 issue 5): TeleGeography''s map citation and geocoded data licence pages read; user-supplied only. Stays draft until
       the licence terms for publication are read from an actual licence.'
+  - rev: 2
+    date: '2026-11-14'
+    note: 'Active (1.15.0): the rights question moves to the person. The first map that uses the entry shows the licence pop-up (provider, terms
+      address, the uses their licence covers); their answer, kept in their own .geo-mapping/licences/, decides internal, publication, commercial
+      and redistribution for them. No data is bundled or fetched; the file stays theirs (user-supplied, provenance.library_entry).'

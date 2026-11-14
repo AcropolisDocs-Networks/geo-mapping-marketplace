@@ -377,6 +377,11 @@ class SafeHTTP:
                 continue
             if status >= 400:
                 raise ServiceError(f"the service answered {status}: {untrusted(body[:300].decode('utf-8', 'replace'), 160)}", "MAP-SVC-013", status=status)
+            if cred is not None and callable(getattr(cred, "content_rejects", None)) and cred.content_rejects(resp["content"]):
+                cred.rejected("placeholder answer", url=redact_url(full))
+                raise ServiceError(f"the service answered HTTP {status} with its placeholder for a wrong or missing key, not the data: it rejected the "
+                                   f"credential '{cred.name}'; the run stops here and is not retried. Get a key that works and run map-credentials rotate "
+                                   f"{cred.name}", "MAP-CRED-008", auth=True, status=status, rejected=True)
             r = Response(final, status, resp["headers"], body, ms, hashlib.sha256(body).hexdigest(), resp["headers"].get("content-type", ""))
             if method != "HEAD":
                 validate_body(r, expect)

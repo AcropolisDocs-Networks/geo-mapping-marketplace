@@ -1,6 +1,6 @@
 id: ref.basemap-provider.carto-positron
 type: basemap-provider
-rev: 5
+rev: 6
 status: active
 title: CARTO basemaps (Positron, Voyager, Dark Matter)
 summary: Quiet raster basemaps on OpenStreetMap data, suited to thematic overlay; a free key is required.
@@ -38,7 +38,9 @@ delivery:
     class_allowed: [secret, browser]
     host: basemaps.cartocdn.com
     inject: {query: key}
-    reject: {status: [401, 403]}
+    reject:
+      status: [401, 403]
+      content_sha256: [69be4aecf9f814ba45d585801a5aa41e79b16fc88eafec5b1954a9f06a69e6be]
     signup_url: https://www.carto.com/basemaps/apikey/
     probe: https://basemaps.cartocdn.com/rastertiles/light_all/0/0/0.png
     free: true
@@ -58,7 +60,7 @@ license:
     read the current terms before heavy use.
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-08'
+  reviewed_on: '2026-11-14'
   verify_by: '2027-11-02'
   changelog:
   - rev: 1
@@ -77,6 +79,9 @@ maintenance:
   - rev: 5
     date: '2026-11-09'
     note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+  - rev: 6
+    date: '2026-11-14'
+    note: 'Live check (1.15.0): basemaps.cartocdn.com answers HTTP 200 with one 2,049-byte "API KEY REQUIRED" tile for every address when the key is missing or wrong (checked at zooms 0 to 13), so a 401 or 403 never comes and the old zoom-0 probe passed a made-up key; a print map came out with the watermark over it. Its SHA-256 is declared as reject.content_sha256: a tile with those bytes is a rejection (MAP-CRED-008), in the probe and in every tile fetch.'
 url_template: https://basemaps.cartocdn.com/rastertiles/{style}/{z}/{x}/{y}.png?key={key}
 provider:
   attribution_html: © OpenStreetMap contributors, © CARTO
@@ -89,7 +94,7 @@ provider:
   - light_all
   - dark_all
   - voyager
-url_verified_on: '2026-11-08'
+url_verified_on: '2026-11-14'
 attribution:
   corner: © OpenStreetMap contributors, © CARTO
   links:

@@ -71,7 +71,8 @@ python3 "$GMAP_ROOT/scripts/modules.py" read geo-catalog-search        # any mod
    A `service` entry names a shipped profile (`delivery.profile`, such as `hifld-geoplatform`, `fema-nfhl`, `tigerweb`) and a layer:
    pull it with `geo-service-query` and that profile, no saving needed. A `user-supplied` entry's `delivery.note` says where to download it.
 3. **Check the gates.** An entry is never offered if it is draft or blocked, if its license does not allow the audience, or if the task
-   is in its `avoid_for`. Say so when a near-miss was held back, and name the reason in one phrase.
+   is in its `avoid_for`. Say so when a near-miss was held back, and name the reason in one phrase. A reason that names `licence_acknowledge`
+   is not a refusal: the data is under a third party's licence, so show the person the licence pop-up (that tool) and offer it again (1.15.0).
 4. **No fit: ask the catalogs.** `catalog_search.py "<words>" --bbox=...` (or the `catalog_search` tool) searches data.gov, ArcGIS Online and Hub,
    Socrata and STAC at once. Read the top results with their license as the catalog states it and their route (a download, or an ArcGIS
    FeatureServer or WFS address). `--find-record N` drafts the record for one result (`confidence: medium`, a caveat that the publisher's page has not

@@ -1,6 +1,6 @@
 id: ref.public-service.world.street-imagery.mapillary
 type: public-service
-rev: 4
+rev: 5
 status: active
 title: Mapillary street-level imagery (Graph API)
 summary: Crowd-sourced street-level photos worldwide with their capture points and directions, from the Mapillary Graph API with a free client token, for
@@ -62,6 +62,7 @@ delivery:
       body:
       - OAuthException
       - access token
+      - Error validating application
     signup_url: https://www.mapillary.com/dashboard/developers
     free: true
     limits: Entity APIs 60,000 a minute per app, search APIs 10,000 a minute per app, tiles 50,000 a day (API documentation, read 2026-11-07)
@@ -75,7 +76,7 @@ source:
   publisher: Mapillary (Meta)
   product: Mapillary API v4
   url: https://www.mapillary.com/developer/api-documentation
-url_verified_on: '2026-11-08'
+url_verified_on: '2026-11-14'
 vintage:
   current: rolling
   cadence: irregular
@@ -90,7 +91,7 @@ license:
     bulk extraction outside the published interfaces (section 5).'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-09'
+  reviewed_on: '2026-11-14'
   verify_by: '2027-02-07'
   changelog:
   - rev: 1
@@ -108,3 +109,6 @@ maintenance:
     date: '2026-11-09'
     note: 'Rejections (1.0.2): the Graph API can answer 400 for a malformed request too, so a 400 counts as a rejection only when the answer is an
       OAuth error (OAuthException, "access token"), the form the Graph API documents for a bad token; the answer to a wrong token was not read here.'
+  - rev: 5
+    date: '2026-11-14'
+    note: 'Live check (1.15.0): a wrong client token, sent in the authorization header with the OAuth prefix, answers HTTP 401 {"error":{"message":"Error validating application","type":"OAuthException","code":190}}, a rejection by status and body; "Error validating application" added to reject.body. Without a token the Graph API answers 500 MLYApiException "Invalid OAuth 2.0 Access Token"; the plugin always sends the registered token, so that answer is recorded here only. Read 2026-11-14.'

@@ -551,6 +551,10 @@ def load_source(layer: dict, base: Path, window=None):
         ent = library_entry(str(le)) if le else None
         if ent is not None and ent.get("status") == "blocked":
             raise PlanError(f"layer '{layer['id']}': library entry '{le}' is blocked by its terms; its data cannot be drawn", gc.EXIT_REFUSED)
+        if ent is not None:
+            import licence_ack as la                          # 1.15.0: a third party's licence is acknowledged by the person, in a pop-up
+            if la.required(ent) and la.current(ent["id"]) is None:
+                raise PlanError(f"MAP-LIC-018: layer '{layer['id']}': {la.refusal(ent)}", gc.EXIT_REFUSED)
         return r.gdf, ent, r.crs_assumed, [n.as_dict() for n in r.notes], None
     if t in ("service", "user-run"):
         return load_capture(layer, base)
@@ -2216,8 +2220,10 @@ def vector_source(spec: dict, base: Path | None):
     A file that is named but missing is returned too, so the build can say so."""
     bm = spec.get("basemap") or {}
     src = str(bm.get("source") or "")
-    if bm.get("provider", "none") in ("none", "bundled") or ":" not in src:
+    if ":" not in src or bm.get("provider") == "none":
         return None
+    # 1.15.0 (live check with a Protomaps extract): a file named in basemap.source is the person's ground with any provider but `none` (no
+    # basemap at all); with provider bundled it used to be passed over without a word, and the map came out on the generalized bundled ground
     kind, name = src.split(":", 1)
     if kind not in ("pmtiles", "mbtiles"):
         return None

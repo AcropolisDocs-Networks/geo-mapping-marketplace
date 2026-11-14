@@ -1,6 +1,6 @@
 id: ref.statistic.world.population.worldpop
 type: statistic
-rev: 1
+rev: 2
 status: active
 title: WorldPop constrained population 2020, 100 m, by country
 summary: 'People per 100 m cell for 2020, one GeoTIFF per country in EPSG:4326, constrained to built settlement so rural cells are empty rather than smeared; a UN-adjusted variant matches national totals. The country-file alternative to GHSL.'
@@ -42,7 +42,7 @@ source:
   product: 'Constrained individual countries 2020 (100 m resolution), Global 2000-2020 Constrained'
   url: https://hub.worldpop.org/geodata/summary?id=49914
   methods: https://www.worldpop.org/methods/populations/
-url_verified_on: '2026-11-04'
+url_verified_on: '2026-11-14'
 vintage:
   current: '2020 (the constrained series ends at 2020)'
   cadence: static
@@ -55,7 +55,7 @@ license:
   note: 'The hub page links creativecommons.org/licenses/by/4.0/; WorldPop asks that the dataset be cited with its DOI, which the hub page for each country gives.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
+  reviewed_on: '2026-11-14'
   verify_by: '2027-11-04'
   check:
     kind: http_head
@@ -65,3 +65,6 @@ maintenance:
   - rev: 1
     date: '2026-11-04'
     note: 'Verified by HEAD from the build environment: USA (HTTP 200, 494,369,192 bytes) and MEX (200, 56,060,408 bytes) constrained files, the hub summary page with its CC BY 4.0 link and the methods page. No file was downloaded or bundled (M12).'
+  - rev: 2
+    date: '2026-11-14'
+    note: 'Byte ranges (1.15.0, the 1.11.0 open question): data.worldpop.org advertises Accept-Ranges: bytes but answers a Range request with HTTP 200 and the whole file, from the build session and from the owner''s own network alike (2026-11-14), while the Copernicus bucket on S3 answered 206 to the same request from both. It is the server, not a proxy: the window read cannot engage for country files over 200 MB, and GHSL stays the route for them.'

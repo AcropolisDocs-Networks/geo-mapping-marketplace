@@ -169,9 +169,23 @@ def license_gate(e: dict, req: dict) -> tuple[list[str], list[str]]:
     aud = req.get("audience", "any")
     reasons, cautions = [], []
     external = aud in ("external", "regulatory")
+    # 1.15.0: data under a third party's licence is not hidden: the person says, in a pop-up, whether they hold that licence and for which
+    # uses (licence_ack). Until they answer, the reason names the pop-up; after, their licence decides external, commercial and redistribution.
+    import licence_ack as la
+    if la.required(e):
+        ack = la.current(e.get("id", ""))
+        prov = la.required(e)["provider"]
+        if ack is None:
+            reasons.append(f"license_class={lc}; {prov}'s licence is not acknowledged yet: ask the person with the licence pop-up "
+                           f"(licence_acknowledge entry_id={e.get('id')}) whether they hold it and for which uses")
+            return reasons, cautions
+        lic = la.effective(lic, ack)
+        cautions.append(f"Licensed by {prov}: you acknowledged on {ack.get('acknowledged_on')} that your licence covers "
+                        f"{', '.join(ack.get('uses') or [])}.")
     if lc == "licensed":
         if external and not lic.get("external_ok"):
-            reasons.append(f"license_class=licensed; audience={aud} not permitted")
+            reasons.append(f"license_class=licensed; audience={aud} not permitted" + (" by the uses acknowledged for your licence (withdraw the "
+                           "acknowledgment and answer the licence pop-up again if your licence covers publication)" if lic.get("acknowledged") else ""))
         elif (e.get("delivery") or {}).get("mode") != "user-supplied":
             reasons.append("license_class=licensed but the entry is not user-supplied (licensed data cannot be bundled or fetched)")
         else:

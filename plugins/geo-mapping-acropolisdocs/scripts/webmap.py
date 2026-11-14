@@ -1755,6 +1755,8 @@ def _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_
 
         if p3 and p3["dem"]:
             page_cfg["ml"]["dem"] = w3.dem_config(p3["dem"])
+        if p3 and p3.get("links3d"):
+            page_cfg["ml"]["links3d"] = p3["links3d"]          # 1.15.0: links drawn and picked by the page's own WebGL layer
     if p3:
         page_cfg["view3d"] = p3["cfg"]
     story_in = cfg["story"] or {}

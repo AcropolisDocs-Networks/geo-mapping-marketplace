@@ -1,6 +1,6 @@
 id: ref.public-service.us.weather.noaa-cdo
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: NOAA Climate Data Online (CDO) web services v2
 summary: Historical weather and climate records for the United States and worldwide stations from NOAA NCEI - stations, daily summaries, normals -
@@ -71,7 +71,7 @@ source:
   publisher: NOAA, National Centers for Environmental Information
   product: Climate Data Online web services v2
   url: https://www.ncei.noaa.gov/cdo-web/webservices/v2
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-14'
 vintage:
   current: rolling
   cadence: irregular
@@ -83,7 +83,7 @@ license:
   attribution_text: 'Source: NOAA National Centers for Environmental Information.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-09'
+  reviewed_on: '2026-11-14'
   verify_by: '2027-02-07'
   check:
     kind: http_get
@@ -99,3 +99,6 @@ maintenance:
     note: 'Rejections (1.0.2): the API also answers 400 for a malformed request, so a 400 counts as a rejection only when the answer mentions the token
       (as "Token parameter is required." does); any other 400 is reported as the service''s refusal and the key is left as it was. The answer to a
       wrong token was not read.'
+  - rev: 3
+    date: '2026-11-14'
+    note: 'Live check (1.15.0): a wrong token answers HTTP 400 with {"status" : "400", "message" : "The token parameter provided is not valid."}, and no token answers 400 "Token parameter is required."; both mention the token, so both are rejections by reject.body as declared. Read from the build session on 2026-11-14.'

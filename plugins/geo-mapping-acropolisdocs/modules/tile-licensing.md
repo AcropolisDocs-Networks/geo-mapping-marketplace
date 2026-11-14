@@ -12,7 +12,7 @@ Read this before choosing a basemap, or when someone asks "can I use Google or B
 
 | Provider | Status | Key needed | Live use | Bulk or offline | Redistribute | Commercial | Print | Attribution to show | Verify at build |
 |---|---|---|---|---|---|---|---|---|---|
-| CARTO basemaps (Positron, Voyager, Dark Matter) (`ref.basemap-provider.carto-positron`) | active | yes | yes | no | no | yes | yes | © OpenStreetMap contributors, © CARTO | terms read 2026-11-08 |
+| CARTO basemaps (Positron, Voyager, Dark Matter) (`ref.basemap-provider.carto-positron`) | active | yes | yes | no | no | yes | yes | © OpenStreetMap contributors, © CARTO | terms read 2026-11-14 |
 | Esri ArcGIS basemaps (`ref.basemap-provider.esri-arcgis`) | active | yes | yes | no | no | yes | yes | Powered by Esri. Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, © OpenStreetMap contributors, and the GIS User Community | terms read 2026-11-07 |
 | Mapbox basemaps (`ref.basemap-provider.mapbox`) | active | yes | yes | no | no | yes | no | © Mapbox © OpenStreetMap | terms read 2026-11-07 |
 | MapTiler basemaps (`ref.basemap-provider.maptiler`) | active | yes | yes | no | no | yes | not stated | © MapTiler © OpenStreetMap contributors | terms read 2026-11-08 |

@@ -130,6 +130,7 @@
       return md["gm:mode"] === "3d" ? mode3d : (md["gm:mode"] === "2d" ? !mode3d : true);
     }
     function apply(m) {
+      applyLinks(m);
       cfg.layers.forEach(function (d) {
         layerIds(d.id).forEach(function (lid) {
           if (m.getLayer(lid)) m.setLayoutProperty(lid, "visibility", vis[d.id] && sideOk(m, d.id) && modeOk(lid) ? "visible" : "none");
@@ -253,6 +254,8 @@
       maps.forEach(function (m) {
         m.on("load", function () {
           measureLayers(m);
+          addLinkLayers(m);
+          applyLinks(m);
           if (--pending === 0) {
             map.on("moveend", function () { moveFns.forEach(function (fn) { fn(); }); });
             ready();
@@ -292,10 +295,178 @@
       }
       return box;
     }
+    // ---- 1.15.0: line-of-sight links as real lines in the air, drawn by the page's own WebGL layer and picked by its own hit test
+    // Each link point is [lon, lat, ground above the page's base, clearance of the ray]; it is lifted to ground x exaggeration + clearance
+    // (flat ground when the terrain is off), so the line is the ray itself. The line is a screen-space ribbon a few pixels wide; a click
+    // within a few pixels of it opens the link's profile chart, at any pitch, without reading the terrain back from the GPU.
+    var L3 = ml.links3d || {}, linkLayers = [];
+    function hexRgb(h) {
+      var m_ = /^#?([0-9a-f]{6})$/i.exec(String(h || "")); var n = m_ ? parseInt(m_[1], 16) : 0x444444;
+      return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+    }
+    function mul4(a, b) {
+      var o = new Float64Array(16);
+      for (var i = 0; i < 4; i++) for (var j = 0; j < 4; j++) {
+        var s_ = 0; for (var k = 0; k < 4; k++) s_ += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s_;
+      }
+      return o;
+    }
+    function linkLayer(m, lid, spec) {
+      var gl_ = null, prog = null, vbo = null, ibo = null, count = 0, origin = null, last = null, built = null, alpha = 1;
+      var tk3 = { on: true };
+      function lift() {
+        var ter = mode3d && V && V.terrain && ml.dem && V.terrainOn !== false, ex = ter ? (V.exaggeration || 1) : 0;
+        return spec.links.map(function (lk) {
+          return lk.pts.map(function (q) { return maplibregl.MercatorCoordinate.fromLngLat([q[0], q[1]], q[2] * ex + q[3]); });
+        });
+      }
+      function build() {
+        var lines = lift(), verts = [], idx = [], base = spec.links.length ? lines[0][0] : { x: 0, y: 0, z: 0 };
+        origin = [base.x, base.y, 0];
+        lines.forEach(function (pts, li) {
+          var c = hexRgb(spec.links[li].c || spec.color);
+          for (var i = 0; i + 1 < pts.length; i++) {
+            var a = [pts[i].x - origin[0], pts[i].y - origin[1], pts[i].z], b = [pts[i + 1].x - origin[0], pts[i + 1].y - origin[1], pts[i + 1].z];
+            var v0 = verts.length / 10;
+            [[a, b, 1], [a, b, -1], [b, a, -1], [b, a, 1]].forEach(function (t) { verts.push(t[0][0], t[0][1], t[0][2], t[1][0], t[1][1], t[1][2], t[2], c[0], c[1], c[2]); });
+            idx.push(v0, v0 + 1, v0 + 2, v0 + 1, v0 + 3, v0 + 2);
+          }
+        });
+        built = lines;
+        if (!gl_) return;
+        gl_.bindBuffer(gl_.ARRAY_BUFFER, vbo); gl_.bufferData(gl_.ARRAY_BUFFER, new Float32Array(verts), gl_.STATIC_DRAW);
+        gl_.bindBuffer(gl_.ELEMENT_ARRAY_BUFFER, ibo);
+        gl_.bufferData(gl_.ELEMENT_ARRAY_BUFFER, verts.length / 10 > 65535 ? new Uint32Array(idx) : new Uint16Array(idx), gl_.STATIC_DRAW);
+        count = idx.length; tk3.big = verts.length / 10 > 65535;
+      }
+      var VS = "uniform mat4 u_m; uniform vec2 u_vp; uniform float u_w; attribute vec3 a_pos; attribute vec3 a_oth; attribute float a_side; attribute vec3 a_col; varying vec3 v_col;" +
+        "void main(){ vec4 c0 = u_m * vec4(a_pos, 1.0); vec4 c1 = u_m * vec4(a_oth, 1.0); vec2 d = (c1.xy / c1.w - c0.xy / c0.w) * u_vp;" +
+        " float l = length(d); vec2 dir = l > 0.0 ? d / l : vec2(1.0, 0.0); vec2 n = vec2(-dir.y, dir.x);" +
+        " c0.xy += n * a_side * u_w * 2.0 / u_vp * c0.w; gl_Position = c0; v_col = a_col; }";
+      var FS = "precision mediump float; uniform float u_a; varying vec3 v_col; void main(){ gl_FragColor = vec4(v_col * u_a, u_a); }";
+      var layer = {
+        id: lid + "--link3d", type: "custom", renderingMode: "3d",
+        onAdd: function (map_, gl) {
+          gl_ = gl;
+          function sh(type, src) { var o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return o; }
+          prog = gl.createProgram();
+          gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+          vbo = gl.createBuffer(); ibo = gl.createBuffer();
+          if (!gl.getExtension("OES_element_index_uint") && !(typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext)) tk3.noUint = true;
+          build();
+        },
+        render: function (gl, args) {
+          var pd = args && args.defaultProjectionData, mm = pd ? pd.mainMatrix : args;
+          var t = new Float64Array(16); t[0] = t[5] = t[10] = t[15] = 1; t[12] = origin[0]; t[13] = origin[1];
+          last = mul4(mm, t);                                  // kept even when the layer is off, so the screen position can be asked
+          if (!tk3.on || !count || !mode3d) return;
+          gl.useProgram(prog);
+          gl.uniformMatrix4fv(gl.getUniformLocation(prog, "u_m"), false, new Float32Array(last));
+          gl.uniform2f(gl.getUniformLocation(prog, "u_vp"), gl.drawingBufferWidth, gl.drawingBufferHeight);
+          gl.uniform1f(gl.getUniformLocation(prog, "u_w"), (spec.width || 3) * (window.devicePixelRatio || 1) / 2);
+          gl.uniform1f(gl.getUniformLocation(prog, "u_a"), alpha);
+          gl.bindBuffer(gl.ARRAY_BUFFER, vbo); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+          var st_ = 40, at = function (n_, size, off) { var l_ = gl.getAttribLocation(prog, n_); gl.enableVertexAttribArray(l_); gl.vertexAttribPointer(l_, size, gl.FLOAT, false, st_, off); };
+          at("a_pos", 3, 0); at("a_oth", 3, 12); at("a_side", 1, 24); at("a_col", 3, 28);
+          gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          gl.drawElements(gl.TRIANGLES, count, tk3.big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+          window.__gmLinkFrames = (window.__gmLinkFrames || 0) + 1;
+        }
+      };
+      return {
+        layer: layer, id: lid,
+        setOn: function (on) { tk3.on = !!on; },
+        isOn: function () { return tk3.on && mode3d; },
+        rebuild: function () { build(); m.triggerRepaint(); },
+        setAlpha: function (k) { alpha = k; m.triggerRepaint(); },
+        // the hit test: every segment projected with the matrix of the last frame drawn; the nearest within `px` pixels wins
+        pick: function (pt, px) {
+          if (!last || !built || !tk3.on || !mode3d) return null;
+          var cv = m.getCanvas(), W = cv.clientWidth, H = cv.clientHeight, best = null, bd = px || 7;
+          function scr(q) {
+            var x = q.x - origin[0], y = q.y - origin[1], z = q.z, M = last;
+            var cx = M[0] * x + M[4] * y + M[8] * z + M[12], cy = M[1] * x + M[5] * y + M[9] * z + M[13], cw = M[3] * x + M[7] * y + M[11] * z + M[15];
+            if (cw <= 0) return null;
+            return [(cx / cw + 1) / 2 * W, (1 - cy / cw) / 2 * H];
+          }
+          built.forEach(function (pts, li) {
+            var prev = null;
+            pts.forEach(function (q) {
+              var s_ = scr(q);
+              if (prev && s_) {
+                var dx = s_[0] - prev[0], dy = s_[1] - prev[1], L2 = dx * dx + dy * dy, t_ = L2 ? Math.max(0, Math.min(1, ((pt.x - prev[0]) * dx + (pt.y - prev[1]) * dy) / L2)) : 0;
+                var d_ = Math.hypot(pt.x - (prev[0] + t_ * dx), pt.y - (prev[1] + t_ * dy));
+                if (d_ < bd) { bd = d_; best = { link: spec.links[li], px: d_ }; }
+              }
+              prev = s_;
+            });
+          });
+          return best;
+        },
+        screen: function (key, share) {
+          // where a link is on the screen (for tests and the keyboard): the point at `share` of its length
+          var li = -1; spec.links.forEach(function (lk, i) { if (lk.key === key) li = i; });
+          if (li < 0 || !last) return null;
+          var pts = built[li], q = pts[Math.min(pts.length - 1, Math.round((pts.length - 1) * (share == null ? 0.5 : share)))];
+          var x = q.x - origin[0], y = q.y - origin[1], z = q.z, M = last, cw = M[3] * x + M[7] * y + M[11] * z + M[15];
+          var cv = m.getCanvas();
+          return [((M[0] * x + M[4] * y + M[8] * z + M[12]) / cw + 1) / 2 * cv.clientWidth, (1 - (M[1] * x + M[5] * y + M[9] * z + M[13]) / cw) / 2 * cv.clientHeight];
+        }
+      };
+    }
+    function addLinkLayers(m) {
+      Object.keys(L3).forEach(function (lid) {
+        var ll = linkLayer(m, lid, L3[lid]);
+        var before = style.layers.filter(function (l) { return l.type === "symbol" && m.getLayer(l.id); })[0];
+        m.addLayer(ll.layer, before ? before.id : undefined);
+        ll.map = m;
+        linkLayers.push(ll);
+      });
+    }
+    function applyLinks(m) {
+      linkLayers.forEach(function (ll) { if (ll.map === m) ll.setOn(vis[ll.id] && sideOk(m, ll.id)); });
+    }
+    function pickLink(m, point) {
+      var hit = null;
+      linkLayers.forEach(function (ll) {
+        if (ll.map === m && ll.isOn()) { var h = ll.pick(point, 7); if (h && (!hit || h.px < hit.px)) hit = { d: defs[ll.id], link: h.link, px: h.px }; }
+      });
+      return hit;
+    }
+    E.linksDrawn = function (lid) {
+      // how many of the layer's links were drawn in the last frame with a point inside the map (0 when the layer is off or the page is flat)
+      var ll = linkLayers.filter(function (x) { return x.id === lid && x.map === map; })[0], cv = map.getCanvas(), n = 0;
+      if (!ll || !ll.isOn()) return 0;
+      (L3[lid].links || []).forEach(function (lk) {
+        for (var k = 0; k <= 4; k++) {
+          var q = ll.screen(lk.key, k / 4);
+          if (q && q[0] >= 0 && q[1] >= 0 && q[0] <= cv.clientWidth && q[1] <= cv.clientHeight) { n++; break; }
+        }
+      });
+      return n;
+    };
+    E.linkVisible = function (lid) { return linkLayers.some(function (x) { return x.id === lid && x.map === map && x.isOn(); }); };
+    E.linkOnScreen = function (lid, key, share) {
+      // the map that draws the layer (the right one of a swipe compare when the layer is a right-side layer); both share one camera
+      var ll = linkLayers.filter(function (x) { return x.id === lid && x.isOn(); })[0] || linkLayers.filter(function (x) { return x.id === lid && x.map === map; })[0];
+      return ll ? ll.screen(key, share) : null;
+    };
+
     function wireClicks(m) {
       m.on("click", function (e) {
         clickFns.forEach(function (fn) { fn(e.lngLat.lng, e.lngLat.lat); });
         if (measuring) return;
+        var lk = pickLink(m, e.point);
+        // a link a few pixels off gives way to a mast, a building or a point right under the pointer (links meet at the mast heads)
+        if (lk && lk.px > 2.5 && m.queryRenderedFeatures(e.point, { layers: interactive(m) }).length) lk = null;
+        if (lk) {
+          var lp = { _p: lk.link.key, status: lk.link.status };
+          if (ctx.onFeature && lk.d) ctx.onFeature(lk.d, lp);
+          if (cfg.controls.popups && profiles[lk.link.key]) {
+            new maplibregl.Popup({ maxWidth: "min(640px, 94vw)", className: "gm-link-popup" }).setLngLat(e.lngLat).setDOMContent(linkPopup(lk.d, lp)).addTo(m);
+          }
+          return;
+        }
         var hits = m.queryRenderedFeatures(e.point, { layers: interactive(m) });
         if (!hits.length) return;
         var f = hits[0], md = f.layer.metadata || {}, d = defs[md["gm:layer"]];
@@ -318,7 +489,7 @@
       });
       m.on("mousemove", function (e) {
         if (measuring) { m.getCanvas().style.cursor = "crosshair"; return; }
-        var n = m.queryRenderedFeatures(e.point, { layers: interactive(m) }).length;
+        var n = pickLink(m, e.point) ? 1 : m.queryRenderedFeatures(e.point, { layers: interactive(m) }).length;
         m.getCanvas().style.cursor = n ? "pointer" : "";
       });
     }
@@ -345,6 +516,7 @@
         apply(m);
         rotation(m, mode3d);
       });
+      linkLayers.forEach(function (ll) { ll.rebuild(); });          // the links follow the terrain on or off
       // a pitched view has no one scale: the scale bar is shown in 2D only
       scales.forEach(function (s) { if (mode3d && s._map) map.removeControl(s); else if (!mode3d && !s._map) map.addControl(s, "bottom-left"); });
       label3d();
@@ -421,6 +593,7 @@
       if (o.on != null) V.terrainOn = !!o.on;
       var want = mode3d && V.terrainOn !== false;
       maps.forEach(function (m) { m.setTerrain(want ? { source: "gm-dem", exaggeration: V.exaggeration } : null); });
+      linkLayers.forEach(function (ll) { ll.rebuild(); });
     };
 
     E.setLayerVisible = function (id, on) { vis[id] = !!on; maps.forEach(apply); };
@@ -433,6 +606,7 @@
       var d = defs[id];
       if (!d) return;
       factor[id] = k;
+      linkLayers.forEach(function (ll) { if (ll.id === id) ll.setAlpha(k); });
       style.layers.forEach(function (l) {
         if ((l.metadata || {})["gm:layer"] !== id) return;
         (OPACITY[l.type] || []).forEach(function (prop) {

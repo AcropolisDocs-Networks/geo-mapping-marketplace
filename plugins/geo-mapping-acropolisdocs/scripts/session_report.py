@@ -91,6 +91,9 @@ def load(path: Path) -> dict:
     calls: dict[str, dict] = {}
     turns = 0
     first = last = None
+    order: list[str] = []                  # 1.15.0: the replies in order, and what came back between each one and the next
+    gaps: dict[str, dict] = {}
+    cur = None
     with open(path, encoding="utf-8") as f:
         for line in f:
             d = scrubbed_record(line)
@@ -107,6 +110,8 @@ def load(path: Path) -> dict:
                     replies[mid] = {"ts": ts, "model": msg.get("model"), "input": u.get("input_tokens", 0) or 0, "output": u.get("output_tokens", 0) or 0,
                                     "cache_read": u.get("cache_read_input_tokens", 0) or 0, "cache_write": u.get("cache_creation_input_tokens", 0) or 0,
                                     "thinking": ((u.get("output_tokens_details") or {}).get("thinking_tokens", 0) or 0)}
+                    order.append(mid)
+                cur = mid
                 for c in msg.get("content") or []:
                     if isinstance(c, dict) and c.get("type") == "tool_use":
                         cmd = (c.get("input") or {}).get("command") if isinstance(c.get("input"), dict) else None
@@ -115,18 +120,69 @@ def load(path: Path) -> dict:
                                           "input_chars": len(json.dumps(c.get("input") or {}))}
             elif d.get("type") == "user" and msg:
                 content = msg.get("content")
+                g = gaps.setdefault(cur, {"calls": [], "other": False}) if cur else None
                 if isinstance(content, list):
                     got_result = False
                     for c in content:
                         if isinstance(c, dict) and c.get("type") == "tool_result" and c.get("tool_use_id") in calls:
                             k = calls[c["tool_use_id"]]
                             k["end"], k["result_chars"], k["error"] = ts, _size(c.get("content")), bool(c.get("is_error"))
+                            k["reported"] = _reported_tokens(d.get("toolUseResult"))
                             got_result = True
+                            if g is not None:
+                                g["calls"].append(c["tool_use_id"])
+                        elif g is not None and not (isinstance(c, dict) and c.get("type") == "tool_result"):
+                            g["other"] = True                 # text from the person (or a reminder) shares the gap: not a measure of tools alone
                     if not got_result:
                         turns += 1
                 elif isinstance(content, str):
                     turns += 1
+                    if g is not None:
+                        g["other"] = True
+            elif d.get("type") not in ("assistant", "user") and cur and d.get("type") in ("attachment", "system"):
+                gaps.setdefault(cur, {"calls": [], "other": False})["other"] = True
+    measure(order, replies, gaps, calls)
     return {"path": str(path), "replies": list(replies.values()), "calls": list(calls.values()), "user_turns": turns, "first": first, "last": last}
+
+
+def _reported_tokens(r) -> int | None:
+    """A token count the CLI wrote for one tool's result, if it writes one (it did not in the versions read on 2026-11-14)."""
+    if isinstance(r, dict):
+        for k in ("tokens", "totalTokens", "outputTokens", "resultTokens"):
+            v = r.get(k)
+            if isinstance(v, int) and v >= 0:
+                return v
+        u = r.get("usage")
+        if isinstance(u, dict) and isinstance(u.get("output_tokens"), int):
+            return u["output_tokens"]
+    return None
+
+
+def measure(order: list[str], replies: dict, gaps: dict, calls: dict) -> None:
+    """1.15.0: each tool result's tokens, measured. The transcript gives every reply's whole context (input + cache read + cache write) and
+    its output; what the next reply's context holds beyond the last one and its output is what came back in between. Where only tool results
+    came back, that growth is theirs, shared among them by their characters. A gap with the person's own text in it, a shrinking context (a
+    compacted conversation) or a reply with no next one leaves those results to the estimate. A count the CLI writes itself wins."""
+    for i in range(len(order) - 1):
+        g = gaps.get(order[i])
+        if not g or not g["calls"] or g["other"]:
+            continue
+        a, b = replies[order[i]], replies[order[i + 1]]
+        grew = (b["input"] + b["cache_read"] + b["cache_write"]) - (a["input"] + a["cache_read"] + a["cache_write"]) - a["output"]
+        if grew <= 0:
+            continue
+        chars = sum(max(1, calls[c]["result_chars"]) for c in g["calls"])
+        for c in g["calls"]:
+            calls[c]["measured"] = int(round(grew * max(1, calls[c]["result_chars"]) / chars))
+
+
+def call_tokens(c: dict, ratio: float) -> tuple[int, str]:
+    """(tokens, how) for one tool result: reported by the CLI, measured from the context growth, or estimated from its characters."""
+    if c.get("reported") is not None:
+        return int(c["reported"]), "reported"
+    if c.get("measured") is not None:
+        return int(c["measured"]), "measured"
+    return int(c["result_chars"] / ratio), "estimated"
 
 
 def load_runs() -> list[dict]:
@@ -164,20 +220,29 @@ def tokens(t: dict) -> dict:
     fresh_in = tot["input"] + tot["cache_write"]
     reads = tot["cache_read"]
     ctx = [r["input"] + r["cache_read"] + r["cache_write"] for r in rs]
+    # 1.15.0: characters per token as this session's own measured results show it (text and code run about 2 to 3), for the rest
+    pairs = [(c["result_chars"], c["measured"]) for c in t["calls"] if c.get("measured") and c["result_chars"] > 500]
+    ratio = (sum(a for a, _ in pairs) / sum(b for _, b in pairs)) if len(pairs) >= 3 and sum(b for _, b in pairs) else float(CHARS_PER_TOKEN)
+    ratio = min(6.0, max(1.5, ratio))
+    hows = {"reported": 0, "measured": 0, "estimated": 0}
     by_tool: dict[str, dict] = {}
     for c in t["calls"]:
-        d = by_tool.setdefault(c["name"] or "?", {"calls": 0, "result_tokens": 0, "input_tokens": 0, "errors": 0})
+        n, how = call_tokens(c, ratio)
+        c["tokens"], c["how"] = n, how
+        hows[how] += 1
+        d = by_tool.setdefault(c["name"] or "?", {"calls": 0, "result_tokens": 0, "input_tokens": 0, "errors": 0, "measured_calls": 0})
         d["calls"] += 1
-        d["result_tokens"] += c["result_chars"] // CHARS_PER_TOKEN
-        d["input_tokens"] += c["input_chars"] // CHARS_PER_TOKEN
+        d["result_tokens"] += n
+        d["input_tokens"] += int(c["input_chars"] / ratio)
         d["errors"] += 1 if c["error"] else 0
+        d["measured_calls"] += 1 if how != "estimated" else 0
     by_script: dict[str, dict] = {}
     for c in t["calls"]:
         for s in dict.fromkeys(c["scripts"]):
             d = by_script.setdefault(s, {"calls": 0, "result_tokens": 0})
             d["calls"] += 1
-            d["result_tokens"] += c["result_chars"] // CHARS_PER_TOKEN
-    big = sorted(({"tool": c["name"], "tokens": c["result_chars"] // CHARS_PER_TOKEN, "scripts": c["scripts"][:2]} for c in t["calls"]), key=lambda x: -x["tokens"])[:5]
+            d["result_tokens"] += c["tokens"]
+    big = sorted(({"tool": c["name"], "tokens": c["tokens"], "how": c["how"], "scripts": c["scripts"][:2]} for c in t["calls"]), key=lambda x: -x["tokens"])[:5]
     growth = None
     if len(ctx) >= 4:
         q = max(1, len(ctx) // 4)
@@ -185,7 +250,10 @@ def tokens(t: dict) -> dict:
     out = {"transcript": Path(t["path"]).name, "replies": len(rs), "user_turns": t["user_turns"], "tool_calls": len(t["calls"]), "models": sorted({r["model"] for r in rs if r["model"]}),
            "totals": tot, "cache_hit_share": round(reads / (reads + fresh_in), 3) if reads + fresh_in else None, "largest_context": max(ctx) if ctx else 0, "context_growth": growth,
            "by_tool": dict(sorted(by_tool.items(), key=lambda kv: -kv[1]["result_tokens"])[:TOOLS_OF_INTEREST]),
-           "by_plugin_script": dict(sorted(by_script.items(), key=lambda kv: -kv[1]["result_tokens"])[:TOOLS_OF_INTEREST]), "largest_results": big, "note": "Tool-output tokens are estimated at characters / 4."}
+           "by_plugin_script": dict(sorted(by_script.items(), key=lambda kv: -kv[1]["result_tokens"])[:TOOLS_OF_INTEREST]), "largest_results": big,
+           "counts": {**hows, "chars_per_token": round(ratio, 2)},
+           "note": (f"Tool-output tokens: {hows['measured'] + hows['reported']} of {len(t['calls'])} results measured from how much the context grew "
+                    f"between replies; the other {hows['estimated']} estimated at {ratio:.1f} characters a token (this session's own measured rate).")}
     out["advice"] = advise_tokens(out)
     return out
 
@@ -213,9 +281,10 @@ def tokens_text(o: dict) -> str:
     L = [f"Token use, {o['transcript']}", "", f"{o['replies']} replies, {o['user_turns']} messages from you, {o['tool_calls']} tool calls. Models: {', '.join(o['models']) or 'unknown'}.", "",
          f"New input {fmt_n(t['input'] + t['cache_write'])} (of which written to cache {fmt_n(t['cache_write'])}); read from cache {fmt_n(t['cache_read'])}; output {fmt_n(t['output'])} (reasoning {fmt_n(t['thinking'])}).",
          f"Cache hit share of input: {round(100 * o['cache_hit_share'])}%." if o["cache_hit_share"] is not None else "", f"Largest context in one reply: {fmt_n(o['largest_context'])} tokens.", ""]
-    L.append("Where tool output went (estimated):")
+    L.append("Where tool output went:")
+    w = max([18] + [len(k) for k in o["by_tool"]])
     for k, v in o["by_tool"].items():
-        L.append(f"  {k:<18} {v['calls']:>4} calls  {fmt_n(v['result_tokens']):>10} tokens back" + (f"  {v['errors']} errors" if v["errors"] else ""))
+        L.append(f"  {k:<{w}} {v['calls']:>4} calls  {fmt_n(v['result_tokens']):>10} tokens back" + (f"  {v['errors']} errors" if v["errors"] else ""))
     if o["by_plugin_script"]:
         L += ["", "By plugin script:"] + [f"  {k:<22} {v['calls']:>4} calls  {fmt_n(v['result_tokens']):>10} tokens back" for k, v in o["by_plugin_script"].items()]
     L += ["", "What to change:"] + [f"  - {x}" for x in o["advice"]] + ["", o["note"]]

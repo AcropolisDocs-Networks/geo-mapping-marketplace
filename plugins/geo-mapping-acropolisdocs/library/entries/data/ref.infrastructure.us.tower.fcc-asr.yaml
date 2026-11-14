@@ -1,7 +1,7 @@
 id: ref.infrastructure.us.tower.fcc-asr
 type: infrastructure
-rev: 2
-status: draft
+rev: 3
+status: active
 title: FCC Antenna Structure Registration (towers)
 summary: Registered antenna structures (towers and masts) with height and location, for tower context maps. The file is downloaded from the FCC by the person;
   the plugin reads it once supplied.
@@ -44,13 +44,12 @@ crs: EPSG:4326
 delivery:
   mode: user-supplied
   format: zip of pipe-delimited tables (RA, CO, EN; no header row)
-  note: 'Download r_tower.zip from the ULS ''complete'' download page at data.fcc.gov/download/pub/uls/complete/ in a browser, then supply the zip. The
-    RA table carries registration number, status and structure height; CO carries coordinates in degrees, minutes, seconds with N/S and E/W flags: convert
-    to decimal before mapping. Field layouts are in the ULS public access database definitions (pa_ddef) on the same page.'
-  size_mb: about 60 (varies weekly)
+  note: 'data.fcc.gov answers automated requests again (checked 2026-11-14): fcc_uls.py fetch r_tower downloads the weekly file through the guarded client, and fcc_uls.py towers r_tower.zip OUT.gpkg [--state AZ] [--status C] turns it into points (CO joined to RA by the unique system identifier; DMS to degrees; NAD83). A zip downloaded in a browser is read the same way.'
+  size_mb: about 38 (the 2026-11-08 file)
 source:
   publisher: FCC
   product: Antenna Structure Registration database (ULS complete download r_tower.zip)
+url_verified_on: '2026-11-14'
 vintage:
   current: weekly complete file
   cadence: monthly
@@ -60,11 +59,11 @@ license:
   commercial_ok: true
   bulk_ok: true
   attribution_text: 'Source: FCC Antenna Structure Registration.'
-  note: Public domain; the download host refuses automated requests, so the file is supplied by the person.
+  note: 'Public domain. The host answered the build session on 2026-11-14 (HTTP 200, byte ranges offered); fetched with the guarded client, never bundled.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
-  verify_by: '2027-05-04'
+  reviewed_on: '2026-11-14'
+  verify_by: '2027-05-14'
   changelog:
   - rev: 1
     date: '2026-11-02'
@@ -74,3 +73,6 @@ maintenance:
     note: 'Still draft: The FCC web hosts (fcc.gov, data.fcc.gov, broadbandmap.fcc.gov) refuse automated requests from the build environment (HTTP 403 on
       2026-11-04), so the r_tower.zip download could not be verified. The route and the table layout are recorded so the person can download it; delivery
       is user-supplied until a reachable copy exists.'
+  - rev: 3
+    date: '2026-11-14'
+    note: 'Active (1.15.0): data.fcc.gov answered r_tower.zip (37.9 MB, file of 2026-11-08) from the build session; the CO and RA layouts read from the file itself (18 and 49 fields; T coordinates; height of structure, ground elevation, overall height above ground and above sea level at RA positions 28 to 31, structure type at 32); fcc_uls.py reads it (1,792 constructed structures in Arizona).'
