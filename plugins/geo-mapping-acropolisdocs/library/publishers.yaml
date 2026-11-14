@@ -48,6 +48,14 @@ publishers:
   - name: Overture Maps
     match: ["Overture"]
     products: none
+  - name: DHS HIFLD                 # 1.14.0 (Day 13 issue 7): before FCC, so "DHS HIFLD (from FCC ULS)" is credited to HIFLD, not as FCC (ULS)
+    ids: ["ref.*.hifld.*"]
+    match: ["DHS HIFLD (from", "DHS HIFLD, re-hosted", "HIFLD Cellular", "HIFLD Electric", "HIFLD Transmission", "Homeland Infrastructure Foundation"]
+    products:
+      - {match: "Cellular Towers", product: "Cellular Towers, from FCC ULS"}
+      - {match: "Electric Retail Service Territories", product: "Electric Retail Service Territories"}
+      - {match: "Transmission Lines", product: "Transmission Lines"}
+      - {match: "Substations", product: "Substations"}
   - name: FCC
     match: ["Federal Communications Commission", "FCC"]
     products:

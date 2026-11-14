@@ -27,6 +27,14 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import textmeasure as tm  # noqa: E402
 
+
+def _dash(d):
+    """1.14.0 (Day 11 issue 8): the key's line dash in numbers, as the map draws it."""
+    if not d:
+        return None
+    import map_plan as mp
+    return mp.dash_array(d)
+
 SWATCH_W_MM = 6.0
 SWATCH_H_MM = 3.6
 ROW_GAP_MM = 1.4
@@ -151,7 +159,7 @@ def lines_block(layer: dict, tokens: dict) -> dict:
     return {"layer": layer["id"], "title": _single_title(layer), "kind": "lines",
             "items": [{"label": (layer.get("legend") or {}).get("label") or _layer_title(layer), "stroke": sym.get("_color") or tokens["emphasis"],
                        "width_mm": float(sym["_width_mm"]) if sym.get("_width_mm") and tokens.get("_look", "classic") != "classic"
-                       else float(sym.get("width", 0.8)) * 0.35, "dash": sym.get("dash")}], "note": _note(layer)}
+                       else float(sym.get("width", 0.8)) * 0.35, "dash": _dash(sym.get("dash"))}], "note": _note(layer)}
 
 
 def polygons_block(layer: dict, tokens: dict) -> dict:

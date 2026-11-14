@@ -141,7 +141,14 @@ areas per cell is a WARN (MAP-CART-018); when the dark theme's grid is too close
 tail (a few very large values: the class count comes from the data, `classes` is the most). A classed lines layer is keyed with line samples; add
 `symbol: {graduated: true}` to draw its classes as wider lines in one colour (`widths_mm: [...]` sets them; MAP-CART-019 checks they can be told
 apart). `classification: {patterns: auto}` hatches the classes of an area layer when colour alone fails the colour-vision check (`true` always).
-A proportional layer with `legend: {nested: true}` keys its sizes as nested circles with leader lines. A layer with `time_field: on_air` (dates,
+A proportional layer with `legend: {nested: true}` keys its sizes as nested circles with leader lines. 1.14.0: `legend: {single: true, label: ...}`
+keys a classed layer with one entry (its symbol in a mid neutral, `legend.color` for another brand colour) when another block already explains
+its classes; `legend: {only: true}` keys a layer without drawing it (a symbol that appears only in an animation over the map; its filter may keep
+no feature). `symbol: {min_length_mm: 1.5}` on a lines layer marks each line shorter than that on the sheet with a dot that long, so a 100 km
+segment shows on a world map (MAP-CART-039 warns when most of a layer is under 0.8 mm). `extent: {crop: true}` cuts the box to the map frame's
+shape (no padding) instead of growing it, so a world box that ends at 58 degrees south does not show Antarctica on a 16:9 slide. `qa: territories`
+on a polygon layer of service territories checks they tile the ground (`qa: {territories: true, name_field: NAME, density_field: customers}`):
+overlaps, gaps such as a city no territory covers, and a territory far sparser than the others (MAP-DATA-012). A layer with `time_field: on_air` (dates,
 years, months, quarters or named periods) can be made into one map per period with `map-atlas` (`by: time`); a single map of one period takes `time: {at: 2026-06}` on the layer (`cumulative: true` for everything up to it).
 
 **Rasters, relief and service pictures go on the map as layers too.** All four are read for the map's own window once its extent is known (the

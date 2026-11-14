@@ -1,9 +1,10 @@
 # acropolisdocs-maps: maps for Claude
 
-The Claude Code marketplace for **geo-mapping-acropolisdocs** 1.13.0: cartographic maps from a request or your own geodata (print maps as SVG, PDF and
+The Claude Code marketplace for **geo-mapping-acropolisdocs** 1.14.0: cartographic maps from a request or your own geodata (print maps as SVG, PDF and
 PNG, interactive web maps, data conversion and analysis, public data services, travel-time areas and terrain).
 
-In Claude CoWork, Go to Customize->Plugins then select Add.   Add MarketPlace and enter AcropolisDocs-Networks/geo-mapping-marketplace for the marketplace.  The geo-mapping-acropolisdocs plugin will be available to search and install.
+In Claude CoWork, Go to Customize->Plugins then select Add. Add MarketPlace and enter AcropolisDocs-Networks/geo-mapping-marketplace for the marketplace. The geo-mapping-acropolisdocs plugin will be
+available to search and install.
 
 ## Install
 

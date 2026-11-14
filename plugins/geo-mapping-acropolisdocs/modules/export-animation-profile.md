@@ -25,6 +25,15 @@ description: >
   when a GPU run fell back to software. On a time page the slider follows the marker, so a timed route draws in as it is flown.
   The path camera rides the route averaged over its lookahead and turns at most 30 degrees a second (`--steady 2`, `--max-turn 30`), so a
   winding road does not shake the view.
+- **"A video of the time slider", "time-lapse of the page"** (1.14.0): `map_export.py --timelapse PAGE.html --out DIR` (the flythrough capture
+  with `--slider`): the camera holds the page's own view and each period of the slider is shown for an equal share of the run, the last a little
+  longer, its label in the HUD. A MapLibre page (`webmap.engine: maplibre`); the same draft-then-final route through map-run.
+- **"Animate the events", "quakes popping in", "a running counter"** (1.14.0): `map_export.py --events map.yaml --layer quakes --time-field time
+  --highlight "mag>=7" --counter "{hl} of {n} by {date}" --size slide --out DIR [--quality final]`: the map is built once at the size (the event
+  layer stays in the legend only), then each event pops in at its time, a highlighted one ripples in the brand's danger colour and stays, and
+  the counter runs in the lower left. A custom overlay of your own lines up with the map through the build report's `map_window`: `extent` (the
+  map's window in its own CRS) fills `rect_mm` (millimetres on the page); a point's page position is rect_x0 + (x - x0) / (x1 - x0) x width,
+  and rect_y0 + (y1 - y) / (y1 - y0) x height, times dpi / 25.4 for pixels.
 - **"A profile of the link", "path profile", "show the Fresnel zone"**: `python3 "$GMAP_ROOT/scripts/terrain.py" profile-chart --dem dem.tif
   --a lon,lat --b lon,lat --ha 30 --hb 30 --freq 11 --out out` (or `--spec map.yaml --layer links --link SITE1-SITE2` for a link a
   `line_of_sight` op drew). A chart in the brand: the ground, the line of sight with earth curvature, the first Fresnel zone, the obstruction or
@@ -32,5 +41,7 @@ description: >
 
 ```bash
 python3 "$GMAP_ROOT/scripts/map_export.py" --animate out/rollout-atlas --out out/animation [--sizes square,slide] [--formats gif,mp4]
+python3 "$GMAP_ROOT/scripts/map_export.py" --timelapse out/ferries.html --out out/video --size 1080x1350 [--quality final]
+python3 "$GMAP_ROOT/scripts/map_export.py" --events map.yaml --layer quakes --time-field time --highlight "mag>=7" --out out/video
 python3 "$GMAP_ROOT/scripts/terrain.py" profile-chart --spec map.yaml --layer links --link PHX01-PHX04 --out out --formats svg,pdf,png
 ```

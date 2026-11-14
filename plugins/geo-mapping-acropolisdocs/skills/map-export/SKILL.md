@@ -47,7 +47,7 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-pdf-publisher        # any modu
 | `provenance-ledger` | when exported data needs its attribution and licence notes |
 | `tile-licensing`    | when the map carries a tile basemap: whether the provider allows print and export |
 | `export-print-sheets` | for a new size, or a file for a print shop, a slide or a designer |
-| `export-animation-profile` | for an animated rollout or a link profile chart |
+| `export-animation-profile` | for an animated rollout, a time-slider time-lapse, an event-timeline video or a link profile chart |
 | `export-data-package` | for the map's data as KMZ, GeoPackage, QGIS, PMTiles or MBTiles |
 
 ## Choosing

@@ -96,12 +96,16 @@
     }
 
     function images(m) {
-      function add(id, w, h, ratio, draw) {
+      function add(id, w, h, ratio, draw, sdf) {
         if (m.hasImage(id)) return;
         var c = document.createElement("canvas"); c.width = w; c.height = h;
         var g = c.getContext("2d"); if (draw) draw(g);
-        m.addImage(id, g.getImageData(0, 0, w, h), { pixelRatio: ratio });
+        m.addImage(id, g.getImageData(0, 0, w, h), sdf ? { pixelRatio: ratio, sdf: true } : { pixelRatio: ratio });
       }
+      // 1.14.0: the direction-of-travel pointer (the print map's shape), drawn white and coloured by the layer's paint (SDF)
+      add("gm-pointer", 48, 48, 2, function (g) {
+        g.translate(24, 24); g.scale(1.1, 1.1); g.fillStyle = "#fff"; g.fill(new Path2D(cfg.pointer || "M0 -10A10 10 0 1 1 0 10A10 10 0 1 1 0 -10Z"));
+      }, true);
       add("gm-box", 8, 8, 1, null);                                    // an invisible box: the room a data symbol takes, so names avoid it
       add("gm-dot", 10, 10, 2, function (g) { g.fillStyle = tk.label; g.beginPath(); g.arc(5, 5, 4, 0, 2 * Math.PI); g.fill(); });
       add("gm-dot-capital", 14, 14, 2, function (g) {

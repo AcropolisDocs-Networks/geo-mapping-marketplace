@@ -588,6 +588,13 @@ entries:
   rev: 1
   tags_digest: a7c28ea05016
   entry_digest: d0f939f18c3e
+- id: ref.infrastructure.world.submarine-cable.telegeography
+  file: entries/data/ref.infrastructure.world.submarine-cable.telegeography.yaml
+  type: infrastructure
+  status: draft
+  rev: 1
+  tags_digest: f523d79301c9
+  entry_digest: 3a949e53cf12
 - id: ref.map-type.choropleth
   file: entries/method/ref.map-type.choropleth.yaml
   type: map-type

@@ -439,6 +439,9 @@ def highlight_passes(layers: list[dict], hl: dict) -> list[dict]:
         top.append(t)
     return rest + top
 
+POINTER_MIN_PX = 12          # 1.14.0: a direction pointer's body is at least this wide, so its nose reads
+
+
 def data_layers(d: dict, src: str, source_layer: str | None, t: dict, *, visible: bool, cluster: dict | None, label_field: str | None, label_zoom: float = 0,
                 tiled: dict | None) -> tuple[list[dict], list[dict]]:
     """(drawn layers, symbol layers) for one page layer. Symbol layers (point collision boxes, feature labels, cluster counts) go above the
@@ -491,7 +494,25 @@ def data_layers(d: dict, src: str, source_layer: str | None, t: dict, *, visible
             circ["minzoom"] = int(cluster["points_zoom"])
         if tiled:
             circ["minzoom"] = tiled["points_zoom"]
-        base.append(circ)
+        if s.get("pointer"):
+            # 1.14.0 (Day 11 issue 2): points with a heading (`_rot`, compass degrees) are drawn as the print map's pointer, turned with the
+            # map, so the direction of travel reads on the page too; points without one stay dots
+            has = ["has", "_rot"]
+            circ["filter"] = ["all", ["!", has], circ["filter"]] if circ.get("filter") else ["!", has]
+            ptr = {"id": f"{lid}--dir", "type": "symbol", "source": src, **sl, "metadata": _meta(lid, "data"),
+                   "filter": ["all", has, pt_filter] if pt_filter else has,
+                   "layout": {**vis, "icon-image": "gm-pointer", "icon-size": ["/", ["max", ["*", 2, radius], POINTER_MIN_PX], 11], "icon-rotate": ["get", "_rot"],
+                              "icon-rotation-alignment": "map", "icon-pitch-alignment": "map", "icon-allow-overlap": True,
+                              "icon-ignore-placement": True, "icon-anchor": "center"},
+                   "paint": {"icon-color": ["coalesce", ["get", "_c"], s["fill"]], "icon-opacity": _num(s.get("fillOpacity", 0.85)),
+                             "icon-halo-color": s["stroke"], "icon-halo-width": _num(max(0.5, float(s.get("pointWeight", 1)) * 0.75))}}
+            for k in ("minzoom",):
+                if k in circ:
+                    ptr[k] = circ[k]
+            base.append(circ)
+            base.append(ptr)
+        else:
+            base.append(circ)
         # the collision layer: an invisible box per point (so the place names avoid the data's symbols) and the feature label beside it
         lay = {**vis, "icon-image": "gm-box", "icon-size": ["/", ["*", 2, radius], 8], "icon-allow-overlap": True, "icon-ignore-placement": False,
                "icon-padding": 0}
@@ -657,10 +678,14 @@ def bundled_layers(bdefs: list[dict], detail_zoom: int) -> list[dict]:
     fade = ["step", ["zoom"], 1, ml_zoom(detail_zoom), 0.45]
     for b in bdefs:
         st = b["style"]
-        out.append({"id": f"{b['id']}--fill", "type": "fill", "source": b["id"], "paint": {"fill-color": st["fillColor"], "fill-opacity": fade},
+        # 1.14.0 (Day 11 issue 6): the fills keep their strength past the detail zoom and only the outlines fade. A faded land fill let the
+        # page's water colour through, so land read as water. Detailed ground (b["detail"]) never fades.
+        out.append({"id": f"{b['id']}--fill", "type": "fill", "source": b["id"], "paint": {"fill-color": st["fillColor"], "fill-opacity": 1},
                     "metadata": _meta("bundled", "bundled")})
-        out.append({"id": f"{b['id']}--line", "type": "line", "source": b["id"], "paint": {"line-color": st["color"], "line-width": st["weight"], "line-opacity": fade},
-                    "metadata": _meta("bundled", "bundled")})
+        if st.get("weight", 0) > 0:
+            out.append({"id": f"{b['id']}--line", "type": "line", "source": b["id"],
+                        "paint": {"line-color": st["color"], "line-width": st["weight"], "line-opacity": 1 if b.get("detail") else fade},
+                        "metadata": _meta("bundled", "bundled")})
     return out
 
 

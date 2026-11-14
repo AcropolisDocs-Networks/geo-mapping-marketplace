@@ -61,7 +61,7 @@ ENGINES = ("auto", "leaflet", "maplibre")
 AUTO_MAPLIBRE_FEATURES = 20_000   # engine auto: above this many features on the page, MapLibre
 SEARCH_TILED_MAX = 50_000         # a tiled layer's search index is carried as plain JSON up to this many features
 SEARCH_PACKED_MAX = 500_000       # 1.0.0 (TODO M14): above it, packed (texts and positions, gzip) and unpacked by the browser, up to this many
-TIME_STEPS = ("day", "week", "month", "quarter", "year")
+TIME_STEPS = ("auto", "instant", "second", "minute", "hour", "day", "week", "month", "quarter", "year")   # 1.14.0: auto and the steps under a day
 
 
 def finding(fid: str, sev: str, message: str, detail=None, layer: str | None = None) -> dict:
@@ -192,6 +192,11 @@ def layer_collection(plan, l, label_field: str | None, px: dict, time_field: str
                               + ([label_field] if label_field else []) + [c for c in (extra_fields or []) if c in gdf.columns]))
     tvals = gdf[time_field].tolist() if time_field and time_field in gdf.columns else None
     contour = l.role == "contour" and "elevation" in gdf.columns
+    rot_f = (l.symbol or {}).get("rotate_field") if l.kind == "point" else None
+    rots = None
+    if rot_f and rot_f in gdf.columns:                  # 1.14.0 (Day 11 issue 2): a heading per point, as the print map draws it
+        import pandas as pd
+        rots = pd.to_numeric(gdf[rot_f], errors="coerce").to_numpy(dtype="float64", na_value=np.nan)
     if contour:
         c_idx = gdf["index"].to_numpy(dtype=bool) if "index" in gdf.columns else np.zeros(len(gdf), bool)
         c_elev = gdf["elevation"].to_numpy(dtype=float)
@@ -240,6 +245,8 @@ def layer_collection(plan, l, label_field: str | None, px: dict, time_field: str
             props["_r"] = round(max(px["min_r"], px["max_r"] * (v / vmax) ** 0.5), 2)        # radius ~ sqrt(value): area is proportional (MAP-CART-010)
         if tvals is not None:
             props["_tv"] = tvals[i]
+        if rots is not None and np.isfinite(rots[i]):
+            props["_rot"] = round(float(rots[i]) % 360.0, 1)          # compass degrees clockwise from north (Web Mercator keeps north up)
         if contour:
             props["_i"] = int(bool(c_idx[i]))
             props["_e"] = f"{c_elev[i]:,.0f}"
@@ -264,6 +271,26 @@ def layer_collection(plan, l, label_field: str | None, px: dict, time_field: str
 NAMES_MAX_FEATURES = 900        # the page carries at most this many place, water and admin names (the highest tiers first)
 NAMES_ID = "gm-names"
 ADMIN_NAME_ZOOM = (4, 8)        # state and province names are shown between these zooms
+
+
+SAME_NAME_DEG = 0.12            # a place name is left out of the page when a data label this close (in degrees) says the same name (1.14.0)
+
+
+def data_label_points(plan) -> list:
+    """(name key, lon, lat) of every feature the MapSpec's labels name, so the page's place names leave out a name the data already says."""
+    import map_render as mr
+    out = []
+    for lb in plan.spec.get("labels") or []:
+        l = next((x for x in plan.layers if x.id == lb.get("layer")), None)
+        fld = lb.get("field")
+        if l is None or not fld or fld not in l.gdf.columns or not len(l.gdf):
+            continue
+        g = to_wgs84(l.gdf)
+        pts = g.geometry.representative_point()
+        for v, p in zip(g[fld].tolist(), pts):
+            if v is not None and v == v and p is not None and not p.is_empty:
+                out.append((mr.name_key(v), p.x, p.y))
+    return out
 
 
 def names_collection(plan, bbox, fit: int, max_zoom: int) -> tuple[dict, dict]:
@@ -311,6 +338,8 @@ def names_collection(plan, bbox, fit: int, max_zoom: int) -> tuple[dict, dict]:
             web_names, _alt, _left = mp.choose_place_names(sel, cfg) if len(sel) else ([], [], set())
         except Exception:  # noqa: BLE001 - the plain names
             web_names = list(sel["name"].astype(str))
+        said = data_label_points(plan)
+        import map_render as mr_
         for i in range(len(sel)):
             g = sel.geometry.iloc[i]
             tr = str(sel["_tier"].iloc[i])
@@ -327,6 +356,10 @@ def names_collection(plan, bbox, fit: int, max_zoom: int) -> tuple[dict, dict]:
             if not nm.isascii():                             # which Inter range files the page carries beside Latin
                 from fontTools import unicodedata as ud2_
                 plan.web_name_scripts = set(getattr(plan, "web_name_scripts", ())) | ({ud2_.script(ch) for ch in nm} & set(INTER_SCRIPT_FACES))
+            pk = mr_.name_key(nm)
+            if any(mr_.says_place(k, pk) and abs(lx - g.x) < SAME_NAME_DEG and abs(ly - g.y) < SAME_NAME_DEG for k, lx, ly in said):
+                stats["same_as_label"] = stats.get("same_as_label", 0) + 1       # 1.14.0 (Day 11 issue 12): a data label already says it
+                continue
             feats.append(feat(g.x, g.y, nm, tr, mz, sel["_prio"].iloc[i], "place"))
             stats["places"] += 1
     if cfg["water"]:
@@ -385,6 +418,9 @@ def bundled_background(plan) -> tuple[list[dict], dict, list[dict]]:
         todo.append(("states", mp.BASEMAP_REFS["states"], {"fillColor": t["land"], "fillOpacity": 1, "color": t["frame"], "weight": 0.6, "opacity": 1}, 3))
     todo.append(("lakes", mp.BASEMAP_REFS["lakes"], {"fillColor": t["water"], "fillOpacity": 1, "color": t["water"], "weight": 0.5, "opacity": 1}, 3))
     defs, cols, recs = [], {}, []
+    ground = detailed_ground(plan)
+    if ground and ground["water"] is not None:
+        todo = [x for x in todo if x[0] != "lakes"]            # the detailed water replaces the 1:10m lakes (one resolution for both)
     for name, ref, style, nd in todo:
         gdf, e = mp.load_ref_layer(ref)
         gdf = to_wgs84(gdf)
@@ -398,7 +434,68 @@ def bundled_background(plan) -> tuple[list[dict], dict, list[dict]]:
         defs.append({"id": cid, "style": style})
         cols[cid] = {"type": "FeatureCollection", "features": feats}
         recs.append(e)
+    if ground:
+        # 1.14.0 (Day 11 issues 6 and 7): the print map's detailed land and water on the page too, at full strength past the zoom where the
+        # bundled outlines fade, and their sources in the credits; 1.13 drew only the 1:10m background, so a sound read as land and
+        # (where it faded) land as water
+        for name, geom, colour in (("ground-land", ground["land"], t["land"]), ("ground-water", ground["water"], t["water"])):
+            if geom is None:
+                continue
+            m = mapping(geom)
+            cid = f"base-{name}"
+            defs.append({"id": cid, "detail": True, "style": {"fillColor": colour, "fillOpacity": 1, "color": colour, "weight": 0, "opacity": 0}})
+            cols[cid] = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {},
+                                                                   "geometry": {"type": m["type"], "coordinates": round_coords(m["coordinates"], 5)}}]}
+        recs += [e for e in ground["entries"] if e and all(e is not r for r in recs)]
+        plan.notes.append(f"ground on the page: {ground['provider']} land and water ({ground['kb']:,} KB, simplified to {ground['tol_m']:,.0f} m), "
+                          "the same ground as the print map")
     return defs, cols, recs
+
+
+GROUND_PAGE_MAX_KB = 3000        # detailed ground carried by a page; past it the tolerance is doubled until it fits, or the ground is left out
+
+
+def detailed_ground(plan) -> dict | None:
+    """The detailed land and water the print map drew (TIGER, Overture or OSM, map_plan.choose_ground), in lon/lat for the page: clipped to a
+    window a little past the map, simplified to about a pixel at the page's deepest bundled zoom. None when the print drew the bundled ground."""
+    import shapely
+    gd_info = (getattr(plan, "crs_info", {}) or {}).get("ground_detail") or {}
+    prov = ((getattr(plan, "crs_info", {}) or {}).get("ground_provider") or {}).get("provider")
+    if not gd_info.get("drawn") and prov not in ("global-osm-simplified",):
+        return None
+    land = next((b for b in plan.basemap if b.get("kind") == "land"), None)
+    water = next((b for b in reversed(plan.basemap) if b.get("kind") == "lake"), None)
+    if land is None:
+        return None
+    w = mp._wgs84_extent(plan)
+    pw, ph = (w[2] - w[0]) * 0.6, (w[3] - w[1]) * 0.6
+    from shapely.geometry import box
+    clip = box(w[0] - pw, w[1] - ph, w[2] + pw, w[3] + ph)
+
+    def ll(item):
+        if item is None or item.get("gdf") is None or not len(item["gdf"]):
+            return None
+        g = to_wgs84(item["gdf"])
+        return shapely.make_valid(shapely.intersection(shapely.union_all(g.geometry.values), clip))
+    land_ll, water_ll = ll(land), ll(water)
+    lat = (w[1] + w[3]) / 2
+    tol = 360.0 / (256 * 2 ** 13) / 2                         # half a pixel at zoom 13, in degrees of longitude (about 10 m at 47 N)
+    for _ in range(6):
+        ls = shapely.simplify(land_ll, tol, preserve_topology=True) if land_ll is not None else None
+        ws = shapely.simplify(water_ll, tol, preserve_topology=True) if water_ll is not None else None
+        kb = round(sum(len(json.dumps(round_coords(mapping_of(g)["coordinates"], 5))) for g in (ls, ws) if g is not None) / 1024)
+        if kb <= GROUND_PAGE_MAX_KB:
+            import math
+            return {"land": ls, "water": ws, "provider": prov or "detailed", "kb": kb, "tol_m": tol * 111_320 * math.cos(math.radians(lat)),
+                    "entries": [land.get("entry"), (water or {}).get("entry")]}
+        tol *= 2
+    plan.notes.append("ground on the page: the detailed land and water are too large to carry even simplified; the page draws the bundled ground")
+    return None
+
+
+def mapping_of(g):
+    from shapely.geometry import mapping
+    return mapping(g)
 
 
 # ---------------------------------------------------------------------------------------------------------------- markup helpers
@@ -439,6 +536,15 @@ def logo_html(plan, ground: str, height_px: int = 28) -> str:
                   f'aria-label="{esc(plan.brand_name)} logo" xmlns="http://www.w3.org/2000/svg">', inner, count=1)
 
 
+def _pointer_d() -> str:
+    """The print map's pointer (svg_draw.pointer_path) as a path in a 20-unit box, pointing up: the web key and the page's icon share it."""
+    import svg_draw
+    return svg_draw.pointer_path(0.0, 0.0, 20.0, 0.0)
+
+
+POINTER_D = _pointer_d()
+
+
 def swatch_html(block: dict, item: dict) -> str:
     kind = block["kind"]
     if kind == "swatches":                           # a MapServer legend swatch, as the server drew it (M12)
@@ -460,6 +566,9 @@ def swatch_html(block: dict, item: dict) -> str:
         return f'<span class="gm-ln" style="border-top-color:{item["stroke"]};border-top-style:{dash}"></span>'
     d = max(8, round(float(item.get("size_mm", 2.5)) * 3.78))
     shape = item.get("shape", "circle")
+    if shape == "pointer":                       # 1.14.0: the direction-of-travel key, as on paper (a dot with a nose, pointing up)
+        return (f'<svg class="gm-pt-svg" width="{d}" height="{round(d * 1.45)}" viewBox="-10 -19.5 20 29" aria-hidden="true">'
+                f'<path d="{POINTER_D}" fill="{item["fill"]}" stroke="{item.get("stroke", item["fill"])}" stroke-width="1.5" stroke-linejoin="round"/></svg>')
     rad = "50%" if shape == "circle" else "0"
     rot = "transform:rotate(45deg);" if shape == "diamond" else ""
     return f'<span class="gm-pt" style="width:{d}px;height:{d}px;border-radius:{rad};{rot}background:{item["fill"]};border-color:{item.get("stroke", item["fill"])}"></span>'
@@ -495,7 +604,8 @@ def bivariate_key_html(block: dict) -> str:
 def legend_block_html(block: dict, hidden: bool = False) -> str:
     title = f'<h3>{esc(block["title"])}</h3>' if block.get("title") else ""
     note = f'<p class="gm-note">{esc(block["note"])}</p>' if block.get("note") else ""
-    head = f'<section class="gm-lg" data-legend-for="{esc(block["layer"])}"{" hidden" if hidden else ""}>{title}'
+    cont = ' data-continues="1"' if block.get("continues") else ""      # 1.14.0: drawn close under the block it continues
+    head = f'<section class="gm-lg" data-legend-for="{esc(block["layer"])}"{cont}{" hidden" if hidden else ""}>{title}'
     if block["kind"] == "ramp":                      # a continuous bar through the brand ramp's tokens, the values under it (M12)
         stops = block["stops"]
         grad = ",".join(f"{c} {100 * i / (len(stops) - 1):.1f}%" for i, c in enumerate(stops))
@@ -540,6 +650,8 @@ def layer_style(plan, l) -> tuple[dict, dict]:
          "stroke": (l.fill or t["land"]) if no_stroke else (l.stroke or t["frame"]), "weight": 0 if no_stroke else px_w,
          "dash": (l.symbol or {}).get("dash") and "6 4", "radius": max(3, round(float((l.symbol or {}).get("size", 3)) * 1.333 * 0.9, 1)),
          "opacity": round(float(getattr(l, "stroke_opacity", 1.0)), 2)}
+    if l.kind == "point" and (l.symbol or {}).get("rotate_field"):
+        s["pointer"] = True                                   # 1.14.0 (Day 11 issue 2): a pointer where the heading is known, a dot elsewhere
     if getattr(l, "outline", False):                          # 1.2.0: an outline polygon layer has no fill on the page either
         s["fillOpacity"] = 0.0
     if l.kind == "point" and str((l.symbol or {}).get("shape", "")).lower() == "none":
@@ -584,7 +696,8 @@ def _as_time(v):
 
 def time_periods(tcfg: dict, cols: dict[str, dict]) -> dict:
     """The time slider's periods from the `_tv` values of the time layers' features, and each feature's period number `_t` (-1: no value).
-    Numbers step by `step` (default 1); dates by day, week, month, quarter or year (default month). Returns {labels, step, kind, missing}."""
+    Numbers step by `step` (default 1); dates by instant, second, minute, hour, day, week, month, quarter or year (default auto: month over
+    more than a month, day within a month, each moment within a day; 1.14.0). Returns {labels, step, kind, missing}."""
     import pandas as pd
     vals = [f["properties"].get("_tv") for c in cols.values() for f in c["features"]]
     present = [v for v in vals if v is not None and v == v]
@@ -637,10 +750,16 @@ def time_periods(tcfg: dict, cols: dict[str, dict]) -> dict:
         out["key"] = key
         return _assign(out, cols, key)
     else:
-        step = str(step or "month")
+        step = str(step or "auto")
         if step not in TIME_STEPS:
             raise ValueError(f"webmap.time.step '{step}' is not one of {', '.join(TIME_STEPS)} (for a date field) or a number")
         ts = [_as_time(v) for v in present]
+        ts = [pd.Timestamp(t).tz_localize(None) for t in ts]          # wall-clock time, as the page shows it
+        if step == "auto":
+            step = _auto_time_step(ts)
+            out["auto_step"] = step
+        if step in ("instant", "second", "minute", "hour"):
+            return _sub_day_periods(out, cols, ts, step)
         freq = {"day": "D", "week": "W-MON", "month": "M", "quarter": "Q", "year": "Y"}[step]
         per = lambda t: pd.Timestamp(t).tz_localize(None).to_period(freq)     # noqa: E731
         ps = sorted({per(t) for t in ts})
@@ -664,6 +783,57 @@ def time_periods(tcfg: dict, cols: dict[str, dict]) -> dict:
         key = lambda v: index[per(_as_time(v))]                        # noqa: E731
     out["step"] = step
     out["key"] = key                                                     # a raw value's period number (a story chapter's print filter, M15)
+    return _assign(out, cols, key)
+
+
+SUB_DAY = {"second": "s", "minute": "min", "hour": "h"}
+
+
+def _auto_time_step(ts: list) -> str:
+    """1.14.0 (Day 11 issue 1): the step a date field gets when webmap.time.step is not set. Values that span more than one month go by month
+    (as before); within one month by day; within one day (times of day such as 08:15:30, or timestamps of one morning) each distinct moment is a
+    period when there are at most 400 of them, else the finest of second, minute and hour that fits in 400. 1.13 read every date field by
+    month, so 121 positions taken 30 seconds apart folded into one period ("Nov 2026")."""
+    import pandas as pd
+    lo, hi = min(ts), max(ts)
+    if (hi.year * 12 + hi.month) != (lo.year * 12 + lo.month):
+        return "month"
+    if hi.normalize() != lo.normalize():
+        return "day"
+    if len({t for t in ts}) <= 400:
+        return "instant"
+    for st in ("second", "minute", "hour"):
+        if len(pd.period_range(pd.Timestamp(lo).floor(SUB_DAY[st]), pd.Timestamp(hi).floor(SUB_DAY[st]), freq=SUB_DAY[st])) <= 400:
+            return st
+    return "hour"
+
+
+def _sub_day_periods(out: dict, cols: dict, ts: list, step: str) -> dict:
+    """Periods shorter than a day: each distinct moment (instant) or each second, minute or hour from the first to the last. Labels are the
+    clock time (08:15:30, 08:15, 08:00), with the date in front when the values cross midnight."""
+    import pandas as pd
+    if step == "instant":
+        rng = sorted(set(ts))
+        if len(rng) > 400:
+            raise ValueError(f"the time field has {len(rng)} distinct moments; choose step second, minute or hour (at most 400 periods)")
+        floor = lambda t: t                                                   # noqa: E731
+    else:
+        f = SUB_DAY[step]
+        rng = list(pd.date_range(min(ts).floor(f), max(ts).floor(f), freq=f))
+        if len(rng) > 400:
+            raise ValueError(f"the time field spans {len(rng)} {step}s; choose a longer step (at most 400 periods)")
+        floor = lambda t: t.floor(f)                                          # noqa: E731
+    index = {t: k for k, t in enumerate(rng)}
+    one_day = rng[0].normalize() == rng[-1].normalize()
+    secs = any(t.second for t in rng) or step == "second"
+    clock = "%H:%M:%S" if secs else "%H:%M"
+    fmt = clock if one_day else "%Y-%m-%d " + clock
+    out.update({"labels": [t.strftime(fmt) for t in rng], "starts": [t.strftime("%Y-%m-%dT%H:%M:%S") for t in rng], "step": step})
+
+    def key(v):
+        t = pd.Timestamp(_as_time(v)).tz_localize(None)
+        return index[floor(t)]
+    out["key"] = key
     return _assign(out, cols, key)
 
 
@@ -854,8 +1024,9 @@ body{overflow:hidden}
 .gm-conf{position:absolute;z-index:850;top:0;left:50%;transform:translateX(-50%);background:@@emphasis@@;color:@@background@@;font-weight:700;font-size:12px;letter-spacing:.04em;padding:3px 14px;border-radius:0 0 6px 6px}
 .gm-banner{margin:0;padding:6px 10px;background:@@legend_bg@@;color:@@label@@;border:1px solid @@status_warning@@;border-left-width:4px;border-radius:4px;font-size:12px;pointer-events:auto}
 .gm-popup{font-family:Inter,system-ui,sans-serif;font-size:13px}
-.gm-faint path.gm-bundled{opacity:.45}
+.gm-faint path.gm-bundled{stroke-opacity:.45}
 .gm-name-icon{background:none;border:0;pointer-events:none}
+.gm-ptr{background:none;border:0}
 .gm-name{position:absolute;white-space:nowrap;font-family:Inter,system-ui,sans-serif;font-size:11px;line-height:1;color:@@label@@;pointer-events:none;
   text-shadow:0 0 2px @@land@@,0 0 2px @@land@@,0 0 3px @@land@@,0 0 3px @@land@@}
 .gm-name-dot{position:absolute;left:-2px;top:-2px;width:4px;height:4px;border-radius:50%;background:@@label@@}
@@ -1123,6 +1294,10 @@ def _page_layers(cfg, ctl, findings, live_specs, notes, pfields, plan, s3, spec,
         collections[f"relief-{b.get('layer_id')}"] = {"type": "FeatureCollection", "features": []}
         images += 1
     for l in mp.draw_order(plan.layers):             # the page adds layers in this order: the context pack under the data
+        if getattr(l, "legend_only", False):         # 1.14.0: keyed in the legend, not drawn (no eye: there is nothing to hide)
+            if l.legend_block:
+                blocks.append({**l.legend_block, "layer": ""})
+            continue
         if l.kind == "raster":                       # a raster layer: the print picture warped to Web Mercator as an image overlay with an opacity slider (M12)
             im = (l.raster or {}).get("image")
             if not im:
@@ -1569,12 +1744,15 @@ def _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_
                   "fade_rail": fc["fade_rail"], "tools": tools, "delivery": fc["delivery"],
                   "credits": [{k: it[k] for k in ("key", "corner", "links", "full", "required", "collapse", "export", "short", "dynamic", "bases", "layers", "logo")} for it in credit_list]},
     }
+    if any((d.get("style") or {}).get("pointer") for d in defs):
+        page_cfg["pointer"] = POINTER_D                  # 1.14.0: the direction-of-travel symbol's outline (both engines)
     if engine == "maplibre":
         page_cfg["ml"] = {"pmtiles": [{"key": tl["key"], "el": f"gmap-pmtiles-{tl['key']}"} for tl in tiles.values()]
                           + [{"key": b["key"], "el": f"gmap-pmtiles-{b['key']}"} for b in base_defs if b.get("key")],
                           "tiles": {lid: {"key": tl["key"], "sourceLayer": tl["source_layer"], "pointsZoom": tl["points_zoom"],
                                           "layers": tl["layers"], "features": source_counts[lid]} for lid, tl in tiles.items()},
                           "clusters": {lid: {"pointsZoom": c["points_zoom"]} for lid, c in clusters.items()}}
+
         if p3 and p3["dem"]:
             page_cfg["ml"]["dem"] = w3.dem_config(p3["dem"])
     if p3:

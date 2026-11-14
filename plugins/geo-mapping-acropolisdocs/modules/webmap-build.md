@@ -72,7 +72,11 @@ feature counts and fetches nothing.
   A layer with a time field is never clustered.
 - **Search** covers a tiled layer only up to 50,000 features; above that it covers the other layers and the place names (the notes say so).
 - **Zoom** on a tile provider stops at its last zoom plus two (enlarged tiles), at most 18. With the bundled background the page zooms four
-  zooms past the one that fits the data, further on MapLibre when a dense point layer needs it to separate its points.
+  zooms past the one that fits the data, further on MapLibre when a dense point layer needs it to separate its points. Past zoom 8 its outlines
+  fade but its land and water keep their colours (1.14.0: land no longer reads as water); when the print map drew detailed ground (TIGER,
+  Overture, OSM), the page carries the same land and water, simplified to about a pixel at zoom 13 (at most 3 MB), and their credits.
+- **Direction of travel** (`symbol.rotate_field`) is drawn on both engines as the print map's pointer (1.14.0); a point with no heading stays a dot.
+- **Place names** a data label already says (the same name, or the name and a word such as terminal or station, within about 13 km) are left out, on paper too.
 - **Image export** is MapLibre's (a PNG from the map canvas); the Leaflet page saves a picture through Print.
 - **Terrain** is capped at 4 MB of tiles (`webmap.3d.max_dem_mb`, up to 12): the tiles go to the zoom whose pixels match the DEM's cells
   (a 10 m 3DEP DEM: 512-pixel tiles at zoom 13, about 8 m a pixel at mid latitudes) and lower until they fit; MapLibre enlarges the last ones past it. The

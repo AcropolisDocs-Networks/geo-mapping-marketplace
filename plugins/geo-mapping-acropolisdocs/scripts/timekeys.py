@@ -10,6 +10,8 @@ order (2026-03, 2026-Q1, 2026), so "up to this period" is `key <= period`.
                   pandas reads as a date is a date, grouped by month when the dates span more than one month, else by day; what is left
                   are named periods ("Phase 1", "Wave 2"), in natural order (or the order the spec gives)
     unit year | quarter | month | day   group dates (or months, quarters) into that unit
+    unit hour | minute | instant        1.14.0 (Day 11 issue 1): times of day (08:15:30) and timestamps within a day; auto picks instant (each
+                  distinct moment) when every value falls on one day and they are not all midnight
 """
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ import math
 import re
 from dataclasses import dataclass, field
 
-UNITS = ("auto", "year", "quarter", "month", "day")
+UNITS = ("auto", "year", "quarter", "month", "day", "hour", "minute", "instant")      # 1.14.0: hour, minute, instant
 _MONTH = re.compile(r"^\s*(\d{4})[-/](\d{1,2})\s*$")
 _QUARTER = re.compile(r"^\s*(\d{4})\s*[-/ ]?\s*Q([1-4])\s*$|^\s*Q([1-4])\s*[-/ ]?\s*(\d{4})\s*$", re.I)
 _YEAR = re.compile(r"^\s*(\d{4})\s*$")
@@ -48,7 +50,7 @@ class Periods:
     @property
     def word(self) -> str:
         """'month', 'quarter', 'year', 'day' or 'period', for legend labels ('New this month')."""
-        return self.unit if self.unit in ("month", "quarter", "year", "day") else "period"
+        return self.unit if self.unit in ("month", "quarter", "year", "day", "hour", "minute") else "period"
 
 
 def _isnull(v) -> bool:
@@ -71,10 +73,19 @@ def _label(key: str, unit: str) -> str:
     if unit == "day":
         y, m, d = key.split("-")
         return f"{calendar.month_name[int(m)]} {int(d)}, {y}"
+    if unit in ("hour", "minute", "instant"):
+        clock = key[11:] if unit == "instant" else key[11:16]
+        return clock
     return key
 
 
 def _from_date(ts, unit: str) -> str:
+    if unit == "instant":
+        return ts.strftime("%Y-%m-%d %H:%M:%S")
+    if unit == "minute":
+        return ts.strftime("%Y-%m-%d %H:%M")
+    if unit == "hour":
+        return ts.strftime("%Y-%m-%d %H:00")
     if unit == "year":
         return f"{ts.year:04d}"
     if unit == "quarter":
@@ -138,6 +149,8 @@ def periods(values, unit: str = "auto", order=None) -> Periods:
             if u == "auto":
                 good = ts[ok]
                 u = "month" if (good.dt.year * 12 + good.dt.month).nunique() > 1 else "day"
+                if u == "day" and good.dt.normalize().nunique() == 1 and (good != good.dt.normalize()).any():
+                    u = "instant"                                    # 1.14.0: one day of timestamps or times of day
             kind = u
             keys = [_from_date(t, u) if isinstance(t, pd.Timestamp) and not pd.isna(t) else None for t in ts]
         else:

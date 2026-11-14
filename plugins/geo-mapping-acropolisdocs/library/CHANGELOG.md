@@ -2,6 +2,10 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-13
+
+- `ref.infrastructure.world.submarine-cable.telegeography` rev 1: Draft (1.14.0, Day 13 issue 5): TeleGeography's map citation and geocoded data licence pages read; user-supplied only. Stays draft until the licence terms for publication are read from an actual licence.
+
 ## 2026-11-11
 
 - `ref.basemap-provider.pmtiles-user` rev 4: 1.10.0: a vector tile file is also the ground of a printed map (read through GDAL for the map window at the zoom of the print scale; three schemas). The file's own attribution, read from its metadata, is the credit.

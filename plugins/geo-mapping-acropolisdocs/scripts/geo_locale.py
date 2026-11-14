@@ -11,6 +11,8 @@ No code path here assumes the United States: the US is one row of the table like
 """
 from __future__ import annotations
 
+import math
+
 import datetime as dt
 import functools
 import sys
@@ -106,14 +108,28 @@ def admin_word(iso: str | None, level: int = 1) -> str:
     return words[min(level, len(words)) - 1]
 
 
+WORLD_SPAN_DEG = 120.0       # a map wider than this (in longitude) shows no one country: no country under the centre (1.14.0)
+
+
 def plan_country(plan) -> str | None:
-    """The country under the centre of a plan's window (cached on the plan); None when the plan has no window."""
+    """The country under the centre of a plan's window (cached on the plan); None when the plan has no window, or for a map of the world or
+    an ocean (wider than WORLD_SPAN_DEG), which has no one country.
+
+    1.14.0 (Day 13 issue 2): the centre is the middle of the map's own frame, taken back to longitude and latitude. 1.13 took the middle of the
+    frame's longitude-latitude box, which for a world map centred on 150 degrees east is 0 degrees, so "the country under the centre" was
+    Ghana and the dates came out in its style."""
     cache = getattr(plan, "__dict__", {})
     if "_country" not in cache:
         try:
             import map_plan as mp
+            from pyproj import Transformer
             w = mp._wgs84_extent(plan)
-            cache["_country"] = country_at((w[0] + w[2]) / 2, (w[1] + w[3]) / 2)
+            x0, y0, x1, y1 = plan.extent
+            lon, lat = Transformer.from_crs(plan.crs, "EPSG:4326", always_xy=True).transform((x0 + x1) / 2, (y0 + y1) / 2)
+            if w[2] - w[0] >= WORLD_SPAN_DEG or not (math.isfinite(lon) and math.isfinite(lat)):
+                cache["_country"] = None
+            else:
+                cache["_country"] = country_at(lon, lat)
         except Exception:  # noqa: BLE001 - a chart without a map window
             cache["_country"] = None
     return cache.get("_country")

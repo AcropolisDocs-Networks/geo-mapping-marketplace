@@ -258,6 +258,72 @@ def check_field_mapping(field_map: dict | None) -> list[dict]:
     return []
 
 
+TERRITORY_OVERLAP_SHARE = 0.01      # two territories overlapping more than this share of the smaller one
+TERRITORY_GAP_KM2 = 2.0             # a hole inside the territories' union larger than this is a gap
+TERRITORY_DENSITY_FACTOR = 20.0     # a territory this many times sparser (per km2 of its density field) than the median is an outlier
+
+
+def check_territories(gdf, name_field: str | None = None, density_field: str | None = None) -> list[dict]:
+    """1.14.0 (Day 12 issue 14): MAP-DATA-012 (WARN), service territories that do not tile: territories that overlap (each pair over 1 percent
+    of the smaller), holes inside the territories' outer edge that no territory covers (over 2 km2: Everett outside Snohomish PUD), and with a
+    density field (customers, people), a territory far sparser than the others (a city utility drawn over 6,000 km2 of its county). Measured
+    on the ellipsoid's equal-area projection of the layer's own centre. Turned on by the layer's `qa: territories`."""
+    import numpy as np
+    import shapely
+    g = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty]
+    if len(g) < 2:
+        return []
+    c = g.to_crs(4326).geometry.union_all().centroid if hasattr(g.geometry, "union_all") else g.to_crs(4326).unary_union.centroid
+    laea = f"+proj=laea +lat_0={c.y:.4f} +lon_0={c.x:.4f} +datum=WGS84 +units=m"
+    gm = g.to_crs(laea)
+    geoms = shapely.make_valid(np.asarray(gm.geometry.values, dtype=object))
+    names = [str(v) for v in (g[name_field].tolist() if name_field and name_field in g.columns else [f"row {i}" for i in g.index])]
+    area = shapely.area(geoms)
+    out = []
+    tree = shapely.STRtree(geoms)
+    pairs = []
+    for i, j in zip(*tree.query(geoms, predicate="intersects"), strict=True):
+        if i >= j:
+            continue
+        ov = shapely.area(shapely.intersection(geoms[i], geoms[j]))
+        small = min(area[i], area[j])
+        if small > 0 and ov / small > TERRITORY_OVERLAP_SHARE:
+            pairs.append((names[i], names[j], ov / 1e6, ov / small))
+    if pairs:
+        pairs.sort(key=lambda p: -p[2])
+        top = "; ".join(f"{a} and {b} ({km:,.0f} km2, {sh:.0%} of the smaller)" for a, b, km, sh in pairs[:4])
+        out.append(finding("MAP-DATA-012", "WARN", f"{len(pairs)} pair(s) of territories overlap: {top}; decide which one serves the overlap "
+                           "(the smaller wins, say) before mapping a value per territory", [p[:2] for p in pairs[:20]]))
+    union = shapely.union_all(geoms)
+    holes = []
+    for part in getattr(union, "geoms", [union]):
+        for ring in getattr(part, "interiors", []):
+            h = shapely.Polygon(ring)
+            if h.area / 1e6 >= TERRITORY_GAP_KM2:
+                holes.append(h)
+    if holes:
+        from pyproj import Transformer
+        back = Transformer.from_crs(laea, "EPSG:4326", always_xy=True)
+        where = [back.transform(h.representative_point().x, h.representative_point().y) for h in sorted(holes, key=lambda h: -h.area)[:5]]
+        out.append(finding("MAP-DATA-012", "WARN", f"{len(holes)} gap(s) inside the territories that no territory covers (largest "
+                           f"{max(h.area for h in holes) / 1e6:,.0f} km2, near {where[0][1]:.3f}, {where[0][0]:.3f}); a territory may be missing a city",
+                           [[round(y, 4), round(x, 4)] for x, y in where]))
+    if density_field and density_field in g.columns:
+        import pandas as pd
+        v = pd.to_numeric(g[density_field], errors="coerce").to_numpy(dtype="float64", na_value=np.nan)
+        dens = v / np.maximum(area / 1e6, 1e-9)
+        ok = np.isfinite(dens) & (dens > 0)
+        if ok.sum() >= 3:
+            med = float(np.median(dens[ok]))
+            sparse = [(names[i], dens[i], area[i] / 1e6) for i in np.where(ok)[0] if dens[i] * TERRITORY_DENSITY_FACTOR < med]
+            if sparse:
+                sparse.sort(key=lambda s: s[1])
+                top = "; ".join(f"{n} ({d:,.1f} per km2 over {a:,.0f} km2)" for n, d, a in sparse[:4])
+                out.append(finding("MAP-DATA-012", "WARN", f"{len(sparse)} territor{'y is' if len(sparse) == 1 else 'ies are'} far sparser in {density_field} "
+                                   f"than the median ({med:,.1f} per km2): {top}; the polygon may cover more than the utility serves", [s[0] for s in sparse[:20]]))
+    return out
+
+
 def lint_data(gdf, *, assumed: bool = False, display_crs=None, null_threshold: float = NULL_RATIO_WARN, id_field: str | None = None) -> list[dict]:
     """The MAP-DATA checks that need only the data. id_field (or the reader's gdf.attrs['id_field'], which gtfs.py sets) names the one key
     column the duplicate check reads; without it every id-like column is checked (a zone or agency id is shared by design, so name the key)."""

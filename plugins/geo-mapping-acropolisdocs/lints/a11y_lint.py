@@ -68,10 +68,16 @@ def check_001(plan, rendered=None) -> list[dict]:
                 out.append(finding("MAP-A11Y-001", "INFO", f"layer '{l.id}': {len(weak)} pair(s) of class colours are close under colour-vision "
                                    f"simulation (closest {worst[0]} and {worst[1]}, difference {worst[2]}); hatch patterns tell them apart", weak[:6]))
                 continue
+            swap = ""
+            if l.palette_kind == "categorical":                   # 1.14.0 (Day 13 issue 6): name a brand colour that would part the closest pair
+                import cartographic_lint as cl_
+                alt = cl_.brand_alternative(plan.tokens, [c for c in l.colors if c.upper() != str(worst[1]).upper()], MIN_CVD_DELTA_E["categorical"])
+                if alt:
+                    swap = f"; or colour that class {alt[0]} ({alt[1]}) in place of {worst[1]} (classification.colors)"
             out.append(finding("MAP-A11Y-001", "WARN",
                                f"layer '{l.id}': {len(weak)} pair(s) of classes are hard to tell apart with colour-vision deficiency "
                                f"(closest {worst[0]} and {worst[1]}, difference {worst[2]}); add direct labels, fewer classes, or patterns "
-                               f"(classification.patterns: auto)", weak[:6]))
+                               f"(classification.patterns: auto){swap}", weak[:6]))
     return out
 
 

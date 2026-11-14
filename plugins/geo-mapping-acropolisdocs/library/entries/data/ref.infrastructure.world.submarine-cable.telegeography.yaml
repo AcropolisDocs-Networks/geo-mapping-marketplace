@@ -1,0 +1,78 @@
+id: ref.infrastructure.world.submarine-cable.telegeography
+type: infrastructure
+rev: 1
+status: draft
+title: Submarine cable systems and landing points (TeleGeography Submarine Cable Map)
+summary: Routes of the world's submarine telecom cable systems (in service and planned) and their landing points, as drawn on TeleGeography's free
+  Submarine Cable Map; the geocoded route data is licensed by TeleGeography for a fee.
+tags:
+  geography:
+  - world
+  level:
+  - line
+  - site
+  domain:
+  - telecom
+  use_for:
+  - flow-line
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - world
+  - regional
+  audience:
+  - internal
+  confidentiality:
+  - restricted-license
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - licensed
+  quality:
+  - commercial
+use_when:
+- A world or ocean-basin map of submarine cable systems (routes, landing points, in service or planned), with TeleGeography's geocoded data held
+  under its annual licence, or for an internal analysis while the rights for publication are confirmed.
+avoid_when:
+- 'Publishing a map drawn from the route data without a TeleGeography data licence: the public maps are CC BY-SA 4.0, but the underlying geocoded
+  data is a paid product (read 2026-11-13). Confirm the rights for the use before posting (Day 13 of the #30DayMapChallenge).'
+- 'Exact cable positions: the routes are schematic, drawn for a world map, not surveyed positions (use the operator''s own route data).'
+- 'An openly licensed source is required: OpenStreetMap submarine cables (ODbL) are open but far from complete (about 250,000 of some 2 million
+  route km, checked 2026-11-13).'
+delivery:
+  mode: user-supplied
+  note: The licensed data arrives as GeoJSON and JSON through TeleGeography's API (Amazon S3 or SFTP). Save the route and landing-point files and
+    give them as file layers; the plugin fetches nothing from TeleGeography.
+source:
+  publisher: TeleGeography
+  product: Submarine Cable Map
+  url: https://www.submarinecablemap.com/
+url_verified_on: '2026-11-13'
+crs: EPSG:4326
+vintage:
+  current: as delivered (TeleGeography updates the map regularly)
+  cadence: irregular
+license:
+  class: licensed
+  external_ok: false
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: false
+  attribution_text: 'Source: TeleGeography, Submarine Cable Map'
+  note: 'Read 2026-11-13: TeleGeography''s map citation page puts its publicly available maps under CC BY-SA 4.0 with TeleGeography credited, and
+    says the underlying databases are for paying subscribers; the geocoded dataset page offers an annual licence for interactive maps and data
+    visualisations (price and redistribution terms not stated). external_ok and commercial_ok stay false until the licence held says otherwise.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-13'
+  verify_by: '2027-05-13'
+  changelog:
+  - rev: 1
+    date: '2026-11-13'
+    note: 'Draft (1.14.0, Day 13 issue 5): TeleGeography''s map citation and geocoded data licence pages read; user-supplied only. Stays draft until
+      the licence terms for publication are read from an actual licence.'

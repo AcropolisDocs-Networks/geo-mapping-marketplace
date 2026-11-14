@@ -195,6 +195,16 @@
         filter: def.time ? timeOk : null,
         pointToLayer: function (f, ll) {
           var o = styleFor(def, f); o.pane = pane; if (rend) o.renderer = rend;
+          var rot = f.properties && f.properties._rot;
+          if (def.style.pointer && rot != null && cfg.pointer) {
+            // 1.14.0 (Day 11 issue 2): the direction of travel, as on paper: the print pointer turned to the heading (north is up here)
+            var d = Math.max(12, 2 * (o.radius || 4)), s = d / 20, w = Math.ceil(d * 2.1);
+            var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + w + '" viewBox="-21 -21 42 42">' +
+              '<path d="' + cfg.pointer + '" transform="rotate(' + rot + ') scale(' + (20 * s / d) + ')" fill="' + o.fillColor + '" fill-opacity="' +
+              (o.fillOpacity == null ? 0.85 : o.fillOpacity) + '" stroke="' + o.color + '" stroke-width="' + Math.max(1, (o.weight || 1) / s) + '" stroke-linejoin="round"/></svg>';
+            return L.marker(ll, { pane: pane, icon: L.divIcon({ className: "gm-ptr", html: svg, iconSize: [w, w], iconAnchor: [w / 2, w / 2] }),
+                                  keyboard: false });
+          }
           return L.circleMarker(ll, o);
         }
       };

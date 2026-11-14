@@ -387,10 +387,28 @@ def check_015(plan) -> list[dict]:
     return out
 
 
+def brand_alternative(tokens: dict, against: list[str], floor: float = DISTINCT_DELTA_E) -> tuple[str, str] | None:
+    """1.14.0 (Day 13 issue 6): the brand colour (a categorical or status token) that stays most distinct from every colour in `against` under
+    normal vision and the three colour-vision types, as (token, hex), when it clears `floor`; else None. The warnings name it, so the fix is
+    one line of the MapSpec, not a search through the palette."""
+    cands = [(f"@brand.categorical.{i}", c) for i, c in enumerate(tokens.get("categorical") or [])]
+    cands += [(f"@brand.status.{k}", c) for k, c in (tokens.get("status") or {}).items()]
+    taken = {str(a).upper() for a in against}
+    best = None
+    for tok, c in cands:
+        if str(c).upper() in taken:
+            continue
+        d = min((cl.cvd_min_delta_e(c, a) for a in against), default=99.0)
+        if best is None or d > best[2]:
+            best = (tok, c, d)
+    return (best[0], best[1]) if best and best[2] >= floor else None
+
+
 def check_016(plan) -> list[dict]:
-    """Two single-symbol data layers share a color or are too close to tell apart."""
+    """Two single-symbol data layers share a color or are too close to tell apart. 1.14.0: the message names a brand colour that would not."""
     out = []
     seen: list[tuple[str, str]] = []
+    every = [c for c in (_drawn_color(l, plan.tokens) for l in plan.layers) if c]
     for l in plan.layers:
         color = _drawn_color(l, plan.tokens)
         if not color:
@@ -398,8 +416,11 @@ def check_016(plan) -> list[dict]:
         for other_id, other in seen:
             d = cl.cvd_min_delta_e(color, other)
             if d < DISTINCT_DELTA_E:
+                alt = brand_alternative(plan.tokens, [c for c in every if c.upper() != color.upper()])
+                hint = (f"give '{l.id}' {alt[0]} ({alt[1]}), which stays distinct from the map's other colours" if alt
+                        else "give one of them another palette color")
                 out.append(finding("MAP-CART-016", "WARN", f"layers '{other_id}' and '{l.id}' have colors too close to tell apart (delta E {d:.0f} under colour-vision simulation); "
-                                   "give one of them another palette color", [other_id, l.id]))
+                                   + hint, [other_id, l.id]))
         seen.append((l.id, color))
     return out
 

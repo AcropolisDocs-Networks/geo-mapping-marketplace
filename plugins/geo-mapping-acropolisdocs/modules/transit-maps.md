@@ -43,7 +43,10 @@ labels: [{layer: stations, field: stop_name}]
 - **Direction of travel:** `symbol: {rotate_field: heading}` draws each point as a pointer turned to its compass bearing (degrees from true
   north, turned into the map's own grid); a point with no heading keeps the plain shape. `gtfs.py vehicles` writes `heading` from the feed's
   bearing, or, when the feed sends none (Sound Transit does not), from the trip's own shape at the vehicle's position (`heading_source`;
-  MAP-GTFS-009 counts each).
+  MAP-GTFS-009 counts each). Web pages draw the same pointer (1.14.0), turned with the map; the web legend keys it as a pointer.
+- **Directional route pairs:** a routes layer carries `terminal_a`, `terminal_b` and `route_pair` (the two terminals in name order, the same for both
+  directions; up to 150 routes, so name a mode for a large feed). `ops: [{op: dissolve, by: route_pair}]` draws each pair once; join a two-column
+  table of route_pair and the agency's own route name, and dissolve by that, for an agency's operating routes (MAP-GTFS-010 says how many pairs).
 - Line colours come from the brand's categorical palette by `route_name`, like any category. The agency's own `route_color` is in the
   data (and in the web map's popups); use it only when the person asks for the agency's colours.
 - Say the feed's publisher, version and service dates (the read note) in the source line, and pass on MAP-GTFS-001 when the feed has

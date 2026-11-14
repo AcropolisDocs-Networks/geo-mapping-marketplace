@@ -722,6 +722,7 @@ FRAME_CSS = """
 .gm-lg.gm-off>*:not(.gm-lg-head){opacity:.45}.gm-lg-hidden{font-size:11.5px;font-style:italic}
 .gm-eye{width:32px;height:32px}
 .gm-lg li{display:flex;align-items:center;gap:8px;font-size:12px;padding:1px 0}
+.gm-lg li .gm-eye-row{margin-left:auto}.gm-lg[data-continues]{margin-top:-8px}
 .gm-lrow{display:flex;align-items:center;gap:8px;min-height:32px;font-size:13px}
 .gm-lrow label{flex:1 1 auto;display:flex;align-items:center;gap:8px;cursor:pointer;min-width:0}
 .gm-lrow input[type=checkbox],.gm-lrow input[type=radio]{width:16px;height:16px;accent-color:@@accent@@;flex:none}
@@ -877,6 +878,14 @@ def legend_block(b: dict, *, toggles: bool, legend_html: str) -> str:
     m = re.match(r'(<section class="gm-lg" data-legend-for="[^"]*"[^>]*>)(<h3>.*?</h3>)?', legend_html, re.S)
     if not m:
         return legend_html
+    if not m.group(2):
+        # 1.14.0 (Day 11 issue 11, Day 10 issue 27): a block that continues the one above has no heading, so its eye sits at the end of its
+        # first key row; 1.13 gave it a heading row of its own that held nothing but the eye
+        rest = legend_html[m.end():]
+        i = rest.find("</li>")
+        if i >= 0:
+            return m.group(1) + rest[:i] + eye.replace('class="gm-ib gm-eye"', 'class="gm-ib gm-eye gm-eye-row"', 1) + rest[i:] \
+                .replace("</ul>", '</ul><p class="gm-lg-hidden" hidden>Hidden</p>', 1)
     head = f'<div class="gm-lg-head">{m.group(2) or "<h3></h3>"}{eye}</div><p class="gm-lg-hidden" hidden>Hidden</p>'
     return m.group(1) + head + legend_html[m.end():]
 

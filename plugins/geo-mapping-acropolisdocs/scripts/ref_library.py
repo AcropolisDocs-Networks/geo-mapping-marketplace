@@ -2,6 +2,7 @@
 """ref-library: the one access layer to the reference library (spec 9.3): get, list, index, lint and select.
 
     ref_library.py get ID [--scope shipped|local|all]
+    ref_library.py search WORDS... [--limit N] [--format json|text]     # 1.14.0: entries ranked by the words (id, title, summary, publisher, tags)
     ref_library.py list [--type T] [--status S] [--tag facet=value ...] [--scope ...]
     ref_library.py index [--scope local]            # writes workdir/library/index.yaml
     ref_library.py lint  [--scope all] [--release]
@@ -170,8 +171,8 @@ def maint_op(a) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("op", choices=["get", "list", "index", "lint", "select", "add", "verify", "report", "apply"])
-    ap.add_argument("id", nargs="?")
+    ap.add_argument("op", choices=["get", "list", "index", "lint", "select", "add", "verify", "report", "apply", "search"])
+    ap.add_argument("id", nargs="*")
     ap.add_argument("--scope", choices=["shipped", "local", "all"], default="all")
     ap.add_argument("--type")
     ap.add_argument("--status")
@@ -216,6 +217,28 @@ def main(argv=None) -> int:
         if not (LIB_OVERRIDE / "tags.yaml").is_file():
             print(f"{a.library} is not a library folder (no tags.yaml)", file=sys.stderr)
             return gc.EXIT_USAGE
+    words_ = list(a.id or [])
+    a.id = words_[0] if words_ else None
+    if a.op == "search":
+        # 1.14.0 (Day 13 issue 5): keyword search of the library without reading every entry by hand (1,274 lines of `list` and grep)
+        if not words_:
+            print("search needs words, e.g. ref_library.py search submarine cable", file=sys.stderr)
+            return gc.EXIT_USAGE
+        import catalog_search as cs
+        hits = cs.search_library(" ".join(words_), limit=a.limit if a.limit != 5 else 10, scope=a.scope)
+        rows = [{"id": h["id"], "score": h["score"], "status": h.get("status"), "title": h["title"], "publisher": h["publisher"], "license": h["license"]}
+                for h in hits]
+        if a.format == "text":
+            for r in rows:
+                print(f"{r['score']:>3}  {r['id']}  {r['title']}  [{r['license']}, {r['status']}]")
+            if not rows:
+                print("no library entry matches those words; catalog_search.py searches the public catalogs")
+        else:
+            print(json.dumps(rows, indent=2))
+        return gc.EXIT_OK
+    if len(words_) > 1:
+        print(f"{a.op} takes one id", file=sys.stderr)
+        return gc.EXIT_USAGE
     if a.op in ("add", "verify", "report", "apply"):
         return maint_op(a)
 

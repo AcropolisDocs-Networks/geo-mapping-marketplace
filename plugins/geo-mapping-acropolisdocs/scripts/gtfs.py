@@ -379,6 +379,7 @@ def _routes_layer(f: Feed, mode: str | None, notes: list):
                      "route_url": r.get("route_url", ""), "route_sort_order": r.get("route_sort_order", ""),
                      "trips": ntrips.get(rid, 0), "shapes": len(shape_ids.get(rid, ())), "geometry_source": src})
         geoms.append(merged)
+    _terminal_pairs(f, rows, notes)
     if no_shape - {r["route_id"] for r in rows if r["geometry_source"] == "shapes"}:
         drawn = [routes[x] for x in no_shape if x in sel and _route_name(routes[x]) not in unmapped]
         if drawn:
@@ -388,6 +389,49 @@ def _routes_layer(f: Feed, mode: str | None, notes: list):
         notes.append(_note("MAP-GTFS-002", "WARN", f"{len(unmapped)} route(s) have no shape and no trips with located stops; left off: "
                            + ", ".join(sorted(unmapped)[:12]), unmapped))
     return rows, geoms
+
+
+TERMINAL_PAIR_MAX_ROUTES = 150      # terminal pairs are worked out for a routes layer of up to this many routes (stop_times is read once)
+
+
+def _place(stops: dict, sid: str) -> str:
+    """A stop's name for a terminal: its station's (parent_station) name when it has one, so the bays of one terminal are one place."""
+    st = stops.get(sid) or {}
+    par = stops.get(st.get("parent_station") or "")
+    return str((par or st).get("stop_name") or sid).strip()
+
+
+def _terminal_pairs(f: "Feed", rows: list, notes: list) -> None:
+    """1.14.0 (Day 11 issue 16): each route's terminals (`terminal_a`, `terminal_b`: the first and last stop of its longest trip, by station)
+    and `route_pair`, the two in name order ("Bainbridge Island – Seattle"), which is the same for the two directions of a directional
+    terminal-pair route. Dissolve by route_pair (ops: [{op: dissolve, by: route_pair}]) to draw each pair once; join a two-column table of
+    route_pair and the agency's own route name, and dissolve by that, for an agency's operating routes (Washington State Ferries: 38 GTFS
+    routes, 8 operating routes). Worked out for up to TERMINAL_PAIR_MAX_ROUTES routes."""
+    if not rows:
+        return
+    if len(rows) > TERMINAL_PAIR_MAX_ROUTES:
+        notes.append(_note("MAP-GTFS-010", "INFO", f"terminal pairs are not worked out for {len(rows)} routes (at most {TERMINAL_PAIR_MAX_ROUTES}); "
+                           "choose a mode (routes:ferry) to have them"))
+        return
+    stops = f.stops()
+    longest = f.longest_trip_stops({r["route_id"] for r in rows})
+    by_route: dict = {}
+    for (rid, _dir), seq in longest.items():
+        if seq and (rid not in by_route or len(seq) > len(by_route[rid])):
+            by_route[rid] = seq
+    pairs = set()
+    for r in rows:
+        seq = by_route.get(r["route_id"])
+        if not seq:
+            r["terminal_a"] = r["terminal_b"] = r["route_pair"] = None
+            continue
+        a, b = _place(stops, seq[0]), _place(stops, seq[-1])
+        r["terminal_a"], r["terminal_b"] = a, b
+        r["route_pair"] = " – ".join(sorted({a, b}, key=str.casefold)) if a != b else a
+        pairs.add(r["route_pair"])
+    if pairs and len(pairs) < len(rows):
+        notes.append(_note("MAP-GTFS-010", "INFO", f"{len(rows)} routes run between {len(pairs)} terminal pairs (route_pair); dissolve by route_pair "
+                           "to draw each pair once", sorted(pairs)[:20]))
 
 
 def _coord_ok(s: dict) -> bool:

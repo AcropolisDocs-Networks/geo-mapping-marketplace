@@ -18,6 +18,7 @@ if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   done
 fi
 [ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
+python3 "$GMAP_ROOT/scripts/ref_library.py" search submarine cable [--format text]          # 1.14.0: entries ranked by the words
 python3 "$GMAP_ROOT/scripts/ref_library.py" list [--type boundary] [--status active] [--tag use_for=choropleth]
 python3 "$GMAP_ROOT/scripts/ref_library.py" get ref.boundary.us.county.cb
 python3 "$GMAP_ROOT/scripts/ref_library.py" select --geography us/state/az --level county --use-for choropleth --scale state [--audience external] [--format text]

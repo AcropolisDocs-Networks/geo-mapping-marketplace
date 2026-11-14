@@ -28,9 +28,12 @@ python3 "$GMAP_ROOT/scripts/ground_detail.py" status  --spec map.yaml      # whi
 python3 "$GMAP_ROOT/scripts/ground_detail.py" prepare --spec map.yaml      # once per area: TIGER files in the US, Overture z8 tiles elsewhere
 ```
 
-Run `prepare` before the first build of a metro or city map (it says when the map is too small-scale to need it). The build never goes online:
+Run `prepare` before the first build of a metro or city map (it says when the map is too small-scale to need it). `prepare --spec` keeps the
+ground beside the MapSpec (`<its folder>/.geo-mapping/cache`), and a build reads the cache there, in the working folder and in the home folder,
+so the folder a command runs from does not matter (1.14.0). TIGER is chosen when the window's land outside the US is under 0.5 percent (a sliver
+across the border is drawn from the 10 m coast); a web page carries the same detailed land and water as the print map, with its credits. The build never goes online:
 until the files are cached it draws the next provider and says so (MAP-GND-002). Overture is read by HTTPS range requests for the window's
-row groups only, capped at 300 MB a window (MAP-GND-003 when over), from a pinned release (MAP-GND-004 when the release is past its review
+row groups only, capped at 300 MB a window (MAP-GND-003 when over; `prepare --cap-mb 600` reads more, 1.14.0), from a pinned release (MAP-GND-004 when the release is past its review
 date). The ODbL credit goes in the source note; a web page or data export that carries the ground gets the share-alike notice.
 `basemap: {ground_detail: false}` keeps the bundled ground; `basemap: {ground: global-overture}` names a provider.
 

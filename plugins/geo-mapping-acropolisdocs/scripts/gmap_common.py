@@ -102,6 +102,47 @@ def outputs_dir(create: bool = False) -> Path:
     return p
 
 
+_SPEC_DIR: "contextvars.ContextVar[Path | None]" = contextvars.ContextVar("gmap_spec_dir", default=None)
+
+
+def note_spec_folder(spec_path) -> None:
+    """1.14.0 (Day 11 issue 5): the folder of the MapSpec being built, so a cache made for that map (`ground_detail.py prepare --spec`, which
+    writes beside the MapSpec) is found wherever the build is started from."""
+    try:
+        _SPEC_DIR.set(Path(spec_path).resolve().parent / WORKDIR_NAME)
+    except OSError:
+        pass
+
+
+def cache_roots() -> list[Path]:
+    """The .geo-mapping folders a cache is READ from, in order (1.14.0): where this call writes (outputs_dir), the MapSpec's own folder, the
+    working directory, and the person's home folder. Writing still goes to outputs_dir() only. 1.13 read the current folder alone, so a
+    `prepare` run from another folder was invisible to the build. The home folder is left out while GEO_MAPPING_HOME is set (tests, spikes)."""
+    out: list[Path] = []
+    cands = [outputs_dir(), _SPEC_DIR.get(), workdir()]
+    if not os.environ.get("GEO_MAPPING_HOME"):
+        cands.append(Path.home() / WORKDIR_NAME)
+    for c in cands:
+        if c is None:
+            continue
+        try:
+            r = c.resolve()
+        except OSError:
+            r = c
+        if r not in out:
+            out.append(r)
+    return out
+
+
+def find_cached(*parts) -> Path | None:
+    """The first existing file at <root>/<parts...> over cache_roots(), or None."""
+    for r in cache_roots():
+        p = r.joinpath(*parts)
+        if p.is_file():
+            return p
+    return None
+
+
 @contextlib.contextmanager
 def outputs_in(folder):
     """Within the block, outputs_dir() is FOLDER/.geo-mapping. The caller checks the folder first (service_tools.check_work_folder)."""

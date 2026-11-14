@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -117,6 +118,10 @@ def load(window_ll, plan_crs, scale_den: float, map_width_mm: float, visible_wid
             # the subdivisions cover land and water; the build cuts the TIGER water out, so the land's edge is the water's edge
             out["land_ll"] = shapely.make_valid(shapely.union_all(shapely.intersection(near.geometry.values, wbox)))
             out["entries"].append(_entry(LAND_REF))
+            extra = _outside_us_land(window_ll)
+            if extra is not None:                          # 1.14.0: a sliver across the border is land too (TIGER stops at it)
+                out["land_ll"] = shapely.make_valid(shapely.union(out["land_ll"], extra))
+                out["outside_us_share"] = round(extra.area / max(out["land_ll"].area, 1e-12), 5)
     parts = [gpd.read_parquet(p) for p in st["water"].values() if p]
     if parts:
         import pandas as pd
@@ -155,27 +160,44 @@ def _in_scale(p: dict, den: float | None) -> bool:
     return not (p.get("min_denominator") and den < float(p["min_denominator"]))
 
 
-def us_holds(window_ll) -> bool:
-    """Whether the window's land lies wholly inside the United States (TIGER's coverage): the 10m land of the window, less the US states with
-    a 2 km margin, under 0.5 percent of it."""
+US_LAND_SHARE_OUTSIDE = 0.005          # TIGER takes a window whose land outside the US (with a 2 km margin) is at most this share of its land
+
+
+def _land_split(window_ll, margin_deg: float = 0.02):
+    """(the window's 10m land, the part of it outside the US states with a margin, 2 km by default), in lon/lat."""
     import shapely
     import map_plan as mp
     from shapely.geometry import box
-    try:
-        import geo_locale as gl
-        if any(c != "US" for c in gl.countries_in(window_ll)):
-            return False
-    except Exception:  # noqa: BLE001
-        pass
     wbox = box(*window_ll)
     ocean, _ = mp.load_ref_layer(mp.BASEMAP_REFS["ocean"])
     ocean = ocean.to_crs("EPSG:4326") if ocean.crs is not None and not ocean.crs.equals("EPSG:4326") else ocean
     land = shapely.difference(wbox, shapely.union_all(shapely.intersection(ocean.geometry.values, wbox)))
     if land.area <= 0:
-        return True
+        return land, None
     states, _ = mp.load_ref_layer(mp.BASEMAP_REFS["states"])
-    us = shapely.union_all(states.to_crs("EPSG:4326").geometry.values).buffer(0.02)
-    return shapely.difference(land, us).area / land.area <= 0.005
+    us = shapely.union_all(states.to_crs("EPSG:4326").geometry.values)
+    return land, shapely.difference(land, us.buffer(margin_deg) if margin_deg else us)
+
+
+def us_holds(window_ll) -> bool:
+    """Whether the window's land lies wholly inside the United States (TIGER's coverage): the 10m land of the window, less the US states with
+    a 2 km margin, under 0.5 percent of it. 1.14.0 (Day 11 issue 3): the land decides, not a grid of sample points. 1.13 first asked
+    geo_locale.countries_in, whose corner point in the Strait of Juan de Fuca read as Canada, and refused TIGER for a Puget Sound map whose
+    land outside the US was 0.4 percent."""
+    land, outside = _land_split(window_ll)
+    if outside is None or land.area <= 0:
+        return True
+    return outside.area / land.area <= US_LAND_SHARE_OUTSIDE
+
+
+def _outside_us_land(window_ll):
+    """The sliver of land outside the US that a TIGER window may hold (at most 0.5 percent of its land), from the bundled 10m coast, so it is
+    drawn as land and not as water. None when there is none."""
+    try:
+        _, outside = _land_split(window_ll, 0.0)            # up to the border itself, where TIGER's land stops
+    except Exception:  # noqa: BLE001
+        return None
+    return None if outside is None or outside.is_empty or outside.area <= 0 else outside
 
 
 def overture_release() -> str:
@@ -186,9 +208,9 @@ def overture_status(window_ll) -> dict:
     import overture_io as ov
     rel = overture_release()
     tiles = ov.tiles_for(window_ll)
-    have = {q: ov.tile_path(rel, q) for q in tiles}
-    return {"provider": "global-overture", "release": rel, "tiles": tiles,
-            "missing": [f"{OVERTURE_REF} --variant {q}" for q, p in have.items() if not p.exists()]}
+    have = {q: ov.find_tile(rel, q) for q in tiles}
+    return {"provider": "global-overture", "release": rel, "tiles": tiles, "paths": {q: str(p) for q, p in have.items() if p},
+            "missing": [f"{OVERTURE_REF} --variant {q}" for q, p in have.items() if p is None]}
 
 
 def osm_status() -> dict:
@@ -255,8 +277,7 @@ def load_overture(window_ll, plan_crs, map_width_mm: float, visible_width_m: flo
     out = {"land_ll": None, "water": None, "entries": [], "missing": st["missing"], "resolution": OVERTURE_RES, "tiles": st["tiles"]}
     if st["missing"]:
         return out
-    import overture_io as ov
-    parts = [gpd.read_parquet(ov.tile_path(st["release"], q)) for q in st["tiles"]]
+    parts = [gpd.read_parquet(st["paths"][q]) for q in st["tiles"]]
     parts = [p for p in parts if len(p)]
     wbox = box(*window_ll)
     g = gpd.GeoDataFrame(pd.concat(parts, ignore_index=True), crs="EPSG:4326") if parts else gpd.GeoDataFrame({"kind": []}, geometry=[], crs="EPSG:4326")
@@ -317,7 +338,8 @@ def prepare_window(window_ll, den: float | None, *, refresh: bool = False, http=
             if ov.tile_path(overture_release(), q).exists() and not refresh:
                 continue
             if used >= cap:
-                raise ov.CapExceeded(f"the window needs more than {cap / 1e6:,.0f} MB of Overture data; nothing more was read (MAP-GND-003)")
+                raise ov.CapExceeded(f"the window needs more than {cap / 1e6:,.0f} MB of Overture data; nothing more was read (MAP-GND-003). "
+                                     f"Run prepare again with --cap-mb {int(cap / 1e6 * 2)} to read more, or make the map's window smaller")
             r = ov.fetch_tile(q, overture_release(), http=http, refresh=refresh, cap_bytes=cap - used)
             used += int(r.get("bytes") or 0)
             out["fetched"].append({"entry": OVERTURE_REF, "variant": q, "path": r["path"], "bytes": r.get("bytes")})
@@ -347,7 +369,12 @@ def main(argv=None) -> int:
     ap.add_argument("--refresh", action="store_true")
     ap.add_argument("--scale", type=float, help="the map's scale denominator with --bbox (default: none, every provider is considered)")
     ap.add_argument("--provider", help="a provider id from data/ground-providers.yaml (default: the finest that covers the window)")
+    ap.add_argument("--cap-mb", type=float, help="1.14.0: the most Overture data to read for the window, in MB (default: the library entry's, 300); "
+                                                 "a large sound or coast may need more (Puget Sound read about 400)")
     a = ap.parse_args(argv)
+    if a.cap_mb is not None and not 1 <= a.cap_mb <= 5000:
+        print("ground_detail: --cap-mb is between 1 and 5000", file=sys.stderr)
+        return gc.EXIT_USAGE
     try:
         if a.spec:
             win, den = window_of_spec(a.spec)
@@ -356,13 +383,20 @@ def main(argv=None) -> int:
         else:
             print("ground_detail: give --spec MAP.yaml or --bbox=W,S,E,N", file=sys.stderr)
             return gc.EXIT_USAGE
+        if a.spec and a.cmd == "prepare" and not os.environ.get("GEO_MAPPING_HOME"):
+            # 1.14.0 (Day 11 issue 5): the ground for a MapSpec is kept beside it, so its build finds it from any folder
+            with gc.outputs_in(Path(a.spec).resolve().parent) as od:
+                res = prepare_window(win, den, refresh=a.refresh, provider=a.provider, cap_bytes=int(a.cap_mb * 1e6) if a.cap_mb else None)
+                res["cache"] = str(od / "cache")
+            print(json.dumps(res, indent=2, default=str))
+            return gc.EXIT_OK
         if a.cmd == "status":
             sel = choose(win, den, cached_only=True, asked=a.provider)
             best = choose(win, den, cached_only=False, asked=a.provider)
             res = {"window": [round(v, 5) for v in win], "scale_denominator": round(den) if den else None, "provider": sel["provider"], "why": sel["why"],
                    "finest": best["provider"], "skipped": sel["skipped"], "status": best.get("status")}
         else:
-            res = prepare_window(win, den, refresh=a.refresh, provider=a.provider)
+            res = prepare_window(win, den, refresh=a.refresh, provider=a.provider, cap_bytes=int(a.cap_mb * 1e6) if a.cap_mb else None)
         print(json.dumps(res, indent=2, default=str))
         return gc.EXIT_OK
     except DetailError as ex:
@@ -370,6 +404,8 @@ def main(argv=None) -> int:
         return gc.EXIT_USAGE
     except Exception as ex:  # noqa: BLE001 - a cap or a refused read is said, never a traceback
         if type(ex).__name__ == "CapExceeded":
+            if "--cap-mb" not in str(ex):
+                ex = type(ex)(f"{ex}; run prepare again with a larger --cap-mb to read more")
             print(json.dumps({"findings": [{"id": "MAP-GND-003", "severity": "BLOCK", "message": str(ex) + "; nothing more was read"}]}, indent=2))
             print(f"ground_detail: {ex}", file=sys.stderr)
             return gc.EXIT_REFUSED

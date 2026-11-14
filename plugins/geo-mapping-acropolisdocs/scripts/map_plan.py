@@ -858,6 +858,15 @@ def apply_layer_ops(layer: dict, gdf, ctx_layers: dict | None, measure_crs: str 
     return gdf, steps, list(notes), findings, ctx.provenance
 
 
+ROLE_KIND = {"points": "point", "proportional": "point", "lines": "line", "polygons": "polygon", "choropleth": "polygon"}
+
+
+def legend_only(layer: dict) -> bool:
+    """1.14.0 (Day 13 issue 9): `legend: {only: true}`: the layer is keyed in the legend and not drawn (a symbol that appears only in an
+    animation drawn over the map, or one explained here and drawn elsewhere). Its filter may keep no feature; its kind comes from its role then."""
+    return bool((layer.get("legend") or {}).get("only"))
+
+
 def postload(layer: dict, gdf, base: Path, ctx_layers: dict | None = None, measure_crs: str | None = None, spec: dict | None = None):
     """Table join, then the layer's ops, then coordinate reduction, then sector wedges, in that order: an op works on the joined attributes,
     and wedges are drawn from the already-reduced positions. `ctx_layers` holds the other layers already loaded (by id) for the ops."""
@@ -869,7 +878,7 @@ def postload(layer: dict, gdf, base: Path, ctx_layers: dict | None = None, measu
         if col not in gdf.columns or not isinstance(vals, list) or not vals:
             raise PlanError(f"layer '{lid}': filter needs column (one of {', '.join(c for c in gdf.columns if c != gdf.geometry.name)}) and a list in:", gc.EXIT_USAGE)
         keep = gdf[col].astype(str).isin([str(v) for v in vals])
-        if not keep.any():
+        if not keep.any() and not legend_only(layer):
             raise PlanError(f"layer '{lid}': filter {col} in {vals} keeps no feature", gc.EXIT_USAGE)
         out["steps"].append(f"kept {int(keep.sum())} of {len(gdf)} feature(s) where {col} is {', '.join(map(str, vals))}")
         gdf = gdf[keep].copy()
@@ -1078,6 +1087,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     """`spec_edit(spec)` may adjust the loaded spec in memory (the web page turns the static scale bar off); the file is never changed."""
     spec_path = Path(spec_path)
     spec = gc.load_mapspec(spec_path)
+    gc.note_spec_folder(spec_path)                        # 1.14.0: a cache prepared beside the MapSpec is found from any folder
     if spec_edit:
         spec_edit(spec)
     findings: list[dict] = []
@@ -1152,7 +1162,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
             pre_notes += [f"layer '{lid}': {n}" for n in agg_info["notes"]]
             post["findings"] += agg_info["findings"]
         gdf, unpacked = unpack_collections(gdf)
-        kind = geom_kind(gdf)
+        kind = geom_kind(gdf) if len(gdf) or not legend_only(ly) else ROLE_KIND.get(role, "point")
         gdf, dropped = keep_kind(gdf, kind)
         time_note = None
         if isinstance(ly.get("time"), dict) and ly["time"].get("at") is not None:
@@ -1162,6 +1172,9 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         lp = LayerPlan(id=lid, spec=layer_spec, role=role, gdf=gdf, kind=kind, title=lg._layer_title(layer_spec), value_field=layer_spec.get("value_field"),
                        confidentiality=ly.get("confidentiality") or ("client-confidential" if cap and cap.get("confidential") else "public"), entry=entry, assumed_crs=assumed, capture=cap)
         lp.draw, lp.aggregation, lp.ops_provenance, lp.used_by = draw, agg_info, list(post["ops"]), list(used_by.get(lid, []))
+        lp.legend_only = legend_only(ly)
+        if lp.legend_only:
+            pre_notes.append(f"layer '{lid}': keyed in the legend only (legend.only), not drawn")
         lp.crs_original = crs_label(gdf.crs)
         if unpacked:
             lp.transformations.append(f"{unpacked} geometry collection(s) reduced to their {kind}s")
@@ -1199,6 +1212,13 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
             lp.notes.append(f"joined table fingerprint (SHA-256): {post['table_sha256'][:16]}")
         findings += [{**f, "layer": lid} for f in post["findings"]]
         fixed = geo_ops_fixed_ids(ly.get("ops"))
+        qa = ly.get("qa") or {}
+        if (qa == "territories" or (isinstance(qa, dict) and qa.get("territories"))) and kind == "polygon":
+            # 1.14.0 (Day 12 issue 14): service territories that overlap, leave gaps or sprawl (MAP-DATA-012)
+            qd = qa if isinstance(qa, dict) else {}
+            name_f = qd.get("name_field") or next((c for c in ("NAME", "name", "utility_name", "Utility") if c in gdf.columns), None)
+            findings += [{**f, "layer": lid, "message": f"layer '{lid}': {f['message']}"}
+                         for f in dl.check_territories(gdf, name_f, qd.get("density_field"))]
         for f in dl.lint_data(gdf, assumed=assumed, id_field=ly.get("id_field")):
             if f["id"] in fixed:
                 continue                      # the op that fixes it ran; its own finding replaces the input's (geo_ops.FIXES)
@@ -1227,7 +1247,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     # ---- extent in WGS84 first, to choose the display CRS
     ext = spec.get("extent") or {}
     mode_e = ext.get("mode", "fit_layers")
-    placed = [l for l in layers if len(l.gdf)]               # a fetched or service raster has no footprint until it is read for the window
+    placed = [l for l in layers if len(l.gdf) and not getattr(l, "legend_only", False)]   # a fetched or service raster has no footprint yet
     # a library service layer is fetched for the window, not fitted to (M13)
     data_layers = [l for l in placed if l.role in DATA_ROLES and l.role not in ("hillshade", "contour") and not (l.entry and l.capture)] or placed
     if not data_layers and mode_e == "fit_layers":
@@ -1303,6 +1323,8 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
                 tpl=tpl, tpl_name=tpl_name, crs=display, crs_info=crs_info, extent=extent, layers=layers, basemap=[], findings=findings, helpers=helpers,
                 look=look, style=style)
     plan.look_asked = map_look.look_of(spec)
+    if (spec.get("extent") or {}).get("crop"):
+        crop_extent(plan)
     plan.notes += style_notes
     import treatments as treat_mod
     plan.treatments = treat_mod.merged(style, spec)
@@ -2004,6 +2026,8 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
         l.legend_block = None
     if (ly.get("legend") or {}).get("include") is False:
         l.legend_block = None
+    if (ly.get("legend") or {}).get("single") and l.legend_block:
+        l.legend_block = single_entry_block(plan, l, ly)
     cont = (ly.get("legend") or {}).get("continues")
     if cont and l.legend_block:                # this layer's key is drawn as more rows of the block above, with no heading (0.10.0)
         prev = [p for p in plan.layers[:plan.layers.index(l)] if p.legend_block]
@@ -2012,6 +2036,33 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
                             f"{('layer ' + repr(prev[-1].id)) if prev else 'none'}; list '{l.id}' right after '{cont}'", gc.EXIT_USAGE)
         l.legend_block = {**l.legend_block, "title": None, "continues": cont}
     l.provenance = layer_provenance(l)
+
+
+def single_entry_block(plan: Plan, l: LayerPlan, ly: dict) -> dict:
+    """1.14.0 (Day 11 issue 10): `legend: {single: true}` keys a classed layer with ONE entry, for a layer whose classes another block already
+    explains (the ferries' positions, coloured by route as the tracks above them are). The swatch is the layer's own symbol in a mid neutral
+    (`legend.color` names another brand colour), labelled `legend.label`, else the layer's title. 1.13 repeated every class, so a one-moment
+    layer of 17 boats grew a legend 132 mm tall."""
+    lgd = ly.get("legend") or {}
+    t = plan.tokens
+    fill = resolve_color(lgd["color"], t, f"layer '{l.id}' legend.color") if lgd.get("color") else _neutral(t, 2)
+    label = str(lgd.get("label") or l.title or l.id)
+    sym = l.symbol or {}
+    if l.kind == "point":
+        item = {"label": label, "shape": "pointer" if sym.get("rotate_field") else str(sym.get("shape", "circle")),
+                "size_mm": float(sym.get("_size_mm") or float(sym.get("size", 3)) * 0.35), "fill": fill, "stroke": l.stroke or t["background"]}
+        kind = "points"
+    elif l.kind == "line":
+        item = {"label": label, "stroke": fill, "width_mm": max(0.5, float(l.stroke_w_mm))}
+        if sym.get("dash"):
+            item["dash"] = dash_array(sym["dash"])
+        kind = "lines"
+    else:
+        item = {"label": label, "fill": fill, "stroke": fill}
+        kind = "polygons"
+    title = lgd.get("title") if lgd.get("title") and str(lgd.get("title")).strip() != label.strip() else None
+    plan.notes.append(f"layer '{l.id}': one legend entry (legend.single) in place of {len((l.legend_block or {}).get('items') or [])} classes")
+    return {"layer": l.id, "title": title, "kind": kind, "items": [item], **({"note": lgd["note"]} if lgd.get("note") else {})}
 
 
 def highlight_mask(l: LayerPlan, hl: dict):
@@ -2655,6 +2706,28 @@ def _wgs84_extent(plan: Plan):
     lon, lat = t.transform(X.ravel(), Y.ravel())
     ok = np.isfinite(lon) & np.isfinite(lat)
     return (float(lon[ok].min()), float(lat[ok].min()), float(lon[ok].max()), float(lat[ok].max()))
+
+
+def crop_extent(plan: Plan) -> None:
+    """1.14.0 (Day 13 issue 3): `extent.crop: true`: the map shows the extent's box cut to the map frame's shape, so nothing outside the box
+    is drawn. Without it the frame grows the box to its own shape (a world box ending at 58 degrees south on a 16:9 slide grew down to show
+    Antarctica). The longer side of the box is trimmed about its centre, and the padding is set to 0 for this build (the file is unchanged)."""
+    rect = lo.rect_of(plan.tpl["map"])
+    x0, y0, x1, y1 = (float(v) for v in plan.extent)
+    w, h = max(x1 - x0, 1e-9), max(y1 - y0, 1e-9)
+    want = rect.w / max(rect.h, 1e-9)
+    if w / h > want:
+        nw = h * want
+        cx = (x0 + x1) / 2
+        plan.extent = (cx - nw / 2, y0, cx + nw / 2, y1)
+        cut = f"trimmed at the left and right ({1 - nw / w:.0%} of its width)"
+    else:
+        nh = w / want
+        cy = (y0 + y1) / 2
+        plan.extent = (x0, cy - nh / 2, x1, cy + nh / 2)
+        cut = f"trimmed at the top and bottom ({1 - nh / h:.0%} of its height)"
+    plan.spec.setdefault("extent", {})["padding_pct"] = 0
+    plan.notes.append(f"extent.crop: the box is cut to the map's shape, {cut}; nothing outside it is drawn")
 
 
 def plan_visible_pad(plan: Plan):

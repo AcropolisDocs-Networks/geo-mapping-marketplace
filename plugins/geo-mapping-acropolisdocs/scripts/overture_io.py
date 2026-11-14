@@ -293,6 +293,14 @@ def tile_path(release: str, qk: str) -> Path:
     return ground_dir(release) / f"{qk}.parquet"
 
 
+def find_tile(release: str, qk: str) -> Path | None:
+    """1.14.0: a cached ground tile wherever a prepare left it (gmap_common.cache_roots), or None. Writing stays in tile_path()."""
+    p = tile_path(release, qk)
+    if p.is_file():
+        return p
+    return gc.find_cached("cache", "ground", GROUND_PROVIDER, str(release), f"{qk}.parquet")
+
+
 def ground_features(land, water):
     """The land (polygons of class land, island, islet) and water areas (polygons, no pools or the sea) of a read, as one frame with `kind`."""
     import geopandas as gpd

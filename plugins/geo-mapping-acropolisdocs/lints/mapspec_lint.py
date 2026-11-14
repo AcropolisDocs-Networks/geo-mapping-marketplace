@@ -1,4 +1,4 @@
-"""Spec lint: MAP-SPEC-001 to 007 (spec 12.1; 006 is M10's: classification keys that contradict each other; 007 is M11's: a layer's
+"""Spec lint: MAP-SPEC-001 to 007 and 011 to 012 (012, 1.14.0: a brand palette step past the end of its ramp) (spec 12.1; 006 is M10's: classification keys that contradict each other; 007 is M11's: a layer's
 `ops:` naming a layer the spec does not have, naming itself, or a `draw: false` helper no op uses). A layer's `ops:` list is also checked by
 `ops_lint.lint_ops_spec` here (MAP-OPS-008: an unknown op, a missing `layer:`, `value:`, `distance`, `size` or `tolerance`), before any data is read.
 
@@ -43,7 +43,7 @@ ROLES_NEEDING_VALUE = {"choropleth"}
 
 
 # 1.13.0: layer keys the code reads that the schema does not list (the schema leaves layers open); anything else is MAP-SPEC-011
-LAYER_KEYS_OUTSIDE_SCHEMA = {"symbol", "value_field", "title", "provenance", "palette", "popup", "popup_fields", "queryable", "visible", "layout",
+LAYER_KEYS_OUTSIDE_SCHEMA = {"qa", "symbol", "value_field", "title", "provenance", "palette", "popup", "popup_fields", "queryable", "visible", "layout",
                              "home_addresses_reviewed"}
 LAYER_KEY_HINTS = {"note": "legend.note", "label": "legend.label",
                    "where": "filter: {column, in: [...]} (a file layer; source.where is for a library service layer)", "color": "symbol.color", "colour": "symbol.color", "size": "symbol.size", "width": "symbol.width",
@@ -181,6 +181,59 @@ def lint_spec(spec: dict) -> list[dict]:
             out.append(finding("MAP-SPEC-005", "BLOCK", str(ex), tpl))
     elif tpl and tpl != "auto" and tpl not in template_names():          # 1.5.0: auto is Letter or A-series by country
         out.append(finding("MAP-SPEC-005", "BLOCK", f"template '{tpl}' does not exist; choose one of {', '.join(template_names())}, or a custom sheet {{custom: {{w_mm, h_mm}}}}", tpl))
+    out += lint_brand_refs(spec)          # 1.14.0: MAP-SPEC-012
+    return out
+
+
+BRAND_RAMP_REF = __import__("re").compile(r"^@brand\.(categorical|sequential|neutral)\.(.+)$")
+RAMP_TOKENS = {"categorical": "categorical", "sequential": "sequential_ramp", "neutral": "neutral_ramp"}
+
+
+def _ramp_sizes(spec: dict) -> dict | None:
+    """The number of steps in the brand's categorical, sequential and neutral ramps for this MapSpec (its brand, style pack and theme),
+    or None when the brand cannot be read here (the build then says why)."""
+    try:
+        import brandlib as bl
+        import map_style
+        r = bl.resolve(gc.build_manifest(), spec.get("brand"), None)
+        pack = bl.load_pack(r["brand"])
+        mode = {"light": "print", "dark": "screen"}.get(str(spec.get("theme") or "light"), "print")
+        toks = map_style.mode_tokens(map_style.load(map_style.pack_of(spec)), pack["tokens"]["modes"], mode)
+    except Exception:  # noqa: BLE001 - a brand or style pack that does not load is reported by the build, not here
+        return None
+    return {fam: len(toks.get(key) or []) for fam, key in RAMP_TOKENS.items()}
+
+
+def _strings(x, path=""):
+    if isinstance(x, str):
+        yield path, x
+    elif isinstance(x, dict):
+        for k, v in x.items():
+            yield from _strings(v, f"{path}.{k}" if path else str(k))
+    elif isinstance(x, list):
+        for i, v in enumerate(x):
+            yield from _strings(v, f"{path}[{i}]")
+
+
+def lint_brand_refs(spec: dict) -> list[dict]:
+    """1.14.0 (Day 11 issue 9, Day 10 issue 1): an @brand.categorical.N, .sequential.N or .neutral.N past the end of the brand's ramp is a
+    BLOCK here (MAP-SPEC-012), before any data is read. 1.13 let it through the lint and the build stopped on it later."""
+    refs = [(where, v, m) for where, v in _strings(spec) if (m := BRAND_RAMP_REF.match(v.strip()))]
+    if not refs:
+        return []
+    sizes = _ramp_sizes(spec)
+    if sizes is None:
+        return []
+    out = []
+    for where, v, m in refs:
+        fam, idx = m.group(1), m.group(2)
+        n = sizes.get(fam, 0)
+        top = f"@brand.{fam}.0 to @brand.{fam}.{max(n - 1, 0)}"
+        if not idx.isdigit():
+            out.append(finding("MAP-SPEC-012", "BLOCK", f"{where}: '{v}' needs a step number ({top})", where))
+        elif int(idx) >= n:
+            out.append(finding("MAP-SPEC-012", "BLOCK", f"{where}: '{v}' is past the end of the brand's {fam} colours, which has {n} "
+                                                        f"(the first is .0, so use {top})", where))
     return out
 
 

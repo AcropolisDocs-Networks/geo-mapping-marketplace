@@ -26,7 +26,7 @@ webmap:
     brand: {co_brand: {name: Partner Co, url: "https://example.org"}}   # the logo comes from the brand pack; a co-brand's logo sits after a divider
     tools: [measure, save_image, print, copy_link, download]   # the ⋯ menu; each still gated by its own rule and by the delivery
   search_field: name                   # which attribute search looks in (place names are searched too)
-  time: {step: 1, play: true}          # numbers step by `step`; dates by day, week, month, quarter or year; mode: period | cumulative
+  time: {step: 1, play: true}          # numbers step by `step`; dates by auto (default), instant, second, minute, hour, day, week, month, quarter or year; times of day (08:15:30) work; mode: period | cumulative
   compare: {left: [sites_2020], right: [sites_2026], left_label: "2020", right_label: "Now"}   # a draggable divider; other layers on both sides
   basemap_file: embed                  # a PMTiles basemap inside the page (default; over 40 MB it goes beside the page) | beside
   initial_view: {mode: fit_layers, max_zoom: 12}

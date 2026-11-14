@@ -701,9 +701,19 @@ def main(argv=None) -> int:
     ap.add_argument("--last-hold", type=float, default=3.0, help="--animate: seconds the last period stays")
     ap.add_argument("--brand")
     ap.add_argument("--flythrough", metavar="PAGE.html", help="1.6.0: a video flown over a 3D web page (flythrough.py); run it through map-run")
+    ap.add_argument("--timelapse", metavar="PAGE.html", help="1.14.0: a video of a MapLibre page's time slider played from its own view (flythrough --slider)")
+    ap.add_argument("--events", metavar="MAP.yaml", help="1.14.0: an event-timeline video over the map: a point layer's events in time order (events_anim.py)")
     add_option_flags(ap)
     if argv is None:
         argv = sys.argv[1:]
+    if "--timelapse" in argv:                  # 1.14.0 (Day 11 issue 14): the flythrough capture holding the page's view, stepping its slider
+        import flythrough as fl
+        i = argv.index("--timelapse")
+        return fl.main([argv[i + 1], "--slider"] + argv[:i] + argv[i + 2:])
+    if "--events" in argv:                     # 1.14.0 (Day 13 issue 8): its own options (--layer, --time-field, --highlight, --counter, ...)
+        import events_anim as ev
+        i = argv.index("--events")
+        return ev.main([argv[i + 1]] + argv[:i] + argv[i + 2:])
     if "--flythrough" in argv:                 # 1.6.0 (R4-FLY): its own options (--path, --chapters, --orbit, --size, --quality, --resume, ...)
         import flythrough as fl
         i = argv.index("--flythrough")

@@ -12,6 +12,8 @@ Camera (pure functions of the frame number, unit-tested):
             smooth_m, 400 m), at the page's pitch and a zoom that keeps the next lookahead_m in view; constant speed, or by a time_field
   chapters  eased flights between the story chapters' views, with a hold at each
   orbit     a bearing sweep around the centre
+  slider    1.14.0 (Day 11 issue 14): a time-lapse of the page's time slider: the camera holds the page's own view and each period is shown for
+            an equal share of the run (the last held a little longer), its label in the HUD; a 2D or 3D MapLibre page
 Capture: Playwright Chromium on the page in capture mode (?gm-capture=1: no controls, the drawing buffer kept, one device pixel per CSS pixel,
 no fades). Per frame map.jumpTo(camera), wait for `idle`, screenshot. Software GL is Mesa llvmpipe (--use-angle=gl-egl), SwiftShader the
 fallback; `gl: gpu` asks for the hardware GPU (a PC). The moving marker is a DOM element placed with map.project, never a GeoJSON update.
@@ -41,6 +43,7 @@ DRAFT = {"size": (640, 360), "fps": 12.5}
 R = 6378137.0
 FOV = math.radians(36.8699)
 GIF_MAX_S = 10.0
+SLIDER_LAST_HOLD = 0.08          # a slider time-lapse holds its last period for this share of the frames
 WARMUP = 10
 # 1.6.2: "gpu" names the platform's own ANGLE back end. 1.6.0's flags (--enable-gpu-rasterization) left headless Chromium on SwiftShader on
 # Windows (measured on a workstation: SwiftShader with them, the AMD Radeon through Direct3D 11 with --use-angle=d3d11). "auto": the GPU on Windows and
@@ -311,7 +314,7 @@ def with_periods(cams: list[dict], mode: str, ctx: dict, layer: str | None) -> l
     the marker runs along it, and the posts appear as it reaches them); otherwise, on a cumulative time page, the last period (everything
     drawn). A page without a time slider is left as it is."""
     T = (ctx.get("cfg") or {}).get("time")
-    if not T or not T.get("labels"):
+    if not T or not T.get("labels") or mode == "slider":          # a slider time-lapse sets its own period per frame
         return cams
     last = len(T["labels"]) - 1
     per = line_periods(ctx["data"], layer) if (mode == "path" and layer) else None
@@ -343,6 +346,18 @@ def cameras(mode: str, n: int, ctx: dict, *, size, layer: str | None = None, pit
         cache: dict = {}
         cams = [path_camera(i, n, line, pitch=p, size=size, smooth_m=smooth_m, lookahead_m=lookahead_m, times=times, _cache=cache) for i in range(n)]
         return steady(cams, fps, steady_s=steady_s, max_turn=max_turn)
+    if mode == "slider":
+        T = cfg.get("time") or {}
+        P = len(T.get("labels") or [])
+        if P < 2:
+            raise FlyError("the page has no time slider with two or more periods to play (webmap.time)", gc.EXIT_USAGE)
+        b = cfg["bounds"]
+        c = [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]
+        z = zoom_for_bbox(b, size)
+        hold_last = max(1, round(n * SLIDER_LAST_HOLD))                   # the last period stays on a little longer
+        per = max(1, n - hold_last)
+        return [{"center": [round(c[0], 7), round(c[1], 7)], "zoom": round(z, 4), "pitch": float(v3.get("pitch") or 0.0) if pitch is None else float(pitch),
+                 "bearing": float(v3.get("bearing") or 0.0), "time": min(P - 1, int(i * P / per)) if i < per else P - 1} for i in range(n)]
     if mode == "chapters":
         views = views_of(cfg, size)
         if not views:
@@ -520,6 +535,8 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
         return {"ok": False, "findings": [{"id": "MAP-OUT-013", "severity": "WARN", "message": why}], "files": [], "skipped_reason": why}
     if mode == "path" and not layer:
         raise FlyError("--path needs the line layer to follow", gc.EXIT_USAGE)
+    if mode == "slider" and '"engine": "leaflet"' in page_html.read_text(encoding="utf-8", errors="replace")[:400000].replace('"engine":"leaflet"', '"engine": "leaflet"'):
+        raise FlyError("a time-lapse of the slider is captured from a MapLibre page: build it with webmap.engine: maplibre", gc.EXIT_USAGE)
     if quality == "draft":
         wh, fps = DRAFT["size"], DRAFT["fps"]
     else:
@@ -527,7 +544,7 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
             raise FlyError(f"size {size} is not one of {', '.join(SIZES)}", gc.EXIT_USAGE)
         wh = SIZES[size]
     n = int(frames or max(2, round(duration * fps)))
-    stem = f"{page_html.stem}_flythrough{'_draft' if quality == 'draft' else ''}"
+    stem = f"{page_html.stem}_{'timelapse' if mode == 'slider' else 'flythrough'}{'_draft' if quality == 'draft' else ''}"
     fdir = out / f"{stem}_frames"
     fdir.mkdir(parents=True, exist_ok=True)
     man_p = fdir / "manifest.json"
@@ -568,6 +585,10 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
             lines = []
             if mode == "path":
                 lines.append(f"{cams[i]['distance_m'] / 1000:.1f} km")
+            if mode == "slider":
+                labs = ((ctx["cfg"].get("time") or {}).get("labels") or [])
+                if labs:
+                    lines.append(str(labs[cams[i]["time"]]))
             if hud_on or credits:
                 im, placed = hud(im, title=title if hud_on else None, lines=lines if hud_on else [], credits=credits, tokens=tokens)
                 if credits and not placed["credits"] and not any(f["id"] == "MAP-OUT-020" for f in findings):
@@ -618,6 +639,7 @@ def main(argv=None) -> int:
     g.add_argument("--path")
     g.add_argument("--chapters", action="store_true")
     g.add_argument("--orbit", action="store_true")
+    g.add_argument("--slider", action="store_true", help="1.14.0: a time-lapse of the page's time slider from its own view")
     ap.add_argument("--duration", type=float, default=32.0)
     ap.add_argument("--fps", type=float, default=25.0)
     ap.add_argument("--size", default="1280x720")
@@ -630,7 +652,7 @@ def main(argv=None) -> int:
     ap.add_argument("--max-turn", type=float, default=MAX_TURN, help="the path camera turns at most this many degrees a second")
     ap.add_argument("--warmup", action="store_true", help="capture the first 10 frames and report the seconds a frame takes")
     a = ap.parse_args(argv)
-    mode = "path" if a.path else "chapters" if a.chapters else "orbit"
+    mode = "path" if a.path else "chapters" if a.chapters else "slider" if a.slider else "orbit"
     try:
         rep = run(a.page, a.out, mode=mode, layer=a.path, duration=a.duration, fps=a.fps, size=a.size, marker=a.marker, hud_on=a.hud == "on",
                   quality=a.quality, resume=a.resume, gl=a.gl, warmup_only=a.warmup, steady_s=a.steady, max_turn=a.max_turn)

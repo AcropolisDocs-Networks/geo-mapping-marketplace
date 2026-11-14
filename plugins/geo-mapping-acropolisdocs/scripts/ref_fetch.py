@@ -73,8 +73,11 @@ def cache_name(entry_id: str, variant: str | None = None) -> str:
 
 
 def cached_path(entry: dict, variant: str | None = None) -> Path | None:
+    """The cached file of an entry: where this call writes first, then the MapSpec's folder, the working folder and home (1.14.0)."""
     p = cache_dir() / cache_name(entry["id"], variant)
-    return p if p.is_file() else None
+    if p.is_file():
+        return p
+    return gc.find_cached("cache", "library", cache_name(entry["id"], variant))
 
 
 def source_url(entry: dict, variant: str | None) -> tuple[str, bool]:

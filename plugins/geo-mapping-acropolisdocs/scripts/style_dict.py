@@ -580,7 +580,8 @@ def style_from_layerplan(layerplan, tokens: dict | None = None, label: dict | No
         st["width"] = round(float(l.stroke_w_mm), 4)
         st["opacity"] = float(getattr(l, "stroke_opacity", 1.0) or 1.0)
         if sym.get("dash"):
-            st["dash"] = str(sym["dash"])
+            import map_plan as mp
+            st["dash"] = mp.dash_array(sym["dash"])          # 1.14.0: numbers, not the name
     else:
         st["stroke"] = l.stroke
         st["shape"] = str(sym.get("shape") or "circle")

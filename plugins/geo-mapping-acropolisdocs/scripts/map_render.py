@@ -287,6 +287,8 @@ def draw_layers(plan: mp.Plan, frame: lo.Frame, rep: dict) -> tuple[list[str], l
     t = plan.tokens
     parts: list[str] = []
     obstacles: list[Rect] = []
+    sparse: list[Rect] = []
+    by_layer: dict = {}
     import map_focus
     fcfg = map_focus.config(plan.spec, getattr(plan, "look", "classic"))
     farea = map_focus.study_area(plan, fcfg)
@@ -303,10 +305,19 @@ def draw_layers(plan: mp.Plan, frame: lo.Frame, rep: dict) -> tuple[list[str], l
                 parts.append(map_focus.lift_markup(fsheet, frame.rect, shadow))
             rep["focus"] = {"mask": True, "lift": bool(fcfg["lift"]), "area": fcfg["area"] or "auto"}
             focus_done = True
+        if getattr(l, "legend_only", False):            # 1.14.0: keyed in the legend, not drawn
+            continue
+        n0 = len(obstacles)
         if getattr(l, "highlight", None) is not None:
             parts.extend(highlight_groups(plan, l, frame, rep, obstacles))      # 0.22.0: the rest dimmed, then the highlighted features
         else:
             parts.append(layer_group(plan, l, frame, rep, obstacles))
+        by_layer[l.id] = obstacles[n0:]
+        if len(obstacles) - n0 <= DENSE_POINT_LAYER:
+            sparse += obstacles[n0:]
+    plan._sparse_point_obstacles = sparse          # 1.14.0: the symbols of layers that are not dense, for the city names (draw_names)
+    plan._point_obstacles = obstacles
+    plan._obstacles_by_layer = by_layer
     return parts, obstacles
 
 
@@ -417,7 +428,9 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
         if page:
             _record_page_simplify(l, page, rep)
         dash = l.symbol.get("dash")
-        da = f' stroke-dasharray="{sd.esc(dash)}"' if dash else ""
+        # 1.14.0 (Day 11 issue 8): a named dash (dashed, dotted, dash-dot) is turned into numbers, as on polygon edges; 1.13 wrote the
+        # name itself into stroke-dasharray, which renderers ignore, so "dashed" drew solid
+        da = f' stroke-dasharray="{sd.esc(mp.dash_array(dash))}"' if dash else ""
         if l.stroke_opacity < 1:
             da += f' stroke-opacity="{sd.num(l.stroke_opacity)}"'
         # opaque lines of one class draw the same as one path (a see-through line would darken where two cross, so it keeps its own)
@@ -468,9 +481,17 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
             g.append(f'<g fill="none" stroke="{l.stroke}" stroke-width="{sd.num(l.stroke_w_mm)}" stroke-linecap="round" stroke-linejoin="round"{da}>')
             emit_lines(np.where(keep)[0])
             g.append("</g>")
+        if l.role not in ("context", "contour"):
+            g.append(short_lines_markup(plan, l, geoms, keep, t, rep))     # 1.14.0 (Day 13 issue 4): lines too short to see at this scale
         import map_look
         if map_look.params(getattr(plan, "look", "classic"))["line_nodes"] and l.role not in ("context", "contour"):
-            g.append(line_nodes_markup(l, geoms, keep, t, rep))       # 0.22.0 network look: a dot at each line end
+            auto = getattr(plan, "look_asked", "") == "auto"
+            if auto and (getattr(l, "emphasis", "primary") or "primary") != "primary":
+                rep.setdefault("line_nodes", {})[l.id] = "not drawn: a supporting or background layer (style.look auto)"
+            else:
+                # 1.14.0 (Day 13 issue 1): under style.look auto the nodes are drawn up to LINE_NODE_AUTO_MAX line ends, and only on a
+                # primary layer; a cable map drew a ring at each of thousands of line ends
+                g.append(line_nodes_markup(l, geoms, keep, t, rep, auto=auto))       # 0.22.0 network look: a dot at each line end
         rep.setdefault("drawn", {})[l.id] = n
         if merge:
             rep.setdefault("compact", {})[l.id] = "one path per class"
@@ -658,13 +679,61 @@ def highlight_groups(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: li
     return out
 
 
+DENSE_POINT_LAYER = 200          # a point layer with more symbols than this on the map is dense: it does not hide city names (1.14.0)
+SHORT_LINE_MM = 0.8               # a line feature shorter than this on the sheet is hard to see; MAP-CART-039 when most of a layer is
+SHORT_LINE_SHARE = 0.5
+
+
+def short_lines_markup(plan, l, geoms, keep, t: dict, rep: dict) -> str:
+    """1.14.0 (Day 13 issue 4): `symbol.min_length_mm` marks each line feature shorter than that on the sheet with a dot of its own colour
+    (the dot is that long across), drawn over the lines, so a 100 km segment on a world map is still seen. Without it, a layer most of whose
+    features are under SHORT_LINE_MM gets MAP-CART-039 (WARN) with the two remedies: a minimum length, or the layer listed after the point
+    layers so nothing covers it."""
+    import shapely
+    idx = [i for i in np.where(keep)[0] if geoms[i] is not None and not geoms[i].is_empty]
+    if not idx:
+        return ""
+    lens = shapely.length(np.asarray([geoms[i] for i in idx], dtype=object))
+    min_mm = (l.symbol or {}).get("min_length_mm")
+    if not min_mm:
+        short = float(np.mean(lens < SHORT_LINE_MM))
+        if short >= SHORT_LINE_SHARE and len(idx) >= 3 and not any(f.get("id") == "MAP-CART-039" and f.get("layer") == l.id for f in plan.findings):
+            rep.setdefault("short_lines", {})[l.id] = round(short, 3)
+            plan.findings.append({"id": "MAP-CART-039", "severity": "WARN", "layer": l.id,
+                                  "message": (f"layer '{l.id}': {short:.0%} of its lines are shorter than {SHORT_LINE_MM} mm at this scale and may not be seen, "
+                                              "least of all under point symbols; set symbol.min_length_mm (a dot that long marks each), list the layer "
+                                              "after the point layers, or show whole features"), "detail": {"share": round(short, 3)}})
+        return ""
+    min_mm = float(min_mm)
+    classed = l.cls is not None and len(l.cls.assigned) == len(l.gdf)
+    assigned = np.asarray(l.cls.assigned) if classed else None
+    groups: dict = {}
+    for i, ln in zip(idx, lens):
+        if ln >= min_mm:
+            continue
+        ci = int(assigned[i]) if classed else None
+        col = (t["no_data"] if ci == -1 else l.colors[ci]) if classed else l.stroke
+        c = shapely.centroid(geoms[i])
+        groups.setdefault(col, []).append((float(c.x), float(c.y)))
+    if not groups:
+        return ""
+    d = max(min_mm, 2 * float(l.stroke_w_mm))
+    out = [f'<path fill="{col}" stroke="{(getattr(l, "casing", None) or {}).get("color") or t["land"]}" stroke-width="0.2" d="'
+           + "".join(sd.symbol_paths("circle", [p[0] for p in pts], [p[1] for p in pts], d)) + '"/>' for col, pts in groups.items()]
+    rep.setdefault("short_lines", {})[l.id] = sum(len(v) for v in groups.values())
+    return f'<g data-short-lines="1">{"".join(out)}</g>'
+
+
 LINE_NODE_MAX = 3000              # a network look draws its end nodes up to this many; more would be a point layer of their own
 LINE_NODE_MIN_MM = 1.2
 LINE_NODE_MAX_MM = 3.2
 LINE_NODE_SCALE = 1.6             # a node is this many times the width of its line, between the two sizes above
 
 
-def line_nodes_markup(l, geoms, keep, t: dict, rep: dict) -> str:
+LINE_NODE_AUTO_MAX = 400         # under style.look auto, nodes only up to this many line ends (look: network keeps LINE_NODE_MAX)
+
+
+def line_nodes_markup(l, geoms, keep, t: dict, rep: dict, auto: bool = False) -> str:
     """The network look's nodes (0.22.0): a dot at each end of each line part, in the line's (class) colour with a casing-coloured edge. Where
     ends meet, one dot: the one of the widest line there. LINE_NODE_SCALE times the line's width, kept between LINE_NODE_MIN_MM and
     LINE_NODE_MAX_MM. Not drawn past LINE_NODE_MAX ends (noted in the report)."""
@@ -691,6 +760,10 @@ def line_nodes_markup(l, geoms, keep, t: dict, rep: dict) -> str:
                     at[k] = (w, col)
         if len(at) > LINE_NODE_MAX:
             rep.setdefault("line_nodes", {})[l.id] = f"not drawn: more than {LINE_NODE_MAX:,} line ends"
+            return ""
+    if auto:
+        if len(at) > LINE_NODE_AUTO_MAX:
+            rep.setdefault("line_nodes", {})[l.id] = f"not drawn: {len(at):,} line ends, more than style.look auto draws ({LINE_NODE_AUTO_MAX})"
             return ""
     groups: dict = {}
     for (x, y), (w, col) in at.items():
@@ -1529,10 +1602,10 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
                 f"the map was reduced to {pick['frame'].scale / best['frame'].scale:.0%} of full size to keep the legend and other elements off the data "
                 f"(they would have covered {best['cover']:.0%} of it)")
         best = pick
-    if (inset is not None and inset_on == "auto" and "position" not in inset_cfg and "inset" in best["placed"] and best["occ"] is not None
+    if (inset is not None and inset_on == "auto" and inset_cfg.get("position") == "auto" and "inset" in best["placed"] and best["occ"] is not None
             and not best["err"] and lo.covered_fraction(best["frame"], best["occ"], [best["placed"]["inset"]["rect"]]) > 0):
-        # 0.24.0 (sample-map showcase): an automatic locator never covers data. It moves to another free corner, or it is left off and the
-        # notes say why (the 1.5 percent the other elements may cover does not apply to it: the locator is never needed more than the data)
+        # 1.14.0: `elements.inset_map.position: auto` asks for 0.24.0's rule: a locator that would sit on data moves to a free corner, or is
+        # left off; it never covers data
         moved = None
         for corner in ("lower-left", "upper-left", "upper-right"):
             inset_try["corner"] = corner
@@ -1543,12 +1616,26 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
                 break
         if moved is not None:
             best = moved
-            rep.setdefault("notes", []).append(f"locator: moved to the {inset_try['corner'].replace('-', ' ')} corner so it covers no data")
+            rep.setdefault("notes", []).append(f"locator: moved to the {inset_try['corner'].replace('-', ' ')} corner so it covers no data (position: auto)")
         else:
             inset_try.update(corner="lower-right", drop=True)
             best = evaluate(best["reserve"], best.get("pan", (0.0, 0.0)))
             inset = None
-            rep.setdefault("notes", []).append("locator: left off, because in every corner it would have covered part of the data")
+            rep.setdefault("notes", []).append("locator: left off, because in every corner it would have covered part of the data (position: auto)")
+    elif (inset is not None and inset_on == "auto" and "position" not in inset_cfg and "inset" in best["placed"] and best["occ"] is not None
+            and not best["err"]):
+        # 1.14.0 (Day 13 issue 7): the automatic locator keeps its corner, lower right, as every element keeps its default corner unless the
+        # MapSpec moves it. It stays when it covers no more of the data than the elements may (fit_cover_pct, after the map has been moved);
+        # past that it is left off and the notes say so. 1.13 moved it to another free corner (0.24.0), which put it upper right on Day 13.
+        inset_cover = lo.covered_fraction(best["frame"], best["occ"], [best["placed"]["inset"]["rect"]])
+        if inset_cover > fit_limit:
+            inset_try.update(corner="lower-right", drop=True)
+            best = evaluate(best["reserve"], best.get("pan", (0.0, 0.0)))
+            inset = None
+            rep.setdefault("notes", []).append(f"locator: left off, because in its corner (lower right) it would have covered {inset_cover:.0%} of the data, "
+                                               "more than the elements may; give elements.inset_map.position to place it elsewhere")
+        elif inset_cover > 0:
+            rep.setdefault("notes", []).append(f"locator: kept in its corner (lower right), over {inset_cover:.1%} of the data")
     frame, occ, info, _items, placed = best["frame"], best["occ"], best["info"], best["items"], best["placed"]
     if best["err"]:
         findings.append(f("MAP-SPEC-005", "BLOCK", best["err"]))
@@ -1845,6 +1932,31 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
 
 
 # ---------------------------------------------------------------------------------------------------------------- labels
+SAME_NAME_MM = 40.0        # a place name is left out when a data label within this distance says the same name (1.14.0)
+
+
+def name_key(text) -> str:
+    """A name for comparing a data label with a place name: case, accents, punctuation and spacing set aside ("Bremerton", "BREMERTON")."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode().casefold()
+    return re.sub(r"[^a-z0-9]+", " ", t).strip()
+
+
+PLACE_SUFFIXES = {"terminal", "ferry", "station", "stop", "dock", "pier", "port", "harbor", "harbour", "landing", "transit", "center", "centre",
+                  "downtown", "city", "town", "wsf", "ferries", "and", "the", "of"}
+
+
+def says_place(label_key: str, place_key: str) -> bool:
+    """Whether a data label already names a place: the same name, or the place's name followed only by words for a stop on a network
+    ("Bremerton terminal", "Bremerton (WSF)"). A venue in the place ("Los Angeles Memorial Coliseum") does not name the place."""
+    if not place_key or not label_key.startswith(place_key):
+        return False
+    rest = label_key[len(place_key):]
+    if not rest:
+        return True
+    return rest.startswith(" ") and all(w in PLACE_SUFFIXES for w in rest.split())
+
+
 @_role("label")
 def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: dict, tpl: dict) -> tuple[str, dict]:
     import shapely
@@ -1854,6 +1966,10 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
     pt = fonts["label"]
     floor = lg.MIN_LABEL_PT["print" if tpl["kind"] == "print" else "slide"]
     taken = list(obstacles)
+    said: list = []
+    sparse_ids = {id(r) for r in getattr(plan, "_sparse_point_obstacles", obstacles)}
+    point_ids = {id(r) for r in getattr(plan, "_point_obstacles", [])}
+    dense_ids = point_ids - sparse_ids
     for lb in plan.spec.get("labels") or []:
         l = next((x for x in plan.layers if x.id == lb["layer"]), None)
         if l is None:
@@ -1935,7 +2051,11 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
             stats["layers"][l.id] = {"placed": st_l["placed"], "dropped_collision": st_l["collision"], "dropped_size": st_l["too_short"] + st_l["too_bent"],
                                      "dropped_outside": 0, "along_line": st_l}
             continue
-        res = le.place(cands, lo.rect_of(tpl["map"]), taken, size, 400, floor)
+        # 1.14.0 (Day 13 issue 7): a label may sit over the symbols of another, dense layer (thousands of cell sites left 2 of 6 fire
+        # labels on the map); it keeps off its own layer's symbols, sparse layers' symbols and every other label and element
+        own = {id(r) for r in (getattr(plan, "_obstacles_by_layer", {}) or {}).get(l.id, [])}
+        skip = dense_ids - own
+        res = le.place(cands, lo.rect_of(tpl["map"]), [r for r in taken if id(r) not in skip] if skip else taken, size, 400, floor)
         stats["layers"][l.id] = res.as_dict()
         if lb.get("leaders") and l.kind == "point" and res.dropped_collision:      # 0.15.0: a leader line for a label with no room beside its symbol
             got = [(p.text, p.rect) for p in res.placed]
@@ -1956,6 +2076,8 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
             out.append(sd.text(p.x, p.y, p.text, size, fg, anchor=p.anchor, halo=halo,
                                halo_w=max(0.3, size * PT * 0.22)))
             taken.append(p.rect.grown(le.PAD_MM))
+            said.append((name_key(p.text), (p.rect.x0 + p.rect.x1) / 2, (p.rect.y0 + p.rect.y1) / 2))
+    plan._data_label_texts = said                         # 1.14.0: the place names leave out a name a data label already says
     stats["total_candidates"] = sum(v["placed"] + v["dropped_collision"] + v["dropped_size"] + v["dropped_outside"] for v in stats["layers"].values())
     stats["placed"] = sum(v["placed"] for v in stats["layers"].values())
     return '<g class="gm-labels">' + "".join(out) + "</g>", stats, taken
@@ -2137,14 +2259,25 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
         mx, my, vis = sheet_points(sel, frame)
         groups: dict[str, list[le.Candidate]] = {k: [] for k in TIER_SIZE}
         symbols_index = le.RectIndex(point_obstacles)               # M16: each place is tested against the symbols near it, not all of them
+        # 1.14.0 (Day 13 issue 7): a city or capital is not left unnamed for sitting among a dense layer's symbols (hundreds of cell sites
+        # around Seattle, Portland and Spokane hid all three); only a symbol of a sparse layer, which may be the place itself, still does
+        sparse_index = le.RectIndex(getattr(plan, "_sparse_point_obstacles", point_obstacles))
+        sparse_ids = {id(r) for r in getattr(plan, "_sparse_point_obstacles", point_obstacles)}
+        dense_ids = {id(r) for r in point_obstacles if id(r) not in sparse_ids}
+        said = getattr(plan, "_data_label_texts", None) or []
         for i in np.where(vis)[0]:
             x, y = float(mx[i]), float(my[i])
             near = Rect(x - POINT_CLEARANCE_MM, y - POINT_CLEARANCE_MM, x + POINT_CLEARANCE_MM, y + POINT_CLEARANCE_MM)
-            if symbols_index.hits(near):
+            big = str(sel["_tier"].iloc[i]) in ("capital", "city")
+            if (sparse_index if big else symbols_index).hits(near):
                 pstats["under_symbol"] += 1
                 continue
             tr = str(sel["_tier"].iloc[i])
             text = str(sel_names[i])
+            pk = name_key(text)
+            if any(says_place(k, pk) and abs(lx - x) < SAME_NAME_MM and abs(ly - y) < SAME_NAME_MM for k, lx, ly in said):
+                pstats["same_as_label"] = pstats.get("same_as_label", 0) + 1      # 1.14.0 (Day 11 issue 12): Bremerton was named twice
+                continue
             if tr == "capital":
                 text = caps(text)
             groups[tr].append(le.Candidate(text, "point", x, y, float(sel["_prio"].iloc[i]), radius=(trm.GLYPH_MM.get(tr, 2.0) / 2 if glyphs else CITY_DOT_MM / 2 + (0.25 if tr == "capital" else 0.0)),
@@ -2171,7 +2304,12 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
         for tr, cands, size in passes:
             if not cands:
                 continue
-            res = le.place(cands, map_rect, taken, size, 400, floor, avoid=on_line)
+            if tr in ("capital", "city") and dense_ids:
+                # 1.14.0: a city's name may sit over a dense layer's symbols (with its halo); it still keeps off every other label and symbol
+                room = [r for r in taken if id(r) not in dense_ids]
+                res = le.place(cands, map_rect, room, size, 400, floor, avoid=on_line)
+            else:
+                res = le.place(cands, map_rect, taken, size, 400, floor, avoid=on_line)
             if res.dropped_lines:
                 pstats.setdefault("dropped_for_lines", []).extend(res.dropped_lines)
             pstats["candidates"] += len(cands)
