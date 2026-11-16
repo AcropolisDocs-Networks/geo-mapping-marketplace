@@ -1,0 +1,2 @@
+# Python writes these when the plugin runs in place from this folder (a marketplace added by local path)
+__pycache__/

@@ -48,6 +48,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import gmap_common as gc  # noqa: E402
 import redact  # noqa: E402
+import shell_calls  # noqa: E402
 from entry_skills import ENTRY_SKILLS  # noqa: E402
 
 PLUGIN_ROOT = HERE.parent
@@ -247,26 +248,21 @@ def calls_of(records: list[dict]) -> tuple[list[dict], list[dt.datetime], int]:
 
 # ---------------------------------------------------------------------------------------------------------------- classifying
 def _command(call: dict) -> str:
-    inp = call["input"]
-    return str(inp.get("command") or "") if call["tool"] in ("Bash",) or call["tool"].endswith("device_bash") else ""
+    """The command line of a Bash, PowerShell (1.17.3: Claude Code's primary shell on Windows) or device-shell call, with Windows path
+    separators read as forward slashes; '' for any other tool."""
+    return shell_calls.command_of(call["tool"], call["input"])
 
 
-RUN_SCRIPT = re.compile(r"""(?:^|[\s;&|(])(?:python3?(?:\.\d+)?|py(?:\s+-3)?)(?:\s+-[A-Za-z]+)*\s+["']?([^\s"';&|]*?)(?:^|/)(scripts|lints)/([a-z0-9_]+)\.py""")
-INLINE_PY = re.compile(r"python3?(?:\.\d+)?(?:\s+-[A-Za-z]+)*\s+(?:-\s*<<|-c\b)")
 IMPORT = re.compile(r"^\s*(?:import|from)\s+([a-z0-9_]+)", re.M)
 
 
 def map_scripts(cmd: str, inv: dict) -> tuple[list[str], str | None]:
     """This plugin's scripts or lints the command RUNS (a Python interpreter on the file), or imports from an inline Python program that
     puts a scripts/ or lints/ folder on its path. Reading a file (grep, sed, cat) is not using the plugin. Returns (names, how)."""
-    out = []
-    for m in RUN_SCRIPT.finditer(cmd):
-        name, before = m.group(3), (m.group(1) or "") + "/" + m.group(2)
-        if name in inv["scripts"] and not re.search(r"skills/[^/\s\"']+/" + re.escape(m.group(2)), before) and name not in out:
-            out.append(name)
+    out = shell_calls.runs(cmd, inv["scripts"])
     if out:
         return out, "path"
-    if INLINE_PY.search(cmd) and re.search(r"""(?:^|[/\s"'])(?:scripts|lints)["'/]""", cmd) and not re.search(r"skills/[^/\s\"']+/scripts", cmd):
+    if shell_calls.INLINE_PY.search(cmd) and re.search(r"""(?:^|[/\s"'])(?:scripts|lints)["'/]""", cmd) and not re.search(r"skills/[^/\s\"']+/scripts", cmd):
         mods = [m for m in IMPORT.findall(cmd) if m in inv["scripts"] and m not in ("gmap_common",)]
         if mods:
             return list(dict.fromkeys(mods)), "import"

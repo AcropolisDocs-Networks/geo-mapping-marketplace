@@ -12,14 +12,14 @@ named by the user, then the person's stored default, then the plugin's default `
 other is a brand pack the person added with `/geo-mapping-acropolisdocs:brand` (kept outside the plugin, in `.geo-mapping/brands/`), resolved the same way.
 
 ```bash
-# Resolve this plugin's root in THIS shell call. It looks only for this plugin's own marker file.
-GMAP_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
     [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
   done
 fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)   # or --token
 python3 "$GMAP_ROOT/scripts/map_brand.py" resolve --spec map.yaml [--request-brand SLUG]
 python3 "$GMAP_ROOT/scripts/map_brand.py" tokens  --spec map.yaml --mode print|screen      # print = theme light (default), screen = theme dark

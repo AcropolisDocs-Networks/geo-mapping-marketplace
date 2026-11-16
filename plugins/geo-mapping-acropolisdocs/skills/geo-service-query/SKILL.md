@@ -11,14 +11,14 @@ Gets a bounded, complete set of features from a service and saves it as a file t
 It only reads. It never receives a password, key or token, and it never runs a command the person pasted.
 
 ```bash
-# Resolve this plugin's root in THIS shell call. It looks only for this plugin's own marker file.
-GMAP_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
     [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
   done
 fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/service_query.py" plan  --profile P --layer L [--cql "state='AZ'"] [--bbox=-115,31,-108,37] [--properties a,b]
 python3 "$GMAP_ROOT/scripts/service_query.py" fetch --profile P --layer L [same options] [--max-features N]
 ```
@@ -28,14 +28,14 @@ python3 "$GMAP_ROOT/scripts/service_query.py" fetch --profile P --layer L [same 
 These are this plugin's reference pages, not skills: read one with the line below when its row applies. The Skill tool cannot load them.
 
 ```bash
-# Resolve this plugin's root in THIS shell call. It looks only for this plugin's own marker file.
-GMAP_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
     [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
   done
 fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/modules.py" read geo-service-explore        # any module in the table
 ```
 

@@ -55,8 +55,6 @@ fc /b "%HERE%requirements.txt" "%STAMP%" >nul 2>nul
 if errorlevel 1 goto fallback
 "%VENVPY%" -c "import mcp, httpx, lxml, pyogrio, yaml, jsonschema, shapely, geopandas, pandas, pyarrow, openpyxl" >nul 2>nul
 if errorlevel 1 goto fallback
-rem 1.17.0: the hooks start with python3, the Store stub on Windows: point them at this Python (hooks\pin_python.py, silent)
-"%VENVPY%" "%HERE%..\hooks\pin_python.py" >nul 2>nul
 "%VENVPY%" "%HERE%ogc_server.py" %*
 exit /b %errorlevel%
 
@@ -71,7 +69,6 @@ if not defined PYEXE (
 )
 "%PYEXE%" %PYARG% -c "import mcp, httpx, lxml, pyogrio, yaml, jsonschema, shapely, geopandas, pandas, pyarrow, openpyxl" >nul 2>nul
 if errorlevel 1 goto needsetup
-"%PYEXE%" %PYARG% "%HERE%..\hooks\pin_python.py" >nul 2>nul
 "%PYEXE%" %PYARG% "%HERE%ogc_server.py" %*
 exit /b %errorlevel%
 

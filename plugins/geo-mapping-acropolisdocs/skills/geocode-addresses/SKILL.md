@@ -14,14 +14,14 @@ the purpose, and a name column beside a street column is refused until the purpo
 addresses, say so and stop: there is no override.
 
 ```bash
-# Resolve this plugin's root in THIS shell call. It looks only for this plugin's own marker file.
-GMAP_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
     [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
   done
 fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/geocode.py" --in venues.csv --address street,city,state,zip --provider census --purpose venues --out venues.gpkg
 python3 "$GMAP_ROOT/scripts/geocode.py" --in stores.csv --address address --provider nominatim --purpose businesses --country ca --out stores.gpkg
 python3 "$GMAP_ROOT/scripts/geocode.py" reverse --lon -112.2646 --lat 33.5291                  # Census: place, county, state at a point
@@ -32,14 +32,14 @@ python3 "$GMAP_ROOT/scripts/geocode.py" reverse --lon -112.2646 --lat 33.5291   
 These are this plugin's reference pages, not skills: read one with the line below when its row applies. The Skill tool cannot load them.
 
 ```bash
-# Resolve this plugin's root in THIS shell call. It looks only for this plugin's own marker file.
-GMAP_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
     [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
   done
 fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/modules.py" read provenance-ledger        # any module in the table
 ```
 

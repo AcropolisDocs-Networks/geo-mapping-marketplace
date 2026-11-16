@@ -11,14 +11,14 @@ description: >
 A print map normally draws the bundled basemap (country, state and lake outlines). When the person wants streets or terrain behind their data, this skill prepares **one picture** from tiles, once, and the build reads that picture. The build itself never fetches a tile.
 
 ```bash
-# Resolve this plugin's root in THIS shell call. It looks only for this plugin's own marker file.
-GMAP_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
     [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
   done
 fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/basemap_render.py" plan   --spec map.yaml [--provider carto-positron] [--style light_all] [--tier T1|T2] [--max-tiles N] [--zoom Z] [--detail legible|sharp]
 python3 "$GMAP_ROOT/scripts/basemap_render.py" render --spec map.yaml [--source mbtiles:FILE | dir:FOLDER] [--scheme xyz|tms]
 python3 "$GMAP_ROOT/scripts/basemap_render.py" show   --spec map.yaml

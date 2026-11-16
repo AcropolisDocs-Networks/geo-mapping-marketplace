@@ -24,14 +24,14 @@ the machine can make maps at all: that is `/geo-mapping-acropolisdocs:map-doctor
    scratchpad path, else the only transcript; a newest-file guess is reported as `NEWEST-FALLBACK`).
 
    ```bash
-   # Resolve this plugin's root in THIS shell call. It looks only for this plugin's own marker file.
-GMAP_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+   GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
     [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
   done
 fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
    python3 "$GMAP_ROOT/scripts/map_trace.py"
    ```
 
@@ -59,7 +59,7 @@ fi
 
 | Signal | How |
 |---|---|
-| Map call | The Skill tool loading one of this plugin's skills (`declared`), Python running one of its scripts or lints (`path`), an inline Python program importing them from a `scripts/` folder (`import`, weaker), or a tool of its OGC server (`server`). A `modules.py read` call (1.0.1) is a script call like any other and falls in the window of the skill that asked for the module. Reading a file with `grep`, `sed` or `cat` is not using the plugin. A `skills/<slug>/scripts/` path is another plugin's and is never counted |
+| Map call | The Skill tool loading one of this plugin's skills (`declared`), Python running one of its scripts or lints (`path`), in the Bash or the PowerShell tool (1.17.3), an inline Python program importing them from a `scripts/` folder (`import`, weaker), or a tool of its OGC server (`server`). A `modules.py read` call (1.0.1) is a script call like any other and falls in the window of the skill that asked for the module. Reading a file with `grep`, `sed` or `cat` is not using the plugin. A `skills/<slug>/scripts/` path is another plugin's and is never counted |
 | Lane | The skill that runs the script (from this plugin's own skill files), or the skill a load opened; `(name)` for a script no skill runs directly |
 | Status | `ok`, `failed`, `blocked` (the harness or a permission refused it; excluded from the error rate), `unfinished` (no result: interrupted), `self` (this report's own call) |
 | Error class | `crash` (a traceback; the crash site is the deepest frame inside this plugin), `lint-block` (exit 3 or blocking MAP-* findings), `usage` (2), `refused` (4), `service` (5), `dependency` (a package or native library missing), `network`, `timeout`, `environment` (permissions, read-only folders), `failed` (the output does not say) |

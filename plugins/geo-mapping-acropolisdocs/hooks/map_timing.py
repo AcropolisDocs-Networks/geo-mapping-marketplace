@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """map_timing: measured start, end and failure of the map plugin's own calls, for map-trace (1.17.2).
 
-A Claude Code hook on PreToolUse, PostToolUse and PostToolUseFailure, with the matcher `Bash|mcp__.*device_bash|mcp__.*geo-mapping.*`
-(the shell, the device shell on a linked computer, and this plugin's map server). A matcher selects tools, not files, so the hook scopes
+A Claude Code hook on PreToolUse, PostToolUse and PostToolUseFailure, with the matcher `Bash|PowerShell|mcp__.*device_bash|mcp__.*geo-mapping.*`
+(the shells, the device shell on a linked computer, and this plugin's map server). 1.17.3: PowerShell too, the primary shell of Claude Code
+on Windows; both shells' command lines are read by scripts/shell_calls.py, which map-trace shares. A matcher selects tools, not files, so the hook scopes
 itself: it records a call only when the command runs one of this plugin's scripts or lints with Python, or the tool is this plugin's map
 server. Every other call returns at once, unrecorded.
 
@@ -24,7 +25,6 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 EVENTS = {"PreToolUse": "start", "PostToolUse": "end", "PostToolUseFailure": "fail"}
-RUN = re.compile(r"""(?:^|[\s;&|(])(?:"[^"]*python[^"]*"|python3?(?:\.\d+)?|py(?:\s+-3)?)(?:\s+-[A-Za-z]+)*\s+["']?([^\s"';&|]*?)(?:^|/)(scripts|lints)/([a-z0-9_]+)\.py""")
 EXIT = re.compile(r"^\s*(?:Error:\s*)?Exit code (\d+)", re.M)
 
 
@@ -43,17 +43,15 @@ def subject(event: dict) -> tuple[str, str] | None:
     tool = str(event.get("tool_name") or "")
     if tool.startswith("mcp__") and "geo-mapping" in tool:
         return "server", tool.rsplit("__", 1)[-1]
-    if tool != "Bash" and not tool.endswith("device_bash"):
+    if tool not in ("Bash", "PowerShell") and not tool.endswith("device_bash"):
         return None
-    cmd = str((event.get("tool_input") or {}).get("command") or "")
-    if "scripts/" not in cmd and "lints/" not in cmd:
-        return None
-    names = own_scripts()
-    for m in RUN.finditer(cmd):
-        before = (m.group(1) or "") + "/" + m.group(2)
-        if m.group(3) in names and not re.search(r"skills/[^/\s\"']+/" + re.escape(m.group(2)), before):
-            return "script", m.group(3)
-    return None
+    raw = str((event.get("tool_input") or {}).get("command") or "")
+    if not any(k in raw for k in ("scripts", "lints", "Scripts")):
+        return None                                     # the common case returns before anything is imported
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import shell_calls
+    found = shell_calls.runs(shell_calls.command_of(tool, event.get("tool_input")), own_scripts())
+    return ("script", found[0]) if found else None
 
 
 def record(event: dict) -> dict | None:

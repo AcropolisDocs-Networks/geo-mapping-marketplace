@@ -1,23 +1,23 @@
 {
-  "description": "1.17.2: three hooks. The pre-export lint and the credentials reminder (on since 1.17.0, spike P7) and the timing hook that measures this plugin's own calls for map-trace. Every command starts its script through a guarded python3 -c program: a missing script (a plugin updated while a chat is open, or an unexpanded ${CLAUDE_PLUGIN_ROOT}) exits 0, never 2, so it can never refuse a tool call; only the pre-export check's own verdict exits 2. The program drops the working folder from the import path first. On Windows the server launcher points python3 at the plugin's own Python on each start (hooks/pin_python.py). Hooks act only on this plugin's own calls (MAP-ED-005). hooks/README.md says how to turn one off.",
+  "description": "1.17.3: three hooks. The pre-export lint and the credentials reminder (on since 1.17.0, spike P7) and the timing hook that measures this plugin's own calls for map-trace. The shell matchers name PowerShell as well as Bash: on Windows, Claude Code's PowerShell tool is the primary shell. Each command picks the plugin's own Python on Windows (the private environment setup.cmd builds, else python3) and starts its script through a guarded -c program: a missing script (a plugin updated while a chat is open, or an unexpanded ${CLAUDE_PLUGIN_ROOT}) exits 0, never 2, so it can never refuse a tool call; only the pre-export check's own verdict exits 2. The program drops the working folder from the import path first. Nothing rewrites this file any more. Hooks act only on this plugin's own calls (MAP-ED-005). hooks/README.md says how to turn one off.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_export_lint.py\"",
+            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_export_lint.py\"",
             "timeout": 60
           }
         ]
       },
       {
-        "matcher": "Bash|mcp__.*device_bash|mcp__.*geo-mapping.*",
+        "matcher": "Bash|PowerShell|mcp__.*device_bash|mcp__.*geo-mapping.*",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
             "timeout": 10
           }
         ]
@@ -25,11 +25,11 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|mcp__.*device_bash|mcp__.*geo-mapping.*",
+        "matcher": "Bash|PowerShell|mcp__.*device_bash|mcp__.*geo-mapping.*",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
             "timeout": 10
           }
         ]
@@ -37,11 +37,11 @@
     ],
     "PostToolUseFailure": [
       {
-        "matcher": "Bash|mcp__.*device_bash|mcp__.*geo-mapping.*",
+        "matcher": "Bash|PowerShell|mcp__.*device_bash|mcp__.*geo-mapping.*",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
             "timeout": 10
           }
         ]
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"",
+            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"",
             "timeout": 10
           }
         ]

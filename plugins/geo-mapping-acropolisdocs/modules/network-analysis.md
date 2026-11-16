@@ -12,14 +12,14 @@ Started by `/geo-mapping-acropolisdocs:map-run network-analysis`. Never begin it
 one-off spatial question, `coverage-map` draws the footprints, and this pipeline measures the layout and draws what it measured.
 
 ```bash
-# Resolve this plugin's root in THIS shell call. It looks only for this plugin's own marker file.
-GMAP_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
   for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
     [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
   done
 fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found (CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT:-unset}); nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/pipelines.py" plan network-analysis --sites SITES.csv --option analysis=spacing,best-server --option out=./maps [--option band=n41] [--option clip=market.gpkg] [--option formats=pdf,png,svg]
 python3 "$GMAP_ROOT/scripts/pipelines.py" run  network-analysis --sites SITES.csv --option analysis=spacing,best-server --option out=./maps [same options] --confirm TOKEN
 ```

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pre-export lint hook (spec 5 and 12, gap analysis P1-13). On since 1.17.0 (spike P7): see hooks/README.md.
 
-A Claude Code `PreToolUse` hook on the Bash tool. It reads the hook's JSON from stdin and acts only when the command runs this plugin's
+A Claude Code `PreToolUse` hook on the Bash and PowerShell tools (PowerShell since 1.17.3: Claude Code's primary shell on Windows). It reads the hook's JSON from stdin and acts only when the command runs this plugin's
 own `build_map.py`, `webmap.py` or `map_restyle.py --build` with a `--spec` (through `$GMAP_ROOT`, the skills' resolver, or this plugin's
 root path). For any other command it exits 0 at once and prints nothing, so it scopes itself by the command line, since a hook matcher
 selects tools, not files. When it acts, it runs the spec lint (MAP-SPEC-*, and the `ops:` checks inside it) on that MapSpec; a BLOCK
@@ -24,20 +24,32 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 EXPORTERS = ("build_map.py", "webmap.py", "map_restyle.py")
 UNJUDGED = "could not be checked against its schema"      # MAP-SPEC-001 when the schema check itself failed (no or old jsonschema): not a verdict
-CD = re.compile(r"(?:^|[;&|(]\s*)cd\s+(\"[^\"]*\"|'[^']*'|[^\s;&|)]+)")
+# 1.17.3: PowerShell's Set-Location and Push-Location (and their aliases) as well as cd, with ; or a new line between commands.
+CD = re.compile(r"""(?:^|[;&|(\n]\s*)(?:cd|chdir|pushd|sl|Set-Location|Push-Location)\s+(?:-(?:Literal)?Path\s+)?("[^"]*"|'[^']*'|[^\s;&|)]+)""",
+                re.I)
+EXPORTER_RX = "|".join(re.escape(e) for e in EXPORTERS)
+# A literal folder in front of scripts/<exporter>: the PowerShell tool spells the plugin's folder out, and a plugin installed from a
+# marketplace added by local path runs in place, from the folder it was added from. It counts only when that folder is a copy of this
+# plugin (it holds scripts/gmap_common.py), so another plugin's build script is never linted.
+LITERAL = re.compile(r"""((?:[A-Za-z]:)?/[^\s"';&|]*?|~[^\s"';&|]*?)/scripts/(%s)""" % EXPORTER_RX)
+
+
+def _norm(path: str) -> str:
+    return path.replace("\\", "/").rstrip("/")
 
 
 def ours(command: str) -> str | None:
     """The exporter this command runs, when it is this plugin's own; None otherwise."""
     m = _match(command)
-    return m.group(1) if m else None
+    return m[1] if m else None
 
 
 def run_dir(command: str, cwd: Path) -> Path | None:
     """The folder the exporter runs in: the session's cwd, moved by each `cd DIR` before the exporter. None when a cd cannot be followed."""
+    command = _cmd(command)
     m = _match(command)
     here = cwd
-    for arg in CD.findall(command[: m.start()] if m else ""):
+    for arg in CD.findall(command[: m[0]] if m else ""):
         arg = arg.strip("\"'")
         if not arg or arg == "-" or "$" in arg or "`" in arg:
             return None
@@ -45,13 +57,31 @@ def run_dir(command: str, cwd: Path) -> Path | None:
     return here
 
 
-def _match(command: str):
-    roots = [re.escape(str(ROOT)), r"\$GMAP_ROOT", r"\$\{GMAP_ROOT\}"]
+def _cmd(command: str) -> str:
+    """The command as the readers see it: Windows path separators as forward slashes (shell_calls.normalized)."""
+    try:
+        if str(ROOT / "scripts") not in sys.path:
+            sys.path.insert(0, str(ROOT / "scripts"))
+        import shell_calls
+        return shell_calls.normalized(command)
+    except Exception:                                    # noqa: BLE001 - without the reader the Bash forms still match
+        return command
+
+
+def _match(command: str) -> tuple[int, str] | None:
+    """(where the exporter's path starts, the exporter) when the command runs this plugin's own exporter; None otherwise."""
+    command = _cmd(command)
+    roots = [re.escape(_norm(str(ROOT))), r"\$GMAP_ROOT", r"\$\{GMAP_ROOT\}", r"\$env:CLAUDE_PLUGIN_ROOT", r"\$\{env:CLAUDE_PLUGIN_ROOT\}"]
     env_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
     if env_root:
-        roots.append(re.escape(env_root.rstrip("/")))
-    rx = re.compile(r"(?:%s)/scripts/(%s)" % ("|".join(roots), "|".join(re.escape(e) for e in EXPORTERS)))
-    return rx.search(command)
+        roots.append(re.escape(_norm(env_root)))
+    m = re.search(r"(?i:%s)/scripts/(%s)" % ("|".join(roots), EXPORTER_RX), command)
+    if m:
+        return m.start(), m.group(1)
+    for m in LITERAL.finditer(command):
+        if (Path(m.group(1)).expanduser() / "scripts" / "gmap_common.py").is_file():
+            return m.start(), m.group(2)
+    return None
 
 
 def spec_arg(command: str, script: str) -> str | None:
@@ -71,9 +101,9 @@ def spec_arg(command: str, script: str) -> str | None:
 
 def decide(event: dict) -> tuple[int, str]:
     """(exit code, message for stderr): 0 and '' to let the command run, 2 and the findings to stop it."""
-    if event.get("tool_name") != "Bash":
+    if event.get("tool_name") not in ("Bash", "PowerShell"):            # 1.17.3: PowerShell, Claude Code's primary shell on Windows
         return 0, ""
-    command = str((event.get("tool_input") or {}).get("command") or "")
+    command = _cmd(str((event.get("tool_input") or {}).get("command") or ""))
     script = ours(command)
     if not script:
         return 0, ""

@@ -13,6 +13,19 @@ import os
 import sys
 from pathlib import Path
 
+def utf8_console() -> None:
+    """1.17.3: print UTF-8 whatever the console's code page. On a Windows console the default is cp1252, where a report line with an
+    arrow or a dot (map_trace.py's) raised UnicodeEncodeError. A stream that is already UTF-8 is left alone; a failure changes nothing."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is not None and (getattr(stream, "encoding", "") or "").lower().replace("-", "") != "utf8":
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:                                   # noqa: BLE001 - a stream that cannot be reconfigured keeps its own encoding
+            pass
+
+
+utf8_console()
+
 EXIT_OK = 0
 EXIT_RUNTIME = 1
 EXIT_USAGE = 2
