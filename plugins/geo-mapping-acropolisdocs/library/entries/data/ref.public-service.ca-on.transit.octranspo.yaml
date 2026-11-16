@@ -1,7 +1,7 @@
 id: ref.public-service.ca-on.transit.octranspo
 type: public-service
-rev: 1
-status: draft
+rev: 2
+status: active
 title: OC Transpo (Ottawa) GTFS and GTFS-realtime
 summary: Ottawa bus and O-Train schedules (GTFS, public since 2008) and GTFS-realtime for registered developers.
 tags:
@@ -43,12 +43,14 @@ avoid_when:
 delivery:
   mode: user-supplied
   format: GTFS (zip); GTFS-realtime (protobuf)
-  note: API 2.0 retired 30 April 2025. GTFS-RT for registered developers, allowed for commercial and non-commercial use (developers FAQ, read 2026-11-07).
+  note: 'Static GTFS: https://www.octranspo.com/files/google_transit.zip (listed on open.ottawa.ca as ''OC Transpo Schedules''); it refuses automated requests
+    (HTTP 403 from the build session and the owner''s computer, 2026-11-15), so download it in a browser and supply it. GTFS-realtime: register as a developer
+    through octranspo-dev@ottawa.ca; the developers page publishes no key header or limits.'
 source:
   publisher: City of Ottawa, OC Transpo
   product: GTFS and GTFS-realtime
   url: https://www.octranspo.com/en/plan-your-trip/travel-tools/developers
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-15'
 vintage:
   current: current GTFS
   cadence: irregular
@@ -58,13 +60,18 @@ license:
   commercial_ok: true
   bulk_ok: false
   attribution_text: 'Source: OC Transpo.'
-  note: 'FAQ: registered developers may use GTFS-RT for non-commercial and commercial purposes; the full terms were not read.'
+  note: 'The developers page (read 2026-11-15) is the published terms: registered developers may use the GTFS-RT data for non-commercial and commercial
+    purposes; OC Transpo does not guarantee accuracy. No separate terms page or attribution wording is published.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
-  verify_by: '2027-02-07'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-02-15'
   changelog:
   - rev: 1
     date: '2026-11-07'
     note: 'Draft (reference library additions, P2): the developers page read on 2026-11-07 (commercial use allowed for registered developers); feed addresses
       and key delivery not stated.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): the developers page re-read (commercial use for registered developers, no other terms published); the static feed address found
+      on open.ottawa.ca, a browser download.'

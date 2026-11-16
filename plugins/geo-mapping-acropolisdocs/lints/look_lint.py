@@ -6,7 +6,7 @@ weight check reads the plan's geometry on the sheet, which is what the renderer 
 
     MAP-CART-029  weight budget: no context line wider than 0.6 x the thinnest data line
     MAP-CART-030  contrast budget: context lines no stronger than 1.8:1 against the land while data is drawn
-    MAP-CART-031  point symbols at least 1.4 mm across
+    MAP-CART-031  point symbols at least 1.4 mm across (not a dot-density layer's dots, 1.17.0)
     MAP-CART-032  point symbols overlapping on more than 15 percent of them after the size step-down
     MAP-CART-033  a sequential palette spans at least 50 L* from its lightest class to its darkest
     MAP-CART-034  categorical colours of small symbols (points under 3 mm, lines) at least delta E 25 apart under colour-vision simulation
@@ -118,7 +118,8 @@ def _point_d(l) -> float:
 def check_031(plan) -> list[dict]:
     out = []
     for l in _data(plan):
-        if l.kind == "point" and l.role != "proportional" and _point_d(l) < POINT_MIN_MM - 1e-9:
+        dots = any(isinstance(o, dict) and o.get("op") == "dot_density" for o in ((getattr(l, "spec", None) or {}).get("ops") or []))
+        if l.kind == "point" and l.role != "proportional" and not dots and _point_d(l) < POINT_MIN_MM - 1e-9:     # 1.17.0: dots are small on purpose
             out.append(finding("MAP-CART-031", "WARN", f"layer '{l.id}': point symbols {_point_d(l):.2f} mm across, under the {POINT_MIN_MM:g} mm a reader "
                                "can find and tell apart; drop symbol.size (the look sizes points by count) or raise it", {"diameter_mm": round(_point_d(l), 3)}, l.id))
     return out

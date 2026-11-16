@@ -1,18 +1,26 @@
 {
-  "description": "OPTIONAL, off by default (spec 5, v0.14). Copy this file over hooks/hooks.json to turn both hooks on; see hooks/README.md. They wait for spike P7 (hook scoping on the desktop app, Appendix H).",
+  "description": "The two hooks as shipped (on since 1.17.0, the same as hooks/hooks.json). Copy this file back over hooks/hooks.json to restore them after editing; see hooks/README.md.",
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
-          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_export_lint.py\"", "timeout": 60}
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_export_lint.py\"",
+            "timeout": 60
+          }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"", "timeout": 10}
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"",
+            "timeout": 10
+          }
         ]
       }
     ]

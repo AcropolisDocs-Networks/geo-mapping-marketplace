@@ -1,7 +1,7 @@
 id: ref.public-service.fi.transit.digitransit
 type: public-service
-rev: 1
-status: draft
+rev: 2
+status: active
 title: Digitransit (Finland) routing and transit APIs
 summary: Finnish public transport routing (OpenTripPlanner), stops and real-time data for HSL (Helsinki), Waltti cities and all of Finland from Digitransit,
   with a subscription key.
@@ -35,7 +35,7 @@ tags:
   tier:
   - T2
   license_class:
-  - restricted
+  - attribution
   quality:
   - authoritative
 use_when:
@@ -67,23 +67,27 @@ source:
   publisher: Digitransit (HSL, Fintraffic, Waltti)
   product: Digitransit APIs
   url: https://digitransit.fi/en/developers/api-registration/
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-15'
 vintage:
   current: live
   cadence: live
 license:
-  class: restricted
-  redistribute_ok: false
+  class: attribution
+  redistribute_ok: true
   commercial_ok: true
   bulk_ok: false
-  attribution_text: 'Source: Digitransit.'
-  note: Terms of use not read; treated as restricted until they are.
+  attribution_text: © Digitransit (with the date and time the data was received)
+  note: 'Terms of use (digitransit.fi developers/apis/7-terms-of-use, read 2026-11-15): CC BY 4.0, data owned by HSL, Fintraffic and Waltti Solutions; credit
+    Digitransit with the date and time; OpenStreetMap-derived geography is ODbL; no fees; rate limits may be applied.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
-  verify_by: '2027-02-07'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-02-15'
   changelog:
   - rev: 1
     date: '2026-11-07'
     note: 'Draft (reference library additions, P2): the registration and API pages read on 2026-11-07 (key name, hosts, limits); cost, licence and the routing
       path not confirmed.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): the terms of use read: CC BY 4.0 (HSL, Fintraffic, Waltti), credit with date and time, no fees, ODbL for OSM-derived geography.'

@@ -11,6 +11,10 @@ source and trademark lines) and notes.md. Title, legend and notes are NOT in the
 `slide` writes one slide with the picture, the title and subtitle as text boxes, the legend as native shapes with text boxes, the source lines as a text box, and the message in the
 speaker notes and the picture's alt text. With `--deck` the slide is added to a COPY of that deck (the original is never changed) using one of its own layouts; nothing of the deck's theme,
 fonts or other slides is touched. The map is branded; the deck is not restyled.
+1.17.0 (the hand-off tried on a real deck): without `--layout` the deck's own "Title Only" (light) layout is used, else a blank one, never
+a dark, cover, section or closing layout; the map's title goes into that layout's title placeholder (so it is set the deck's way) with the
+subtitle under it, and the map, legend and sources are fitted between the subtitle and the deck's footer, inside its margins (0.5 in at
+least). The deck's footer line is copied onto the map slide; a page number with a typed total is not (MAP-PPT-007).
 
 Everything is set in Inter by name; PowerPoint shows Inter only where it is installed (the font is not embedded in a .pptx).
 
@@ -28,6 +32,7 @@ Findings
   MAP-PPT-004 BLOCK  --deck cannot be read, or the output would overwrite the deck or an existing file
   MAP-PPT-005 WARN   (1.12.0, `check` or `slide --check`) drawn by LibreOffice, the map on the slide differs from the picture in the file
   MAP-PPT-006 WARN   (1.12.0) on the drawn slide a legend key is not in its class colour
+  MAP-PPT-007 INFO   (1.17.0) the deck numbers its slides with a typed total ("Page N of M"): the map slide has no page number; renumber in PowerPoint
 """
 from __future__ import annotations
 
@@ -440,8 +445,10 @@ def _nested(slide, b: dict, lx: float, y: float, k: float, lpt: float, tokens: d
     return y + g["h"] * k
 
 
-def build_slide(slide, text: dict, png: Path, rect_scale: tuple[float, float, float], map_frame: dict, alt: str) -> None:
-    """Add every piece to `slide`. rect_scale = (scale, offset_x_mm, offset_y_mm) from template mm to slide mm."""
+def build_slide(slide, text: dict, png: Path, rect_scale: tuple[float, float, float], map_frame: dict, alt: str, *, title_ph=None,
+                subtitle_at: tuple[float, float, float] | None = None) -> None:
+    """Add every piece to `slide`. rect_scale = (scale, offset_x_mm, offset_y_mm) from template mm to slide mm. 1.17.0: with `title_ph` (a deck
+    layout's title placeholder) the title is set there in the deck's own style and the subtitle goes at `subtitle_at` (x, y, w in slide mm)."""
     k, ox, oy = rect_scale
     tpl = text["template"]
     fonts = text["fonts"]
@@ -454,10 +461,17 @@ def build_slide(slide, text: dict, png: Path, rect_scale: tuple[float, float, fl
     def S(v): return float(v) * k
 
     t = tpl["title"]
-    title_h = S(float(fonts["title"]) * 25.4 / 72 * 1.25)
-    _textbox(slide, X(t["x"]), Y(t["y"]), S(t["w"]), title_h, [text["title"]], float(fonts["title"]) * k, lc, bold=True, name="Map title")
-    if text.get("subtitle"):
-        _textbox(slide, X(t["x"]), Y(t["y"]) + title_h, S(t["w"]), S(float(fonts["subtitle"]) * 25.4 / 72 * 1.3), [str(text["subtitle"])], float(fonts["subtitle"]) * k, lc, name="Map subtitle")
+    if title_ph is not None:
+        title_ph.text_frame.text = text["title"]
+        title_ph.name = "Map title"
+        if text.get("subtitle") and subtitle_at:
+            sx, sy, sw_ = subtitle_at
+            _textbox(slide, sx, sy, sw_, float(fonts["subtitle"]) * 25.4 / 72 * 1.3, [str(text["subtitle"])], float(fonts["subtitle"]), lc, name="Map subtitle")
+    else:
+        title_h = S(float(fonts["title"]) * 25.4 / 72 * 1.25)
+        _textbox(slide, X(t["x"]), Y(t["y"]), S(t["w"]), title_h, [text["title"]], float(fonts["title"]) * k, lc, bold=True, name="Map title")
+        if text.get("subtitle"):
+            _textbox(slide, X(t["x"]), Y(t["y"]) + title_h, S(t["w"]), S(float(fonts["subtitle"]) * 25.4 / 72 * 1.3), [str(text["subtitle"])], float(fonts["subtitle"]) * k, lc, name="Map subtitle")
     pic = slide.shapes.add_picture(str(png), _mm(X(map_frame["x"] - 0.3)), _mm(Y(map_frame["y"] - 0.3)), _mm(S(map_frame["w"] + 0.6)), _mm(S(map_frame["h"] + 0.6)))
     pic.name = "Map"
     pic._element.nvPicPr.cNvPr.set("descr", alt)
@@ -482,6 +496,60 @@ def build_slide(slide, text: dict, png: Path, rect_scale: tuple[float, float, fl
         np_ = float(fonts["note"]) * k
         _textbox(slide, X(f["x"]), Y(f["y"]), S(f["w"]), S(f["h"]), list(text["footer"]), np_, lc, name="Source and notes")
     slide.notes_slide.notes_text_frame.text = text["message"] + ("\n\n" + "\n".join(text["footer"]) if text["footer"] else "")
+
+
+DECK_MARGIN_MM = 12.7                   # 0.5 in: the least margin a deck's content keeps from the slide's edges (1.17.0)
+AVOID_LAYOUT = ("dark", "thank", "closing", "section", "cover", "agenda", "divider", "end")
+
+
+def _is_title(ph) -> bool:
+    from pptx.enum.shapes import PP_PLACEHOLDER
+    return ph.placeholder_format.type in (PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE)
+
+
+def pick_layout(layouts):
+    """1.17.0: the deck layout a map slide goes on when none is named: its own "Title Only" (light) layout, else a blank one; never a dark,
+    cover, section or closing layout (a real deck's last layout was its dark "Thank You", and the map's title vanished into it)."""
+    def score(l):
+        n = l.name.strip().lower()
+        sc = 0
+        if any(w in n for w in AVOID_LAYOUT):
+            sc -= 100
+        if n == "title slide" or n.startswith("title \u2014") or n.startswith("title -"):
+            sc -= 60                                    # a cover: "Title — Light 01"
+        if "title only" in n:
+            sc += 40
+        elif "blank" in n or "empty" in n:
+            sc += 30
+        if "light" in n:
+            sc += 5
+        return sc - len(l.placeholders)
+    return max(layouts, key=score)
+
+
+def deck_frame(prs, lay) -> dict:
+    """1.17.0: where the map goes on a deck slide (slide mm): the title placeholder (if the layout has one), the subtitle line under it and
+    the body box between them and the deck's footer, inside its margins; and a footer line to copy from the deck's own slides."""
+    sw, sh = prs.slide_width / EMU_PER_MM, prs.slide_height / EMU_PER_MM
+    title = next((ph for ph in lay.placeholders if _is_title(ph)), None)
+    left = max(DECK_MARGIN_MM, title.left / EMU_PER_MM) if title is not None else DECK_MARGIN_MM
+    top = (title.top + title.height) / EMU_PER_MM + 2.0 if title is not None else DECK_MARGIN_MM
+    footer_top, footer_el, numbered = None, None, False
+    from pptx.enum.shapes import PP_PLACEHOLDER
+    for sl in prs.slides:
+        for ph in sl.placeholders:
+            kind = ph.placeholder_format.type
+            if kind in (PP_PLACEHOLDER.FOOTER, PP_PLACEHOLDER.SLIDE_NUMBER):
+                y = ph.top / EMU_PER_MM if ph.top is not None else None
+                if y is not None and y > sh * 0.6:
+                    footer_top = y if footer_top is None else min(footer_top, y)
+                if kind == PP_PLACEHOLDER.FOOTER and footer_el is None and ph.has_text_frame and ph.text_frame.text.strip():
+                    footer_el = ph._element
+                if kind == PP_PLACEHOLDER.SLIDE_NUMBER and re.search(r"\bof\s+\d+", ph.text_frame.text if ph.has_text_frame else ""):
+                    numbered = True
+    bottom = min(sh - DECK_MARGIN_MM, (footer_top - 3.0) if footer_top else sh - DECK_MARGIN_MM)
+    return {"title": title, "left": left, "right": sw - left, "top": top, "bottom": bottom, "footer_el": footer_el, "numbered": numbered}
+
 
 
 def write_slide(spec_path, out_pptx, *, deck: str | None = None, layout: str | None = None, template: str = DEFAULT_TEMPLATE, brand: str | None = None,
@@ -509,7 +577,7 @@ def write_slide(spec_path, out_pptx, *, deck: str | None = None, layout: str | N
             if lay is None:
                 raise AdapterError(f"the deck has no layout named '{layout}' (layouts: {', '.join(l.name for l in prs.slide_layouts)})", "MAP-PPT-004")
         else:
-            lay = next((l for l in prs.slide_layouts if l.name.strip().lower() in ("blank", "empty")), None) or min(prs.slide_layouts, key=lambda l: len(l.placeholders))
+            lay = pick_layout(prs.slide_layouts)
     else:
         prs = Presentation()
         prs.slide_width, prs.slide_height = _mm(tpl_w), _mm(tpl_h)
@@ -520,9 +588,40 @@ def write_slide(spec_path, out_pptx, *, deck: str | None = None, layout: str | N
     if abs((sw / sh) - (tpl_w / tpl_h)) > 0.02:
         fs.append(finding("MAP-PPT-003", "INFO", f"the deck's slide is {sw / 25.4:.2f} x {sh / 25.4:.2f} in, not 16:9; the map was fitted inside it and centered"))
     slide = prs.slides.add_slide(lay)
-    for ph in list(slide.placeholders):                         # the map slide carries its own title; an empty placeholder would show "Click to add title"
+    frame = deck_frame(prs, lay) if deck else None
+    title_ph = None
+    for ph in list(slide.placeholders):                         # an empty placeholder would show "Click to add title"; a deck's title one is used
+        if frame and frame["title"] is not None and _is_title(ph) and title_ph is None:
+            title_ph = ph
+            continue
         ph._element.getparent().remove(ph._element)
-    build_slide(slide, text, Path(parts["png"]), (k, off[0], off[1]), plan.tpl["map"], text["alt"])
+    subtitle_at = None
+    if frame:
+        import copy
+        tpl, fonts = plan.tpl, text["fonts"]
+        t, mf, ft = tpl["title"], tpl["map"], tpl["footer"]
+        x0, x1 = min(float(t["x"]), float(mf["x"]) - 0.3), float(t["x"]) + float(t["w"])      # the picture bleeds 0.3 mm past its frame
+        y0, y1 = float(mf["y"]) - 0.3, float(ft["y"]) + float(ft["h"])
+        top = frame["top"] if frame["title"] is not None else DECK_MARGIN_MM + float(fonts["title"]) * 25.4 / 72 * 1.4
+        if text.get("subtitle"):
+            subtitle_at = (frame["left"], top, frame["right"] - frame["left"])
+            top += float(fonts["subtitle"]) * 25.4 / 72 * 1.3 + 3.0
+        bw, bh = frame["right"] - frame["left"], frame["bottom"] - top
+        k = min(bw / (x1 - x0), bh / (y1 - y0))
+        off = (frame["left"] - x0 * k, top - y0 * k)
+        if frame["title"] is None:                              # a blank layout: the map draws its own title above the body box
+            off_t = DECK_MARGIN_MM - float(t["y"]) * k
+            off = (off[0], max(off[1], off_t))
+        if frame["footer_el"] is not None:
+            el = copy.deepcopy(frame["footer_el"])
+            ids = [int(x) for x in slide.shapes._spTree.xpath(".//p:cNvPr/@id")] or [1]
+            el.xpath(".//p:cNvPr")[0].set("id", str(max(ids) + 1))   # a fresh id on this slide (a repeated one makes PowerPoint repair the file)
+            slide.shapes._spTree.append(el)
+        if frame["numbered"]:
+            fs.append(finding("MAP-PPT-007", "INFO", "the deck's page numbers carry a typed total (\"Page N of M\"): the map slide has none and the other "
+                                                     "slides still give the old total; renumber in PowerPoint"))
+    build_slide(slide, text, Path(parts["png"]), (k, off[0], off[1]), plan.tpl["map"], text["alt"], title_ph=title_ph,
+                subtitle_at=subtitle_at)
     out_pptx.parent.mkdir(parents=True, exist_ok=True)
     prs.save(str(out_pptx))
     shutil.rmtree(tmp, ignore_errors=True)

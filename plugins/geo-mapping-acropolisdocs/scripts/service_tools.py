@@ -378,13 +378,13 @@ def hits(profile: str = "", layer: str = "", protocol: str = "wfs", cql_filter: 
 
 @guarded
 def fetch_features(profile: str = "", layer: str = "", protocol: str = "wfs", cql_filter: str = "", bbox: str = "", properties: str = "", page_size: int = 0, sort_by: str = "", max_features: int = 0,
-                   accept_over_cap: bool = False, output_format: str = "gpkg", version: str = "2.0.0", url: str = "", confirm_host: str = "", http=None, conditions: str = "") -> dict:
+                   accept_over_cap: bool = False, output_format: str = "gpkg", version: str = "2.0.0", url: str = "", confirm_host: str = "", http=None, conditions: str = "", generalize_m: float = 0) -> dict:
     """A bounded, paged, resumable download into the working folder. Returns a file path, counts and the capture record path, not the data."""
     prof, h = _setup(profile, http, url, confirm_host)
     layer, protocol = _need_layer(prof, layer), _hint(prof, "protocol", protocol)
     req = sq.request_from({"profile": prof["profile"], "protocol": protocol, "layer": layer, "version": version, "cql_filter": cql_filter or None, "bbox": _bbox(bbox), "properties": _split(properties),
                            "page_size": page_size or None, "sort_by": sort_by or None, "max_features": max_features or None, "accept_over_cap": accept_over_cap,
-                           "conditions": conditions or None})
+                           "conditions": conditions or None, "generalize_m": generalize_m or None})
     r = sq.capture(h, prof, req, outroot=outdir(), fmt=output_format if output_format in ("gpkg", "geojson") else "gpkg")
     s = sq.summary(r)
     if not r["ok"]:
@@ -599,13 +599,13 @@ def verify_saved(name: str, confirm_verify: str = "", http=None) -> dict:
 
 @guarded
 def plan(profile: str = "", layer: str = "", protocol: str = "wfs", cql_filter: str = "", bbox: str = "", properties: str = "", page_size: int = 0, sort_by: str = "", max_features: int = 0,
-         accept_over_cap: bool = False, version: str = "2.0.0", url: str = "", confirm_host: str = "", http=None, conditions: str = "") -> dict:
+         accept_over_cap: bool = False, version: str = "2.0.0", url: str = "", confirm_host: str = "", http=None, conditions: str = "", generalize_m: float = 0) -> dict:
     """Validate a request against the service and show the query in words, without downloading anything."""
     prof, h = _setup(profile, http, url, confirm_host)
     layer, protocol = _need_layer(prof, layer), _hint(prof, "protocol", protocol)
     req = sq.request_from({"profile": prof["profile"], "protocol": protocol, "layer": layer, "version": version, "cql_filter": cql_filter or None, "bbox": _bbox(bbox), "properties": _split(properties),
                            "page_size": page_size or None, "sort_by": sort_by or None, "max_features": max_features or None, "accept_over_cap": accept_over_cap,
-                           "conditions": conditions or None})
+                           "conditions": conditions or None, "generalize_m": generalize_m or None})
     mp = sq.make_plan(h, prof, req)
     out = {"ok": mp["ok"], "findings": mp["findings"], "query": mp.get("human"), "hits": mp.get("hits"), **_oneshot_note(prof)}
     if not mp["ok"]:

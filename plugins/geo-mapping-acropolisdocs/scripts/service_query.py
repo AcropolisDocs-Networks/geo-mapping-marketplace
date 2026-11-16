@@ -3,7 +3,7 @@
 
     service_query.py explore --profile P [--protocol wfs|wms|wmts|wcs|ogcapi|arcgis] [--path PATH]
     service_query.py plan    --profile P --layer L [--protocol wfs] [--cql ...] [--bbox x0,y0,x1,y1] [--properties a,b]
-    service_query.py fetch   --profile P --layer L [same options] [--max-features N] [--page-size N] [--accept-over-cap]
+    service_query.py fetch   --profile P --layer L [same options] [--max-features N] [--page-size N] [--accept-over-cap] [--generalize-m M]
     service_query.py hits | legend | preview | info | tile | cors   (same options; see --help)
     service_query.py coverage --profile P --layer COVERAGE_ID --bbox x0,y0,x1,y1 [--max-features SIDE]   (0.15.0: WCS GetCoverage to a GeoTIFF)
 
@@ -56,7 +56,8 @@ def request_from(d: dict) -> dict:
     proto = d.get("protocol") or {"wfs": "wfs"}.get(d.get("type"), "wfs")
     r = {"profile": d.get("profile"), "protocol": proto, "layer": layer, "version": d.get("version") or "2.0.0", "cql_filter": d.get("cql_filter") or d.get("where"),
          "bbox": d.get("bbox"), "srs": d.get("srs") or "EPSG:4326", "properties": d.get("properties"), "page_size": d.get("page_size"), "sort_by": d.get("sort_by"),
-         "max_features": d.get("max_features"), "accept_over_cap": bool(d.get("accept_over_cap")), "conditions": d.get("conditions") or None}
+         "max_features": d.get("max_features"), "accept_over_cap": bool(d.get("accept_over_cap")), "conditions": d.get("conditions") or None,
+         "generalize_m": d.get("generalize_m")}
     return r
 
 
@@ -73,7 +74,8 @@ def plan_of(req: dict, profile: dict) -> oc.FetchPlan:
     if conds and req["protocol"] != "wfs":
         cql, conds = oc.conditions_text(conds, "cql2" if req["protocol"] == "ogcapi" else "sql"), None
     return oc.FetchPlan(protocol=req["protocol"], layer=req["layer"], version=req.get("version") or "2.0.0", cql_filter=cql, bbox=req.get("bbox"), srs=req.get("srs") or "EPSG:4326",
-                        properties=req.get("properties"), page_size=page, sort_by=req.get("sort_by"), max_features=req.get("max_features"), conditions=conds or None)
+                        properties=req.get("properties"), page_size=page, sort_by=req.get("sort_by"), max_features=req.get("max_features"), conditions=conds or None,
+                        generalize_m=float(req["generalize_m"]) if req.get("generalize_m") else None)
 
 
 def need_mcp_profile(name: str) -> dict:
@@ -302,7 +304,7 @@ def crs_check(g, declared_bbox, srs: str = "EPSG:4326") -> dict:
 
 def capture_id(profile: dict, req: dict, layer_name: str) -> str:
     """The id a capture of this request gets: the same request always gives the same id, so a repeat is recognised."""
-    key = hashlib.sha256(json.dumps({k: req.get(k) for k in ("profile", "protocol", "layer", "cql_filter", "conditions", "bbox", "properties", "sort_by", "max_features")}, sort_keys=True, default=str).encode()).hexdigest()[:8]
+    key = hashlib.sha256(json.dumps({k: req.get(k) for k in ("profile", "protocol", "layer", "cql_filter", "conditions", "bbox", "properties", "sort_by", "max_features", "generalize_m")}, sort_keys=True, default=str).encode()).hexdigest()[:8]
     return f"{slug(profile['profile'])}-{slug(layer_name.split(':')[-1])}-{key}"
 
 
@@ -359,11 +361,11 @@ def capture(http, profile: dict, req: dict, *, outroot: Path | None = None, fmt:
            "copyright": mp["schema"].get("copyright") if plan.protocol == "arcgis" else None, "profile_default": (profile.get("license") or {}).get("default")}
     record = {
         "capture_version": 1, "id": cid, "route": route,
-        "asked": {k: req.get(k) for k in ("protocol", "layer", "version", "cql_filter", "conditions", "bbox", "srs", "properties", "sort_by", "page_size", "max_features")}, "attested": None, "verification": "plugin", "started_at": started, "finished_at": now(),
+        "asked": {k: req.get(k) for k in ("protocol", "layer", "version", "cql_filter", "conditions", "bbox", "srs", "properties", "sort_by", "page_size", "max_features", "generalize_m")}, "attested": None, "verification": "plugin", "started_at": started, "finished_at": now(),
         "profile": profile["profile"], "host": sr.public_view(profile).get("host") or sr.host_of(profile), "protocol": plan.protocol,
         "server": {"type": profile["type"], "version": caps.get("version"), "title": caps.get("title")},
         "request": {"layer": plan.layer, "version": plan.version, "cql_filter": plan.cql_filter, "bbox": plan.bbox, "srs": plan.srs, "properties": plan.properties, "sort_by": plan.sort_by,
-                    "page_size": plan.page_size, "max_features": plan.max_features},
+                    "page_size": plan.page_size, "max_features": plan.max_features, "generalize_m": plan.generalize_m},
         "hits_expected": hits, "received": res.received, "truncated": res.truncated, "server_limit": res.server_limit, "duplicates": res.duplicates, "resumed_pages": res.resumed_pages,
         "pages": [{k: p[k] for k in ("n", "count", "sha256", "url")} for p in res.pages], "calls": http.audit.calls,
         "result": ({"path": str(result_path), "format": fmt, "sha256": hashlib.sha256(Path(result_path).read_bytes()).hexdigest(), "features": int(len(g)), "bbox": cc.get("bbox"), "crs": (plan.srs or "EPSG:4326") if fmt == "gpkg" else "EPSG:4326",
@@ -393,7 +395,8 @@ def summary(r: dict) -> dict:
 def build_request(a) -> dict:
     bbox = [float(v) for v in a.bbox.split(",")] if a.bbox else None
     return request_from({"profile": a.profile, "protocol": a.protocol, "layer": a.layer, "version": a.version, "cql_filter": a.cql, "bbox": bbox, "properties": a.properties.split(",") if a.properties else None,
-                         "page_size": a.page_size, "sort_by": a.sort_by, "max_features": a.max_features, "accept_over_cap": a.accept_over_cap, "conditions": a.where})
+                         "page_size": a.page_size, "sort_by": a.sort_by, "max_features": a.max_features, "accept_over_cap": a.accept_over_cap, "conditions": a.where,
+                         "generalize_m": a.generalize_m})
 
 
 def main(argv=None, http=None) -> int:
@@ -410,6 +413,7 @@ def main(argv=None, http=None) -> int:
     ap.add_argument("--bbox")
     ap.add_argument("--properties")
     ap.add_argument("--page-size", type=int)
+    ap.add_argument("--generalize-m", type=float, help="1.17.0, ArcGIS: the server simplifies geometry to this tolerance in metres (large polygons)")
     ap.add_argument("--sort-by")
     ap.add_argument("--max-features", type=int)
     ap.add_argument("--accept-over-cap", action="store_true")
@@ -431,10 +435,11 @@ def main(argv=None, http=None) -> int:
     elif a.op == "hits":
         out = st.hits(a.profile, a.layer, proto, a.cql or "", a.bbox or "", a.version or "2.0.0", http=http)
     elif a.op == "plan":
-        out = st.plan(a.profile, a.layer, proto if proto in PROTOCOLS else "wfs", a.cql or "", a.bbox or "", a.properties or "", a.page_size or 0, a.sort_by or "", a.max_features or 0, a.accept_over_cap, a.version or "2.0.0", http=http)
+        out = st.plan(a.profile, a.layer, proto if proto in PROTOCOLS else "wfs", a.cql or "", a.bbox or "", a.properties or "", a.page_size or 0, a.sort_by or "", a.max_features or 0, a.accept_over_cap, a.version or "2.0.0", http=http,
+                     generalize_m=a.generalize_m or 0)
     elif a.op == "fetch":
         out = st.fetch_features(a.profile, a.layer, proto if proto in PROTOCOLS else "wfs", a.cql or "", a.bbox or "", a.properties or "", a.page_size or 0, a.sort_by or "", a.max_features or 0, a.accept_over_cap,
-                                a.format, a.version or "2.0.0", http=http)
+                                a.format, a.version or "2.0.0", http=http, generalize_m=a.generalize_m or 0)
     elif a.op == "legend":
         out = st.get_legend(a.profile, a.layer, "arcgis" if proto == "arcgis" else "wms", http=http)
     elif a.op == "preview":

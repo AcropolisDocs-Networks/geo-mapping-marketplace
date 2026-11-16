@@ -1,9 +1,10 @@
 id: ref.map-type.density-surface
 type: map-type
-rev: 1
-status: draft
+rev: 2
+status: active
 title: Density surface (heat)
-summary: A smoothed surface from point density, for patterns in many points.
+summary: 'A smoothed surface from point density, for patterns in many points (the density_surface op: a Gaussian kernel cut into bands, drawn as a choropleth
+  of bands).'
 tags:
   use_for:
   - density-surface
@@ -13,7 +14,8 @@ use_when:
 avoid_when:
 - The points are few; show them as symbols.
 - The reader needs values; a smoothed surface has none.
-pairs_with: []
+pairs_with:
+- ref.infrastructure.us.tower.fcc-asr
 chooses_when:
   message_type:
   - distribution
@@ -23,8 +25,32 @@ chooses_when:
 requires:
   data_shape: see chooses_when
   join_key: false
-recommended: {}
-guarded_by: []
+recommended:
+  role: choropleth
+  ops:
+  - op: density_surface
+    bandwidth: <distance with units, or leave out for the points' spread>
+    classes: 5
+  value_field: band
+  classification:
+    method: manual
+    edges:
+    - 0.5
+    - 1.5
+    - 2.5
+    - 3.5
+    - 4.5
+    - 5.5
+    labels:
+    - Lowest
+    - Low
+    - Middle
+    - High
+    - Highest
+  legend_note: A <bandwidth> kernel; a pattern, not values
+guarded_by:
+- MAP-OPS-012
+- MAP-OPS-008
 license:
   class: open
   redistribute_ok: true
@@ -32,10 +58,14 @@ license:
   bulk_ok: true
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-02'
-  verify_by: '2027-11-02'
-  check: none yet; the renderer does not build this map type
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-11-15'
+  check: the gallery map builds (tests/test_release_1170.py)
   changelog:
   - rev: 1
     date: '2026-11-02'
     note: 'Draft: the renderer does not build this map type yet; the entry records when to choose it so selection can say it is not available.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): the density_surface op (thematic.py) builds a kernel density grid (scipy''s Gaussian filter, or numpy) and cuts it into bands
+      with matplotlib''s filled contours; MAP-OPS-012 says it shows pattern, not values. Gallery: density-surface.yaml.'

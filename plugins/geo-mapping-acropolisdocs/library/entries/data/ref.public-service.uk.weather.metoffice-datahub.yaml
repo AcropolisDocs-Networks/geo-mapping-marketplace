@@ -1,7 +1,7 @@
 id: ref.public-service.uk.weather.metoffice-datahub
 type: public-service
-rev: 1
-status: draft
+rev: 2
+status: active
 title: Met Office Weather DataHub
 summary: UK and global site-specific forecasts, observations and map images from the Met Office Weather DataHub, by product subscription with daily call
   limits.
@@ -50,7 +50,7 @@ source:
   publisher: Met Office
   product: Weather DataHub
   url: https://datahub.metoffice.gov.uk/
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-15'
 vintage:
   current: live
   cadence: live
@@ -60,13 +60,17 @@ license:
   commercial_ok: true
   bulk_ok: false
   attribution_text: Contains Met Office data.
-  note: Met Office Weather DataHub Terms and Conditions apply to orders (not read).
+  note: 'The Weather DataHub terms open only after signing in (2026-11-15), so they are accepted at sign-up; the pricing page (read 2026-11-15) lists a
+    free site-specific plan of 360 calls a day (limits reset at 00:00 UTC). Treated as restricted: no redistribution of the raw data.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
-  verify_by: '2027-02-07'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-02-15'
   changelog:
   - rev: 1
     date: '2026-11-07'
     note: 'Draft (reference library additions, P2): the DataHub overview read (products, daily limits at 00:00 UTC); pricing, key delivery and terms not
       readable as text on 2026-11-07.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): the free site-specific plan (360 calls a day) read on the pricing page; the terms open only after sign-in and are accepted there.'

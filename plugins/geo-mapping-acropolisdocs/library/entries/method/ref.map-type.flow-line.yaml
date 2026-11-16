@@ -1,9 +1,10 @@
 id: ref.map-type.flow-line
 type: map-type
-rev: 1
-status: draft
+rev: 2
+status: active
 title: Flow lines
-summary: Draws lines between places with width set by the flow.
+summary: Draws curved lines between places with width set by the flow (the flow_lines op on an origin-destination table, drawn as a lines layer with graduated
+  widths).
 tags:
   use_for:
   - flow-line
@@ -13,7 +14,8 @@ use_when:
 avoid_when:
 - Lines would cross so much that nothing is readable; filter to the largest flows.
 - The flows have no origin and destination.
-pairs_with: []
+pairs_with:
+- ref.boundary.us.state.cb20m
 chooses_when:
   message_type:
   - flow
@@ -22,8 +24,26 @@ chooses_when:
 requires:
   data_shape: see chooses_when
   join_key: false
-recommended: {}
-guarded_by: []
+recommended:
+  role: lines
+  source: 'a CSV of origin and destination coordinates read with x: and y: on the origin columns'
+  ops:
+  - op: flow_lines
+    to_x: <destination longitude column>
+    to_y: <destination latitude column>
+    value: <volume column>
+    bend: 0.18
+  value_field: flow
+  classification:
+    method: manual
+    edges: <3 or 4 breaks>
+  symbol:
+    graduated: true
+  legend_note: Lines bend to the right of travel
+guarded_by:
+- MAP-OPS-013
+- MAP-OPS-008
+- MAP-CART-019
 license:
   class: open
   redistribute_ok: true
@@ -31,10 +51,14 @@ license:
   bulk_ok: true
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-02'
-  verify_by: '2027-11-02'
-  check: none yet; the renderer does not build this map type
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-11-15'
+  check: the gallery map builds (tests/test_release_1170.py)
   changelog:
   - rev: 1
     date: '2026-11-02'
     note: 'Draft: the renderer does not build this map type yet; the entry records when to choose it so selection can say it is not available.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): the flow_lines op (thematic.py) draws a quadratic arc from each origin to its destination, bending to the right of travel so
+      both directions of a pair show; the width is graduated by the flow. Gallery: flow-lines.yaml.'

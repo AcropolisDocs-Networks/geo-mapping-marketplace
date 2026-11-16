@@ -1,7 +1,7 @@
 id: ref.gazetteer.world.place.wof
 type: gazetteer
-rev: 1
-status: draft
+rev: 2
+status: active
 title: Who's On First gazetteer
 summary: An open gazetteer of places with stable ids, hierarchies and concordances to other id systems (GeoNames, Wikidata, Quattroshapes), published as
   per-country SQLite databases and GeoJSON; CC BY 4.0 with per-source terms.
@@ -38,9 +38,11 @@ tags:
   quality:
   - community
 use_when:
-- Crosswalking place ids between GeoNames, Wikidata and a client's naming once the per-country database is supplied.
+- Crosswalking place ids between GeoNames, Wikidata and a client's naming, or drawing a country's regions, counties or localities with stable ids (ref_fetch.py
+  read --placetype).
 avoid_when:
-- 'Nothing is verified beyond the licence page: the distribution host (data.geocode.earth/wof/dist) answered 404 and github.com 403 from the build environment.'
+- 'Official statistical boundaries are needed: the outlines come from many sources of varying date and detail; use the census agency''s files.'
+- 'A source''s own terms matter for publication: some records carry stricter per-source licences (the licences page lists each).'
 pairs_with:
 - ref.gazetteer.world.place.geonames
 - ref.public-service.world.wikidata
@@ -50,14 +52,21 @@ join:
   note: Who's On First id; wof:concordances carries gn:id (GeoNames) and wd:id (Wikidata).
 delivery:
   mode: user-supplied
-  format: SQLite database per country (whosonfirst-data-admin-<cc>) or GeoJSON per record
-  note: See https://whosonfirst.org/docs/licenses/ (verified 2026-11-04) and the project's download page for the current distribution; the admin-us, admin-ca
-    and admin-mx databases are the relevant ones. Supply the file.
+  layout: wof-sqlite
+  format: bzip2-compressed SQLite database per country (spr and geojson tables)
+  files:
+    us: https://data.geocode.earth/wof/dist/sqlite/whosonfirst-data-admin-us-latest.db.bz2
+    ca: https://data.geocode.earth/wof/dist/sqlite/whosonfirst-data-admin-ca-latest.db.bz2
+    mx: https://data.geocode.earth/wof/dist/sqlite/whosonfirst-data-admin-mx-latest.db.bz2
+  size_mb: US 886, MX 241, CA 184 (compressed, 2025-10-30)
+  note: 'Download the country''s database from data.geocode.earth/wof/dist/sqlite/ (the address files above; whosonfirst-data-admin-<cc>-latest.db.bz2),
+    decompress it (bunzip2, or 7-Zip on Windows) and read one placetype: ref_fetch.py read ref.gazetteer.world.place.wof FILE.db --placetype region [--bbox=W,S,E,N].
+    Each record keeps its wof_id, name, placetype, parent_id and country.'
 source:
   publisher: Who's On First (Geocode Earth)
   product: Who's On First administrative gazetteer
-  url: https://whosonfirst.org/docs/licenses/
-url_verified_on: '2026-11-04'
+  url: https://data.geocode.earth/wof/dist/sqlite/whosonfirst-data-admin-us-latest.db.bz2
+url_verified_on: '2026-11-15'
 vintage:
   current: not verified
   cadence: irregular
@@ -66,17 +75,24 @@ license:
   redistribute_ok: true
   commercial_ok: true
   bulk_ok: true
-  attribution_text: Data from Who's On First (whosonfirst.org), CC BY 4.0, with per-source licences.
-  note: The licences page lists CC BY 4.0 for the WOF data itself and the licence of each upstream source.
+  attribution_text: 'Data from Who''s On First. License: https://whosonfirst.org/docs/licenses/'
+  note: 'whosonfirst-data LICENSE.md (read 2026-11-15): crediting Who''s On First is recommended and a link to the licences page is required; the structure
+    is CC0; records inherit their sources'' terms, listed on the licences page (mostly CC BY and open-government licences, CC0 for Mapzen and SimpleGeo;
+    a few with no licence stated).'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
-  verify_by: '2027-11-04'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-05-15'
   check:
     kind: http_head
-    url: https://whosonfirst.org/docs/licenses/
+    url: https://data.geocode.earth/wof/dist/sqlite/whosonfirst-data-admin-us-latest.db.bz2
     expect: 200
   changelog:
   - rev: 1
     date: '2026-11-04'
     note: 'Draft: the licences page answered (HTTP 200, 2026-11-04); the distribution addresses did not (404 and 403), so no file is recorded.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): data.geocode.earth answers for the US, Canada and Mexico databases (dated 2025-10-30); the Canada database read with the new
+      wof-sqlite layout: 13 regions, 359 counties, localities by box. The licence corrected to what LICENSE.md says (a required link, the structure CC0,
+      per-source terms), not CC BY 4.0 for the whole.'

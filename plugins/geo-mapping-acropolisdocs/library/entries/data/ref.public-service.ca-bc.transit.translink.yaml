@@ -1,7 +1,7 @@
 id: ref.public-service.ca-bc.transit.translink
 type: public-service
-rev: 1
-status: draft
+rev: 2
+status: active
 title: TransLink (Metro Vancouver) GTFS and GTFS-realtime
 summary: Metro Vancouver bus, SkyTrain, SeaBus and West Coast Express schedules (GTFS) and real-time feeds from TransLink's open API, with a free key.
 tags:
@@ -43,29 +43,34 @@ avoid_when:
 delivery:
   mode: user-supplied
   format: GTFS (zip); GTFS-realtime (protobuf)
-  note: Register at translink.ca (app-developer-resources/register) for a key; static data at app-developer-resources/gtfs/gtfs-data and real-time at /gtfs/gtfs-realtime.
-    Use is under TransLink's Open API Terms of Use (not read).
+  note: 'Static GTFS needs no key: https://gtfs-static.translink.ca/gtfs/google_transit.zip (16 MB, updated 2026-11-13). Real-time needs an API key: write
+    to TransLink with the organisation and intended use; an approved key allows 1,000 requests a day.'
 source:
   publisher: TransLink
   product: Open API (GTFS static and real-time)
   url: https://www.translink.ca/about-us/doing-business-with-translink/app-developer-resources
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-15'
 vintage:
   current: current GTFS
   cadence: irregular
 license:
   class: restricted
-  redistribute_ok: false
+  redistribute_ok: true
   commercial_ok: true
   bulk_ok: false
-  attribution_text: 'Source: TransLink.'
-  note: Terms of Use (app-developer-resources/terms-of-use) not read; treated as restricted until they are.
+  attribution_text: Data provided by permission of TransLink; TransLink takes no responsibility for its accuracy or currency.
+  note: 'Open API Terms of Use (read 2026-11-15): a limited, revocable licence to use, reproduce and redistribute; the disclaimer shown prominently; no
+    use of TransLink''s names or marks; a fee charged to end users may bring further terms; ended on 10 days'' notice.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
-  verify_by: '2027-02-07'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-02-15'
   changelog:
   - rev: 1
     date: '2026-11-07'
     note: 'Draft (reference library additions, P2): the developer resources page read on 2026-11-07 (key by registration, RTTI deprecated, terms linked);
       the static URL and key delivery not stated.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): the Open API Terms of Use read (the disclaimer, 1,000 requests a day per key, redistribution allowed, no use of the marks);
+      the static GTFS answers without a key.'

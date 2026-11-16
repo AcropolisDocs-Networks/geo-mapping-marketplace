@@ -1,0 +1,32 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-15 from the build environment.
+profile: statcan-geo
+type: arcgis-rest
+base_url: https://geo.statcan.gc.ca/geo_wa/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 2000
+  server_max_features: 6000
+  max_concurrency: 1
+  timeout_s: 120
+  max_bytes: 100000000
+  max_total_features: 60000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: attribution
+  confidential: false
+  attribution: 'Source: Statistics Canada, 2021 Census cartographic boundary files, adapted. This does not constitute an endorsement by Statistics Canada of this product.'
+host_visibility: shown
+host_confirmed_on: '2026-11-15'
+verified_on: '2026-11-15'
+notes: 'Statistics Canada ArcGIS Server (ArcGIS 11.5). 2021/Cartographic_boundary_files/MapServer: the 2021 Census cartographic boundary files
+  by layer: 0 provinces and territories (13), 4 census divisions (293), 9 census subdivisions (5,161), also economic regions, federal electoral
+  districts, census metropolitan areas, tracts, dissemination areas and blocks, forward sortation areas. maxRecordCount 6000; EPSG:3347. The file
+  downloads on www12.statcan.gc.ca refuse automated requests (HTTP 403, from the build session and the owner''s computer alike, 2026-11-15); this
+  service answers. Shipped with the plugin (1.17.0), read-only: a profile of the same name saved in the working folder overrides it.'

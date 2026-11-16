@@ -23,6 +23,7 @@ BARE = [
     (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"), "a GitHub token"),
     (re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"), "a Slack token"),
     (re.compile(r"\bsk-[A-Za-z0-9_\-]{20,}\b"), "a secret API key"),
+    (re.compile(r"\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}\b"), "a secret API key"),      # 1.17.0: the sk_live_ / sk_test_ shape
     (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "a private key"),
     (re.compile(r"\bGEO_MAPPING_KEY_[A-Z0-9_]+\s*[=:]\s*['\"]?[^\s'\"]{6,}"), "a tile provider key with its value"),
 ]

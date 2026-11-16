@@ -1,7 +1,7 @@
 id: ref.public-service.no.weather.met-frost
 type: public-service
-rev: 1
-status: draft
+rev: 2
+status: active
 title: MET Norway Frost (observations and climate data)
 summary: Weather observations and climate records for Norwegian stations from MET Norway's Frost API, signed with a free client ID.
 tags:
@@ -63,7 +63,7 @@ source:
   publisher: Norwegian Meteorological Institute (MET Norway)
   product: Frost API
   url: https://frost.met.no/howto.html
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-15'
 vintage:
   current: live
   cadence: live
@@ -72,13 +72,18 @@ license:
   redistribute_ok: true
   commercial_ok: true
   bulk_ok: false
-  attribution_text: Data from MET Norway (CC BY 3.0 NO).
-  note: The licence is as the API states it in its responses (creativecommons.org/licenses/by/3.0/no/); the terms page was not read (robots disallowed).
+  attribution_text: Data from The Norwegian Meteorological Institute (MET Norway)
+  note: 'MET Norway licensing and crediting page (read 2026-11-15): NLOD 2.0 and CC BY 4.0, credit MET Norway as the source; free to use, disseminate and
+    process, except customised deliveries and partners'' data. Frost sends the client ID as the user name of HTTP Basic auth with an empty password.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
-  verify_by: '2027-02-07'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-02-15'
   changelog:
   - rev: 1
     date: '2026-11-07'
     note: 'Draft (reference library additions, P2): the how-to page read and the API answered with its licence on 2026-11-07; limits and terms not read.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): the licence and credit read on MET Norway''s licensing page (NLOD 2.0 and CC BY 4.0) and the client-ID authentication read on
+      the how-to page.'

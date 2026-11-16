@@ -22,6 +22,7 @@ hash and count are those verified on `url_verified_on`, and a fetch that differs
 
     ref_fetch.py read ENTRY_ID FILE [--out OUT] [--bbox=W,S,E,N]   read a file you supplied by the entry's declared layout (Ookla's WKT
                                                                    tiles: `delivery.quadkey_column` lets a box skip the rest of the world)
+                 [--placetype region]                              1.17.0: a Who's On First SQLite database (`delivery.layout: wof-sqlite`)
 
 0.6.0 (credentials spec §7.2, §10): an entry that needs a key says so in `delivery.requires_credential` (name, kind, host, how it is sent, how
 the service says no). Its request text carries no key and no variable. The fetch resolves `cred:NAME` from the person's own credential folder
@@ -568,7 +569,56 @@ def quadkey_prefixes(bbox, max_tiles: int = 64) -> list[str]:
     return best
 
 
-def read_user_file(entry: dict, path: Path, bbox=None) -> tuple[object, list[str]]:
+def derive_columns(df, spec: dict | None) -> list[str]:
+    """1.17.0: `delivery.derive: {NEW: {column: SRC, start: i, end: j}}` adds NEW as characters i to j of SRC (a join key held inside another
+    code: Auction 105's licence PL-D01001-P1 carries the county FIPS 01001 at 4 to 9). The source column must exist; the result is text."""
+    out = []
+    for new, rule in (spec or {}).items():
+        src = (rule or {}).get("column")
+        if src not in df.columns:
+            raise FetchError(f"delivery.derive.{new}: the column '{src}' is not in the file", gc.EXIT_LINT)
+        a, b = int(rule.get("start", 0)), rule.get("end")
+        df[new] = df[src].astype("string").str.slice(a, None if b is None else int(b))
+        out.append(f"{new} = characters {a} to {b} of {src}")
+    return out
+
+
+def read_wof_sqlite(path: Path, placetype: str | None, bbox=None):
+    """1.17.0: a Who's On First SQLite distribution (whosonfirst-data-admin-<cc>-latest.db): the current, not deprecated records of one
+    placetype (region, county, locality, ...) as a layer from each record's own GeoJSON, with id, name, placetype, parent_id and country."""
+    import json as _json
+    import sqlite3
+
+    import geopandas as gpd
+    import shapely.geometry as sg
+    if not placetype:
+        raise FetchError("a Who's On First database holds every placetype; give one with --placetype (country, region, county, locality, ...)", gc.EXIT_USAGE)
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        q = ("SELECT s.id, s.name, s.placetype, s.parent_id, s.country, g.body FROM spr s JOIN geojson g ON g.id = s.id AND g.is_alt = 0 "
+             "WHERE s.placetype = ? AND s.is_current != 0 AND s.is_deprecated = 0")
+        args: list = [placetype]
+        if bbox:
+            q += " AND s.max_longitude >= ? AND s.min_longitude <= ? AND s.max_latitude >= ? AND s.min_latitude <= ?"
+            args += [float(bbox[0]), float(bbox[2]), float(bbox[1]), float(bbox[3])]
+        rows = con.execute(q, args).fetchall()
+    except sqlite3.DatabaseError as ex:
+        raise FetchError(f"{path.name} is not a Who's On First database ({ex})", gc.EXIT_LINT)
+    finally:
+        con.close()
+    recs, geoms = [], []
+    for wid, name, pt, parent, cc, body in rows:
+        try:
+            geoms.append(sg.shape(_json.loads(body)["geometry"]))
+        except Exception:  # noqa: BLE001 - a record without a readable geometry is skipped and counted
+            continue
+        recs.append({"wof_id": int(wid), "name": name, "placetype": pt, "parent_id": parent, "country": cc})
+    gdf = gpd.GeoDataFrame(recs, geometry=geoms, crs="EPSG:4326")
+    return gdf, [f"read {len(gdf)} current {placetype} record(s) from the Who's On First database" + (" over the box" if bbox else "")
+                 + (f"; {len(rows) - len(gdf)} without a readable geometry skipped" if len(rows) > len(gdf) else "")]
+
+
+def read_user_file(entry: dict, path: Path, bbox=None, placetype: str | None = None) -> tuple[object, list[str]]:
     """A file the person supplied for a user-supplied entry, read by the entry's declared layout (or by geo_io when it declares none); a box
     keeps what intersects it (with `delivery.quadkey_column`, a Parquet is first cut to the quadkeys over the box, so the world is not parsed)."""
     import geo_io
@@ -580,6 +630,8 @@ def read_user_file(entry: dict, path: Path, bbox=None) -> tuple[object, list[str
         inner = gunzip(path, tmp / Path(path.stem).name)
         path, suffix = inner, inner.suffix.lower()
         notes.append("decompressed the gzip file")
+    if d.get("layout") == "wof-sqlite" and suffix in (".db", ".sqlite", ".sqlite3"):
+        return read_wof_sqlite(path, placetype, bbox)
     if bbox and suffix == ".parquet" and d.get("quadkey_column"):
         import pyarrow.compute as pc
         import pyarrow.parquet as pq
@@ -615,6 +667,36 @@ def read_user_file(entry: dict, path: Path, bbox=None) -> tuple[object, list[str
     return g, notes
 
 
+def _fetch_members(entry: dict, url: str, out: Path, tmp: Path, http=None) -> dict:
+    """1.17.0: `delivery.remote_members` ({path, prefix, crc32}): only the named files of a large remote zip, read by byte ranges
+    (remote_zip.py), each checked against the CRC-32 the archive records and the one the entry recorded."""
+    import geo_io
+    import remote_zip as rz
+    d = entry.get("delivery") or {}
+    rm = d["remote_members"]
+    try:
+        got = rz.extract(url, list(rm.get("path") or []), str(rm["prefix"]), tmp / "members", http=http, crc32=rm.get("crc32"), max_bytes=MAX_BYTES)
+    except rz.RemoteZipError as ex:
+        raise FetchError(f"{entry['id']}: {ex}", gc.EXIT_LINT if "CRC-32" in str(ex) else gc.EXIT_RUNTIME)
+    files = [Path(f) for f in got["files"]]
+    main = next((f for f in files if f.suffix.lower() in (".shp", ".gpkg", ".geojson", ".fgb", ".csv")), None)
+    if main is None:
+        raise FetchError(f"{entry['id']}: none of {', '.join(f.name for f in files)} is a data file", gc.EXIT_LINT)
+    try:
+        res = geo_io.read(main, layer=d.get("layer"))
+    except geo_io.GeoIOError as ex:
+        raise FetchError(f"{entry['id']}: {main.name} could not be read: {ex}", gc.EXIT_LINT)
+    gdf = res.gdf
+    exp = d.get("features")
+    if exp and len(gdf) != exp:
+        raise FetchError(f"{entry['id']}: {len(gdf)} features read, the entry says {exp}", gc.EXIT_LINT)
+    geo_io.write(gdf, out, "geoparquet")
+    return {"id": entry["id"], "rev": entry.get("rev"), "variant": None, "path": str(out), "cached": False, "url": url,
+            "members": got["members"], "fetched_bytes": got["fetched_bytes"], "hash_checked": bool(rm.get("crc32")), "features": int(len(gdf)),
+            "crs": str(gdf.crs), "format": res.format, "geometry": True,
+            "notes": [f"read {', '.join(sorted(got['members']))} from the archive by byte ranges ({got['fetched_bytes'] / 1048576:.1f} MB fetched)"]}
+
+
 def fetch(entry: dict, variant: str | None = None, refresh: bool = False, opener=None, http=None, store=None) -> dict:
     """Download the entry's file, verify it, read it whatever its format and cache it as GeoParquet.
 
@@ -641,6 +723,11 @@ def fetch(entry: dict, variant: str | None = None, refresh: bool = False, opener
         import ogc_http as oh
         http = oh.SafeHTTP(limits={"timeout_s": 120, "max_bytes": oh.CEILING["max_bytes"]})
     tmp = Path(tempfile.mkdtemp(prefix="gmap-fetch-"))
+    if (entry.get("delivery") or {}).get("remote_members"):
+        try:
+            return _fetch_members(entry, url, out, tmp, http)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
     try:
         raw = tmp / "download.bin"
         try:
@@ -683,14 +770,16 @@ def fetch(entry: dict, variant: str | None = None, refresh: bool = False, opener
                 notes += [n.msg for n in res.notes if n.sev == "WARN" or n.id == "IO"]
                 fmt_read = res.format
         except geo_io.AmbiguousColumns:
-            if suffix not in (".csv", ".tsv"):
+            if suffix not in (".csv", ".tsv", ".zip"):              # 1.17.0: a zip holding one CSV table (Auction 105's results) too
                 raise
             import pandas as pd
-            gdf = pd.read_csv(src, dtype=str, sep=None, engine="python", encoding="utf-8-sig")
+            gdf = pd.read_csv(src, dtype=str, sep=None, engine="python", encoding="utf-8-sig",
+                              compression="zip" if suffix == ".zip" else "infer")
             table_only, fmt_read = True, "csv"
             notes.append("the CSV has no coordinate columns; cached as a table without geometry (for joins), not as a layer")
         except geo_io.GeoIOError as ex:
             raise FetchError(f"{entry['id']}: the download could not be read as {suffix[1:]}: {ex}", gc.EXIT_LINT)
+        notes += derive_columns(gdf, d.get("derive"))
         exp = d.get("features")
         if hash_applies and exp and len(gdf) != exp:
             tol = float(d.get("features_tolerance_pct", 5)) / 100.0 if rolling else 0.0
@@ -722,7 +811,7 @@ def read_main(e: dict, a) -> int:
     if bbox is not None and len(bbox) != 4:
         print("--bbox is four numbers: W,S,E,N", file=sys.stderr)
         return gc.EXIT_USAGE
-    g, notes = read_user_file(e, src, bbox)
+    g, notes = read_user_file(e, src, bbox, placetype=a.placetype)
     out = Path(a.out).expanduser() if a.out else src.with_name(re.sub(r"\.(gz|zip)$", "", src.name).split(".")[0] + "-read.parquet")
     if hasattr(g, "geometry") and getattr(g, "crs", None) is not None:
         geo_io.write(g, out, "geoparquet" if out.suffix.lower() == ".parquet" else None)
@@ -745,6 +834,7 @@ def main(argv=None) -> int:
     ap.add_argument("--refresh", action="store_true")
     ap.add_argument("--out", help="read: where to write the layer (GeoParquet, GeoPackage or GeoJSON by extension); default <file>-read.parquet beside it")
     ap.add_argument("--bbox", help="read: keep what intersects W,S,E,N (write --bbox=-112.4,33.2,-111.6,33.8)")
+    ap.add_argument("--placetype", help="read, a Who's On First database (1.17.0): the placetype to read (region, county, locality, ...)")
     a = ap.parse_args(argv)
     import credentials as cr
     try:

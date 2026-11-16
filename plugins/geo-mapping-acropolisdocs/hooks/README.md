@@ -1,7 +1,8 @@
-# Hooks (off by default)
+# Hooks (on since 1.17.0)
 
-`hooks.json` is empty, so no hook runs. Two hooks are written and wait in `optional/hooks.json` until the hooks spike (Appendix H, P7:
-does a plugin hook fire on this plugin's work only, on the desktop app as well as the CLI) has been run.
+`hooks.json` turns on the two hooks below. They were written in v0.14 and kept off until the hooks spike (Appendix H, P7) had been run;
+on 2026-11-15, in a Claude Code 2.1.325 session with the built plugin, the pre-export hook stopped this plugin's build of a MapSpec with
+blocking findings, let an unrelated command through untouched, and the reminder hook's note reached the model.
 
 | Hook | Event | What it does |
 |---|---|---|
@@ -10,17 +11,16 @@ does a plugin hook fire on this plugin's work only, on the desktop app as well a
 
 Neither writes a file or reaches the network. If a hook cannot read what it needs it lets the work go on: the build's own lint is the gate.
 
-## Turn them on
+**Windows.** Each command starts with `python3`, which on Windows is usually the Microsoft Store stub (it exits 9009, so the hook would
+show an error on every Bash call). The plugin's server launcher (`mcp/launch.cmd`) runs `hooks/pin_python.py` with the plugin's own Python
+on each start, which rewrites the commands to that interpreter's full path; hooks are read when a session starts, so the first session
+after an install or an update can still show those notices once.
 
-For one installed edition, in the plugin's folder:
+## Turn one off
 
-```bash
-cp hooks/optional/hooks.json hooks/hooks.json
-```
-
-then start a new session (hooks are read when the session starts). To ship them in an edition, do the same in `src/hooks/` before
-`tools/build_edition.py`; the edition lint (MAP-ED-005) accepts both: the Bash hook has a matcher, and the prompt hook, which takes none,
-runs a script under `${CLAUDE_PLUGIN_ROOT}`. To turn one off again, delete its block from `hooks/hooks.json`, or copy the empty file back.
+Delete its block from `hooks/hooks.json` in the installed plugin and start a new session; `optional/hooks.json` holds the shipped pair to
+copy back. To ship a build without them, empty `src/hooks/hooks.json` before `tools/build_edition.py`; the edition lint (MAP-ED-005)
+accepts either: the Bash hook has a matcher, and the prompt hook, which takes none, runs a script under `${CLAUDE_PLUGIN_ROOT}`.
 
 ## Test them
 

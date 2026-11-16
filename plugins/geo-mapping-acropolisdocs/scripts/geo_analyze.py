@@ -52,6 +52,10 @@ PARAM_FLAGS = [
     ("--max-area", "max_area", "float"), ("--min-area", "min_area", "float"), ("--form", "form", "text"), ("--height-m", "height_m", "float"),
     ("--cell", "cell", "num_or_text"), ("--max-per-cell", "max_per_cell", "int"), ("--rank-field", "rank_field", "text"),
     ("--keep-share", "keep_share", "float"), ("--threshold", "threshold", "float"),
+    # 1.17.0: dot_density, density_surface, flow_lines
+    ("--per", "per", "float"), ("--seed", "seed", "int"), ("--bandwidth", "bandwidth", "num_or_text"), ("--classes", "classes", "int"),
+    ("--weight", "weight", "text"), ("--to-x", "to_x", "text"), ("--to-y", "to_y", "text"), ("--to-id", "to_id", "text"), ("--bend", "bend", "float"), ("--top", "top", "int"),
+    ("--min-value", "min_value", "float"),
 ]
 
 

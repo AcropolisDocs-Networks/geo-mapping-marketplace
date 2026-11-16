@@ -455,7 +455,10 @@
                     "massing",
                     "split_by",
                     "thin_lines",
-                    "reconcile"
+                    "reconcile",
+                    "dot_density",
+                    "density_surface",
+                    "flow_lines"
                   ]
                 },
                 "layer": {

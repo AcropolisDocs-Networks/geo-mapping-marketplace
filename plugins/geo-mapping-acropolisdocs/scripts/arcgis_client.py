@@ -75,6 +75,9 @@ def layer_info(http, profile: dict, layer_path: str) -> dict:
             "_response": oh.response_record(http, r)}
 
 
+GEOGRAPHIC_WKIDS = {4326, 4269, 4617, 4167, 4258, 4283, 4674, 6318, 7844, 4019}   # outSRs whose units are degrees (1.17.0)
+
+
 def _wkid(srs: str | None) -> str:
     """The numeric id ArcGIS takes for outSR: 'EPSG:3857' -> '3857'; anything that is not an EPSG code falls back to 4326."""
     m = re.match(r"^\s*(?:EPSG|ESRI)\s*:\s*(\d+)\s*$", str(srs or ""), re.I)
@@ -92,6 +95,9 @@ def query_params(plan: FetchPlan, *, count_only: bool = False, offset: int = 0, 
         p["orderByFields"] = order
     p["resultOffset"] = int(offset)
     p["resultRecordCount"] = int(size or plan.page_size)
+    if plan.generalize_m:                              # 1.17.0: in the units of outSR; a degree of latitude is about 111,320 m
+        sr = int(p["outSR"])
+        p["maxAllowableOffset"] = f"{plan.generalize_m / 111320.0:.8g}" if sr in GEOGRAPHIC_WKIDS else f"{plan.generalize_m:g}"
     return p
 
 

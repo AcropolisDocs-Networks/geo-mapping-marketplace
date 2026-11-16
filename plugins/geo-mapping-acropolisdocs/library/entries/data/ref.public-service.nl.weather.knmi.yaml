@@ -1,7 +1,7 @@
 id: ref.public-service.nl.weather.knmi
 type: public-service
-rev: 1
-status: draft
+rev: 2
+status: active
 title: KNMI Data Platform (Netherlands weather and climate)
 summary: Dutch weather observations, radar, model output and climate datasets from the KNMI Data Platform Open Data API, with a free key in the Authorization
   header.
@@ -65,7 +65,7 @@ source:
   publisher: Royal Netherlands Meteorological Institute (KNMI)
   product: KNMI Data Platform Open Data API
   url: https://developer.dataplatform.knmi.nl/open-data-api
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-15'
 vintage:
   current: live
   cadence: live
@@ -75,13 +75,18 @@ license:
   commercial_ok: true
   bulk_ok: false
   attribution_text: 'Source: KNMI.'
-  note: Licence per dataset on the KNMI Data Platform (not read); most KNMI open data is CC BY 4.0, to be confirmed per dataset.
+  note: 'Dataset licences on the KNMI Data Platform: CC BY 4.0 (read for actuele10mindataknmistations, 2026-11-15); check a dataset''s own page. The Open
+    Data API (read 2026-11-15) takes the key in the Authorization header: an anonymous shared key (valid to 2027-08-01; 50 a minute, 3,000 an hour, shared)
+    or a registered key (1,000 requests an hour).'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
-  verify_by: '2027-02-07'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-02-15'
   changelog:
   - rev: 1
     date: '2026-11-07'
     note: 'Draft (reference library additions, P2): the Open Data API page read (header, limits) and the API answered 401 without a key on 2026-11-07; dataset
       licences not read.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): the Authorization header, the anonymous and registered key limits, and CC BY 4.0 on the station dataset read.'

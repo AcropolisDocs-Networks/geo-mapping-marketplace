@@ -1,7 +1,7 @@
 id: ref.statistic.mx.coverage.ift
 type: statistic
-rev: 1
-status: draft
+rev: 2
+status: retired
 title: IFT mobile coverage maps (Mexico), reference only
 summary: The Instituto Federal de Telecomunicaciones publishes operator coverage maps for Mexico as an interactive viewer; there is no bulk download, so
   the entry records where to look and how to cite.
@@ -67,8 +67,8 @@ license:
   note: 'Reference only: the viewer''s terms allow citation, not bulk reuse; no data is held.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
-  verify_by: '2027-11-04'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-11-15'
   check:
     kind: http_head
     url: https://www.ift.org.mx/usuarios-y-audiencias/mapas-de-cobertura
@@ -77,3 +77,11 @@ maintenance:
   - rev: 1
     date: '2026-11-04'
     note: 'Draft, reference only: the coverage-maps page answered (HTTP 200, 2026-11-04); it is a viewer without a download.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Retired (1.17.0): the IFT site is an archive of the dissolved regulator; the coverage-maps page has no viewer or data, and no successor coverage
+      dataset is published.'
+retired:
+  why: The Instituto Federal de Telecomunicaciones was dissolved in 2025; www.ift.org.mx is now a read-only archive of the former IFT (2026-11-15) and the
+    coverage-maps page carries no viewer or data. Current services are with the Comisión Reguladora de Telecomunicaciones (gob.mx/crt).
+  use_instead: []

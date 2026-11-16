@@ -1,7 +1,7 @@
 id: ref.statistic.us.coverage.fcc-nbm
 type: statistic
-rev: 3
-status: draft
+rev: 4
+status: retired
 title: FCC National Broadband Map (availability data)
 summary: Broadband availability by location and provider as filed with the FCC (Broadband Data Collection), summarized to Census geographies. Downloaded
   by the person from the map's data download page.
@@ -74,8 +74,8 @@ license:
   note: Public domain; the host refuses automated requests, so the file is supplied by the person.
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-14'
-  verify_by: '2027-05-14'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-11-15'
   changelog:
   - rev: 1
     date: '2026-11-02'
@@ -86,4 +86,17 @@ maintenance:
       2026-11-04); the download route and the join key are recorded, and the summary layout lives in ref.statistic.us.broadband.fcc-bdc-summary.'
   - rev: 3
     date: '2026-11-14'
-    note: 'Rechecked 2026-11-14 (1.15.0): broadbandmap.fcc.gov/data-download still answers 403 to automated requests, from the build session and from the owner''s own network alike, and its public map API answers 401 without the BDC key. The availability data is reached through the BDC Public Data API with the person''''s own fcc-bdc key (fcc_bdc_list, fcc_bdc_fetch; ref.public-service.us.broadband.fcc-bdc-api); this entry stays draft for the manual download route.'
+    note: 'Rechecked 2026-11-14 (1.15.0): broadbandmap.fcc.gov/data-download still answers 403 to automated requests, from the build session and from the
+      owner''s own network alike, and its public map API answers 401 without the BDC key. The availability data is reached through the BDC Public Data API
+      with the person''''s own fcc-bdc key (fcc_bdc_list, fcc_bdc_fetch; ref.public-service.us.broadband.fcc-bdc-api); this entry stays draft for the manual
+      download route.'
+  - rev: 4
+    date: '2026-11-15'
+    note: 'Retired (1.17.0): the browser-only download route is replaced by the BDC Public Data API entries, which deliver the same files (fcc_bdc_list,
+      fcc_bdc_fetch).'
+retired:
+  why: broadbandmap.fcc.gov/data-download refuses automated requests (HTTP 403) from the build session and the owner's network alike (2026-11-14 and 2026-11-15);
+    the same availability and summary files come through the BDC Public Data API with the person's own key.
+  use_instead:
+  - ref.public-service.us.broadband.fcc-bdc-api
+  - ref.statistic.us.broadband.fcc-bdc-summary

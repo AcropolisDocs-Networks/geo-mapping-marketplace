@@ -415,6 +415,7 @@ class FetchPlan:
     output_format: str | None = None
     extra: dict = field(default_factory=dict)
     conditions: list | None = None     # 0.15.0: [{property, op, value}], sent as OGC Filter XML (WFS) instead of CQL
+    generalize_m: float | None = None  # 1.17.0 (ArcGIS): the server simplifies geometry to this tolerance (maxAllowableOffset), for large polygons
 
 
 @dataclass

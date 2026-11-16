@@ -30,6 +30,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "lints"))
@@ -1565,8 +1567,203 @@ def op_reconcile(gdf, p: dict, ctx: Ctx) -> OpResult:
     return OpResult(out, [note], [], _prov("reconcile", p, len(gdf), len(out), crs, tolerance_m=tm, overrides=done))
 
 
+def op_dot_density(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """dot_density {value, per, seed, max_dots, keep}: a polygon layer with a count becomes dots placed at random inside each polygon, one dot
+    per `per` units (1.17.0, map type dot density). Each dot has `dot_value` and the polygon columns named in `keep` (none by default: a dot
+    repeating its area's id reads as a duplicate); the dots are not locations (MAP-OPS-011)."""
+    import geopandas as gpd
+    import thematic as tm
+    _require_crs(gdf, "dot_density")
+    if _families(gdf) - {"Polygon"}:
+        raise OpsError("dot_density needs a polygon layer (areas with a count)")
+    val = p.get("value")
+    if not val or val not in gdf.columns:
+        raise OpsError("dot_density needs value: the column holding each area's count" + (f" ('{val}' is not a column)" if val else ""))
+    try:
+        per = float(p.get("per"))
+    except (TypeError, ValueError):
+        raise OpsError("dot_density needs per: the amount one dot stands for (for example per: 1000)") from None
+    seed, cap = int(p.get("seed", 1)), int(p.get("max_dots", tm.MAX_DOTS))
+    try:
+        counts = tm.dot_counts(pd_numeric(gdf[val]), per, seed)
+    except tm.ThematicError as ex:
+        raise OpsError(str(ex)) from None
+    total = int(counts.sum())
+    if total > cap:
+        need = float(pd_numeric(gdf[val]).clip(lower=0).sum()) / cap
+        raise OpsError(f"dot_density would draw {total:,} dots (at most {cap:,}); give a larger per, about {_nice(need)} or more")
+    crs, why = measure_crs(gdf, "area", ctx=ctx)
+    m = _in_measure(gdf, crs)
+    rng = np.random.default_rng(seed + 7919)
+    keep = [p["keep"]] if isinstance(p.get("keep"), str) else list(p.get("keep") or [])
+    miss = [c for c in keep if c not in m.columns]
+    if miss:
+        raise OpsError(f"dot_density keep: {', '.join(miss)} is not a column of the layer")
+    attrs = keep
+    recs, xs, ys = [], [], []
+    records = m[attrs].to_dict("records") if attrs else [{} for _ in range(len(m))]      # no columns kept: one empty record a polygon
+    for g, n, rec in zip(m.geometry.values, counts, records):
+        pts = tm.dots_in(g, int(n), rng)
+        for x, y in pts:
+            xs.append(x)
+            ys.append(y)
+            recs.append(rec)
+    out = gpd.GeoDataFrame(recs, geometry=gpd.points_from_xy(xs, ys), crs=crs) if recs else gpd.GeoDataFrame(columns=attrs + ["geometry"], geometry="geometry", crs=crs)
+    out["dot_value"] = per
+    out = _back(out, gdf.crs)
+    find = [{"id": "MAP-OPS-011", "severity": "INFO", "message": f"dot_density: one dot = {_fmt(per)} of {val}; the {len(out):,} dots are placed at random inside "
+             "each area, not at real locations; say so on the map (the legend's dot line, or the note)"}]
+    return OpResult(out, [f"{len(out):,} dots, one per {_fmt(per)} of {val}, inside {len(gdf)} area(s) (seed {seed}), measured in {crs}."], find,
+                    _prov("dot_density", p, len(gdf), len(out), crs, dots=len(out), per=per))
+
+
+def op_density_surface(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """density_surface {bandwidth, cell, classes, weight, floor}: many points become a kernel density surface cut into `classes` bands
+    (1.17.0, map type density surface): polygons with `band` (1 lowest), `density_min` and `density_max` (per km2) and `band_label`."""
+    import geopandas as gpd
+    import thematic as tm
+    _require_crs(gdf, "density_surface")
+    if _families(gdf) - {"Point"}:
+        raise OpsError("density_surface needs a point layer")
+    if len(gdf) < 3:
+        raise OpsError("density_surface needs at least 3 points; draw a few points as symbols instead")
+    crs, why = measure_crs(gdf, "distance", ctx=ctx)
+    m = _in_measure(gdf, crs)
+    x, y = m.geometry.x.to_numpy(), m.geometry.y.to_numpy()
+    w = None
+    if p.get("weight"):
+        if p["weight"] not in gdf.columns:
+            raise OpsError(f"density_surface: the weight column '{p['weight']}' is not in the layer")
+        w = pd_numeric(m[p["weight"]]).fillna(0).clip(lower=0).to_numpy()
+    if p.get("bandwidth") is not None:
+        num, u = parse_distance(p["bandwidth"], p.get("units"), "bandwidth")
+        bw = num * UNITS_M[u]
+        auto = False
+    else:
+        bw, auto = tm.silverman_m(x, y), True
+    if p.get("cell"):
+        cnum, cu = parse_distance(p["cell"], p.get("units"), "cell")
+        cell = cnum * UNITS_M[cu]
+    else:
+        cell = bw / 4
+    k = int(p.get("classes", 5))
+    if not 2 <= k <= 9:
+        raise OpsError("density_surface classes is between 2 and 9")
+    floor = float(p.get("floor", 0.05))
+    try:
+        xs, ys, z = tm.density_grid(x, y, w, bw, cell, 3 * bw)
+    except tm.ThematicError as ex:
+        raise OpsError(f"density_surface: {ex}") from None
+    peak = float(z.max())
+    if peak <= 0:
+        raise OpsError("density_surface: the points carry no weight")
+    levels = np.linspace(floor * peak, peak, k + 1)
+    levels[-1] = peak * 1.000001
+    parts = tm.bands(xs, ys, z, levels)
+    names = _band_names(k)
+    rows = [{"band": i + 1, "density_min": round(lo, 4), "density_max": round(hi, 4), "band_label": names[i]} for i, (lo, hi, _g) in enumerate(parts)]
+    out = gpd.GeoDataFrame(rows, geometry=[g for _lo, _hi, g in parts], crs=crs)
+    out = _back(out, gdf.crs)
+    unit = f"{p['weight']} per km2" if p.get("weight") else "points per km2"
+    find = [{"id": "MAP-OPS-012", "severity": "INFO", "message": f"density_surface: smoothed with a {_fmt(bw)} m kernel" + (" (from the points' spread)" if auto else "")
+             + f"; the bands show where {len(gdf):,} points concentrate, not values at a place; below {floor:.0%} of the peak nothing is drawn"}]
+    return OpResult(out, [f"Density of {len(gdf):,} points ({unit}), a {_fmt(bw)} m kernel on a {_fmt(cell)} m grid, {len(out)} band(s) from {_fmt(levels[0])} "
+                          f"to {_fmt(peak)}, measured in {crs}."], find,
+                    _prov("density_surface", p, len(gdf), len(out), crs, bandwidth_m=round(bw, 1), cell_m=round(cell, 1), peak=round(peak, 4)))
+
+
+def op_flow_lines(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """flow_lines {to_x, to_y | to_id + layer + id_field, value, bend, top, min_value}: each row's point is the origin; a curved line to
+    its destination (1.17.0, map type flow lines), bending to the right of travel. Columns kept, plus `flow` and `length_km`."""
+    import geopandas as gpd
+    import thematic as tm
+    _require_crs(gdf, "flow_lines")
+    if _families(gdf) - {"Point"}:
+        raise OpsError("flow_lines needs a point layer whose points are the origins (a CSV read with x: and y: on the origin columns)")
+    g4 = gdf.to_crs("EPSG:4326")
+    if p.get("to_x") or p.get("to_y"):
+        cols = [p.get("to_x"), p.get("to_y")]
+        if any(not c or c not in gdf.columns for c in cols):
+            raise OpsError("flow_lines needs to_x and to_y: the destination's longitude and latitude columns, both columns of the layer")
+        dx, dy = pd_numeric(gdf[cols[0]]).to_numpy(), pd_numeric(gdf[cols[1]]).to_numpy()
+    elif p.get("to_id"):
+        if p["to_id"] not in gdf.columns:
+            raise OpsError(f"flow_lines to_id: '{p['to_id']}' is not a column of the layer")
+        places = ctx.other(p.get("layer"), "flow_lines").to_crs("EPSG:4326")
+        key = p.get("id_field")
+        if not key or key not in places.columns:
+            raise OpsError("flow_lines with to_id needs id_field: the column of the places layer that the ids match")
+        look = {str(k): (pt.x, pt.y) for k, pt in zip(places[key], places.geometry.representative_point())}
+        miss = sorted({str(v) for v in gdf[p["to_id"]] if str(v) not in look})
+        if miss:
+            raise OpsError(f"flow_lines: {len(miss)} destination id(s) are not in the places layer: {', '.join(miss[:5])}")
+        dx = np.array([look[str(v)][0] for v in gdf[p["to_id"]]])
+        dy = np.array([look[str(v)][1] for v in gdf[p["to_id"]]])
+    else:
+        raise OpsError("flow_lines needs the destination: to_x and to_y (its longitude and latitude columns), or to_id with layer and id_field")
+    val = p.get("value")
+    if val and val not in gdf.columns:
+        raise OpsError(f"flow_lines: the value column '{val}' is not in the layer")
+    vals = pd_numeric(gdf[val]).fillna(0).to_numpy() if val else np.ones(len(gdf))
+    keep = np.isfinite(dx) & np.isfinite(dy)
+    if p.get("min_value") is not None:
+        keep &= vals >= float(p["min_value"])
+    order = np.argsort(-vals)
+    if p.get("top"):
+        top = set(order[: int(p["top"])].tolist())
+        keep &= np.array([i in top for i in range(len(vals))])
+    dest = gpd.GeoSeries(gpd.points_from_xy(dx, dy), crs="EPSG:4326")
+    crs, why = measure_crs(gdf, "distance", others=[gpd.GeoDataFrame(geometry=dest[np.isfinite(dx)])], ctx=ctx)
+    o = g4.to_crs(crs).geometry
+    d = dest.to_crs(crs)
+    bend = float(p.get("bend", 0.2))
+    if not 0 <= bend <= 0.6:
+        raise OpsError("flow_lines bend is between 0 (straight) and 0.6")
+    rows, geoms = [], []
+    attrs = [c for c in gdf.columns if c != _geom_col(gdf)]
+    for i in np.where(keep)[0]:
+        ln = tm.arc(o.iloc[i].x, o.iloc[i].y, d.iloc[i].x, d.iloc[i].y, bend)
+        if ln is None:
+            continue
+        rows.append({**{a: gdf.iloc[i][a] for a in attrs}, "flow": float(vals[i]), "length_km": round(ln.length / 1000, 2)})
+        geoms.append(ln)
+    out = gpd.GeoDataFrame(rows, geometry=geoms, crs=crs).sort_values("flow").reset_index(drop=True) if rows else gpd.GeoDataFrame(columns=attrs + ["flow", "length_km", "geometry"], geometry="geometry", crs=crs)
+    out = _back(out, gdf.crs)
+    dropped = int(len(gdf) - len(out))
+    find = [{"id": "MAP-OPS-013", "severity": "INFO", "message": f"flow_lines: {len(out)} curved line(s) bending to the right of travel; draw them with "
+             "symbol: {graduated: true} on value_field: flow so the width shows the volume" + (f"; {dropped} row(s) left out (no destination, under min_value "
+             "or past top)" if dropped else "")}]
+    return OpResult(out, [f"{len(out)} flow line(s) from {len(gdf)} row(s), measured in {crs} (bend {bend:g} of the chord)."], find,
+                    _prov("flow_lines", p, len(gdf), len(out), crs, dropped=dropped))
+
+
+def pd_numeric(s):
+    import pandas as pd
+    return pd.to_numeric(s, errors="coerce")
+
+
+def _nice(v: float) -> str:
+    if v <= 0:
+        return "1"
+    e = 10 ** math.floor(math.log10(v))
+    for k in (1, 2, 2.5, 5, 10):
+        if k * e >= v:
+            return _fmt(k * e)
+    return _fmt(10 * e)
+
+
+def _band_names(k: int) -> list[str]:
+    named = {2: ["Lower", "Higher"], 3: ["Lower", "Middle", "Higher"], 4: ["Lowest", "Lower", "Higher", "Highest"],
+             5: ["Lowest", "Low", "Middle", "High", "Highest"]}
+    return named.get(k) or (["Lowest"] + [f"Band {i}" for i in range(2, k)] + ["Highest"])
+
+
+
 OPS = {
     "geocode": op_geocode,
+    "dot_density": op_dot_density,
+    "density_surface": op_density_surface,
+    "flow_lines": op_flow_lines,
     "buffer": op_buffer,
     "centroid": op_centroid,
     "representative_point": op_centroid,
@@ -1759,6 +1956,12 @@ def equivalent(op: str, p: dict, prov: dict | None = None) -> dict:
         "thin_lines": (f"gdf.assign(cell=grid_cell(gdf.to_crs('{crs}').centroid, {p.get('cell', 'cell')})).sort_values(rank_field, ascending=False).groupby('cell').head({p.get('max_per_cell', 'N')})",
                        f"SELECT * FROM (SELECT *, row_number() OVER (PARTITION BY ST_SnapToGrid(ST_Centroid(geom), {p.get('cell', 'cell')}) ORDER BY rank DESC) AS n FROM a) t "
                        f"WHERE n <= {p.get('max_per_cell', 'N')}"),
+        "dot_density": (f"per polygon: n = stochastic_round({val} / {p.get('per', 'per')}); n uniform points inside it (rejection sampling in its bounds), seeded",
+                        "ST_GeneratePoints(geom, round(value / per)::int, seed) per polygon"),
+        "density_surface": ("np.histogram2d(x, y, weights) then scipy.ndimage.gaussian_filter(sigma = bandwidth / cell); matplotlib contourf bands to polygons",
+                            "(no one-step PostGIS equivalent: ST_SnapToGrid counts, then a kernel in SQL or raster ST_MapAlgebra, then ST_DumpAsPolygons)"),
+        "flow_lines": ("for each row: a quadratic arc from the origin point to the destination, its control point bend x chord to the right of travel",
+                       "ST_LineInterpolatePoints over ST_MakeLine(o, ST_Translate(midpoint, normal * bend * chord), d), or ST_CurveToLine of a CircularString"),
         "reconcile": (f"gpd.sjoin(gdf, {other}.to_crs(gdf.crs).buffer(tolerance), predicate='intersects') then share of length within tolerance >= threshold",
                       f"SELECT a.id, ST_Length(ST_Intersection(a.geom, ST_Buffer(b.geom, tol))) / ST_Length(a.geom) FROM a JOIN {other} b ON ST_DWithin(a.geom, b.geom, tol)"),
     }

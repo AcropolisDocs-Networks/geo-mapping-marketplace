@@ -35,3 +35,5 @@
 - {host: firms.modaps.eosdis.nasa.gov,   url: "https://firms.modaps.eosdis.nasa.gov/",          class: service}
 # 1.2.0: the Copernicus Climate Data Store (credential copernicus-cds); the HEAD carries no key.
 - {host: cds.climate.copernicus.eu,       url: "https://cds.climate.copernicus.eu/",             class: service}
+# 1.17.0: Statistics Canada's ArcGIS service (statcan-geo); the USGS GAP organisation (usgs-gap-padus) is on services.arcgis.com, listed above.
+- {host: geo.statcan.gc.ca,               url: "https://geo.statcan.gc.ca/geo_wa/rest/services?f=json", class: service}

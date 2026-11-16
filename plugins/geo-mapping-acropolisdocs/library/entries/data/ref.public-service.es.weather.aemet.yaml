@@ -1,7 +1,7 @@
 id: ref.public-service.es.weather.aemet
 type: public-service
-rev: 1
-status: draft
+rev: 2
+status: active
 title: AEMET OpenData (Spain weather and climate)
 summary: Spanish weather observations, forecasts and climate records from AEMET OpenData, with a free key; reuse requires citing AEMET.
 tags:
@@ -40,13 +40,28 @@ avoid_when:
 - 'Two steps per request: AEMET answers with a link to the data, which is fetched in a second request.'
 delivery:
   mode: user-supplied
-  note: Request a key with an e-mail address (Obtención de API Key on opendata.aemet.es). The station inventory endpoint answered 200 with an empty body
-    without a key on 2026-11-07.
+  note: 'Request a key with an e-mail address (Obtención de API Key on opendata.aemet.es). The station inventory endpoint answered 200 with an empty body
+    without a key on 2026-11-07. The key is a token sent as api_key (query or header); a wrong key answers HTTP 401 with {"estado": 401}. Each data call
+    answers with a ''datos'' address to fetch the data from.'
+  requires_credential:
+    name: aemet
+    kind: apikey
+    class: secret
+    host: opendata.aemet.es
+    inject:
+      query: api_key
+    reject:
+      status:
+      - 401
+    signup_url: https://opendata.aemet.es/centrodedescargas/altaUsuario
+    free: true
+    limits: No request limits are published; the key is free on request (sign-up page, 2026-11-15).
+    note: The key is a token sent by e-mail after the sign-up form; it may also go in a header named api_key.
 source:
   publisher: Agencia Estatal de Meteorología (AEMET)
   product: AEMET OpenData
   url: https://opendata.aemet.es/centrodedescargas/info
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-15'
 vintage:
   current: live
   cadence: live
@@ -56,13 +71,17 @@ license:
   commercial_ok: true
   bulk_ok: false
   attribution_text: 'Fuente: AEMET.'
-  note: 'Information page (read 2026-11-07): data in Annex II of AEMET''s public-price resolution (BOE, 5 January 2016) is free; use and reproduction are
-    allowed "citando a Aemet como autora de la misma".'
+  note: 'Alta de usuario page (read 2026-11-15): use and reproduction allowed citing AEMET as the author; data under Annex II of the public-price resolution
+    (BOE, 2016-01-05) is free. Ley 18/2015 on reuse applies.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
-  verify_by: '2027-02-07'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-02-15'
   changelog:
   - rev: 1
     date: '2026-11-07'
     note: 'Draft (reference library additions, P2): the information page read on 2026-11-07 (key by e-mail, citation condition); key delivery not stated.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): how the key is sent and refused read from the API itself (a wrong api_key answers 401 with estado 401); the reuse condition
+      (cite AEMET) read on the sign-up page.'

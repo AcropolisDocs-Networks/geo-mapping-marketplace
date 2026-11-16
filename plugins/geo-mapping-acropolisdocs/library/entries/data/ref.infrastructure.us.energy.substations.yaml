@@ -1,10 +1,10 @@
 id: ref.infrastructure.us.energy.substations
 type: infrastructure
-rev: 1
-status: draft
-title: US electric substations (HIFLD, withdrawn from HIFLD Open)
-summary: Substation points with voltage and owner, formerly the HIFLD Electric Substations layer; no publisher copy is currently reachable, so the entry
-  records the state of the source.
+rev: 2
+status: active
+title: US electric substations (OpenStreetMap; the HIFLD layer is withdrawn)
+summary: Substations mapped in OpenStreetMap (power=substation) with voltage and operator where tagged, read through Overpass for a market's box. The federal
+  HIFLD layer was withdrawn and no federal copy is published.
 tags:
   geography:
   - us
@@ -34,42 +34,55 @@ tags:
   - T1
   - T2
   license_class:
-  - public-domain
+  - share-alike
   quality:
-  - derived
+  - community
 use_when:
-- Power-availability context for a site or data-center map, once a publisher copy (HIFLD on GeoPlatform, or the EIA Energy Atlas) is verified.
+- 'Power-availability context for a site or data-center map: substations near candidate sites, with voltage and operator where mapped.'
 avoid_when:
-- 'Nothing is verified: do not draw substations from this entry until a publisher copy is recorded.'
+- 'Completeness matters: OpenStreetMap coverage of substations varies by area, and not every substation carries voltage or operator.'
+- 'Engineering or interconnection decisions: confirm with the utility; positions are as mapped.'
 pairs_with:
 - ref.infrastructure.us.energy.transmission-lines
 crs: EPSG:4326
 delivery:
   mode: user-supplied
-  format: Shapefile or GeoJSON exported by the person from the EIA U.S. Energy Atlas or a HIFLD successor
-  note: 'The HIFLD Open feature service that carried this layer (services1.arcgis.com/Hp6G80Pky0om7QvQ) answers ''Invalid URL'' for it (2026-11-04): the
-    layer was withdrawn from HIFLD Open. Third-party copies exist on ArcGIS Online (state agencies, universities) but none from the publisher, so nothing
-    is recorded as a source. The EIA U.S. Energy Atlas (atlas.eia.gov) publishes a substations layer; export it there and supply the file.'
+  format: JSON from an Overpass QL query (nodes, and ways and relations with their centre)
+  note: 'POST [out:json][timeout:60];(nwr["power"="substation"](S,W,N,E););out center tags; to overpass-api.de/api/interpreter (a box as south, west, north,
+    east; see ref.public-service.world.osm.overpass for the caps) and save the JSON; or cut a Geofabrik extract (ref.infrastructure.world.osm.geofabrik).
+    Tags: voltage (volts, '';'' between levels), operator, name, substation (transmission, distribution). Overpass resets connections from the cloud workspace;
+    it answers from the person''s computer.'
 source:
-  publisher: DHS HIFLD (withdrawn) / EIA U.S. Energy Atlas
-  product: Electric Substations
+  publisher: OpenStreetMap contributors (via Overpass)
+  product: power=substation
+  url: https://overpass-api.de/api/interpreter
 vintage:
   current: not verified
   cadence: irregular
 license:
-  class: public-domain
+  class: share-alike
   redistribute_ok: true
   commercial_ok: true
   bulk_ok: true
-  attribution_text: 'Source: DHS HIFLD / EIA.'
-  note: Public domain; not verified for this entry.
+  attribution_text: © OpenStreetMap contributors, ODbL 1.0.
+  note: 'Open Database License 1.0: attribution, and a derived database (not a rendered map) carries the same licence (MAP-LIC-004).'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
-  verify_by: '2027-05-04'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-05-15'
   changelog:
   - rev: 1
     date: '2026-11-04'
     note: 'Draft: The HIFLD Open feature service that carried this layer (services1.arcgis.com/Hp6G80Pky0om7QvQ) answers ''Invalid URL'' for it (2026-11-04):
       the layer was withdrawn from HIFLD Open. Third-party copies exist on ArcGIS Online (state agencies, universities) but none from the publisher, so
       nothing is recorded as a source. The EIA Energy Atlas copy was not confirmed from the build environment.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0) from OpenStreetMap: the HIFLD layer is not re-hosted on the GeoPlatform (its transmission lines and power plants are) and no
+      federal copy is published. A Phoenix-area Overpass query from the owner''s computer returned 328 substations, 323 with voltage and 210 with an operator
+      (Salt River Project 118, Arizona Public Service 86).'
+  check:
+    kind: http_head
+    url: https://overpass-api.de/api/status
+    expect: 200
+url_verified_on: '2026-11-15'

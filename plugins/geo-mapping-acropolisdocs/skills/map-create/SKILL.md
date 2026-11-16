@@ -88,7 +88,8 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
    `source: {type: geocode, table: venues.csv, address: [street, city, state, zip], purpose: venues}` (the `geocode-addresses` rules apply).
 4. **Pick the map type from the data**, never from habit:
    - a rate or share per area → `role: choropleth` with `value_field` (normalized: per capita, per household, per sq mi, a percent);
-   - a count per area → divide first, or show proportional symbols;
+   - a count per area → divide first, or proportional symbols, or dots (op `dot_density`); many points → op `density_surface`; movement
+     between places → op `flow_lines` (recipes: gallery `dot-density`, `density-surface`, `flow-lines`);
    - sites or events → `role: points`; a measure at each site → `role: proportional`; roads or paths → `role: lines`;
    - a grid of values (a GeoTIFF: signal strength, population per cell, a propagation model) → `role: raster`; terrain → `role: hillshade` or `contour`; building footprints (raised on a 3D web page) → `role: buildings`.
    **Routing note.** A plain site map (where the sites are, what kind each is) is built here. A site list with azimuth and band columns whose

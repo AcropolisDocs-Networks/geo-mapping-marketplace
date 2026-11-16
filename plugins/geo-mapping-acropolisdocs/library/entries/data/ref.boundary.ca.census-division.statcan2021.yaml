@@ -1,7 +1,7 @@
 id: ref.boundary.ca.census-division.statcan2021
 type: boundary
-rev: 1
-status: draft
+rev: 2
+status: active
 title: Canadian census divisions (StatCan 2021 cartographic boundary file)
 summary: The 293 census divisions (counties, regional districts and equivalents) as 2021 cartographic polygons from Statistics Canada.
 tags:
@@ -45,8 +45,8 @@ tags:
 use_when:
 - A Canadian market map rolled up by county (CDUID), joined to census or client tables that use the 2021 geographic codes.
 avoid_when:
-- 'Nothing is verified from the build environment: download the file in a browser and supply it before drawing.'
 - 'The map needs exact legal boundaries: the cartographic files are clipped to the coast and generalized; the digital boundary files hold the full extent.'
+- 'Edges must match the published file exactly: the service sends the outlines generalized to 50 m to stay inside its time limit.'
 pairs_with:
 - ref.boundary.world.state.ne10
 join:
@@ -56,16 +56,30 @@ join:
   note: CDUID as text; keep leading zeros. PRUID is the two-digit province code (35 Ontario, 24 Quebec, 59 British Columbia, 48 Alberta).
 crs: EPSG:3347
 delivery:
-  mode: user-supplied
-  format: Shapefile (zip), Lambert conformal conic (EPSG:3347)
-  note: Download lcd_000b21a_e.zip from the 2021 Census boundary files page (www12.statcan.gc.ca/census-recensement/2021/geo/sip-pis/boundary-limites/index2021-eng.cfm,
-    'cartographic boundary file') in a browser and supply it. www12.statcan.gc.ca answered HTTP 403 to the build environment on 2026-11-04 for the boundary
-    file index and the zips, so the files are not verified; the Statistics Canada Open Licence page was read.
+  mode: service
+  profile: statcan-geo
+  protocol: arcgis
+  layer: 2021/Cartographic_boundary_files/MapServer/4
+  max_record_count: 6000
+  geometry: polygon
+  features: 293
+  columns:
+  - CDUID
+  - DGUID
+  - CDNAME
+  - CDTYPE
+  - LANDAREA
+  - PRUID
+  request: service_query.py fetch --profile statcan-geo --protocol arcgis --layer 2021/Cartographic_boundary_files/MapServer/4 --page-size 50 --generalize-m
+    50
+  note: Statistics Canada's ArcGIS service of the 2021 cartographic boundary files (layer 4); 293 features in 6 page(s) of 50, generalized by the server
+    to 50 m (full detail times out at its 60-second gateway). The file downloads on www12.statcan.gc.ca refuse automated requests (HTTP 403 from the build
+    session and the owner's computer alike, 2026-11-15); a file downloaded in a browser is read the same way.
 source:
   publisher: Statistics Canada
   product: 2021 Census Cartographic Boundary File, Canadian census divisions
-  url: https://www.statcan.gc.ca/en/reference/licence
-url_verified_on: '2026-11-04'
+  url: https://geo.statcan.gc.ca/geo_wa/rest/services/2021/Cartographic_boundary_files/MapServer/4
+url_verified_on: '2026-11-15'
 vintage:
   current: 2021 Census
   cadence: static
@@ -76,17 +90,22 @@ license:
   bulk_ok: true
   attribution_text: Adapted from Statistics Canada, 2021 Census cartographic boundary files. This does not constitute an endorsement by Statistics Canada
     of this product.
-  note: 'Statistics Canada Open Licence (statcan.gc.ca/en/reference/licence, read 2026-11-04): attribution with the stated wording.'
+  note: 'Open Government Licence - Canada (the service''s use limitation) and the Statistics Canada Open Licence (statcan.gc.ca/en/reference/licence, read
+    2026-11-04): attribution with the stated wording, no implied endorsement.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
-  verify_by: '2027-11-04'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-11-15'
   check:
-    kind: http_head
-    url: https://www.statcan.gc.ca/en/reference/licence
+    kind: http_get
+    url: https://geo.statcan.gc.ca/geo_wa/rest/services/2021/Cartographic_boundary_files/MapServer/4/query?where=1%3D1&returnCountOnly=true&f=json
     expect: 200
   changelog:
   - rev: 1
     date: '2026-11-04'
     note: 'Draft: www12.statcan.gc.ca answered HTTP 403 to the build environment on 2026-11-04 for the boundary file index and the zips, so the files are
       not verified; the Statistics Canada Open Licence page was read.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0) through Statistics Canada''s ArcGIS service (geo.statcan.gc.ca, layer 4): 293 features fetched in 6 page(s) of 50 with the server
+      generalizing to 50 m (service_query.py --generalize-m, new); the www12 downloads still refuse automated requests from both networks.'

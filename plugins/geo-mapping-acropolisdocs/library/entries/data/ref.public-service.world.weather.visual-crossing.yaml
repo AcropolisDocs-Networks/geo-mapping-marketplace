@@ -1,7 +1,7 @@
 id: ref.public-service.world.weather.visual-crossing
 type: public-service
-rev: 1
-status: draft
+rev: 2
+status: active
 title: Visual Crossing Weather (history and forecast)
 summary: Worldwide weather history, forecasts and alerts by place from the Visual Crossing Timeline API, with a free key.
 tags:
@@ -47,19 +47,23 @@ source:
   publisher: Visual Crossing Corporation
   product: Timeline Weather API
   url: https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Phoenix
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-15'
 license:
   class: restricted
   redistribute_ok: false
-  commercial_ok: null
+  commercial_ok: true
   bulk_ok: false
-  attribution_text: Weather data by Visual Crossing
-  note: Terms not read.
+  attribution_text: Weather Data Provided by Visual Crossing (linked to visualcrossing.com)
+  note: 'Editions page (read 2026-11-15): Free plan 1,000 records a day, commercial use on every plan; on the free plan the credit ''Weather Data Provided
+    by Visual Crossing'' with a link must appear near the data.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
-  verify_by: '2027-02-07'
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-02-15'
   changelog:
   - rev: 1
     date: '2026-11-07'
     note: 'Draft (reference library additions, P2): only the endpoint was checked on 2026-11-07; the editions page could not be read.'
+  - rev: 2
+    date: '2026-11-15'
+    note: 'Active (1.17.0): the editions page read: Free plan 1,000 records a day, commercial use allowed, the linked credit required on the free plan.'

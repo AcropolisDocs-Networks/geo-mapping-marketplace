@@ -52,10 +52,10 @@ entries:
 - id: ref.basemap-provider.os-maps
   file: entries/data/ref.basemap-provider.os-maps.yaml
   type: basemap-provider
-  status: draft
-  rev: 3
+  status: active
+  rev: 4
   tags_digest: da03c72f9051
-  entry_digest: 8180f78357ab
+  entry_digest: 63b186927e6a
 - id: ref.basemap-provider.osm-standard
   file: entries/data/ref.basemap-provider.osm-standard.yaml
   type: basemap-provider
@@ -101,10 +101,10 @@ entries:
 - id: ref.boundary-derived.us.cbrs-pal.fcc
   file: entries/data/ref.boundary-derived.us.cbrs-pal.fcc.yaml
   type: boundary-derived
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: ca9c52b4c12d
-  entry_digest: af5beb37e5fa
+  entry_digest: 40b81b8c2cdb
 - id: ref.boundary-derived.us.license-area.fcc
   file: entries/data/ref.boundary-derived.us.license-area.fcc.yaml
   type: boundary-derived
@@ -115,24 +115,24 @@ entries:
 - id: ref.boundary.ca.census-division.statcan2021
   file: entries/data/ref.boundary.ca.census-division.statcan2021.yaml
   type: boundary
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: eb17ae3fa29d
-  entry_digest: 1dbc0b4bb6d5
+  entry_digest: 869cac431889
 - id: ref.boundary.ca.csd.statcan2021
   file: entries/data/ref.boundary.ca.csd.statcan2021.yaml
   type: boundary
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: a66792c4da22
-  entry_digest: 9d628679e5d0
+  entry_digest: eb528b99a740
 - id: ref.boundary.ca.province.statcan2021
   file: entries/data/ref.boundary.ca.province.statcan2021.yaml
   type: boundary
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: 9d119d85df6f
-  entry_digest: 5099b191955a
+  entry_digest: ab4e76e37fa2
 - id: ref.boundary.europe.nuts.gisco2024
   file: entries/data/ref.boundary.europe.nuts.gisco2024.yaml
   type: boundary
@@ -143,17 +143,17 @@ entries:
 - id: ref.boundary.mx.municipio.inegi2023
   file: entries/data/ref.boundary.mx.municipio.inegi2023.yaml
   type: boundary
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: 9708fc23db3e
-  entry_digest: 0ed5c0c1927b
+  entry_digest: d367758ad4e6
 - id: ref.boundary.mx.state.inegi2023
   file: entries/data/ref.boundary.mx.state.inegi2023.yaml
   type: boundary
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: 30c858531488
-  entry_digest: d66a4217728d
+  entry_digest: 1b6241179a2a
 - id: ref.boundary.us.aiannh.cb500k
   file: entries/data/ref.boundary.us.aiannh.cb500k.yaml
   type: boundary
@@ -227,10 +227,10 @@ entries:
 - id: ref.boundary.us.protected.pad-us
   file: entries/data/ref.boundary.us.protected.pad-us.yaml
   type: boundary
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: d9cc2c34accd
-  entry_digest: 3a9673ddf8c9
+  entry_digest: ffc99cc84576
 - id: ref.boundary.us.state.cb20m
   file: entries/data/ref.boundary.us.state.cb20m.yaml
   type: boundary
@@ -493,10 +493,10 @@ entries:
 - id: ref.gazetteer.world.place.wof
   file: entries/data/ref.gazetteer.world.place.wof.yaml
   type: gazetteer
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: 98f2efa00ace
-  entry_digest: 7a8d900091c9
+  entry_digest: c280088d8538
 - id: ref.infrastructure.ca.license.ised-spectrum
   file: entries/data/ref.infrastructure.ca.license.ised-spectrum.yaml
   type: infrastructure
@@ -514,10 +514,10 @@ entries:
 - id: ref.infrastructure.us.energy.substations
   file: entries/data/ref.infrastructure.us.energy.substations.yaml
   type: infrastructure
-  status: draft
-  rev: 1
-  tags_digest: 156ad7f5af13
-  entry_digest: 470aac900beb
+  status: active
+  rev: 2
+  tags_digest: 39c44f0a27cb
+  entry_digest: c403d4b5c6fd
 - id: ref.infrastructure.us.energy.transmission-lines
   file: entries/data/ref.infrastructure.us.energy.transmission-lines.yaml
   type: infrastructure
@@ -570,17 +570,17 @@ entries:
 - id: ref.infrastructure.us.tower.land-mobile
   file: entries/data/ref.infrastructure.us.tower.land-mobile.yaml
   type: infrastructure
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: e2b707830cc4
-  entry_digest: 9e874b68027c
+  entry_digest: cd6ec791b5fc
 - id: ref.infrastructure.us.tower.microwave
   file: entries/data/ref.infrastructure.us.tower.microwave.yaml
   type: infrastructure
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: e2b707830cc4
-  entry_digest: 31b97d55151f
+  entry_digest: 382268ba48b7
 - id: ref.infrastructure.world.cell.opencellid
   file: entries/data/ref.infrastructure.world.cell.opencellid.yaml
   type: infrastructure
@@ -626,24 +626,24 @@ entries:
 - id: ref.map-type.density-surface
   file: entries/method/ref.map-type.density-surface.yaml
   type: map-type
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: dc26dcb39e44
-  entry_digest: f275a5562cb1
+  entry_digest: 61fd9bd42c1c
 - id: ref.map-type.dot-density
   file: entries/method/ref.map-type.dot-density.yaml
   type: map-type
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: 699ad782a3bc
-  entry_digest: fd8808e0bca0
+  entry_digest: f8db14b51d3f
 - id: ref.map-type.flow-line
   file: entries/method/ref.map-type.flow-line.yaml
   type: map-type
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: 224b679528e7
-  entry_digest: 4b7e89ca8ca8
+  entry_digest: 02e53a881bcb
 - id: ref.map-type.locator-inset
   file: entries/method/ref.map-type.locator-inset.yaml
   type: map-type
@@ -703,17 +703,17 @@ entries:
 - id: ref.public-service.ca-bc.transit.translink
   file: entries/data/ref.public-service.ca-bc.transit.translink.yaml
   type: public-service
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: a0dbfec61d0e
-  entry_digest: 61e9c40fc2ba
+  entry_digest: f7b3d6a9a464
 - id: ref.public-service.ca-on.transit.octranspo
   file: entries/data/ref.public-service.ca-on.transit.octranspo.yaml
   type: public-service
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: 251ce0ee610a
-  entry_digest: 10a2e8e916dd
+  entry_digest: 658ec4c27eee
 - id: ref.public-service.ca-qc.transit.stm
   file: entries/data/ref.public-service.ca-qc.transit.stm.yaml
   type: public-service
@@ -731,31 +731,31 @@ entries:
 - id: ref.public-service.es.weather.aemet
   file: entries/data/ref.public-service.es.weather.aemet.yaml
   type: public-service
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: c2a4816688be
-  entry_digest: da2557389dfd
+  entry_digest: b8c5241ec4d6
 - id: ref.public-service.fi.transit.digitransit
   file: entries/data/ref.public-service.fi.transit.digitransit.yaml
   type: public-service
-  status: draft
-  rev: 1
-  tags_digest: 3aede4df869b
-  entry_digest: c9cff187a928
+  status: active
+  rev: 2
+  tags_digest: e78929bf3b60
+  entry_digest: 1f6060d099c1
 - id: ref.public-service.nl.weather.knmi
   file: entries/data/ref.public-service.nl.weather.knmi.yaml
   type: public-service
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: fb140c99b40b
-  entry_digest: e776cd78fb9b
+  entry_digest: d55a76b5afbd
 - id: ref.public-service.no.weather.met-frost
   file: entries/data/ref.public-service.no.weather.met-frost.yaml
   type: public-service
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: 4b5475f38856
-  entry_digest: cd1eeaddac8d
+  entry_digest: dfedb52877ca
 - id: ref.public-service.uk.transit.tfl
   file: entries/data/ref.public-service.uk.transit.tfl.yaml
   type: public-service
@@ -766,10 +766,10 @@ entries:
 - id: ref.public-service.uk.weather.metoffice-datahub
   file: entries/data/ref.public-service.uk.weather.metoffice-datahub.yaml
   type: public-service
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: 54e1bfdcd26d
-  entry_digest: 40261e9b9330
+  entry_digest: ff99ba239a0b
 - id: ref.public-service.us-az.gis.azgeo
   file: entries/data/ref.public-service.us-az.gis.azgeo.yaml
   type: public-service
@@ -920,10 +920,10 @@ entries:
 - id: ref.public-service.world.transit.transitland
   file: entries/data/ref.public-service.world.transit.transitland.yaml
   type: public-service
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: f0f1477ab458
-  entry_digest: 7f201bc40d0a
+  entry_digest: f48f58c42af6
 - id: ref.public-service.world.weather.open-meteo
   file: entries/data/ref.public-service.world.weather.open-meteo.yaml
   type: public-service
@@ -941,10 +941,10 @@ entries:
 - id: ref.public-service.world.weather.visual-crossing
   file: entries/data/ref.public-service.world.weather.visual-crossing.yaml
   type: public-service
-  status: draft
-  rev: 1
+  status: active
+  rev: 2
   tags_digest: 6aeeb8aff9a8
-  entry_digest: 7a7defb9e849
+  entry_digest: a5bc34e58a49
 - id: ref.public-service.world.wikidata
   file: entries/data/ref.public-service.world.wikidata.yaml
   type: public-service
@@ -955,10 +955,10 @@ entries:
 - id: ref.statistic.mx.coverage.ift
   file: entries/data/ref.statistic.mx.coverage.ift.yaml
   type: statistic
-  status: draft
-  rev: 1
+  status: retired
+  rev: 2
   tags_digest: 32c8b1b0ac49
-  entry_digest: b045f01a8192
+  entry_digest: 78b8fcddc9ca
 - id: ref.statistic.us.acs5.broadband
   file: entries/data/ref.statistic.us.acs5.broadband.yaml
   type: statistic
@@ -1011,10 +1011,10 @@ entries:
 - id: ref.statistic.us.coverage.fcc-nbm
   file: entries/data/ref.statistic.us.coverage.fcc-nbm.yaml
   type: statistic
-  status: draft
-  rev: 3
+  status: retired
+  rev: 4
   tags_digest: 6bcdb43862da
-  entry_digest: 4650cfeae007
+  entry_digest: 95f3eac5023c
 - id: ref.statistic.us.lodes.lehd
   file: entries/data/ref.statistic.us.lodes.lehd.yaml
   type: statistic

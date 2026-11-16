@@ -1,0 +1,30 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-15 from the build environment.
+profile: usgs-gap-padus
+type: arcgis-rest
+base_url: https://services.arcgis.com/v01gqwM5QqNysAAi/ArcGIS/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 1000
+  server_max_features: 1000
+  max_concurrency: 1
+  timeout_s: 120
+  max_bytes: 100000000
+  max_total_features: 100000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: public-domain
+  confidential: false
+  attribution: 'Source: U.S. Geological Survey (USGS) Gap Analysis Project (GAP), Protected Areas Database of the United States (PAD-US) 4.1.'
+host_visibility: shown
+host_confirmed_on: '2026-11-15'
+verified_on: '2026-11-15'
+notes: 'The USGS Gap Analysis Project''s ArcGIS Online organisation. Manager_Type_PADUS/FeatureServer/0 is the PAD-US 4.1 inventory (655,335
+  polygons: FeatClass, Category, Own_Type, Own_Name, Mang_Type, Mang_Name, Des_Tp, Unit_Nm, State_Nm, GAP_Sts, Pub_Access); maxRecordCount 1000;
+  query by state (State_Nm) or a bbox. Shipped with the plugin (1.17.0), read-only.'
