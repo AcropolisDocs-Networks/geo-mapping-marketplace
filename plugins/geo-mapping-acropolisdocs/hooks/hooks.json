@@ -1,5 +1,5 @@
 {
-  "description": "On since 1.17.0: spike P7 passed (Claude Code 2.1.325, 2026-11-15: the pre-export lint hook stopped this plugin's build of a bad MapSpec, let an unrelated command through untouched, and the credentials reminder reached the model). On Windows the plugin's server launcher points the two commands at the plugin's own Python on each start (hooks/pin_python.py), because python3 there is the Store stub. Hooks act only on this plugin's own files (MAP-ED-005). hooks/README.md says how to turn one off.",
+  "description": "1.17.2: three hooks. The pre-export lint and the credentials reminder (on since 1.17.0, spike P7) and the timing hook that measures this plugin's own calls for map-trace. Every command starts its script through a guarded python3 -c program: a missing script (a plugin updated while a chat is open, or an unexpanded ${CLAUDE_PLUGIN_ROOT}) exits 0, never 2, so it can never refuse a tool call; only the pre-export check's own verdict exits 2. The program drops the working folder from the import path first. On Windows the server launcher points python3 at the plugin's own Python on each start (hooks/pin_python.py). Hooks act only on this plugin's own calls (MAP-ED-005). hooks/README.md says how to turn one off.",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,8 +7,42 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_export_lint.py\"",
+            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_export_lint.py\"",
             "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|mcp__.*device_bash|mcp__.*geo-mapping.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|mcp__.*device_bash|mcp__.*geo-mapping.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|mcp__.*device_bash|mcp__.*geo-mapping.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "timeout": 10
           }
         ]
       }
@@ -18,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"",
+            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"",
             "timeout": 10
           }
         ]

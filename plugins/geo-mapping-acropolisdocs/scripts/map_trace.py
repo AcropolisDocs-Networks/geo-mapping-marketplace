@@ -16,7 +16,7 @@ Attribution, per call:
   import    an inline Python program that puts a scripts/ folder on its path and imports this plugin's modules (a weaker claim);
   server    a tool of this plugin's OGC server (a tool name carrying the plugin's name).
 
-Status: ok, failed, blocked (the harness or a permission refused the call; excluded from the error rate), orphan (no result: the run was
+Status: ok, failed, blocked (the harness or a permission refused the call, or a headless session's call needed approval; excluded from the error rate), orphan (no result: the run was
 interrupted) or self (this report's own call, which cannot see its own result).
 
 Rework: a retry is the same command again with nothing written between; an iteration loop is the same script on the same target again after
@@ -25,7 +25,9 @@ through the shell are inferred from the command text and marked so.
 
 Printed: skill, script and tool names, option names (never their values), call numbers, timings, exit codes, MAP-* finding ids, and for each
 failure one line of its output, redacted (hosts, keys, tokens) with every path cut to its last part and capped at 160 characters. Never
-message text, command text or a full path. Durations come from transcript timestamps: they are bounds, not measurements.
+message text, command text or a full path. Durations come from the plugin's own timing hook when it logged the session (1.17.2:
+hooks/map_timing.py, .geo-mapping/traces/hooks/<session>.ndjson, joined by tool_use_id); otherwise from transcript timestamps, as bounds.
+The same log marks a build the pre-export hook stopped (a lint-block, never a crash) and counts the credentials reminders.
 
 Files: <out-dir>/map-trace_<session8>_<UTCstamp>.md (report and fix spec) and .json (the events), in .geo-mapping/traces/ by default;
 GEO_MAPPING_TRACE_DIR overrides. Exit 0; 2 nothing to trace; 3 with --strict when a map call failed.
@@ -321,7 +323,8 @@ def status_of(call: dict, is_last_map_trace: bool) -> str:
     if call["result"] is None:
         return "self" if is_last_map_trace else "orphan"
     t = call["result"]
-    if t.lstrip().startswith("<tool_use_error>") or "Permission for this action was denied" in t or "permission rule" in t.lower() and "denied" in t.lower():
+    if (t.lstrip().startswith("<tool_use_error>") or "Permission for this action was denied" in t or "permission rule" in t.lower() and "denied" in t.lower()
+            or t.strip().startswith("This command requires approval")):              # 1.17.2: a headless session's unapproved call
         return "blocked"
     if call["is_error"] or EXIT.search(t):
         code = EXIT.search(t)
@@ -372,6 +375,8 @@ def error_class(text: str) -> tuple[str, str | None, str | None]:
             exc = m.group(1)
             break
     low = t.lower()
+    if HOOK_STOP in t:                                     # 1.17.2: the plugin's own pre-export hook stopped the build before it ran
+        return "lint-block", None, None
     if exc in ("ModuleNotFoundError", "ImportError") or "cannot load library" in low or "no module named" in low:
         return "dependency", site, exc
     if "connecterror" in low or "connection refused" in low or "name or service not known" in low or "map-svc-010" in low:
@@ -413,8 +418,94 @@ def findings_in(text: str) -> dict[str, str]:
         if rank[sev] > rank.get(out.get(fid, "?"), -1):
             out[fid] = sev
     for fid in FINDING.findall(text or ""):
-        out.setdefault(fid, "?")
+        out.setdefault(fid, "BLOCK" if HOOK_STOP in (text or "") else "?")    # 1.17.2: the pre-export check lists blocking findings only
     return out
+
+
+# ---------------------------------------------------------------------------------------------------------------- the plugin's hook log
+HOOK_STOP = "geo-mapping pre-export check"
+
+
+def hook_log_dirs(records: list[dict]) -> list[Path]:
+    """Where the plugin's hooks may have logged this session (hooks/hook_log.py): GEO_MAPPING_HOME, this process's working folder, the
+    .geo-mapping/ of every folder the session ran in, and the home folder's."""
+    dirs: list[Path] = []
+    if os.environ.get("GEO_MAPPING_HOME"):
+        dirs.append(Path(os.environ["GEO_MAPPING_HOME"]))
+    dirs.append(gc.workdir())
+    for cwd in dict.fromkeys(str(d.get("cwd")) for d in records if d.get("cwd")):
+        dirs.append(Path(cwd) / gc.WORKDIR_NAME)
+    dirs.append(Path.home() / gc.WORKDIR_NAME)
+    out = []
+    for d in dirs:
+        p = d / "traces" / "hooks"
+        if p not in out:
+            out.append(p)
+    return out
+
+
+def read_hook_log(session: str, records: list[dict]) -> tuple[list[dict], list[str]]:
+    """The hook log lines for one session, from every place it may be, without duplicates. (lines, files read)."""
+    lines, seen, files = [], set(), []
+    for d in hook_log_dirs(records):
+        f = d / f"{session}.ndjson"
+        try:
+            if not f.is_file():
+                continue
+            for raw in f.read_text(encoding="utf-8", errors="replace").splitlines():
+                if raw in seen:
+                    continue
+                seen.add(raw)
+                try:
+                    rec = json.loads(raw)
+                except ValueError:
+                    continue
+                if isinstance(rec, dict) and isinstance(rec.get("t"), (int, float)):
+                    lines.append(rec)
+            files.append(str(f))
+        except OSError:
+            continue
+    return sorted(lines, key=lambda r: r["t"]), files
+
+
+def _ms_time(ms) -> dt.datetime:
+    return dt.datetime.fromtimestamp(ms / 1000, tz=dt.timezone.utc)
+
+
+def apply_hook_log(events: list[dict], log: list[dict]) -> dict:
+    """Measured times, failures and stops from the hook log, onto the map events (joined by the call's tool_use_id)."""
+    by_id: dict = {}
+    for r in log:
+        if r.get("id"):
+            by_id.setdefault(str(r["id"]), {})[r.get("e")] = r
+    measured = 0
+    for e in events:
+        if not e["lane"]:
+            continue
+        got = by_id.get(e.get("_id") or "")
+        if not got:
+            continue
+        start, end = got.get("start"), got.get("end") or got.get("fail")
+        if start and end:
+            ms = end.get("ms") if isinstance(end.get("ms"), (int, float)) else end["t"] - start["t"]
+            e["_start"] = _ms_time(start["t"])
+            e["_end"] = _ms_time(start["t"] + ms)
+            e["seconds"] = round(ms / 1000, 1)
+            e["measured"] = True
+            measured += 1
+        if "fail" in got and e["status"] == "orphan":
+            e["status"] = "failed"
+            e.setdefault("error_class", "failed")
+            e.setdefault("exit_code", got["fail"].get("exit"))
+        elif "end" in got and e["status"] == "orphan":
+            e["status"] = "ok"
+        if "stop" in got:
+            e["status"] = "failed"
+            e["stopped_by"] = "pre-export hook"
+            e["error_class"] = "lint-block"
+            for fid in got["stop"].get("findings") or []:
+                e.setdefault("findings", {})[fid] = "BLOCK"
+    return {"measured": measured}
 
 
 # ---------------------------------------------------------------------------------------------------------------- the trace
@@ -473,17 +564,27 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
         e = {"n": n, "tool": c["tool"] if not c["tool"].startswith("mcp__") or ev["mcp_tool"] else "mcp", "lane": ev["lane"], "basis": ev["basis"],
              "scripts": ev["scripts"], "op": ev["op"], "options": ev["options"], "mcp_tool": ev["mcp_tool"], "write": ev["write"],
              "status": st, "seconds": round(dur, 1) if dur is not None else None, "start": c["start"].isoformat() if c["start"] else None,
-             "_key": ev["key"], "_target": ev["target"], "_start": c["start"], "_end": c["end"]}
+             "_key": ev["key"], "_target": ev["target"], "_start": c["start"], "_end": c["end"], "_id": c["id"]}
         if ev["lane"]:
             e["findings"] = findings_in(c["result"] or "")
             if st == "failed":
                 cls, site, exc = error_class(c["result"] or "")
                 code = EXIT.search(c["result"] or "")
                 e.update(error_class=cls, crash_site=site, exception=exc, exit_code=int(code.group(1)) if code else None, evidence=evidence(c["result"] or ""))
+                if HOOK_STOP in (c["result"] or ""):
+                    e.update(stopped_by="pre-export hook", exit_code=2)
             elif st == "blocked":
                 e["evidence"] = evidence(c["result"] or "")
         events.append(e)
+    # 1.17.2: the plugin's own hook log (hooks/map_timing.py and friends): measured times, stops and reminders
+    log, log_files = read_hook_log(path.stem, records)
+    hk = apply_hook_log(events, log)
     mapev = [e for e in events if e["lane"]]
+    lo_t, hi_t = (min(times), max(times)) if times else (None, None)
+    reminders = sum(1 for r in log if r.get("e") == "reminder" and (not win or lo_t is None or lo_t <= _ms_time(r["t"]) <= hi_t + dt.timedelta(minutes=5)))
+    timed = [e for e in mapev if e["status"] not in ("self", "blocked") and not e.get("stopped_by")]     # calls that ran: a stopped one has no time
+    hooks = {"log": bool(log_files), "files": [Path(f).name for f in log_files], "measured": hk["measured"], "map_calls": len(timed),
+             "stopped": sum(1 for e in mapev if e.get("stopped_by")), "reminders": reminders}
     # --- rework
     retries, loops, reruns = [], [], []
     last_key, wrote_since = None, False
@@ -572,7 +673,8 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             "time": {"wall": round(wall), "tools": round(tool_s), "map_tools": round(map_s), "idle": round(idle), "idle_gaps": len(gaps),
                      "model_overhead_residual": round(model), "round_trip": {"count": len(rtt), "median": round(statistics.median(rtt), 1) if rtt else None,
                                                                           "worst": round(max(rtt), 1) if rtt else None, "total": round(sum(rtt))},
-                     "durations": "bounded from transcript timestamps"},
+                     "durations": durations_note(hooks)},
+            "hooks": hooks,
             "lanes": dict(sorted(lanes.items(), key=lambda kv: -kv[1]["calls"])), "failures": [_public(e) for e in failed],
             "blocked": [_public(e) for e in mapev if e["status"] == "blocked"], "orphans": [e["n"] for e in mapev if e["status"] == "orphan"],
             "retries": retries, "loops": loops, "reruns_after_edit": reruns, "hotspots": hotspots,
@@ -580,6 +682,14 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             "slowest": [_public(e) for e in sorted((e for e in mapev if e["seconds"]), key=lambda e: -e["seconds"])[:5]],
             "runs": [{"pipeline": r.get("pipeline"), "status": r.get("status")} for r in runs][-10:], "run_rework": rework_runs,
             "fix_spec": fix, "events": [_public(e) for e in events]}
+
+
+def durations_note(h: dict) -> str:
+    if not h["log"] or not h["measured"]:
+        return "bounded from transcript timestamps (no timing log for this session)"
+    if h["measured"] >= h["map_calls"]:
+        return "measured by the plugin's timing hook"
+    return f"measured by the plugin's timing hook for {h['measured']} of {h['map_calls']} map calls; the rest bounded from transcript timestamps"
 
 
 def _public(e: dict) -> dict:
@@ -643,7 +753,7 @@ def text_report(o: dict) -> str:
     if len(o["files_read"]) > 1:
         L.append(f"Read with {len(o['files_read']) - 1} pre-compaction cop{'y' if len(o['files_read']) == 2 else 'ies'}")
     if o["first"]:
-        L.append(f"Span: {o['first'][:16].replace('T', ' ')} → {o['last'][:16].replace('T', ' ')} UTC · durations are bounds from transcript timestamps, not measured")
+        L.append(f"Span: {o['first'][:16].replace('T', ' ')} → {o['last'][:16].replace('T', ' ')} UTC · durations {o['time']['durations']}")
     c, s = o["calls"], o["status"]
     L.append("")
     L.append(f"Calls     {c['total']} in the session · {c['map']} map plugin ({100 * c['map'] // max(1, c['total'])}%) · {c['other']} other (not read)")
@@ -655,6 +765,9 @@ def text_report(o: dict) -> str:
     t = o["time"]
     L.append(f"Time      wall {fmt_d(t['wall'])} · tools {fmt_d(t['tools'])} (map {fmt_d(t['map_tools'])}) · idle {fmt_d(t['idle'])} in {t['idle_gaps']} gap(s)"
              f" · not running a tool {fmt_d(t['model_overhead_residual'])} (residual)")
+    h = o["hooks"]
+    L.append(f"Hooks     timing {h['measured']} of {h['map_calls']} map call(s) measured" + ("" if h["log"] else " (no timing log)")
+             + f" · pre-export check stopped {h['stopped']} build(s) · credentials reminder {h['reminders']} time(s)")
     L.append("")
     L.append("Map lanes (calls)")
     top = max(v["calls"] for v in o["lanes"].values())
@@ -668,7 +781,8 @@ def text_report(o: dict) -> str:
         for e in o["failures"][:15]:
             what = (e["scripts"][0] + ".py" + (f" {e['op']}" if e["op"] else "")) if e["scripts"] else (e["mcp_tool"] or e["lane"])
             site = f"  @ {e['crash_site']}" if e.get("crash_site") else ""
-            L.append(f"  #{e['n']:<5} {what[:26]:<26} {e['error_class']:<11} {e.get('evidence', '')[:70]}{site}")
+            why = "stopped before it ran by the pre-export check" if e.get("stopped_by") else e.get("evidence", "")[:70]
+            L.append(f"  #{e['n']:<5} {what[:26]:<26} {e['error_class']:<11} {why}{site}")
         if len(o["failures"]) > 15:
             L.append(f"  … {len(o['failures']) - 15} more in the report file")
     if o["blocked"]:
@@ -708,7 +822,7 @@ def text_report(o: dict) -> str:
 
 def md_report(o: dict, text: str) -> str:
     out = [f"# Map trace: {o['plugin']} {o['version'] or ''}".rstrip(), "",
-           f"Transcript `{o['transcript'][:8]}…` (found by {o['found_by']}). Durations are bounds from transcript timestamps, not measurements. "
+           f"Transcript `{o['transcript'][:8]}…` (found by {o['found_by']}). Durations are {o['time']['durations']}. "
            "Only this plugin's calls are read; other calls are counted.", "", "```", text, "```", "", "## Fix spec", ""]
     if not o["fix_spec"]:
         out.append("No map plugin call failed in this window.")

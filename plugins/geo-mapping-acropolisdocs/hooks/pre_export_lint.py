@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pre-export lint hook (spec 5 and 12, gap analysis P1-13). OFF by default: see hooks/README.md.
+"""Pre-export lint hook (spec 5 and 12, gap analysis P1-13). On since 1.17.0 (spike P7): see hooks/README.md.
 
 A Claude Code `PreToolUse` hook on the Bash tool. It reads the hook's JSON from stdin and acts only when the command runs this plugin's
 own `build_map.py`, `webmap.py` or `map_restyle.py --build` with a `--spec` (through `$GMAP_ROOT`, the skills' resolver, or this plugin's
@@ -9,7 +9,8 @@ stops the command with exit 2 and the findings on stderr, which Claude Code show
 parse error, a missing module, a schema check that could not run because jsonschema is too old) lets the command run: the build lints the
 spec again and is the gate that counts. A `cd DIR &&` before the exporter is followed, so a relative --spec is found where the command runs.
 
-Writes nothing and reaches no network.
+Reaches no network. 1.17.2: a stop also adds one line to the plugin's own hook log (hooks/hook_log.py: the call's id, the script and the
+finding ids, never the spec's text), so map-trace can tell a call this hook stopped from one that failed.
 """
 from __future__ import annotations
 
@@ -109,9 +110,19 @@ def main() -> int:
         event = json.loads(sys.stdin.read() or "{}")
     except ValueError:
         return 0
-    code, msg = decide(event if isinstance(event, dict) else {})
+    event = event if isinstance(event, dict) else {}
+    code, msg = decide(event)
     if msg:
         print(msg, file=sys.stderr)
+    if code == 2 and event.get("tool_use_id"):
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import hook_log
+            ids = sorted(set(re.findall(r"\bMAP-[A-Z0-9]+-[0-9A-Z]+\b", msg)))
+            hook_log.append(event, {"e": "stop", "id": str(event["tool_use_id"])[:64], "script": (ours(str((event.get("tool_input") or {}).get("command") or "")) or "")[:-3],
+                                    "findings": ids})
+        except Exception:                                # noqa: BLE001 - the log never changes the verdict
+            pass
     return code
 
 

@@ -47,7 +47,10 @@ fi
    asked. Then say, in plain words: how many of the session's calls were the map plugin's, how many failed and their classes, any hotspot or
    iteration loop, and the one or two changes that would save the most time.
 
-5. **Say what is inferred.** Durations are bounds from transcript timestamps, not measurements. "Not running a tool" is a residual (wall
+5. **Say what is measured and what is inferred.** The `Hooks` line says how many map calls the plugin's timing hook measured (1.17.2); those
+   durations are measurements, the rest are bounds from transcript timestamps, and with no timing log for the session (`no timing log`)
+   all of them are. A build the pre-export hook stopped is a `lint-block` with disposition `input`: the gate worked, so fix the MapSpec, not
+   the plugin. "Not running a tool" is a residual (wall
    minus tool time minus idle gaps) that holds model time, runtime overhead and short waits; never call it model generation. A lane marked
    `LOW CONFIDENCE` was built only from calls after a skill load, not from the calls naming the plugin's own scripts. If the transcript line
    says `NEWEST-FALLBACK`, say the session was guessed before quoting a number, and offer `--session <id>`.
@@ -62,7 +65,8 @@ fi
 | Error class | `crash` (a traceback; the crash site is the deepest frame inside this plugin), `lint-block` (exit 3 or blocking MAP-* findings), `usage` (2), `refused` (4), `service` (5), `dependency` (a package or native library missing), `network`, `timeout`, `environment` (permissions, read-only folders), `failed` (the output does not say) |
 | Findings named | MAP-* ids in the map calls' output, with the severity printed beside them, ranked BLOCK first |
 | Rework | Retry: the same command again with nothing written between. Iteration loop: the same script on the same target again after a write, where the earlier run failed. Re-run after edit: the same shape after a success (normal for visual checks). Hotspot: 3 or more loops on one script. Writes made through the shell are inferred from the command and marked |
-| Time | Wall clock, tool time (map tool time on its own), idle gaps of 2 minutes or more, the residual, and the slowest map calls |
+| Time | Wall clock, tool time (map tool time on its own), idle gaps of 2 minutes or more, the residual, and the slowest map calls; a map call's time is measured when the timing hook logged it, else bounded |
+| Hooks | From the plugin's own hook log (`.geo-mapping/traces/hooks/<session>.ndjson`, joined by the call's id): how many map calls were measured, how many builds the pre-export check stopped (also read from the transcript when there is no log), how many times the credentials reminder fired. Never a command, an argument or a message |
 | Pipeline runs | This plugin's run records in the working folder: repeated or blocked pipeline jobs |
 | Fix spec | One finding per class, script and crash site, each with one disposition: `product` (a crash inside the plugin: needs a diagnosis), `input` (a gate, the spec, the data or the arguments stopped it), `dependency`, `environment`, `operator` (a traceback with no frame in the plugin: the session's own inline script), `unclassified`; severity by whether a later run of the same target recovered |
 
@@ -84,5 +88,6 @@ anything reads it (0.6.0), so a key someone pasted into the session never reache
 - No token or cost figures (`/geo-mapping-acropolisdocs:map-token-use`), and no analysis of another plugin's calls (the AcropolisDocs documents
   plugin has its own run trace for those).
 - No fixes. The fix spec is a register of what the transcript shows; a fix is a separate change, after reproducing it.
-- No hooks. It installs nothing that runs on every tool call, so it adds nothing to a session and cannot collide with another plugin's
-  hooks; without a hook log, durations stay bounds.
+- No hooks of its own. It reads the log the plugin's hooks write (1.17.2): the timing hook (`hooks/map_timing.py`) records only this
+  plugin's calls, in this plugin's working folder, so it cannot collide with another plugin's hooks or logs (the acropolisdocs run-trace
+  keeps its own). Turn the timing hook off in `hooks/hooks.json` (hooks/README.md) and durations go back to bounds.

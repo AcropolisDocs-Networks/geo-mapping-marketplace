@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Credentials reminder hook (spec 5 and 14, gap analysis P1-13). OFF by default: see hooks/README.md.
+"""Credentials reminder hook (spec 5 and 14, gap analysis P1-13). On since 1.17.0 (spike P7): see hooks/README.md.
 
 A Claude Code `UserPromptSubmit` hook. It reads the person's message from the hook's JSON on stdin and looks for a key, token or password
 with the plugin's own secret patterns (`scripts/redact.py`, the same ones that scrub every record and pasted command, MAP-SVC-022) and a
 few bare key shapes that have no `key=` in front of them. When one is there it adds a reminder to the model's context: do not repeat,
 store or use it, and point the person to their own credential folder (map-credentials). It never prints the secret, never blocks the
-message and never writes a file. With nothing found it prints nothing.
+message. With nothing found it prints nothing. 1.17.2: when it reminds, it adds one line to the plugin's own hook log (hooks/hook_log.py):
+the time and how many kinds of secret, never the message or the secret, so map-trace can count the reminders.
 """
 from __future__ import annotations
 
@@ -86,8 +87,15 @@ def main() -> int:
         event = json.loads(sys.stdin.read() or "{}")
     except ValueError:
         return 0
-    out = decide(event if isinstance(event, dict) else {})
+    event = event if isinstance(event, dict) else {}
+    out = decide(event)
     if out:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import hook_log
+            hook_log.append(event, {"e": "reminder", "kinds": len(kinds(str(event.get("prompt") or "")))})
+        except Exception:                                # noqa: BLE001 - the log never holds back the reminder
+            pass
         print(json.dumps(out))
     return 0
 

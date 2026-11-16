@@ -1,5 +1,5 @@
 {
-  "description": "The two hooks as shipped (on since 1.17.0, the same as hooks/hooks.json). Copy this file back over hooks/hooks.json to restore them after editing; see hooks/README.md.",
+  "description": "The hooks as shipped in 1.17.2 (the same as hooks/hooks.json). Copy this file back over hooks/hooks.json to restore them after editing; see hooks/README.md.",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,8 +7,42 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_export_lint.py\"",
+            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_export_lint.py\"",
             "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|mcp__.*device_bash|mcp__.*geo-mapping.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|mcp__.*device_bash|mcp__.*geo-mapping.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|mcp__.*device_bash|mcp__.*geo-mapping.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "timeout": 10
           }
         ]
       }
@@ -18,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"",
+            "command": "python3 -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"",
             "timeout": 10
           }
         ]
