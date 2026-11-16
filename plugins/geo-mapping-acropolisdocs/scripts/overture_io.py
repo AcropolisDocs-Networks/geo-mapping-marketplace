@@ -3,6 +3,8 @@
 
     overture_io.py files --release 2026-10-21.0 --type land          the release's files for a type (an S3 listing, read-only)
     overture_io.py read  --release R --type water --bbox=W,S,E,N --out F.parquet [--cap-mb 300]
+    overture_io.py read  --release R --theme buildings --type building --bbox=W,S,E,N --out F.parquet     1.16.0: buildings (height, floors, name)
+    overture_io.py read  --release R --theme transportation --type segment ...  |  --theme base --type infrastructure (piers, bridges)
 
 Rules (spec R3-GND):
 - Every byte goes through SafeHTTP (`ogc_http.SafeHTTP.get` with a `Range` header): public-address checks, the capped response, the audit. No
@@ -32,8 +34,15 @@ BASE_URL = f"https://{BUCKET_HOST}/"
 DEFAULT_CAP = 300_000_000
 BLOCK = 1 << 20                     # read-ahead within one range request
 RELEASE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.\d+$")
-TYPES = {"base": ("land", "water", "land_cover", "bathymetry"), "divisions": ("division_area",), "buildings": ("building",)}
+TYPES = {"base": ("land", "water", "land_cover", "bathymetry", "infrastructure"), "divisions": ("division_area",), "buildings": ("building", "building_part"),
+         "transportation": ("segment",)}
 COLUMNS = ["id", "subtype", "class", "bbox", "geometry"]
+# 1.16.0 (Day 15 issues 7 and 15): the columns a type is read with beyond COLUMNS; `names` comes back as `name` (its primary name). Day 15 read
+# buildings, roads and piers through DuckDB on S3 (proxy-injected AWS keys broke it) with a "bbox inside the window" filter that dropped the long
+# segments crossing its edge; this reader is anonymous HTTPS and keeps every feature whose bbox meets the window.
+TYPE_COLUMNS = {"building": ["names", "height", "min_height", "num_floors", "min_floor", "roof_shape", "has_parts"],
+                "building_part": ["names", "height", "min_height", "num_floors", "min_floor", "building_id"],
+                "segment": ["names", "subtype", "class"], "infrastructure": ["names", "height"], "water": ["names"], "land": ["names"]}
 
 
 class CapExceeded(Exception):
@@ -213,7 +222,7 @@ def read_window(release: str, typ: str, bbox, *, theme: str = "base", http=None,
         n_files += 1
         n_rg += len(rgs)
         names = pf.schema_arrow.names
-        cols = [c for c in (columns or COLUMNS) if c in names]
+        cols = [c for c in (columns or (COLUMNS + TYPE_COLUMNS.get(typ, []))) if c in names]
         t = pf.read_row_groups(rgs, columns=cols)
         if "bbox" in t.column_names:
             import pyarrow.compute as pc
@@ -229,6 +238,8 @@ def read_window(release: str, typ: str, bbox, *, theme: str = "base", http=None,
     t = pa.concat_tables(tables, promote_options="default")
     geom = shapely.from_wkb(t.column("geometry").to_numpy(zero_copy_only=False))
     data = {c: t.column(c).to_pylist() for c in t.column_names if c not in ("geometry", "bbox")}
+    if "names" in data:                                       # 1.16.0: the primary name as a plain column
+        data["name"] = [(n or {}).get("primary") if isinstance(n, dict) else None for n in data.pop("names")]
     return gpd.GeoDataFrame(data, geometry=list(geom), crs="EPSG:4326"), cost
 
 

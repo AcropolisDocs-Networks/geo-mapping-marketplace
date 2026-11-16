@@ -162,6 +162,13 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     formats = static + (["svg"] if (opts["inkscape"] or opts["outline_text"]) and "svg" not in static else [])
     result = {"id": plan.spec["id"], "brand": plan.brand, "template": plan.tpl_name, "crs": plan.crs, "findings": [],
               "blocked": False, "files": [], "report": rendered.report, "stem": rendered.filename_stem, "notes": plan.notes, "dpi": dpi}
+    try:                                              # 1.16.0 (Day 14 issue 12): say when a newer plugin release is out (today's answer only)
+        import release_check as rc
+        rn = rc.check(cache_only=True)["note"]
+        if rn and rn not in result["notes"]:
+            result["notes"] = list(result["notes"]) + [rn]
+    except Exception:  # noqa: BLE001 - never stops a build
+        pass
 
     def finish():
         findings.sort(key=lambda f: (SEV.get(f["severity"], 3), f["id"]))

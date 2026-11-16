@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 160 entries (132 active); basemap-provider 14, boundary 31, boundary-derived 2, context 16, crosswalk 1, gazetteer 5, infrastructure 16, map-type 11, palette 2, public-service 35, statistic 16, symbol-set 1, template 6, terrain 4.
+Library: 163 entries (135 active); basemap-provider 14, boundary 33, boundary-derived 2, context 16, crosswalk 1, gazetteer 5, infrastructure 16, map-type 11, palette 2, public-service 36, statistic 16, symbol-set 1, template 6, terrain 4.
 
 ### Usable now
 
@@ -38,6 +38,8 @@ Library: 160 entries (132 active); basemap-provider 14, boundary 31, boundary-de
 | `ref.boundary.world.country.geoboundaries` | geoBoundaries (administrative boundaries worldwide) | geoBoundaries (William & Mary geoLab), current gbOpen release (CAN ADM1 represents 2023) | downloaded on first use | attribution | shapeISO (string) |
 | `ref.boundary.world.country.ne110` | World countries, 110m (Natural Earth) | Natural Earth 5.1.1 | bundled (0.15 MB) | public-domain | ISO_A3_EH (string, 3 chars) |
 | `ref.boundary.world.division.overture` | Overture Maps divisions (administrative areas) | Overture Maps Foundation, 2026-10-21.0 | you supply the file | share-alike | id (string) |
+| `ref.boundary.world.historical.awmc` | Ancient World Mapping Center geodata (Roman Empire extents, provinces, roads) | Ancient World Mapping Center (University of North Carolina at Chapel Hill), repository master (static layers) | downloaded on first use | share-alike | None (none) |
+| `ref.boundary.world.historical.basemaps` | historical-basemaps - world political boundaries by century (A. Ourednik) | André Ourednik and contributors, repository master | downloaded on first use | share-alike | NAME (string) |
 | `ref.boundary.world.historical.ohm` | OpenHistoricalMap administrative boundaries as of a date | OpenHistoricalMap, live, edited daily | web service | public-domain | ohm_id (integer) |
 | `ref.boundary.world.state.ne10` | States and provinces worldwide, 1:10,000,000 (Natural Earth admin-1) | Natural Earth, 5.1.x (naciscdn.org current file, downloaded 2026-11-04) | downloaded on first use | public-domain | iso_3166_2 (string) |
 | `ref.boundary.world.state.ne10-locator` | World first-level divisions for locators and country lookup, 10m simplified (Natural Earth) | Natural Earth 5.1.1 | bundled (2.79 MB) | public-domain | iso_3166_2 (string) |
@@ -84,6 +86,7 @@ Library: 160 entries (132 active); basemap-provider 14, boundary 31, boundary-de
 | `ref.public-service.us-fl.gis.fgio` | Florida Geospatial Open Data Portal (FGIO) and FGDL | Florida Geospatial Open Data Portal, live portal | web service | open |  |
 | `ref.public-service.us-tx.gis.txgio` | Texas Geographic Information Office (TxGIO, formerly TNRIS) | Texas Geographic Information Office, live portal | web service | open |  |
 | `ref.public-service.us-wa.gis.geo-wa` | Washington State Geospatial Open Data Portal (geo.wa.gov) | Washington State Geospatial Open Data Portal, live portal | web service | open |  |
+| `ref.public-service.us-wa.transit.sound-transit` | Sound Transit GTFS (Link light rail, Sounder, T Line, ST Express) | Sound Transit, current GTFS (service periods; Fall 2026 SC-Fall-2026.6 read on Day 15) | you supply the file | restricted |  |
 | `ref.public-service.us.broadband.fcc-bdc-api` | FCC Broadband Data Collection public data API | Federal Communications Commission, per as-of date | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | public-domain |  |
 | `ref.public-service.us.energy.eia-opendata` | US Energy Information Administration Open Data API (v2) | US Energy Information Administration, rolling | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | public-domain |  |
 | `ref.public-service.us.geocoder.census` | US Census Bureau Geocoder | US Census Bureau, Public_AR_Current benchmark | web service | public-domain |  |

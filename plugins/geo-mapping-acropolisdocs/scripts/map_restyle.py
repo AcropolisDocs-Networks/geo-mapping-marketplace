@@ -282,7 +282,7 @@ def main(argv=None) -> int:
     ap.add_argument("--off", action="append")
     ap.add_argument("--on", action="append")
     ap.add_argument("--template")
-    ap.add_argument("--pack", help="the style pack (default, antique, blueprint, editorial, monochrome, sketch, or one of yours): a full rebuild from the kept data")
+    ap.add_argument("--pack", help="the style pack (default, antique, blueprint, classical, editorial, monochrome, sketch, or one of yours): a full rebuild from the kept data")
     ap.add_argument("--palette", action="append")
     ap.add_argument("--classify", action="append")
     ap.add_argument("--brand")

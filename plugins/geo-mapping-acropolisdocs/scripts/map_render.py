@@ -1058,6 +1058,21 @@ def graticule(plan: mp.Plan, frame: lo.Frame, spec_el: dict, fonts: dict, obstac
 
 
 # ---------------------------------------------------------------------------------------------------------------- elements
+KEY_MIN_CONTRAST = 1.35       # 1.16.0 (Day 15 issue 14): a key this close to the legend's ground is outlined in the label colour
+
+
+def key_edge(fill, stroke, ground: str, label: str) -> tuple[str, bool]:
+    """The edge a legend key is drawn with: its own, unless the key and its edge both nearly vanish on the legend's ground (a light-neutral
+    antenna on a light legend), when it is the label colour. -> (edge, outlined)."""
+    import colorlib as cl
+    try:
+        faint = isinstance(fill, str) and fill.startswith("#") and cl.contrast(fill, ground) < KEY_MIN_CONTRAST
+        weak = not stroke or stroke == "none" or (isinstance(stroke, str) and stroke.startswith("#") and cl.contrast(stroke, ground) < KEY_MIN_CONTRAST)
+    except Exception:  # noqa: BLE001 - a colour colorlib cannot read keeps its own edge
+        return stroke, False
+    return (label, True) if faint and weak else (stroke, False)
+
+
 def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, header: str | None = None, frame: "bool | str" = True) -> str:
     """The legend. `header` is the legend's own title (elements.legend.title, 0.15.0); `frame: false` drops the panel behind it, so the
     legend sits on the map with its labels haloed by the panel colour's absence (the layout still keeps its room)."""
@@ -1122,7 +1137,8 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                     else:
                         if op < 1:                          # the swatch shows the fill as the map draws it: see-through, over the land color
                             out.append(sd.rect(cx, mid - lg.SWATCH_H_MM / 2, lg.SWATCH_W_MM, lg.SWATCH_H_MM, t["land"]))
-                        out.append(sd.rect(cx, mid - lg.SWATCH_H_MM / 2, lg.SWATCH_W_MM, lg.SWATCH_H_MM, it["fill"], it["stroke"], 0.15, opa))
+                        edge, thick = key_edge(it["fill"], it["stroke"], t["legend_bg"] if frame else t["background"], t["label"])
+                        out.append(sd.rect(cx, mid - lg.SWATCH_H_MM / 2, lg.SWATCH_W_MM, lg.SWATCH_H_MM, it["fill"], edge, 0.25 if thick else 0.15, opa))
                         if it.get("pattern"):                       # the class's hatch over its colour (M15)
                             out.append(ld.swatch_pattern(it, cx, mid - lg.SWATCH_H_MM / 2, lg.SWATCH_W_MM, lg.SWATCH_H_MM, t, b["layer"]))
                 elif b["kind"] == "swatches":                 # a MapServer legend: the server's own swatch picture, the label in Inter (M12)
@@ -1135,7 +1151,8 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                     dash = f' stroke-dasharray="{sd.esc(it["dash"])}"' if it.get("dash") else ""
                     out.append(f'<path d="M{sd.num(cx)} {sd.num(mid)}h{sd.num(lg.SWATCH_W_MM)}" stroke="{it["stroke"]}" stroke-width="{sd.num(it["width_mm"])}" fill="none" stroke-linecap="round"{dash}/>')
                 else:
-                    out.append(f'<path d="{sd.symbol_path(it["shape"], cx + icon_w / 2, mid, it["size_mm"])}" fill="{it["fill"]}" stroke="{it["stroke"]}" stroke-width="0.12"/>')
+                    edge, thick = key_edge(it["fill"], it["stroke"], t["legend_bg"] if frame else t["background"], t["label"])
+                    out.append(f'<path d="{sd.symbol_path(it["shape"], cx + icon_w / 2, mid, it["size_mm"])}" fill="{it["fill"]}" stroke="{edge}" stroke-width="{0.2 if thick else 0.12}"/>')
                 kop = float(b.get("key_opacity", 1.0))
                 if kop < 1 and len(out) > k0:                # 1.13.0: a supporting or background layer's key at the layer's own strength
                     out.insert(k0, f'<g opacity="{sd.num(kop)}" data-emphasis="key">')
@@ -1330,6 +1347,15 @@ def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
         legend_title = (els.get("legend") or {}).get("title") or None        # 0.15.0: a title for the legend as a whole
         legend_fit = lg.fit_legend(blocks, lmax["w"], min(lmax["h"], map_rect.h * 0.85), columns=cols, template_kind=tpl["kind"],
                                    header=legend_title, start_pt=float((tpl.get("fonts") or {}).get("legend") or 0) or None)
+        inset_auto = (els.get("inset_map") or {}).get("on", "auto") == "auto"
+        if not legend_fit["fits"] and inset_auto and map_rect.h * 0.85 > lmax["h"] + 1:
+            # 1.16.0 (Day 15 issue 10): an automatic locator gives way to a legend that needs the whole right side
+            tall = lg.fit_legend(blocks, lmax["w"], map_rect.h * 0.85, columns=cols, template_kind=tpl["kind"], header=legend_title,
+                                 start_pt=float((tpl.get("fonts") or {}).get("legend") or 0) or None)
+            if tall["fits"]:
+                legend_fit = tall
+                legend_fit["notes"] = list(tall["notes"]) + ["the locator was left off to give the legend the height of the map (inset_map: {on: auto})"]
+                els = dict(els, inset_map=dict(els.get("inset_map") or {}, on=False))
         if not legend_fit["fits"]:
             findings.append(f("MAP-SPEC-005", "BLOCK", legend_fit["notes"][0] + "; use a larger template or fewer layers in the legend"))
             # 1.2.0 (Day 4 issue 3): never silent: a build that goes on past the block says the legend was left off

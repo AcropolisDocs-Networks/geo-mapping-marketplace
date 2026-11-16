@@ -291,9 +291,9 @@ entries:
   file: entries/data/ref.boundary.world.country.ne110.yaml
   type: boundary
   status: active
-  rev: 1
+  rev: 2
   tags_digest: 7c3414d259c5
-  entry_digest: c0dbe554f762
+  entry_digest: bfaef0f655ab
 - id: ref.boundary.world.division.overture
   file: entries/data/ref.boundary.world.division.overture.yaml
   type: boundary
@@ -301,6 +301,20 @@ entries:
   rev: 2
   tags_digest: 87bf1428023f
   entry_digest: 410e83c965ab
+- id: ref.boundary.world.historical.awmc
+  file: entries/data/ref.boundary.world.historical.awmc.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 53d2150fbc45
+  entry_digest: 1fe00b5e9ca1
+- id: ref.boundary.world.historical.basemaps
+  file: entries/data/ref.boundary.world.historical.basemaps.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 06fb177e5b71
+  entry_digest: 91f352528780
 - id: ref.boundary.world.historical.ohm
   file: entries/data/ref.boundary.world.historical.ohm.yaml
   type: boundary
@@ -382,9 +396,9 @@ entries:
   file: entries/data/ref.context.world.building.overture.yaml
   type: context
   status: active
-  rev: 2
+  rev: 3
   tags_digest: 93a248390d74
-  entry_digest: 8efe7508da37
+  entry_digest: ea23ef85d338
 - id: ref.context.world.coastline.ne110
   file: entries/data/ref.context.world.coastline.ne110.yaml
   type: context
@@ -791,6 +805,13 @@ entries:
   rev: 1
   tags_digest: 60a8ee6b72b8
   entry_digest: 18c484c28656
+- id: ref.public-service.us-wa.transit.sound-transit
+  file: entries/data/ref.public-service.us-wa.transit.sound-transit.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: b4bdb7a60bc7
+  entry_digest: 81ca3f7c002f
 - id: ref.public-service.us.broadband.fcc-bdc-api
   file: entries/data/ref.public-service.us.broadband.fcc-bdc-api.yaml
   type: public-service

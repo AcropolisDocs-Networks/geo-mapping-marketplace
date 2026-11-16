@@ -39,6 +39,12 @@ What to ask for, in the person's words:
   (footprints within `extrude.merge_gap_m` and one `height_band_m` merged, simplified, tiny blocks dropped at that zoom only), so the
   buildings stay on wider views; each zoom keeps 98 percent of the area or MAP-WEB-018 says so. `extrude: {lod: off}` keeps the 1.5.0 tiling;
   `lod:` with the same keys does it for any large polygon layer.
+- "See-through roof", "glass": `extrude: {opacity: 0.4}` (default 0.92). A block raised off the ground (`base_m`, `base_field`: a roof
+  canopy, a deck) gets an underside drawn by the page (MapLibre's extrusions have none, so from below a canopy read as slivers); `extrude:
+  {underside: false}` leaves it off. Extruded layers are cut no finer than page zoom 14, so a close, steep camera keeps every block (1.16.0).
+- "The stadium has a wall round the pitch", "fill the courtyard": an outline with a large hole (Overture and OSM carry a stadium's bowl as a
+  hole) is MAP-WEB-045; `ops: [{op: fill_holes}]` fills it, or `ops: [{op: massing, form: raked, ...}]` builds the stands (geo-analyze).
+  A site-sized page (the data fits at page zoom 15 or closer) zooms to 21 on the bundled background.
 - "A sky", "haze on the horizon": a page tilted over 30 degrees gets a sky and haze in the page's colours (`webmap.3d.sky: on | off`). The
   terrain reaches the ground the camera can see at the page's highest tilt (a coarser DEM beyond the window, fetched once); offline or with a DEM
   of your own the highest tilt comes down to what is covered (MAP-WEB-044).
@@ -47,7 +53,8 @@ What to ask for, in the person's words:
   obstructed in the print colours; a click on a link opens its profile chart.
 - "A story map", "walk the client through it": `webmap.story.chapters`, each with a view, the layers it shows, a period (with the time
   slider) and a selection for the KPI panel. Check that each chapter's view shows its layers (MAP-WEB-026 warns when it lands on an empty
-  view). A pitched view shows more ground at the top than a flat one; give a centre and a zoom rather than a box for a close view.
+  view). A pitched view shows more ground at the top than a flat one; give a centre and a zoom rather than a box for a close view. A chapter
+  that names no layers shows all the page's data layers (1.16.0).
 - "A panel with the numbers": `webmap.panel.fields` from the layer or its joined table (`join`); clicking a feature fills it, a chapter's
   `select` shows totals (sum, or `agg: mean | min | max`).
 

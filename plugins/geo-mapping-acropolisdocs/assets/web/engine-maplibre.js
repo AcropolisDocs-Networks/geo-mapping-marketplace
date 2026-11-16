@@ -414,7 +414,70 @@
         }
       };
     }
+    // ---- 1.16.0 (Day 15 issue 11): the underside of a raised extrusion (a roof canopy, a bridge deck). MapLibre's fill-extrusion has no
+    // bottom face, so from under a canopy it read as thin slivers. Each raised footprint's triangles are drawn at its base height by this
+    // layer, both faces, in a shade darker than the block, lifted as MapLibre lifts the block (the ground under its vertices' mean).
+    var U3 = ml.undersides || {}, underLayers = [];
+    function underLayer(m, lid, spec) {
+      var gl_ = null, prog = null, vbo = null, count = 0, origin = null, alpha = 1, on = true;
+      function build() {
+        var ter = mode3d && V && V.terrain && ml.dem && V.terrainOn !== false, ex = ter ? (V.exaggeration || 1) : 0, verts = [];
+        var k = spec.shade == null ? 0.72 : spec.shade, c = hexRgb(spec.color).map(function (v) { return v * k; }), o = null;
+        (spec.parts || []).forEach(function (pt) {
+          var z = (pt.g || 0) * ex + pt.b, t = pt.t;
+          for (var i = 0; i + 1 < t.length; i += 2) {
+            var q = maplibregl.MercatorCoordinate.fromLngLat([t[i], t[i + 1]], z);
+            if (!o) o = [q.x, q.y];
+            verts.push(q.x - o[0], q.y - o[1], q.z, c[0], c[1], c[2]);
+          }
+        });
+        origin = o || [0, 0];
+        count = verts.length / 6;
+        if (!gl_) return;
+        gl_.bindBuffer(gl_.ARRAY_BUFFER, vbo); gl_.bufferData(gl_.ARRAY_BUFFER, new Float32Array(verts), gl_.STATIC_DRAW);
+      }
+      var VS = "uniform mat4 u_m; attribute vec3 a_pos; attribute vec3 a_col; varying vec3 v_col; void main(){ gl_Position = u_m * vec4(a_pos, 1.0); v_col = a_col; }";
+      var FS = "precision mediump float; uniform float u_a; varying vec3 v_col; void main(){ gl_FragColor = vec4(v_col * u_a, u_a); }";
+      var layer = {
+        id: lid + "--under3d", type: "custom", renderingMode: "3d",
+        onAdd: function (map_, gl) {
+          gl_ = gl;
+          function sh(type, src) { var x = gl.createShader(type); gl.shaderSource(x, src); gl.compileShader(x); return x; }
+          prog = gl.createProgram();
+          gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+          vbo = gl.createBuffer();
+          build();
+        },
+        render: function (gl, args) {
+          if (!on || !count || !mode3d) return;
+          var pd = args && args.defaultProjectionData, mm = pd ? pd.mainMatrix : args;
+          var t = new Float64Array(16); t[0] = t[5] = t[10] = t[15] = 1; t[12] = origin[0]; t[13] = origin[1];
+          gl.useProgram(prog);
+          gl.uniformMatrix4fv(gl.getUniformLocation(prog, "u_m"), false, new Float32Array(mul4(mm, t)));
+          gl.uniform1f(gl.getUniformLocation(prog, "u_a"), alpha * (spec.opacity == null ? 1 : spec.opacity));
+          gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+          var at = function (n_, size, off) { var l_ = gl.getAttribLocation(prog, n_); gl.enableVertexAttribArray(l_); gl.vertexAttribPointer(l_, size, gl.FLOAT, false, 24, off); };
+          at("a_pos", 3, 0); at("a_col", 3, 12);
+          gl.disable(gl.CULL_FACE); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          gl.drawArrays(gl.TRIANGLES, 0, count);
+          window.__gmUnderFrames = (window.__gmUnderFrames || 0) + 1;
+        }
+      };
+      return { layer: layer, id: lid, setOn: function (v) { on = !!v; }, rebuild: function () { build(); m.triggerRepaint(); },
+               setAlpha: function (k) { alpha = k; m.triggerRepaint(); }, triangles: function () { return count / 3; } };
+    }
+    E.undersideTriangles = function (lid) {
+      var u = underLayers.filter(function (x) { return x.id === lid && x.map === map; })[0];
+      return u ? u.triangles() : 0;
+    };
     function addLinkLayers(m) {
+      Object.keys(U3).forEach(function (lid) {
+        var ul = underLayer(m, lid, U3[lid]);
+        var before = style.layers.filter(function (l) { return l.type === "symbol" && m.getLayer(l.id); })[0];
+        m.addLayer(ul.layer, before ? before.id : undefined);
+        ul.map = m;
+        underLayers.push(ul);
+      });
       Object.keys(L3).forEach(function (lid) {
         var ll = linkLayer(m, lid, L3[lid]);
         var before = style.layers.filter(function (l) { return l.type === "symbol" && m.getLayer(l.id); })[0];
@@ -425,6 +488,7 @@
     }
     function applyLinks(m) {
       linkLayers.forEach(function (ll) { if (ll.map === m) ll.setOn(vis[ll.id] && sideOk(m, ll.id)); });
+      underLayers.forEach(function (ul) { if (ul.map === m) ul.setOn(vis[ul.id] && sideOk(m, ul.id)); });
     }
     function pickLink(m, point) {
       var hit = null;
@@ -516,7 +580,7 @@
         apply(m);
         rotation(m, mode3d);
       });
-      linkLayers.forEach(function (ll) { ll.rebuild(); });          // the links follow the terrain on or off
+      linkLayers.concat(underLayers).forEach(function (ll) { ll.rebuild(); });          // the links follow the terrain on or off
       // a pitched view has no one scale: the scale bar is shown in 2D only
       scales.forEach(function (s) { if (mode3d && s._map) map.removeControl(s); else if (!mode3d && !s._map) map.addControl(s, "bottom-left"); });
       label3d();
@@ -593,7 +657,7 @@
       if (o.on != null) V.terrainOn = !!o.on;
       var want = mode3d && V.terrainOn !== false;
       maps.forEach(function (m) { m.setTerrain(want ? { source: "gm-dem", exaggeration: V.exaggeration } : null); });
-      linkLayers.forEach(function (ll) { ll.rebuild(); });
+      linkLayers.concat(underLayers).forEach(function (ll) { ll.rebuild(); });
     };
 
     E.setLayerVisible = function (id, on) { vis[id] = !!on; maps.forEach(apply); };
@@ -606,7 +670,7 @@
       var d = defs[id];
       if (!d) return;
       factor[id] = k;
-      linkLayers.forEach(function (ll) { if (ll.id === id) ll.setAlpha(k); });
+      linkLayers.concat(underLayers).forEach(function (ll) { if (ll.id === id) ll.setAlpha(k); });
       style.layers.forEach(function (l) {
         if ((l.metadata || {})["gm:layer"] !== id) return;
         (OPACITY[l.type] || []).forEach(function (prop) {

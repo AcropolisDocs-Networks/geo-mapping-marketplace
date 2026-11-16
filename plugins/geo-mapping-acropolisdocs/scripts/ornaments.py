@@ -1,6 +1,6 @@
 """ornaments: the ornament options of a style pack (1.4.0, R2-ORN), drawn as vector paths in the resolved tokens, deterministic, no filters.
 
-    elements.frame.style      single (the plain neat line) | double (two neat lines) | bar-border (alternating bars between two lines at
+    elements.frame.style      single (the plain neat line) | double (two neat lines) | dentil (1.16.0: square blocks between two rules) | bar-border (alternating bars between two lines at
                               graticule intervals, with degree ticks and labels on the outer edge; bars.interval_deg: auto picks 1, 2, 5,
                               10 or 15 degrees by extent)
     elements.title.box        plain | cartouche (an ornamental frame as a 9-slice: corners keep their shape, edges stretch to the title's
@@ -20,7 +20,8 @@ import textmeasure as tm
 from layout import Rect
 
 PT = tm.PT_MM
-BORDER_MM = {"single": 0.0, "double": 1.6, "bar-border": 3.2}
+BORDER_MM = {"single": 0.0, "double": 1.6, "bar-border": 3.2, "dentil": 3.0}
+DENTIL_W_MM = 1.1                    # 1.16.0 (the classical pack): a dentil's width; the gap between two is 0.6 of it
 BAR_STEPS = (1, 2, 5, 10, 15, 30)
 CORNER_MM = 3.6                      # a cartouche corner's size: the same on every box (the 9-slice rule)
 CARTOUCHE_PAD_MM = 2.6               # the room a cartouche adds round its contents
@@ -84,6 +85,11 @@ def frame_border(style: str, outer: Rect, inner: Rect, frame, crs: str, t: dict,
     ink = t["frame"] if style == "double" else t.get("ornament") or t["label"]
     out = [f'<g class="gm-frame-border" data-style="{sd.esc(style)}">',
            sd.rect(outer.x0, outer.y0, outer.w, outer.h, "none", ink, 0.5)]
+    if style == "dentil":
+        out += dentil_band(outer, border_mm("dentil"), ink, t.get("ornament_light") or t["background"])
+        out.append("</g>")
+        notes.append("frame: dentil border (a row of square blocks between two rules, as under a classical cornice)")
+        return "".join(out), notes
     if style != "bar-border":
         out.append("</g>")
         return "".join(out), notes
@@ -131,6 +137,33 @@ def frame_border(style: str, outer: Rect, inner: Rect, frame, crs: str, t: dict,
     out.append("</g>")
     notes.append(f"frame: bar border, bars every {step:g} degrees")
     return "".join(out), notes
+
+
+def dentil_band(outer: Rect, gap: float, ink: str, light: str) -> list[str]:
+    """1.16.0: the dentil frame, as under a classical cornice: a thin cornice rule just inside the outer line, a row of blocks hanging from
+    it (taller than wide, spaced at 0.6 of their width, a whole number of them on each edge, a square block in each corner), open ground
+    under them, and the map's own rule at the inside of the band."""
+    out = []
+    x0, y0, x1, y1 = outer.x0, outer.y0, outer.x1, outer.y1
+    c = gap * 0.18                              # the cornice rule, in from the outer line
+    d = gap * 0.42                              # how far the blocks hang from it
+    out.append(sd.rect(x0 + c, y0 + c, outer.w - 2 * c, outer.h - 2 * c, "none", ink, 0.18))
+    out.append(sd.rect(x0 + gap, y0 + gap, outer.w - 2 * gap, outer.h - 2 * gap, "none", ink, 0.3))
+    w0 = DENTIL_W_MM * 0.8
+    for horiz, fixed, a, b, sign in ((True, y0 + c, x0 + c + d, x1 - c - d, 1), (True, y1 - c, x0 + c + d, x1 - c - d, -1),
+                                     (False, x0 + c, y0 + c + d, y1 - c - d, 1), (False, x1 - c, y0 + c + d, y1 - c - d, -1)):
+        length = b - a
+        n = max(1, int(round((length - w0 * 0.6) / (w0 * 1.6))))
+        step = (length - w0 * 0.6) / n                   # each step a block and a gap; the row starts and ends on a gap
+        w = step / 1.6
+        for i in range(n):
+            pos = a + w0 * 0.6 / 2 + i * step + (step - w) / 2
+            top = fixed if sign > 0 else fixed - d
+            out.append(sd.rect(pos, top, w, d, ink, "none", 0) if horiz else sd.rect(top, pos, d, w, ink, "none", 0))
+    for cx, cy in ((x0 + c, y0 + c), (x1 - c - d, y0 + c), (x0 + c, y1 - c - d), (x1 - c - d, y1 - c - d)):
+        out.append(sd.rect(cx, cy, d, d, ink, "none", 0))
+    del light
+    return out
 
 
 # ---------------------------------------------------------------------------------------------------------------- cartouche

@@ -1,0 +1,6 @@
+# 1.16.0 (Day 14 issue 12): where this plugin's releases are published, read by scripts/release_check.py to say when a newer one is out.
+# A white-label build that publishes elsewhere changes `repo`; `check: off` turns the check off for everyone using this build.
+repo: AcropolisDocs-Networks/geo-mapping-plugin
+tag_prefix: v
+check: on
+cache_hours: 24

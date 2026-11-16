@@ -123,7 +123,8 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the
 
 ## Another style pack (1.4.0)
 
-"Use the antique style" is `--pack antique` (or `default`, `blueprint`, `editorial`, `monochrome`, `sketch`, or one of the person's own).
+"Use the antique style" is `--pack antique` (or `default`, `blueprint`, `classical`, `editorial`, `monochrome`, `sketch`, or one of the person's own). `classical` (1.16.0):
+Cinzel inscriptional capitals, EB Garamond, marble ground, Pompeian red and Tyrian purple, a dentil frame, for the ancient world.
 That is not a small change: the whole map is built again from its kept data (nothing is fetched again), with a new plan, colours, labels,
 legend and layout, under new file names; the build says so (MAP-STYLE-002) and the earlier files stay. A restyle that keeps the pack stays a
 restyle. `style_pack.py list` names the packs, `show ID` describes one.

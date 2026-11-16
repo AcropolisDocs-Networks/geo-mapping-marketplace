@@ -1,0 +1,90 @@
+id: ref.boundary.world.historical.awmc
+type: boundary
+rev: 1
+status: active
+title: Ancient World Mapping Center geodata (Roman Empire extents, provinces, roads)
+summary: The Ancient World Mapping Center's open GeoJSON of the ancient Mediterranean - the Roman Empire's extent in 60 BCE, AD 117 and AD 200, its provinces in AD 200 and after Diocletian, roads, aqueducts, walls and urban areas.
+tags:
+  geography:
+  - world
+  level:
+  - country
+  - line
+  - place
+  domain:
+  - general
+  - transport
+  use_for:
+  - historical-boundaries
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - world
+  - national
+  - regional
+  detail:
+  - simplified
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - authoritative
+use_when:
+- 'A map of the Roman world (Day 14: the Empire of AD 117 and its roads): github_fetch.py get AWMC/geodata "Cultural-Data/political_shading/roman_empire_ce_117_extent/roman_empire_ce_117_extent.geojson"
+  --out data/rome_117.geojson; roads are Cultural-Data/roads/roads.geojson.'
+- 'Other layers in Cultural-Data: political_shading (roman_empire_bce_60, roman_empire_ce_200_extent, roman_empire_ce_200_provinces, roman_empire_provinces
+  post_diocletian, senatorial_province, alexanders_empire, persian_extent, hasmonean, herod), aqueducts, canals, walls, urban_areas, regional_name_linework;
+  Physical-Data holds the ancient coastlines, rivers and inland water.'
+avoid_when:
+- 'Dates other than the snapshots: the extents are AD 117 and AD 200 (and 60 BCE); for later centuries historical-basemaps (ref.boundary.world.historical.basemaps)
+  or OpenHistoricalMap, and reconcile the edges (ops: [{op: reconcile, tolerance: 25 km}]) where two sources meet.'
+- 'Dense road networks at small scales: 3,166 road lines draw as a solid mass round Rome; thin them (ops: [{op: thin_lines, cell: 5 km}]).'
+join:
+  key: null
+  type: none
+  note: Each file is one layer; join to a map's pieces by geometry (split_by, reconcile), not by a key.
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  tool: github_fetch
+  format: GeoJSON per layer (and zipped shapefiles)
+  note: 'github_fetch.py get AWMC/geodata PATH --out FILE: raw.githubusercontent.com, then GitHub''s LFS host, jsDelivr and a sparse git clone (the cloud
+    workspace on 2026-11-15 was refused by api.github.com and jsDelivr and answered by the clone; raw files were read directly). github_fetch.py ls
+    AWMC/geodata Cultural-Data lists the files.'
+source:
+  publisher: Ancient World Mapping Center (University of North Carolina at Chapel Hill)
+  product: AWMC geodata
+  url: https://github.com/AWMC/geodata
+url_verified_on: '2026-11-15'
+vintage:
+  current: repository master (static layers)
+  cadence: irregular
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Ancient world data: Ancient World Mapping Center, ODbL.'
+  note: '"The GeoJson files are offered under the ODC Open Database License" (repository README, read 2026-11-15). ODbL: credit the source on the map;
+    a database derived from it and shared is shared under the ODbL.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-11-15'
+  check:
+    kind: http_get
+    url: https://github.com/AWMC/geodata
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-15'
+    note: 'New (1.16.0, Day 14 issue 2): the licence read in the README; the Cultural-Data file list read through github_fetch (a sparse clone).'

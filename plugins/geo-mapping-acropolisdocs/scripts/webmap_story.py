@@ -12,7 +12,8 @@
       panel: {title: Venue KPIs, fields: [peak_users, {field: throughput_gbps, label: Throughput, unit: Gbps, agg: sum}]}
 
 One map, a column of chapters beside it (a sheet under it on a phone). The chapter at the reading line flies the map to its view and shows its
-layers and its period; the keyboard moves between chapters (arrow keys, Page Up and Down, Home, End), and with reduced motion the map jumps
+layers and its period (1.16.0: a chapter that names no layers shows the page's data layers, where it used to keep the previous chapter's set,
+Day 15 issue 4); the keyboard moves between chapters (arrow keys, Page Up and Down, Home, End), and with reduced motion the map jumps
 instead of flying. The print view lists the chapters, each with a static picture made at build time through the print path (the same
 renderer as the print map, with the chapter's window, layers and period). MAP-WEB-026 checks the chapters: layers the page has, a view,
 a period the slider has, and a view that shows some of its layers' features.
@@ -197,7 +198,8 @@ def plan(story: dict | None, defs: list[dict], collections: dict, time_cfg: dict
             else:
                 sel = {"layer": sel["layer"], "field": str(sel["field"]), "in": [str(v) for v in sel["in"]], "label": str(sel.get("label") or ", ".join(map(str, sel["in"])))}
         v = {k: view[k] for k in ("center", "zoom", "bbox", "pitch", "bearing") if view.get(k) is not None}
-        out.append({"title": title, "text": str(ch.get("text") or ""), "view": v, "bbox": [round(x, 6) for x in bb], "layers": layers, "time": t,
+        out.append({"title": title, "text": str(ch.get("text") or ""), "view": v, "bbox": [round(x, 6) for x in bb], "layers": shown, "layers_given": layers,
+                    "time": t,
                     "select": sel, "id": f"gm-ch-{i}"})
     if not out:
         return None, fs, notes
@@ -225,7 +227,8 @@ def picture_edit(base_edit, ch: dict, time_cfg: dict | None, time_values: dict, 
     def edit(spec):
         base_edit(spec)
         spec["extent"] = {"mode": "bbox", "bbox": list(ch["bbox"]), "padding_pct": 0}
-        keep = set(ch["layers"]) if ch.get("layers") is not None else None
+        given = ch.get("layers_given", ch.get("layers"))
+        keep = set(given) if given is not None else None
         if keep is not None:
             needed = set()
             for ly in spec.get("layers") or []:

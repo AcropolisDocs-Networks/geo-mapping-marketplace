@@ -180,6 +180,17 @@
               "description": "Slide layouts the template carries, recorded so the linter can verify the file is what the entry claims — the deck-template analogue of local_fonts.internal_family."
             }
           }
+        },
+        "docx_templates": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^T[0-9]{1,2}[a-z]?$": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+\\.(docx|dotx)$"
+            }
+          },
+          "description": "1.16.0 (documents plugin 11.27.0): the brand's own Word reference templates by deliverable id (\"T6\": \"sow.docx\"). Used by the documents plugin; the map plugin carries the key and does not read it."
         }
       }
     },
@@ -304,6 +315,19 @@
         "href": {
           "type": "string",
           "description": "v11.9.0: where the HTML lockup's `html_label` links (an absolute https URL)."
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "footer",
+            "full"
+          ],
+          "description": "1.16.0 (documents plugin 11.27.0): where a file in this brand shows the visible credit: none, footer or full. The house is full."
+        },
+        "provenance_metadata": {
+          "type": "boolean",
+          "description": "1.16.0 (documents plugin 11.27.0): whether a file in this brand names the house in its metadata (the hidden accreditation). The house is true."
         }
       }
     },

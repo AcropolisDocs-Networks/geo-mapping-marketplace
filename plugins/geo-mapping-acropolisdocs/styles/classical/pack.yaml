@@ -1,0 +1,54 @@
+id: classical
+version: 1
+title: Classical
+intent: The ancient world in its own letters; Roman inscriptional capitals for the title, a Garamond for the rest, marble and travertine grounds, Pompeian red and Tyrian purple, a dentil frame (Day 14, the Map of the Empire).
+palette: own
+fonts: own
+modes:
+  print:
+    background: '#F4EFE6'
+    land: '#F1EADC'
+    water: '#C9D8DA'
+    frame: '#2B2A33'
+    legend_frame: '#8C8270'
+    label: '#2B2622'
+    label_halo: '#F1EADC'
+    legend_bg: '#F3EDE1'
+    neutral_ramp: ['#F1EADC', '#DED3BF', '#C2B49B', '#9C8E77', '#6B604F']
+    sequential_ramp: ['#EFD9C4', '#E2BC9C', '#D19C78', '#BC7A58', '#A25A3E', '#80412C', '#5C2B1E']
+    emphasis: '#8E2B24'
+    status: {success: '#4F6B3A', warning: '#8A6A22', danger: '#8E2B24'}
+    categorical: ['#8E2B24', '#5B2A4E', '#4F6B3A', '#2F5D73', '#8A6A22', '#6B4A2B']
+    no_data: '#C2B49B'
+    diverging_ramp: ['#2F5D73', '#6E8E9C', '#A9BCC2', '#EDE4D3', '#D0A07E', '#AE6A4A', '#8E2B24']
+    water_line: '#6F8E90'
+    hill_ink: '#6B604F'
+    ornament: '#2B2A33'
+    ornament_light: '#F1EADC'
+    place_ink: '#2B2622'
+  screen: {inherit: print}
+ramps: pack
+type:
+  title: {family: Cinzel, file: 'fonts/Cinzel-wght.ttf', sha256: f4d83d34d1f6c741193e4acf4b3dff9531e5a67b6aa65228d00a7db72a4e0f34, style: normal, generic: serif, licence: LICENSES/OFL-Cinzel.txt, licence_id: OFL-1.1,
+          upstream: 'https://github.com/google/fonts/tree/main/ofl/cinzel'}
+  label: {family: EB Garamond, file: 'fonts/EBGaramond-Italic-wght.ttf', sha256: bba2c4499c93c9612b90b9825d32b07da52fce2fe57562a1eb6b833553f93c4e, style: italic, generic: serif, licence: LICENSES/OFL-EBGaramond.txt, licence_id: OFL-1.1,
+          upstream: 'https://github.com/google/fonts/tree/main/ofl/ebgaramond'}
+  body: {family: EB Garamond, file: 'fonts/EBGaramond-wght.ttf', sha256: ef9512f92f6d579e5dc75af59a5a4b1b8b47d2eda89e00b954d44520e5369027, style: normal, generic: serif, licence: LICENSES/OFL-EBGaramond.txt, licence_id: OFL-1.1,
+         upstream: 'https://github.com/google/fonts/tree/main/ofl/ebgaramond'}
+elements:
+  frame: {style: dentil}
+  title: {box: plain}
+  north_arrow: {style: compass, points: 8}
+  scale_bar: {style: alternating}
+  legend: {frame: ruled}
+web: palette-and-fonts
+files:
+  'glyphs/MANIFEST.json': dc8c44f6092b49ee8a7bb9cf09f85441defe342713da11962a23197011c0e146
+  'glyphs/8192-8447.pbf': f6af83362497822590d4e7b3250c2890103e7dfb6fa67cdbf226c764ee28eed0
+  'glyphs/256-511.pbf': a9e977a3b9b4dedad240c7e867634bdc8d97e424459fded620e4edb19cd00b87
+  'glyphs/0-255.pbf': e1a38d7ef12327531c078e68bcead15a970a4c0738e6147e97200fabf1c93b18
+  'LICENSES/OFL-Cinzel.txt': f2b3029aba64c378bf0963b62945eee15e564fe4330b934c8f2eb058282b5e83
+  'LICENSES/OFL-EBGaramond.txt': 0985066662eb755ed3683ae5482a81a9195b49ce3f7e165cc2388b3dbece7dd7
+  'fonts/Cinzel-wght.ttf': f4d83d34d1f6c741193e4acf4b3dff9531e5a67b6aa65228d00a7db72a4e0f34
+  'fonts/EBGaramond-Italic-wght.ttf': bba2c4499c93c9612b90b9825d32b07da52fce2fe57562a1eb6b833553f93c4e
+  'fonts/EBGaramond-wght.ttf': ef9512f92f6d579e5dc75af59a5a4b1b8b47d2eda89e00b954d44520e5369027

@@ -1,0 +1,85 @@
+id: ref.boundary.world.historical.basemaps
+type: boundary
+rev: 1
+status: active
+title: historical-basemaps - world political boundaries by century (A. Ourednik)
+summary: World countries and empires as GeoJSON snapshots from 123,000 BC to 2010 (one a century from AD 100 to 1900, with extra years such as 1279, 1492, 1783, 1815, 1914, 1938, 1945), coarse edges.
+tags:
+  geography:
+  - world
+  level:
+  - country
+  domain:
+  - general
+  use_for:
+  - historical-boundaries
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  - legal-boundary
+  scale:
+  - world
+  - national
+  detail:
+  - generalized
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- 'A map that changes by century (Day 14: the Roman, Eastern Roman and Byzantine extents of 200, 300 ... 1400): github_fetch.py get aourednik/historical-basemaps
+  geojson/world_400.geojson --out data/world_400.geojson. Years before Christ are world_bc<year>.geojson (world_bc323); geojson/index.json lists them.'
+avoid_when:
+- 'Edges that must meet another source: the polygons are coarse, so an AD 117 piece of a finer map can read as lost; reconcile with a tolerance (ops: [{op:
+  reconcile, layer: ..., tolerance: 25 km}]) and record any hand overrides.'
+- 'Academic claims without checking: the project asks users to verify the maps against other sources before academic use.'
+join:
+  key: NAME
+  type: string
+  note: The polity's name in that year (NAME); SUBJECTO and PARTOF give the larger realm. Names change between snapshots.
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  tool: github_fetch
+  format: GeoJSON per year (geojson/world_<year>.geojson, world_bc<year>.geojson)
+  note: 'github_fetch.py get aourednik/historical-basemaps geojson/world_<year>.geojson --out FILE (read over raw.githubusercontent.com on 2026-11-15; listing
+    through a sparse clone where the API is refused).'
+source:
+  publisher: André Ourednik and contributors
+  product: historical-basemaps
+  url: https://github.com/aourednik/historical-basemaps
+url_verified_on: '2026-11-15'
+vintage:
+  current: repository master
+  cadence: irregular
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Historical boundaries: historical-basemaps, A. Ourednik and contributors, GPL-3.0.'
+  note: 'The repository is under GPL-3.0 (read 2026-11-15), a software licence applied to data: credit it, and share a modified copy of the data under GPL-3.0
+    with its source. The README asks users to verify the maps against other sources before academic use.'
+distinct_from:
+- id: ref.boundary.world.country.ne110
+  why: Natural Earth holds today's countries; these are the polities of a past year, one snapshot a century.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-11-15'
+  check:
+    kind: http_get
+    url: https://github.com/aourednik/historical-basemaps
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-15'
+    note: 'New (1.16.0, Day 14 issue 2): licence and README read; the 56 files of geojson/ listed through github_fetch (a sparse clone), world_200 read over raw.'

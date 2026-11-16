@@ -403,9 +403,20 @@ def fit_legend(blocks: list[dict], max_w_mm: float, max_h_mm: float, *, columns:
                         notes.append(f"legend text reduced to {pt:g} pt to fit")
                     return {"fits": True, "size": m, "columns": cols, "label_pt": pt, "notes": notes, "wrap": wrap}
                 pt = round(pt - 0.5, 2)
-    m = measure(blocks, 4, floor, floor + 1.0, header, True)
-    return {"fits": False, "size": m, "columns": 4, "label_pt": floor, "wrap": True,
-            "notes": [f"legend needs {m['width']:.0f} x {m['height']:.0f} mm; the template allows {max_w_mm:.0f} x {max_h_mm:.0f} mm"]}
+    # 1.16.0 (Day 15 issue 10): the size reported is the nearest miss (the column count that overflows least), not the four-column
+    # attempt, which said 280 x 62 mm for a one-column legend that was only too tall
+    best = None
+    for cols in range(max(1, columns), 5):
+        m = measure(blocks, cols, floor, floor + 1.0, header, True)
+        over = max(m["width"] / max_w_mm, m["height"] / max_h_mm)
+        if best is None or over < best[0]:
+            best = (over, cols, m)
+    _o, cols, m = best
+    tall = m["height"] > max_h_mm
+    return {"fits": False, "size": m, "columns": cols, "label_pt": floor, "wrap": True,
+            "notes": [f"legend needs {m['width']:.0f} x {m['height']:.0f} mm in {cols} column{'s' if cols > 1 else ''} at {floor:g} pt; the template allows "
+                      f"{max_w_mm:.0f} x {max_h_mm:.0f} mm" + ("; a classed layer keyed as one entry (legend: {single: true}) or fewer entries would shorten it"
+                                                            if tall else "")]}
 
 
 # ---------------------------------------------------------------------------------------------------------------- checks

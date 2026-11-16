@@ -409,11 +409,18 @@ def check_016(plan) -> list[dict]:
     out = []
     seen: list[tuple[str, str]] = []
     every = [c for c in (_drawn_color(l, plan.tokens) for l in plan.layers) if c]
+    # 1.16.0 (Day 15 issue 5): the parts of one structure (stands, wall, roof) share a `group` and are meant to read as one; a layer left out
+    # of the legend is never told apart from another in it
+    grp = {l.id: (l.spec or {}).get("group") for l in plan.layers}
+    keyed = {l.id: ((l.spec or {}).get("legend") or {}).get("include", True) is not False if isinstance((l.spec or {}).get("legend"), (dict, type(None)))
+             else (l.spec or {}).get("legend") is not False for l in plan.layers}
     for l in plan.layers:
         color = _drawn_color(l, plan.tokens)
         if not color:
             continue
         for other_id, other in seen:
+            if (grp.get(l.id) and grp.get(l.id) == grp.get(other_id)) or not keyed.get(l.id, True) or not keyed.get(other_id, True):
+                continue
             d = cl.cvd_min_delta_e(color, other)
             if d < DISTINCT_DELTA_E:
                 alt = brand_alternative(plan.tokens, [c for c in every if c.upper() != color.upper()])

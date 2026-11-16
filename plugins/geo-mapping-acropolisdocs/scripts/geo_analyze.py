@@ -48,6 +48,10 @@ PARAM_FLAGS = [
     ("--extend-km", "extend_km", "float"), ("--field", "field", "text"), ("--value", "value", "text"), ("--mode", "mode", "text"),
     ("--size", "size", "num_or_text"), ("--shape", "shape", "text"), ("--extent", "extent", "text"), ("--min-count", "min_count", "int"),
     ("--resolution", "resolution", "text"),
+    # 1.16.0: fill_holes, massing, thin_lines, reconcile (massing's own numbers go in with --param, e.g. --param top_m=46)
+    ("--max-area", "max_area", "float"), ("--min-area", "min_area", "float"), ("--form", "form", "text"), ("--height-m", "height_m", "float"),
+    ("--cell", "cell", "num_or_text"), ("--max-per-cell", "max_per_cell", "int"), ("--rank-field", "rank_field", "text"),
+    ("--keep-share", "keep_share", "float"), ("--threshold", "threshold", "float"),
 ]
 
 

@@ -703,9 +703,19 @@ def main(argv=None) -> int:
     ap.add_argument("--flythrough", metavar="PAGE.html", help="1.6.0: a video flown over a 3D web page (flythrough.py); run it through map-run")
     ap.add_argument("--timelapse", metavar="PAGE.html", help="1.14.0: a video of a MapLibre page's time slider played from its own view (flythrough --slider)")
     ap.add_argument("--events", metavar="MAP.yaml", help="1.14.0: an event-timeline video over the map: a point layer's events in time order (events_anim.py)")
+    ap.add_argument("--external", metavar="FILE", help="1.16.0: QA, required credits and provenance for a PNG or MP4 made outside the pipeline (with --spec)")
+    ap.add_argument("--story", metavar="MAP.yaml", help="1.16.0: a story video over the map from a --timeline (story line, counters, feature events)")
     add_option_flags(ap)
     if argv is None:
         argv = sys.argv[1:]
+    if "--external" in argv:                   # 1.16.0 (Day 14 issue 13): QA, credits and provenance for a file made outside the pipeline
+        import external_qa as xq
+        i = argv.index("--external")
+        return xq.main([argv[i + 1]] + argv[:i] + argv[i + 2:])
+    if "--story" in argv:                      # 1.16.0 (Day 14 issue 1): the events video with a timeline and no point layer
+        import events_anim as ev
+        i = argv.index("--story")
+        return ev.main([argv[i + 1]] + argv[:i] + argv[i + 2:])
     if "--timelapse" in argv:                  # 1.14.0 (Day 11 issue 14): the flythrough capture holding the page's view, stepping its slider
         import flythrough as fl
         i = argv.index("--timelapse")

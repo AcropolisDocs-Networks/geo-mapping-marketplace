@@ -1,0 +1,76 @@
+id: ref.public-service.us-wa.transit.sound-transit
+type: public-service
+rev: 1
+status: active
+title: Sound Transit GTFS (Link light rail, Sounder, T Line, ST Express)
+summary: Sound Transit's schedule feed (GTFS) for the Puget Sound - Link 1 and 2 Lines, the T Line, Sounder N and S Lines and ST Express buses, with route shapes, stops and networks.
+tags:
+  geography:
+  - us-wa
+  level:
+  - line
+  - site
+  domain:
+  - transport
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  scale:
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - authoritative
+use_when:
+- 'A Seattle-area map with the Link and Sounder lines and stations (Day 15: Lumen Field): download https://www.soundtransit.org/GTFS-rail/40_gtfs.zip (it redirects
+  to gtfs.sound.obaweb.org/prod/40_gtfs.zip) and read it with gtfs.py; routes carry operating_route (Link Light Rail, Sounder, T Line, MAP-GTFS-011).'
+- Overture's rail segments carry no route names, so the line identity comes from this feed.
+avoid_when:
+- 'The regional consolidated feed (gtfs_puget_sound_consolidated.zip): Sound Transit says it is decommissioned at the end of 2026; use each agency''s feed.'
+- 'A product or app named after Sound Transit: the terms reserve the agencies'' names and marks.'
+delivery:
+  mode: user-supplied
+  format: GTFS (zip)
+  note: 'Listed on soundtransit.org Open Transit Data downloads (read 2026-11-15) with the other Puget Sound agencies (King County Metro, Community Transit,
+    Pierce Transit, Kitsap Transit, Washington State Ferries). Downloading means agreeing to the Transit Data Terms of Use.'
+source:
+  publisher: Sound Transit
+  product: Open Transit Data (GTFS)
+  url: https://www.soundtransit.org/help-contacts/business-information/open-transit-data-otd/otd-downloads
+url_verified_on: '2026-11-15'
+vintage:
+  current: current GTFS (service periods; Fall 2026 SC-Fall-2026.6 read on Day 15)
+  cadence: irregular
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Transit data: Sound Transit.'
+  note: 'Transit Data Terms of Use (read 2026-11-15): a limited, revocable licence to use the data in any way except with malicious or criminal intent or to share
+    personal information; passing the data on needs these terms with it and the data unchanged and current (so redistribute_ok is false here); a
+    credit naming Sound Transit is allowed, not required; agency names and marks may not be used in a business or app name.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-15'
+  verify_by: '2027-02-15'
+  check:
+    kind: http_get
+    url: https://www.soundtransit.org/help-contacts/business-information/open-transit-data-otd/otd-downloads
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-15'
+    note: 'New (1.16.0, Day 15 issue 9): the downloads page and the Transit Data Terms of Use read; the feed used on Day 15 (SC-Fall-2026.6).'

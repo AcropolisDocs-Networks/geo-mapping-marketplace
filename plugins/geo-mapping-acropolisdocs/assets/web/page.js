@@ -182,6 +182,9 @@
       window.__gmCtx = { cfg: cfg, data: data,
         // 1.6.2: the flythrough moves the time slider with its marker; a story that follows time must not fly the camera away from it
         setTime: function (i) { storyFollowing = true; try { setTime(i); } finally { storyFollowing = false; } },
+        // 1.16.0 (Day 15 issue 4): the flythrough sets the frame's layers; the story's first chapter no longer decides them for every mode
+        setLayers: function (ids) { setLayers(ids); },
+        setOpacity: function (id, k) { if (E.setLayerOpacity) E.setLayerOpacity(id, k); },
         credits: function () {
         var t = F && F.creditsText ? F.creditsText() : "";
         if (t) return t;

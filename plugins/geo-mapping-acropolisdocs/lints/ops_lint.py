@@ -37,10 +37,11 @@ RAW_COUNT_HINT = re.compile(r"(^|[_\s])(count|cnt|total|num|number|n|pop|populat
 OP_NAMES = ("buffer", "centroid", "representative_point", "clip", "intersect", "intersection", "union", "difference", "symmetric_difference",
             "spatial_join", "nearest", "dissolve", "explode", "dedupe", "repair", "make_valid", "simplify", "antimeridian_split", "convex_hull",
             "concave_hull", "voronoi", "area", "length", "count_in", "sum_in", "population_covered", "coverage_share", "overlap", "grid", "hexbin",
-            "raster_zonal", "line_of_sight", "viewshed", "geocode", "as_of")
+            "raster_zonal", "line_of_sight", "viewshed", "geocode", "as_of", "fill_holes", "massing", "split_by", "thin_lines", "reconcile")
 ZONAL_STATS = ("sum", "mean", "min", "max", "count", "majority", "median", "std")
 NEEDS_LAYER = ("clip", "intersect", "intersection", "union", "difference", "symmetric_difference", "spatial_join", "nearest", "count_in", "sum_in",
-               "population_covered", "coverage_share")
+               "population_covered", "coverage_share", "split_by", "reconcile")
+MASSING_FORMS = ("solid", "courtyard", "stepped", "raked")
 NEEDS_VALUE = ("sum_in", "population_covered", "coverage_share")
 
 
@@ -135,6 +136,14 @@ def lint_ops_spec(ops) -> list[dict]:
             out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (grid) needs `size` with units", name))
         if name == "simplify" and o.get("tolerance") is None:
             out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (simplify) needs `tolerance` with units", name))
+        if name == "thin_lines" and o.get("cell") is None:
+            out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (thin_lines) needs `cell` with units (about a millimetre or two on the sheet)", name))
+        if name == "massing":
+            form = str(o.get("form") or "solid")
+            if form not in MASSING_FORMS:
+                out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (massing): form is one of {', '.join(MASSING_FORMS)}", name))
+            elif form == "stepped" and not o.get("tiers"):
+                out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (massing, stepped) needs tiers, a list of inset_m and height_m pairs", name))
         if name == "raster_zonal":
             if not o.get("raster"):
                 out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (raster_zonal) needs `raster:` (a GeoTIFF path or a library id)", name))

@@ -145,7 +145,8 @@
               "enum": [
                 "single",
                 "double",
-                "bar-border"
+                "bar-border",
+                "dentil"
               ]
             },
             "bars": {

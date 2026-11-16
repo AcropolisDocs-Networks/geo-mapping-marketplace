@@ -14,6 +14,14 @@ Camera (pure functions of the frame number, unit-tested):
   orbit     a bearing sweep around the centre
   slider    1.14.0 (Day 11 issue 14): a time-lapse of the page's time slider: the camera holds the page's own view and each period is shown for
             an equal share of the run (the last held a little longer), its label in the HUD; a 2D or 3D MapLibre page
+  keyframes 1.16.0 (Day 15 issue 1): the timeline's camera keyframes (--timeline T.yaml, or --keyframes cam.json for keyframes alone): a free
+            camera (eye lon/lat/height above the ground and the point it looks at, through MapLibre's calculateCameraOptionsFromTo) with its
+            field of view, or the page's own center/zoom/pitch/bearing; pitch up to 115 degrees; the layers and extrusion opacity each keyframe
+            sets (a see-through roof). The eye never goes under 6 m above the ground (issue 12).
+1.16.0 for every mode: the layers are the page's data layers at the first frame, not the first story chapter's (issue 4); --chapters shows
+each chapter's own layers. The HUD draws the brand logo bottom left above the credits (issue 13: the capture hides the page's controls and the
+logo with them), the timeline's story line and counters, and --poster first|last opens the video on a held frame that dissolves into the
+flight (issue 15: X shows the first frame as the thumbnail).
 Capture: Playwright Chromium on the page in capture mode (?gm-capture=1: no controls, the drawing buffer kept, one device pixel per CSS pixel,
 no fades). Per frame map.jumpTo(camera), wait for `idle`, screenshot. Software GL is Mesa llvmpipe (--use-angle=gl-egl), SwiftShader the
 fallback; `gl: gpu` asks for the hardware GPU (a PC). The moving marker is a DOM element placed with map.project, never a GeoJSON update.
@@ -37,6 +45,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import gmap_common as gc  # noqa: E402
+import timeline as tlm  # noqa: E402
 
 SIZES = {"1280x720": (1280, 720), "1920x1080": (1920, 1080), "1080x1350": (1080, 1350)}
 DRAFT = {"size": (640, 360), "fps": 12.5}
@@ -55,6 +64,10 @@ GL_ARGS = {"llvmpipe": ["--use-angle=gl-egl", "--use-gl=angle", "--ignore-gpu-bl
            "swiftshader": ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
            "gpu": GPU_ARGS.get(sys.platform, GPU_ARGS["linux"])}
 SOFTWARE_GL = re.compile(r"swiftshader|llvmpipe|softpipe|basic render|microsoft basic|warp", re.I)
+LOGO_JS = """async () => { const el = document.querySelector('svg.gm-brand-logo') || document.querySelector('svg.gm-logo'); if (!el) return null;
+  const s = new XMLSerializer().serializeToString(el), img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
+  await img.decode(); const h = 176, w = Math.max(1, Math.round(h * (img.width || 1) / (img.height || 1)));
+  const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); return c.toDataURL('image/png'); }"""
 RENDERER_JS = """() => { const g = document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl');
   if (!g) return null; const e = g.getExtension('WEBGL_debug_renderer_info');
   return String(e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)); }"""
@@ -227,7 +240,8 @@ def views_of(cfg: dict, size) -> list[dict]:
         else:
             bb = v.get("bbox") or cfg["bounds"]
             c, z = [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2], zoom_for_bbox(bb, size)
-        out.append({"center": list(c), "zoom": z, "pitch": float(v.get("pitch", p0)), "bearing": float(v.get("bearing", 0.0))})
+        out.append({"center": list(c), "zoom": z, "pitch": float(v.get("pitch", p0)), "bearing": float(v.get("bearing", 0.0)),
+                    "layers": ch.get("layers")})
     return out
 
 
@@ -336,9 +350,47 @@ def with_periods(cams: list[dict], mode: str, ctx: dict, layer: str | None) -> l
     return cams
 
 
+def data_layers(ctx: dict) -> list[str]:
+    """The page's data layers (not the context or relief layers): what every mode but --chapters shows from the first frame (1.16.0)."""
+    return [d["id"] for d in (ctx["cfg"].get("layers") or []) if not d.get("context") and d.get("role") != "hillshade"]
+
+
+def keyframe_cameras(n: int, fps: float, tl: dict) -> list[dict]:
+    """1.16.0: frame i's camera from the timeline's keyframes at t = i / fps."""
+    out = []
+    for i in range(n):
+        c = tlm.camera_at(tl, i / fps)
+        if c["free"]:
+            out.append({"free": True, "camera": c["camera"], "target": c["target"], "fov": c["fov"], "layers": c["layers"], "opacity": c["opacity"]})
+        else:
+            out.append({"center": c["center"], "zoom": round(c["zoom"] - 1, 4), "pitch": c["pitch"], "bearing": c["bearing"], "fov": c["fov"],
+                        "layers": c["layers"], "opacity": c["opacity"]})
+    return out
+
+
+def with_layers(cams: list[dict], mode: str, ctx: dict) -> list[dict]:
+    """1.16.0 (Day 15 issue 4): the layer set each frame shows. The capture used to start on the first story chapter's set whatever the mode;
+    now a chapter flight shows each chapter's layers, a keyframe its own (or the last one set), and the rest the page's data layers."""
+    every = data_layers(ctx)
+    if mode == "chapters":
+        views = views_of(ctx["cfg"], (1280, 720))
+        for c in cams:
+            lay = views[min(len(views) - 1, int(c.get("chapter", 0)))].get("layers") if views else None
+            c["layers"] = lay if lay is not None else every
+        return cams
+    for c in cams:
+        if c.get("layers") is None:
+            c["layers"] = every
+    return cams
+
+
 def cameras(mode: str, n: int, ctx: dict, *, size, layer: str | None = None, pitch: float | None = None, smooth_m: float = 400.0,
-            lookahead_m: float = 1500.0, fps: float = 25.0, steady_s: float = STEADY_S, max_turn: float = MAX_TURN) -> list[dict]:
+            lookahead_m: float = 1500.0, fps: float = 25.0, steady_s: float = STEADY_S, max_turn: float = MAX_TURN, tl: dict | None = None) -> list[dict]:
     cfg = ctx["cfg"]
+    if mode == "keyframes":
+        if not tl or not tl.get("keyframes"):
+            raise FlyError("--keyframes needs a timeline with keyframes (keyframes: [{t, camera, target} or {t, center, zoom}])", gc.EXIT_USAGE)
+        return keyframe_cameras(n, fps, tl)
     v3 = (cfg.get("ml") or {}).get("view3d") or {}
     p = float(pitch if pitch is not None else v3.get("pitch") or 60.0)
     if mode == "path":
@@ -384,7 +436,7 @@ def _inter_ttf(weight: int) -> Path:
     return out
 
 
-def hud(img, *, title: str | None, lines: list[str], credits: str, tokens: dict):
+def hud(img, *, title: str | None, lines: list[str], credits: str, tokens: dict, info: dict | None = None):
     """The overlay drawn on a frame: the title top left, the clock and distance lines under it, the credits along the bottom on a band.
     -> (image, placed: {title, lines, credits: bool})."""
     from PIL import Image, ImageDraw, ImageFont
@@ -403,6 +455,8 @@ def hud(img, *, title: str | None, lines: list[str], credits: str, tokens: dict)
     ink, bg = rgb(tokens.get("label") or tokens.get("emphasis")), rgb(tokens.get("background") or tokens.get("legend_bg"), 215)
     x, y = int(24 * k), int(20 * k)
     placed = {"title": False, "lines": False, "credits": False}
+    info = info if info is not None else {}
+    info.update(band_px=0, top_px=0)
     blocks = ([(title, big)] if title else []) + [(ln, small) for ln in lines if ln]
     if blocks:
         wmax = max(d.textlength(t, font=f) for t, f in blocks)
@@ -413,6 +467,7 @@ def hud(img, *, title: str | None, lines: list[str], credits: str, tokens: dict)
             y += int(f.size * 1.3)
         placed["title"] = bool(title)
         placed["lines"] = any(lines)
+        info["top_px"] = int(y + 6 * k)
     if credits:
         size = cred_size
         while size >= max(7, int(8 * k)):
@@ -425,6 +480,7 @@ def hud(img, *, title: str | None, lines: list[str], credits: str, tokens: dict)
             d.rectangle([0, H - band, W, H], fill=bg)
             d.text((int(16 * k), H - band + int(size * 0.45)), credits, font=cf, fill=ink)
             placed["credits"] = True
+            info["band_px"] = band
     return Image.alpha_composite(im, over).convert("RGB"), placed
 
 
@@ -463,14 +519,36 @@ class Capture:
             self.renderer = None
 
     def context(self) -> dict:
-        return self.page.evaluate("() => ({cfg: window.__gmCtx.cfg, data: window.__gmCtx.data, credits: window.__gmCtx.credits(), title: document.title, "
-                                  "can_time: typeof window.__gmCtx.setTime === 'function'})")
+        ctx = self.page.evaluate("() => ({cfg: window.__gmCtx.cfg, data: window.__gmCtx.data, credits: window.__gmCtx.credits(), title: document.title, "
+                                 "can_time: typeof window.__gmCtx.setTime === 'function', can_layers: typeof window.__gmCtx.setLayers === 'function'})")
+        try:                                     # 1.16.0: the brand logo the page shows, drawn by the browser into a PNG for the HUD
+            ctx["logo_png"] = self.page.evaluate(LOGO_JS)
+        except Exception:  # noqa: BLE001
+            ctx["logo_png"] = None
+        return ctx
 
     def frame(self, cam: dict, marker: bool) -> bytes:
         self.page.evaluate("""(c) => new Promise((res) => {
             const m = window.__gmMap;
             if (c.time != null && window.__gmCtx.setTime) window.__gmCtx.setTime(c.time);
-            m.jumpTo({center: c.center, zoom: c.zoom, bearing: c.bearing, pitch: c.pitch});
+            if (c.layers && window.__gmCtx.setLayers) {                                  // 1.16.0: the frame's layer set, set when it changes
+              const key = c.layers.join('|'); if (window.__gmFlyLayers !== key) { window.__gmCtx.setLayers(c.layers); window.__gmFlyLayers = key; } }
+            if (c.opacity) Object.keys(c.opacity).forEach((id) => {                     // a factor of the layer's own opacity, as its slider
+              if (window.__gmCtx.setOpacity) { window.__gmCtx.setOpacity(id, c.opacity[id]); return; }
+              (m.getStyle().layers || []).forEach((l) => { if (l.type === 'fill-extrusion' && l.metadata && l.metadata['gm:layer'] === id)
+                m.setPaintProperty(l.id, 'fill-extrusion-opacity', c.opacity[id]); }); });
+            if (c.fov && m.setVerticalFieldOfView) m.setVerticalFieldOfView(c.fov);
+            if (c.free) {                                                                  // 1.16.0: a free camera, heights above the ground
+              if (m.getMaxPitch() < 115) m.setMaxPitch(115);
+              const ground = (ll) => { try { return m.queryTerrainElevation(ll) || 0; } catch (e) { return 0; } };
+              const eye = [c.camera[0], c.camera[1]], at = [c.target[0], c.target[1]];
+              const o = m.calculateCameraOptionsFromTo(eye, ground(eye) + Math.max(6, c.camera[2]), at, ground(at) + (c.target[2] || 0));
+              if (o.zoom > m.getMaxZoom()) m.setMaxZoom(Math.min(24, o.zoom + 0.5));          // the camera is not held back by the page's zoom cap
+              m.jumpTo(o);
+            } else {
+              if (c.pitch > m.getMaxPitch()) m.setMaxPitch(Math.min(115, c.pitch));
+              m.jumpTo({center: c.center, zoom: c.zoom, bearing: c.bearing, pitch: c.pitch});
+            }
             let mk = document.getElementById('gm-fly-marker');
             if (c.marker) {
               if (!mk) { mk = document.createElement('div'); mk.id = 'gm-fly-marker';
@@ -524,7 +602,8 @@ def plan(n_frames: int, sec_per_frame: float | None) -> dict:
 
 def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, duration: float = 32.0, fps: float = 25.0, size: str = "1280x720",
         marker: str | None = None, hud_on: bool = True, quality: str = "final", resume: bool = False, gl: str = "auto", frames: int | None = None,
-        title: str | None = None, warmup_only: bool = False, capture_factory=None, steady_s: float = STEADY_S, max_turn: float = MAX_TURN) -> dict:
+        title: str | None = None, warmup_only: bool = False, capture_factory=None, steady_s: float = STEADY_S, max_turn: float = MAX_TURN,
+        timeline=None, poster: str | None = None) -> dict:
     """Capture, composite and encode. `frames` overrides duration x fps (tests). Returns the report: files, frames done and skipped, the seconds
     a frame took, the findings (MAP-OUT-013 from the read-back, MAP-OUT-020 when a credit could not be placed)."""
     import map_brand
@@ -535,6 +614,16 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
         return {"ok": False, "findings": [{"id": "MAP-OUT-013", "severity": "WARN", "message": why}], "files": [], "skipped_reason": why}
     if mode == "path" and not layer:
         raise FlyError("--path needs the line layer to follow", gc.EXIT_USAGE)
+    try:                                               # 1.16.0: the timeline (story line, counters, keyframes, poster, end hold)
+        tl = tlm.load(timeline, duration=duration)
+    except (tlm.TimelineError, OSError) as ex:
+        raise FlyError(f"timeline: {ex}", gc.EXIT_USAGE) from None
+    if poster:
+        tl["poster"] = poster
+    if mode != "keyframes" and tl["keyframes"]:
+        mode = "keyframes" if mode == "orbit" else mode
+    if tl["duration"] and timeline is not None:
+        duration = tl["duration"]
     if mode == "slider" and '"engine": "leaflet"' in page_html.read_text(encoding="utf-8", errors="replace")[:400000].replace('"engine":"leaflet"', '"engine": "leaflet"'):
         raise FlyError("a time-lapse of the slider is captured from a MapLibre page: build it with webmap.engine: maplibre", gc.EXIT_USAGE)
     if quality == "draft":
@@ -553,8 +642,21 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
     findings: list[dict] = []
     try:
         ctx = cap.context()
-        cams = with_periods(cameras(mode, n, ctx, size=wh, layer=layer, fps=fps, steady_s=steady_s, max_turn=max_turn), mode, ctx, layer)
+        cams = with_periods(cameras(mode, n, ctx, size=wh, layer=layer, fps=fps, steady_s=steady_s, max_turn=max_turn, tl=tl), mode, ctx, layer)
+        cams = with_layers(cams, mode, ctx)
         notes = []
+        findings += tl["findings"]
+        if ctx.get("can_layers") is False:
+            notes.append("the page was built before 1.16.0, so the capture cannot set its layers (it starts on the first story chapter's): rebuild it")
+        logo = None
+        if ctx.get("logo_png"):
+            import base64
+            import io as _io
+            from PIL import Image as _Image
+            logo = _Image.open(_io.BytesIO(base64.b64decode(ctx["logo_png"].split(",", 1)[1])))
+        elif tl.get("logo", True):
+            notes.append("the page shows no brand logo (svg.gm-brand-logo), so the video carries none")
+        font_tl = str(_inter_ttf(600))
         if any("time" in c for c in cams) and ctx.get("can_time") is False:
             notes.append("the page was built before 1.6.2, so its time slider stays where it starts: rebuild the page (webmap.py --spec) for the "
                          "course to draw in as it is flown")
@@ -569,8 +671,9 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
         done, skipped, times = 0, 0, []
         frames_rec = dict(man.get("frames") or {}) if man.get("size") == list(wh) else {}
         upto = min(n, WARMUP) if warmup_only else n
+        tl_key = tlm.dumps(tl)[:4000] if (tl["story"] or tl["counters"]) else ""
         for i in range(upto):
-            h = camera_hash(cams[i])
+            h = camera_hash({**cams[i], "_tl": tl_key, "_logo": bool(logo)})
             fp = fdir / f"frame_{i:05d}.png"
             if resume and frames_rec.get(str(i)) == h and fp.is_file():
                 skipped += 1
@@ -589,11 +692,14 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
                 labs = ((ctx["cfg"].get("time") or {}).get("labels") or [])
                 if labs:
                     lines.append(str(labs[cams[i]["time"]]))
+            info = {"band_px": 0, "top_px": 0}
             if hud_on or credits:
-                im, placed = hud(im, title=title if hud_on else None, lines=lines if hud_on else [], credits=credits, tokens=tokens)
+                im, placed = hud(im, title=title if hud_on else None, lines=lines if hud_on else [], credits=credits, tokens=tokens, info=info)
                 if credits and not placed["credits"] and not any(f["id"] == "MAP-OUT-020" for f in findings):
                     findings.append({"id": "MAP-OUT-020", "severity": "BLOCK",
                                      "message": f"the provider credits ({credits[:80]}...) could not be placed on the frame at {wh[0]} x {wh[1]}; a larger size carries them"})
+            if hud_on:                                  # 1.16.0: the logo, the story line and the counters
+                im, _pl = tlm.paint(im, i / fps, tl, tokens, font_path=font_tl, logo=logo, bottom_px=info["band_px"], top_px=info["top_px"])
             im.save(fp)
             frames_rec[str(i)] = h
             done += 1
@@ -619,14 +725,17 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
     meta = {"title": title or stem, "comment": comment, "copyright": props.get("Author", ""), "artist": props.get("Author", "")}
     rep["accreditation"] = bool(comment)
     mp4 = out / f"{stem}.mp4"
+    seq_dir, n_out = tlm.assemble(fdir, n, fps, tl)        # 1.16.0: the poster frame and the end hold
+    rep["video_frames"] = n_out
+    rep["poster"] = tl["poster"]
     try:
-        rep["files"].append(encode(fdir, mp4, fps, meta)["path"])
+        rep["files"].append(encode(seq_dir, mp4, fps, meta)["path"])
         import output_lint as ol
-        rep["findings"] += ol.check_mp4(str(mp4), tuple(w - w % 2 for w in wh), n / fps)
+        rep["findings"] += ol.check_mp4(str(mp4), tuple(w - w % 2 for w in wh), n_out / fps)
     except FlyError as ex:
         rep["findings"].append({"id": "MAP-OUT-013", "severity": "WARN", "message": str(ex)})
-    if n / fps <= GIF_MAX_S:
-        rep["files"].append(write_gif(fdir, out / f"{stem}.gif", fps, n, comment)["path"])
+    if n_out / fps <= GIF_MAX_S:
+        rep["files"].append(write_gif(seq_dir, out / f"{stem}.gif", fps, n_out, comment)["path"])
     rep["ok"] = not any(f["severity"] == "BLOCK" for f in rep["findings"])
     return rep
 
@@ -640,6 +749,7 @@ def main(argv=None) -> int:
     g.add_argument("--chapters", action="store_true")
     g.add_argument("--orbit", action="store_true")
     g.add_argument("--slider", action="store_true", help="1.14.0: a time-lapse of the page's time slider from its own view")
+    g.add_argument("--keyframes", metavar="CAM.yaml", help="1.16.0: fly the camera keyframes of a timeline file (free camera, fov, pitch to 115)")
     ap.add_argument("--duration", type=float, default=32.0)
     ap.add_argument("--fps", type=float, default=25.0)
     ap.add_argument("--size", default="1280x720")
@@ -651,11 +761,14 @@ def main(argv=None) -> int:
     ap.add_argument("--steady", type=float, default=STEADY_S, help="seconds the path camera is averaged over (0: follow every bend)")
     ap.add_argument("--max-turn", type=float, default=MAX_TURN, help="the path camera turns at most this many degrees a second")
     ap.add_argument("--warmup", action="store_true", help="capture the first 10 frames and report the seconds a frame takes")
+    ap.add_argument("--timeline", help="1.16.0: a timeline (YAML or JSON): keyframes, story line, counters, poster, end hold (timeline.py)")
+    ap.add_argument("--poster", choices=("first", "last", "none"), help="1.16.0: open the video on a held first or last frame")
     a = ap.parse_args(argv)
-    mode = "path" if a.path else "chapters" if a.chapters else "slider" if a.slider else "orbit"
+    mode = "path" if a.path else "chapters" if a.chapters else "slider" if a.slider else "keyframes" if a.keyframes else "orbit"
     try:
         rep = run(a.page, a.out, mode=mode, layer=a.path, duration=a.duration, fps=a.fps, size=a.size, marker=a.marker, hud_on=a.hud == "on",
-                  quality=a.quality, resume=a.resume, gl=a.gl, warmup_only=a.warmup, steady_s=a.steady, max_turn=a.max_turn)
+                  quality=a.quality, resume=a.resume, gl=a.gl, warmup_only=a.warmup, steady_s=a.steady, max_turn=a.max_turn,
+                  timeline=a.timeline or a.keyframes, poster=a.poster)
     except FlyError as ex:
         print(f"flythrough: {ex}", file=sys.stderr)
         return ex.code

@@ -130,6 +130,15 @@ def check_server_launcher() -> dict:
     return {"entry": "Windows (mcp/launch.cmd)", "note": "on a macOS or Linux computer run  sh mcp/use-posix.sh  once in the plugin's folder, then restart the plugin"}
 
 
+def check_release(offline: bool) -> dict:
+    """1.16.0 (Day 14 issue 12): whether a newer release is out (release_check.py; once a day, never with --offline)."""
+    import release_check as rc
+    try:
+        return rc.check(cache_only=offline)
+    except Exception as ex:  # noqa: BLE001 - the check never stops the doctor
+        return {"installed": rc.installed(), "latest": None, "newer": False, "route": f"failed: {type(ex).__name__}", "note": None}
+
+
 def check_library() -> dict:
     import ref_library
     return ref_library.summary()
@@ -274,7 +283,7 @@ def main(argv=None) -> int:
         "gdal_drivers": check_drivers(),
         "egress": {k: eg[k] for k in ("classification", "checked") if k in eg},
         "tier": env_probe.classify_tier(a.device_bridge, eg, "unknown"),
-        "assets": check_assets(), "brand_packs": check_packs(manifest), "library": check_library(),
+        "assets": check_assets(), "brand_packs": check_packs(manifest), "library": check_library(), "release": check_release(a.offline),
         "credentials": check_credentials(a.mcp, a.credentials_dir),
         "engines": check_engines(),
         "server_launcher": check_server_launcher(),

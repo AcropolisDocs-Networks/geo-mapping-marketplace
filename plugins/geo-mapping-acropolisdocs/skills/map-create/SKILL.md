@@ -65,7 +65,7 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the
 | `mapspec-reference`      | **before writing or changing a MapSpec**: every field, the roles and symbols, and worked examples |
 | `transit-maps`           | for a transit map from a GTFS feed |
 | `map-ground-global`      | for a metro or city map that needs detailed land and water, and for any map outside the United States |
-| `map-build-options`      | for a layer over 50,000 features, side panels and the fit, or a style pack (antique, blueprint, editorial, monochrome, sketch) |
+| `map-build-options`      | for a layer over 50,000 features, side panels and the fit, or a style pack (antique, blueprint, classical, editorial, monochrome, sketch) |
 | `map-env-probe`          | when `env_probe.py` stops the build (tier, packages, two editions installed) |
 
 Exit 0 built; 3 a BLOCK finding (nothing is withheld unless `--strict`, which deletes the files); 2 a request this release cannot do.

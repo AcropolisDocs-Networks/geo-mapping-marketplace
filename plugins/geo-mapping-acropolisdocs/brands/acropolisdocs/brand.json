@@ -12,7 +12,9 @@
     "url": "acropolisdocs.com",
     "full": "Powered by AcropolisDocs · acropolisdocs.com",
     "html_label": "AcropolisDocs",
-    "href": "https://acropolisdocs.com"
+    "href": "https://acropolisdocs.com",
+    "mode": "full",
+    "provenance_metadata": true
   },
   "palette": {
     "screen": {

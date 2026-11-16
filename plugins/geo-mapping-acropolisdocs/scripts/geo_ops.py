@@ -1373,6 +1373,198 @@ def op_geocode(gdf, p: dict, ctx: Ctx) -> OpResult:
     return OpResult(kept, notes, findings, prov)
 
 
+# --------------------------------------------------------------------------- 1.16.0: building context, cutting, thinning, reconciling
+
+def op_fill_holes(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """fill_holes {max_area, min_area, units}: fill polygons' holes (all of them, or those in an area range): a stadium bowl, a courtyard"""
+    import massing as ms
+    _require_crs(gdf, "fill_holes")
+    if _families(gdf) - {"Polygon"}:
+        raise OpsError("fill_holes needs a polygon layer")
+    u = _area_unit(p.get("units") or "m2") if p.get("units") else "m2"
+    k = AREA_UNITS_M2[u] if u in AREA_UNITS_M2 else 1.0
+    crs, why = measure_crs(gdf, "area", ctx=ctx)
+    m = _in_measure(gdf, crs)
+    mx = None if p.get("max_area") is None else float(p["max_area"]) * k
+    mn = None if p.get("min_area") is None else float(p["min_area"]) * k
+    geoms, n = [], 0
+    for g in m.geometry.values:
+        g2, c = ms.fill_holes(g, mx, mn)
+        geoms.append(g2)
+        n += c
+    out = m.copy()
+    out[_geom_col(out)] = geoms
+    out = _back(out, gdf.crs)
+    rng = "" if mx is None and mn is None else f" (holes of {_fmt(mn or 0)} to {_fmt(mx) if mx is not None else 'any'} m2)"
+    return OpResult(out, [f"Filled {n} hole(s){rng} in {len(gdf)} polygon(s), measured in {crs}."], [], _prov("fill_holes", p, len(gdf), len(out), crs, filled=n))
+
+
+def op_massing(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """massing {form: solid|courtyard|stepped|raked, height_m|height_field, base_m|base_field, tiers, opening, row_m, rake, start_m, top_m,
+    sides, slice_deg, wall_m, wall_above_m}: the 3D context of a building from its footprint, as parts with base_m and height_m (massing.py)"""
+    import geopandas as gpd
+    import massing as ms
+    _require_crs(gdf, "massing")
+    if _families(gdf) - {"Polygon"}:
+        raise OpsError("massing needs a polygon layer of footprints")
+    form = str(p.get("form") or "solid")
+    crs, why = measure_crs(gdf, "distance", ctx=ctx)
+    m = _in_measure(gdf, crs)
+    opening = None
+    if p.get("opening"):
+        import shapely
+        opening = shapely.union_all(_in_measure(ctx.other(p["opening"], "massing"), crs).geometry.values)
+    hf, bf = p.get("height_field"), p.get("base_field")
+    for f in (hf, bf):
+        if f and f not in gdf.columns:
+            raise OpsError(f"massing: the field '{f}' is not a column of the layer")
+    rows = []
+    attrs = [c for c in m.columns if c != _geom_col(m)]
+    for i, (g, rec) in enumerate(zip(m.geometry.values, m[attrs].to_dict("records"))):
+        h = _num_or_none(rec.get(hf)) if hf else None
+        b = _num_or_none(rec.get(bf)) if bf else None
+        try:
+            parts = ms.mass(g, p, opening=opening.intersection(g.buffer(1.0)) if opening is not None else None, height=h,
+                            base=b if b is not None else float(p.get("base_m") or 0.0))
+        except ms.MassingError as ex:
+            raise OpsError(f"massing (feature {i}): {ex}") from None
+        for part in parts:
+            rows.append({**rec, **part})
+    if not rows:
+        raise OpsError("massing made no parts")
+    out = gpd.GeoDataFrame(rows, geometry="geometry", crs=crs)
+    out = _back(out, gdf.crs)
+    given = (hf or p.get("height_m") is not None) and form in ("solid", "courtyard")
+    findings = [] if given else [{"id": "MAP-OPS-010", "severity": "INFO",
+                                  "message": f"massing ({form}): the heights are modelled from the parameters, not surveyed; say so in the map's note"}]
+    note = (f"Massing ({form}) in {crs}: {len(gdf)} footprint(s) became {len(out)} part(s) with base_m and height_m "
+            f"({', '.join(f'{k} {v}' for k, v in out['part'].value_counts().items())}); extrude them with height_field: height_m, base_field: base_m.")
+    return OpResult(out, [note], findings, _prov("massing", p, len(gdf), len(out), crs, form=form))
+
+
+def _num_or_none(v):
+    try:
+        f = float(v)
+        return f if math.isfinite(f) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def op_split_by(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """split_by {layer, id_field, field}: cut every feature by the polygons of another layer (map pieces, districts), each part tagged with
+    its piece; an STRtree finds the pairs, so thousands of lines into dozens of pieces take seconds, not minutes"""
+    import numpy as np
+    import shapely
+    _require_crs(gdf, "split_by")
+    other = ctx.other(p.get("layer"), "split_by")
+    if _families(other) - {"Polygon"}:
+        raise OpsError("split_by needs a polygon layer to cut by")
+    idf = p.get("id_field")
+    if idf and idf not in other.columns:
+        raise OpsError(f"split_by: id_field '{idf}' is not a column of '{p.get('layer')}'")
+    fld = p.get("field") or "piece"
+    o = other.to_crs(gdf.crs)
+    pieces = np.asarray(o.geometry.values, dtype=object)
+    tree = shapely.STRtree(pieces)
+    gi, pi = tree.query(np.asarray(gdf.geometry.values, dtype=object), predicate="intersects")
+    parts = shapely.intersection(np.asarray(gdf.geometry.values, dtype=object)[gi], pieces[pi])
+    fam = _families(gdf)
+    keep = ~shapely.is_empty(parts)
+    out = gdf.iloc[gi[keep]].copy()
+    out[_geom_col(out)] = parts[keep]
+    out[fld] = (o[idf].to_numpy()[pi[keep]] if idf else pi[keep])
+    out = out.reset_index(drop=True)
+    if len(fam) == 1:
+        out, _red = _reduce_collections(out, fam.pop())
+    note = f"Split {len(gdf):,} feature(s) by the {len(o)} polygon(s) of '{p.get('layer')}': {len(out):,} part(s), each with `{fld}`."
+    return OpResult(out, [note], [], _prov("split_by", p, len(gdf), len(out), None, other_layer=p.get("layer"), other_rows=len(o)))
+
+
+def op_thin_lines(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """thin_lines {cell, max_per_cell, rank_field, keep_share}: a dense line network thinned for its scale (Day 14 issue 5: Roman roads round
+    Rome drew as a blob). Lines go in rank order (rank_field, highest first, else longest); a line is kept while at least keep_share of the
+    grid cells it passes through still hold fewer than max_per_cell kept lines"""
+    import numpy as np
+    _require_crs(gdf, "thin_lines")
+    if _families(gdf) - {"LineString"}:
+        raise OpsError("thin_lines needs a line layer")
+    if p.get("cell") is None:
+        raise OpsError("thin_lines needs `cell` (a distance, e.g. 2 km: about a millimetre or two on the sheet at the map's scale)")
+    cm, cv, cu = to_metres(p["cell"], p.get("units"), "cell")
+    cap = int(p.get("max_per_cell") or 2)
+    share = float(p.get("keep_share") if p.get("keep_share") is not None else 0.5)
+    crs, why = measure_crs(gdf, "distance", ctx=ctx)
+    m = _in_measure(gdf, crs)
+    lengths = m.geometry.length.to_numpy()
+    rf = p.get("rank_field")
+    if rf and rf not in gdf.columns:
+        raise OpsError(f"thin_lines: rank_field '{rf}' is not a column of the layer")
+    import pandas as pd
+    rank = pd.to_numeric(gdf[rf], errors="coerce").fillna(-np.inf).to_numpy() if rf else lengths
+    order = np.lexsort((-lengths, -rank))
+    counts: dict = {}
+    keep = np.zeros(len(m), dtype=bool)
+    for i in order:
+        g = m.geometry.values[i]
+        if g is None or g.is_empty:
+            continue
+        n = max(2, int(math.ceil(lengths[i] / (cm / 2))) + 1)
+        pts = [g.interpolate(t, normalized=True) for t in np.linspace(0, 1, n)]
+        cells = {(int(math.floor(q.x / cm)), int(math.floor(q.y / cm))) for q in pts}
+        free = sum(1 for c in cells if counts.get(c, 0) < cap)
+        if free >= share * len(cells):
+            keep[i] = True
+            for c in cells:
+                counts[c] = counts.get(c, 0) + 1
+    out = gdf[keep].reset_index(drop=True)
+    note = (f"Thinned the lines on a {_fmt(cv)} {cu} grid in {crs}, at most {cap} a cell, by {rf or 'length'}: {len(gdf):,} to {len(out):,} "
+            f"({len(gdf) - len(out):,} left out). Say so in the map's note.")
+    return OpResult(out, [note], [], _prov("thin_lines", p, len(gdf), len(out), crs, cell_m=cm))
+
+
+def op_reconcile(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """reconcile {layer, tolerance, threshold, field, overrides}: the share of each feature inside another layer whose edges disagree with
+    it (two sources of one boundary, Day 14 issue 3), the other layer widened by `tolerance` first; `<field>` the share and `<field>_in` the
+    share at or over threshold; overrides {id: true|false} set a feature by hand, and are listed in provenance"""
+    import shapely
+    _require_crs(gdf, "reconcile")
+    other = ctx.other(p.get("layer"), "reconcile")
+    if _families(gdf) - {"Polygon"} or _families(other) - {"Polygon"}:
+        raise OpsError("reconcile needs polygons on both sides")
+    tm, tv, tu = to_metres(p.get("tolerance", 0), p.get("units"), "tolerance")
+    thr = float(p.get("threshold", 0.5))
+    fld = p.get("field") or f"{p.get('layer')}_share"
+    crs, why = measure_crs(gdf, "area", [other], ctx=ctx)
+    a = _in_measure(gdf, crs)
+    ref = shapely.union_all(shapely.make_valid(_in_measure(other, crs).geometry.values))
+    if tm > 0:
+        ref = ref.buffer(tm)
+    shapely.prepare(ref)
+    geoms = a.geometry.values
+    area = shapely.area(geoms)
+    inter = shapely.area(shapely.intersection(geoms, ref))
+    sh = [float(i / x) if x > 0 else 0.0 for i, x in zip(inter, area)]
+    out = gdf.copy()
+    out[fld] = [round(v, 4) for v in sh]
+    out[f"{fld}_in"] = [v >= thr for v in sh]
+    over = p.get("overrides") or {}
+    idf = p.get("id_field")
+    done = []
+    if over:
+        keys = out[idf].astype(str).tolist() if idf else [str(i) for i in range(len(out))]
+        for k, v in over.items():
+            if str(k) in keys:
+                j = keys.index(str(k))
+                out.loc[out.index[j], f"{fld}_in"] = bool(v)
+                done.append(str(k))
+        missing = [str(k) for k in over if str(k) not in done]
+        if missing:
+            raise OpsError(f"reconcile: overrides name feature(s) not in the layer: {', '.join(missing)}")
+    note = (f"`{fld}`: the share of each feature inside '{p.get('layer')}' widened by {_fmt(tv)} {tu} (in {crs}); `{fld}_in` at {thr:g} or more: "
+            f"{int(out[f'{fld}_in'].sum())} of {len(out)}" + (f"; set by hand: {', '.join(done)}" if done else "") + ".")
+    return OpResult(out, [note], [], _prov("reconcile", p, len(gdf), len(out), crs, tolerance_m=tm, overrides=done))
+
+
 OPS = {
     "geocode": op_geocode,
     "buffer": op_buffer,
@@ -1409,12 +1601,35 @@ OPS = {
     "raster_zonal": op_raster_zonal,
     "line_of_sight": op_line_of_sight,
     "viewshed": op_viewshed,
+    "fill_holes": op_fill_holes,
+    "massing": op_massing,
+    "split_by": op_split_by,
+    "thin_lines": op_thin_lines,
+    "reconcile": op_reconcile,
 }
 
 NEEDS_LAYER = {"clip", "intersect", "intersection", "union", "difference", "symmetric_difference", "spatial_join", "nearest",
-               "count_in", "sum_in", "population_covered", "coverage_share"}
+               "count_in", "sum_in", "population_covered", "coverage_share", "split_by", "reconcile"}
+# 1.16.0 (Day 14 issue 9): the ops that union or overlay geometry; their input is repaired first when it is invalid, so a GEOS
+# TopologyException (Natural Earth's 50 m land raised one) is never what a person sees
+TOPO_OPS = {"clip", "intersect", "intersection", "union", "difference", "symmetric_difference", "dissolve", "split_by", "reconcile", "massing",
+            "fill_holes", "count_in", "sum_in", "population_covered", "coverage_share", "overlap"}
 # the input findings an op is the fix for: a caller drops them from the input lint, since the op's own finding replaces them
 FIXES = {"repair": "MAP-DATA-002", "make_valid": "MAP-DATA-002", "antimeridian_split": "MAP-DATA-009"}
+
+
+def _valid_first(gdf, op: str, what: str):
+    """The layer with invalid geometry repaired before a topology op, and the finding that says so (data_lint.repair_geometry: INFO, or
+    BLOCK when the area moves more than 1 percent). -> (gdf, findings)."""
+    import shapely
+    if gdf is None or len(gdf) == 0:
+        return gdf, []
+    bad = ~shapely.is_valid(gdf.geometry.values) & ~gdf.geometry.isna().values
+    if not bad.any():
+        return gdf, []
+    import data_lint as dl
+    out, fs = dl.repair_geometry(gdf)
+    return out, [{**f, "message": f"{op}: {what}: {f['message']} first"} for f in fs]
 
 
 def fixed_ids(ops: list) -> set:
@@ -1433,7 +1648,25 @@ def run_op(gdf, spec: dict, ctx: Ctx) -> OpResult:
         raise OpsError(f"unknown op '{name}'. Ops: {', '.join(sorted(OPS))}")
     p = dict(spec)
     p["op"] = name
-    r = fn(gdf, p, ctx)
+    pre: list = []
+    if name in TOPO_OPS:
+        gdf, pre = _valid_first(gdf, name, "the layer")
+        oname = p.get("layer") or p.get("opening")
+        if oname and oname in ctx.layers and ctx.layers[oname] is not None:
+            ctx.layers[oname], more = _valid_first(ctx.layers[oname], name, f"layer '{oname}'")
+            pre += more
+    try:
+        r = fn(gdf, p, ctx)
+    except Exception as ex:  # noqa: BLE001 - a GEOS error the check above did not foresee: one more try on repaired input
+        if type(ex).__name__ not in ("GEOSException", "TopologicalError", "TopologyException"):
+            raise
+        import shapely
+        g2 = gdf.copy()
+        g2[_geom_col(g2)] = shapely.make_valid(gdf.geometry.values)
+        r = fn(g2, p, ctx)
+        pre.append({"id": "MAP-DATA-002", "severity": "INFO", "message": f"{name}: GEOS refused the geometry ({str(ex)[:80]}); the op ran again on repaired geometry"})
+    if pre:
+        r.findings = pre + list(r.findings)
     r.provenance.setdefault("op", name)
     r.provenance["layer"] = ctx.layer_id
     return r
@@ -1517,6 +1750,17 @@ def equivalent(op: str, p: dict, prov: dict | None = None) -> dict:
         "geocode": (f"geocode.geocode_table(df, address={_list(p.get('address')) or ['address']!r}, provider='{p.get('provider', 'census')}', purpose='{p.get('purpose', 'sites')}')"
                     " then gpd.points_from_xy(df.lon, df.lat, crs='EPSG:4326')",
                     f"a geocoder call per row ({prov.get('provider', p.get('provider', 'census'))}); PostGIS has none built in (TIGER geocoder extension: geocode(address))"),
+        "fill_holes": ("gdf.geometry.apply(lambda g: Polygon(g.exterior) if g.geom_type == 'Polygon' else MultiPolygon([Polygon(p.exterior) for p in g.geoms]))",
+                       "ST_MakePolygon(ST_ExteriorRing(geom))  # per part after ST_Dump; ST_Collect to rebuild"),
+        "massing": (f"massing.mass(footprint.to_crs('{crs}'), dict(form='{p.get('form', 'solid')}')) per feature: parts with base_m and height_m, then to_crs(gdf.crs)",
+                    "(no one-step PostGIS equivalent: ST_Buffer(hole, -k * row_m) rings intersected with ST_Intersection wedges, heights by row)"),
+        "split_by": (f"gpd.overlay(gdf, {other}[['geometry']], how='intersection', keep_geom_type=True)  # with an STRtree query first",
+                     f"SELECT a.*, ST_Intersection(a.geom, b.geom) FROM a JOIN {other} b ON ST_Intersects(a.geom, b.geom)"),
+        "thin_lines": (f"gdf.assign(cell=grid_cell(gdf.to_crs('{crs}').centroid, {p.get('cell', 'cell')})).sort_values(rank_field, ascending=False).groupby('cell').head({p.get('max_per_cell', 'N')})",
+                       f"SELECT * FROM (SELECT *, row_number() OVER (PARTITION BY ST_SnapToGrid(ST_Centroid(geom), {p.get('cell', 'cell')}) ORDER BY rank DESC) AS n FROM a) t "
+                       f"WHERE n <= {p.get('max_per_cell', 'N')}"),
+        "reconcile": (f"gpd.sjoin(gdf, {other}.to_crs(gdf.crs).buffer(tolerance), predicate='intersects') then share of length within tolerance >= threshold",
+                      f"SELECT a.id, ST_Length(ST_Intersection(a.geom, ST_Buffer(b.geom, tol))) / ST_Length(a.geom) FROM a JOIN {other} b ON ST_DWithin(a.geom, b.geom, tol)"),
     }
     g, s = table.get(op, ("(no one-line equivalent)", "(no one-line equivalent)"))
     return {"geopandas": g, "postgis": s}

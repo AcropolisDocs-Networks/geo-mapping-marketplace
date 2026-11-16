@@ -41,10 +41,16 @@ DEM_MAX_ZOOM = 14                      # the finest terrain tile zoom (about 4 m
 TAPER_SHARE = 0.12                     # beyond the DEM's window the ground eases down over this share of the window's width
 DEFAULT_PITCH = 50.0
 MAX_PITCH = 85.0
+EXTRUDE_MAXZOOM = 14      # 1.16.0 (Day 15 issue 2): an extruded layer's GeoJSON source is cut no finer than this (MapLibre overzooms past it)
+UNDER_MIN_M = 0.5         # 1.16.0 (issue 11): an extrusion raised more than this off the ground gets an underside
+UNDER_MAX_TRIS = 120000   # the undersides' budget on a page (triangles)
+UNDER_SHADE = 0.72        # the underside is the block's own (brand) colour darkened to this share by the page's shader; no new colour enters the page
 MAST_HEAD_M = 3.0                      # the antenna head: the top this many metres of the mast, a little wider
 MAST_PX = 4.5                          # a mast column is about this many pixels wide in the middle of its zoom band
 TUBE_PX = 3.0                          # a link is about this many pixels wide
 MAX_ZOOM_3D = 18                       # a 3D page with buildings or masts zooms to street level (the page's zoom numbers)
+SITE_FIT_ZOOM = 15                     # 1.16.0 (Day 15 issue 6): a 3D page whose data fits at this zoom or closer is a site...
+SITE_MAX_ZOOM_3D = 21                  # ...and zooms in this far on the bundled background, so a camera can stand in it
 BANDS = (15.0, 13.5, 12.0, 10.5)       # MapLibre zooms where each width band starts; one more band covers every zoom below the last
 M_EARTH = 40075016.686
 EXAGGERATION = {"site": 1.0, "local": 1.0, "metro": 1.5}      # terrain exaggeration by the map's scale tier; 2 for coarser maps
@@ -390,6 +396,73 @@ def _apex(ring: list) -> tuple[float, float] | None:
         if cv < cv_best:
             best, cv_best = (float(c[0]), float(c[1])), cv
     return best
+
+
+def undersides(fc: dict, *, dem_path: str | None = None, base_m: float | None = None, budget: int = UNDER_MAX_TRIS) -> tuple[list[dict], int, bool]:
+    """1.16.0 (Day 15 issue 11): the underside of each raised extrusion (base `_b` over UNDER_MIN_M), triangulated (constrained Delaunay where
+    shapely has it, else Delaunay kept inside the footprint), as {t: [lon, lat, lon, lat, ...] three points a triangle, b: base m, g: ground
+    above the page's base at the mean of the ring's vertices (where MapLibre lifts the block)}. -> (parts, triangles, cut short)."""
+    import shapely
+    from shapely.geometry import shape
+    parts, tris, cut, means, idx = [], 0, False, [], []
+    for f in fc.get("features") or []:
+        b = float((f.get("properties") or {}).get("_b") or 0.0)
+        g = f.get("geometry") or {}
+        if b <= UNDER_MIN_M or g.get("type") not in ("Polygon", "MultiPolygon"):
+            continue
+        geom = shape(g)
+        if geom.is_empty:
+            continue
+        if not geom.is_valid:
+            geom = shapely.make_valid(geom)
+        if hasattr(shapely, "constrained_delaunay_triangles"):
+            tri = [t for t in getattr(shapely.constrained_delaunay_triangles(geom), "geoms", [])]
+        else:                                                  # shapely 2.0: Delaunay of the vertices, the triangles inside the footprint kept
+            tri = [t for t in shapely.delaunay_triangles(geom).geoms if geom.contains(t.representative_point())]
+        if tris + len(tri) > budget:
+            cut = True
+            break
+        flat = []
+        for t in tri:
+            for x, y in list(t.exterior.coords)[:3]:
+                flat += [round(x, 7), round(y, 7)]
+        if not flat:
+            continue
+        ring = g["coordinates"][0] if g["type"] == "Polygon" else g["coordinates"][0][0]
+        pts = ring[:-1] if ring[0] == ring[-1] else ring
+        means.append((sum(q[0] for q in pts) / len(pts), sum(q[1] for q in pts) / len(pts)))
+        idx.append(len(parts))
+        parts.append({"t": flat, "b": round(b, 2), "g": 0.0})
+        tris += len(tri)
+    if dem_path and means:
+        import raster_io as rio
+        gv = np.asarray(rio.sample(dem_path, means), float)
+        for k, i in enumerate(idx):
+            if math.isfinite(gv[k]):
+                parts[i]["g"] = round(float(gv[k]) - float(base_m or 0.0), 2)
+    return parts, tris, cut
+
+
+HOLE_WARN = 0.15
+
+
+def hole_share(gdf) -> tuple[float, int]:
+    """The largest share of a footprint's outline taken by its holes, and how many footprints pass HOLE_WARN."""
+    from shapely.geometry import Polygon
+    worst, n = 0.0, 0
+    for g in gdf.geometry.values:
+        if g is None or g.is_empty or g.geom_type not in ("Polygon", "MultiPolygon"):
+            continue
+        for p_ in getattr(g, "geoms", [g]):
+            if not p_.interiors:
+                continue
+            outer = Polygon(p_.exterior).area
+            holes = sum(Polygon(r).area for r in p_.interiors)
+            if outer > 0:
+                sh = holes / outer
+                worst = max(worst, sh)
+                n += 1 if sh > HOLE_WARN else 0
+    return worst, n
 
 
 def slabs_on_masts(fc: dict, dem_path: str, exaggeration: float) -> dict:
@@ -766,6 +839,10 @@ def style_3d(st: dict, *, t: dict, s3: dict, defs: list[dict], dem: dict | None,
         st["sources"].pop(f"img-{relief_id}", None)
         first_data = next((i for i, l in enumerate(layers) if (l.get("metadata") or {}).get("gm:role") not in ("bundled", "basemap", "basemap-label")), len(layers))
         first_sym = next((i for i, l in enumerate(layers) if l.get("type") == "symbol"), len(layers))
+    for lid in list(extruded) + [f"mast-{k}" for k in masts]:       # 1.16.0 (Day 15 issue 2): tiles no finer than EXTRUDE_MAXZOOM
+        s = st["sources"].get(lid if lid.startswith("mast-") else f"data-{lid}")
+        if s and s.get("type") == "geojson":
+            s["maxzoom"] = max(EXTRUDE_MAXZOOM, int(dem["zmax"]) if dem else 0)
     by_id = {d["id"]: d for d in defs}
     for lid, e in extruded.items():
         d = by_id[lid]
@@ -814,7 +891,7 @@ def page(plan, s3: dict, st: dict, defs: list[dict], collections: dict, bbox, ke
     """Everything 3D on one MapLibre page: the terrain tiles, the extrusions, the masts, the links and their profiles, added to the style
     `st` and to `collections` in place. -> {cfg (the page's view3d), dem (the tiles, or None), profiles {key: svg}, notes, findings, report}."""
     import map_plan as mp
-    out = {"notes": [], "findings": [], "dem": None, "profiles": {}, "cfg": None, "report": {}, "links3d": {}}
+    out = {"notes": [], "findings": [], "dem": None, "profiles": {}, "cfg": None, "report": {}, "links3d": {}, "undersides": {}}
     tier = mp.scale_tier(mp.scale_denominator(plan))["tier"]
     ex = exaggeration(s3["exaggeration"], tier)
     s3 = dict(s3, exaggeration_value=ex)
@@ -869,7 +946,20 @@ def page(plan, s3: dict, st: dict, defs: list[dict], collections: dict, bbox, ke
         dem["blob"] += flat
         dem["sha256"] = hashlib.sha256(dem["blob"]).hexdigest()
         dem["bytes"] = len(dem["blob"])
-    extruded = {d["id"]: {"color": d["style"]["fill"], "opacity": 0.92} for d in defs if d.get("d3") == "extrude"}
+    def _ext_opacity(lid):                         # 1.16.0 (Day 15 issue 3): extrude.opacity, else 0.92 as before
+        l_ = next((x for x in plan.layers if x.id == lid), None)
+        v = ((l_.spec.get("extrude") or {}).get("opacity") if l_ is not None else None)
+        return 0.92 if v is None else max(0.05, min(1.0, float(v)))
+    extruded = {d["id"]: {"color": d["style"]["fill"], "opacity": _ext_opacity(d["id"])} for d in defs if d.get("d3") == "extrude"}
+    for lid in extruded:                           # 1.16.0 (Day 15 issue 8): a footprint whose hole is a bowl or a courtyard, extruded as a wall
+        l_ = next((x for x in plan.layers if x.id == lid), None)
+        if l_ is None or l_.gdf is None or not len(l_.gdf):
+            continue
+        share, n_big = hole_share(l_.gdf)
+        if n_big:
+            out["findings"].append(finding("MAP-WEB-045", "WARN", f"layer '{lid}': {n_big} footprint(s) have a hole over {HOLE_WARN:.0%} of their area "
+                                           f"(up to {share:.0%}); extruded as they are they stand as a ring of wall round the hole (a stadium's bowl, a "
+                                           "courtyard). Fill it (ops: [{op: fill_holes}]) or model the building (ops: [{op: massing, form: raked}])", layer=lid))
     if dem and item:
         for lid in extruded:
             l = next((x for x in plan.layers if x.id == lid), None)
@@ -898,6 +988,18 @@ def page(plan, s3: dict, st: dict, defs: list[dict], collections: dict, bbox, ke
                 out["links3d"][d["id"]] = {"color": d["style"]["stroke"], "width": TUBE_PX, "links": feats}
                 tubes[d["id"]] = {"color": d["style"]["stroke"]}
                 out["profiles"].update(profs)
+    left = UNDER_MAX_TRIS
+    for lid, e in extruded.items():                # 1.16.0 (Day 15 issue 11): undersides for raised blocks (extrude.underside: false turns off)
+        l_ = next((x for x in plan.layers if x.id == lid), None)
+        if l_ is None or (l_.spec.get("extrude") or {}).get("underside", True) is False or not isinstance(collections.get(lid), dict):
+            continue
+        parts, n_t, cut = undersides(collections[lid], dem_path=item["dem_path"] if (dem and item) else None, base_m=dem["base_m"] if dem else None, budget=left)
+        if parts:
+            out["undersides"][lid] = {"color": e["color"], "shade": UNDER_SHADE, "opacity": e["opacity"], "parts": parts}
+            left -= n_t
+            out["notes"].append(f"layer '{lid}': {len(parts)} raised block(s) drawn with an underside ({n_t:,} triangles)")
+        if cut:
+            out["notes"].append(f"layer '{lid}': the undersides stop at the page's budget of {UNDER_MAX_TRIS:,} triangles; the rest read from below as before")
     style_3d(st, t=plan.tokens, s3=s3, defs=defs, dem=dem, relief_id=relief_id, relief_opacity=relief_op, masts=masts, tubes=tubes, extruded=extruded)
     out["dem"] = dem
     out["cfg"] = {"pitch": s3["pitch"], "bearing": s3["bearing"], "terrain": bool(dem), "exaggeration": ex, "toggle": s3["toggle"], "start": s3["start"],
@@ -906,7 +1008,7 @@ def page(plan, s3: dict, st: dict, defs: list[dict], collections: dict, bbox, ke
     if sky_wanted(s3):                                    # 1.6.0 (R4-SKY): a sky from the page's tokens above the horizon
         st["sky"] = sky_block(plan.tokens)
         out["notes"].append("sky: the background with a little emphasis above the horizon, haze toward it (webmap.3d.sky)")
-    out["report"] = {"pitch": s3["pitch"], "bearing": s3["bearing"], "exaggeration": ex, "extruded": sorted(extruded), "masts": sorted(masts), "links": sorted(tubes),
+    out["report"] = {"pitch": s3["pitch"], "bearing": s3["bearing"], "exaggeration": ex, "extruded": sorted(extruded), "masts": sorted(masts), "links": sorted(tubes), "undersides": sorted(out["undersides"]),
                      "profiles": len(out["profiles"]), "terrain": ({k: dem[k] for k in ("tiles", "bytes", "zmin", "zmax", "res_m", "dem_res_m", "capped", "base_m", "ideal_zoom")}
                                                                     if dem else None)}
     return out

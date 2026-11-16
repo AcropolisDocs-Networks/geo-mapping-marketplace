@@ -375,7 +375,7 @@
               "swap_colors": {"type": "boolean"}
             }
           },
-          "extrude": {"type": "object", "additionalProperties": false, "description": "a polygon layer drawn as 3D blocks on a 3D web page (M15): heights in metres above the ground; a slab at a height with at_field or at_m and slab_m (sector wedges at antenna height)", "properties": {"height_field": {"type": "string"}, "height_m": {"type": "number"}, "base_field": {"type": "string"}, "base_m": {"type": "number"}, "floors_field": {"type": "string"}, "floor_m": {"type": "number", "minimum": 1, "maximum": 10}, "default_m": {"type": "number"}, "at_field": {"type": "string"}, "at_m": {"type": "number"}, "slab_m": {"type": "number", "minimum": 0.5, "maximum": 50}, "lod": {"enum": ["auto", "off"], "description": "1.6.0: auto (default): a tiled layer carries every footprint from the top zoom (at most page zoom 16) and a level-of-detail pyramid of blocks below it; off: the 1.5.0 tiling"}, "merge_gap_m": {"type": "number", "minimum": 0, "maximum": 50, "description": "1.6.0: footprints this close (or half a pixel of the zoom, when wider) are dissolved into one block (default 1)"}, "height_band_m": {"type": "number", "exclusiveMinimum": 0, "description": "1.6.0: only footprints whose heights fall in the same band of this many metres are merged (default 3)"}, "lod_height": {"enum": ["max", "mean"], "description": "1.6.0: a block's height: its highest footprint (default) or the area-weighted mean"}, "min_zoom": {"anyOf": [{"const": "auto"}, {"type": "integer", "minimum": 1, "maximum": 17}], "description": "1.6.0: the lowest page zoom with blocks (auto: the page's minimum)"}}},
+          "extrude": {"type": "object", "additionalProperties": false, "description": "a polygon layer drawn as 3D blocks on a 3D web page (M15): heights in metres above the ground; a slab at a height with at_field or at_m and slab_m (sector wedges at antenna height)", "properties": {"height_field": {"type": "string"}, "height_m": {"type": "number"}, "base_field": {"type": "string"}, "base_m": {"type": "number"}, "floors_field": {"type": "string"}, "floor_m": {"type": "number", "minimum": 1, "maximum": 10}, "default_m": {"type": "number"}, "at_field": {"type": "string"}, "at_m": {"type": "number"}, "slab_m": {"type": "number", "minimum": 0.5, "maximum": 50}, "lod": {"enum": ["auto", "off"], "description": "1.6.0: auto (default): a tiled layer carries every footprint from the top zoom (at most page zoom 16) and a level-of-detail pyramid of blocks below it; off: the 1.5.0 tiling"}, "merge_gap_m": {"type": "number", "minimum": 0, "maximum": 50, "description": "1.6.0: footprints this close (or half a pixel of the zoom, when wider) are dissolved into one block (default 1)"}, "height_band_m": {"type": "number", "exclusiveMinimum": 0, "description": "1.6.0: only footprints whose heights fall in the same band of this many metres are merged (default 3)"}, "lod_height": {"enum": ["max", "mean"], "description": "1.6.0: a block's height: its highest footprint (default) or the area-weighted mean"}, "min_zoom": {"anyOf": [{"const": "auto"}, {"type": "integer", "minimum": 1, "maximum": 17}], "description": "1.6.0: the lowest page zoom with blocks (auto: the page's minimum)"}, "opacity": {"type": "number", "minimum": 0.05, "maximum": 1, "description": "1.16.0: the blocks' opacity (default 0.92); a see-through roof or glass"}, "underside": {"type": "boolean", "description": "1.16.0: draw the underside of a block raised off the ground (a roof canopy, a deck) so it reads from below (default true)"}}},
           "lod": {"type": "object", "additionalProperties": false, "description": "1.6.0: a level-of-detail pyramid for any large polygon layer on a web page (as extrude's lod keys)", "properties": {"lod": {"enum": ["auto", "off"], "description": "1.6.0: auto (default): a tiled layer carries every footprint from the top zoom (at most page zoom 16) and a level-of-detail pyramid of blocks below it; off: the 1.5.0 tiling"}, "merge_gap_m": {"type": "number", "minimum": 0, "maximum": 50, "description": "1.6.0: footprints this close (or half a pixel of the zoom, when wider) are dissolved into one block (default 1)"}, "height_band_m": {"type": "number", "exclusiveMinimum": 0, "description": "1.6.0: only footprints whose heights fall in the same band of this many metres are merged (default 3)"}, "lod_height": {"enum": ["max", "mean"], "description": "1.6.0: a block's height: its highest footprint (default) or the area-weighted mean"}, "min_zoom": {"anyOf": [{"const": "auto"}, {"type": "integer", "minimum": 1, "maximum": 17}], "description": "1.6.0: the lowest page zoom with blocks (auto: the page's minimum)"}}},
           "mast": {"type": "object", "additionalProperties": false, "description": "a point layer of sites drawn as masts on a 3D web page (M15): a thin column to the antenna height, in metres above the ground", "properties": {"height_field": {"type": "string"}, "height_m": {"type": "number"}, "default_m": {"type": "number"}}},
           "time": {
@@ -450,7 +450,12 @@
                     "line_of_sight",
                     "viewshed",
                     "geocode",
-                    "as_of"
+                    "as_of",
+                    "fill_holes",
+                    "massing",
+                    "split_by",
+                    "thin_lines",
+                    "reconcile"
                   ]
                 },
                 "layer": {
@@ -713,6 +718,10 @@
           "engine": {
             "enum": ["auto", "pandas", "duckdb"],
             "description": "M16: what runs this layer's large-table work: its join table read, the count_in, sum_in, spatial_join and grid ops, and a hexbin or grid role's cells. auto (the default) uses DuckDB above the row thresholds in duck_engine.AUTO_ROWS when it is installed; pandas keeps the plugin's own path; duckdb asks for DuckDB and falls back to pandas, with the reason in provenance, when a step cannot run there. The results are the same either way."
+          },
+          "group": {
+            "type": "string",
+            "description": "1.16.0: layers that are parts of one thing (a stadium's stands, wall and roof) share a group; the colour checks (MAP-CART-016) do not ask them to be told apart"
           },
           "thin": {
             "type": "boolean",

@@ -75,6 +75,11 @@ MapSpec layer, so a map can carry its own analysis.
 | Share of a market's population in each footprint | `coverage_share --other tracts.gpkg --value population` (0 to 1) |
 | Where footprints or sectors pile up | `overlap` (within the layer) or `overlap --other other_footprints.gpkg` → `overlap_count`, `overlap_area_km2` |
 | Density on a grid | `grid --size 500 --units m [--agg mean --value rsrp]`; hexagons with `grid --shape hex --size 500 --units m` |
+| Fill a footprint's hole (a stadium bowl, a courtyard) | `fill_holes [--max-area 5000 --units m2]` (1.16.0) |
+| A building's 3D form from its outline | `massing --form solid|courtyard|stepped|raked [--height-m 40]` → parts with `base_m`, `height_m` (extrude with `height_field: height_m, base_field: base_m`). `stepped`: `--param 'tiers=[{"inset_m": 0, "height_m": 12}, {"inset_m": 20, "height_m": 60}]'` (a podium and a tower); `raked`: stands rising from the footprint's hole (or `--other opening.gpkg --param opening=other`), `--param row_m=3 --param rake=0.55 --param start_m=2 --param top_m=30`, `--param 'sides=[{"from_deg": 315, "to_deg": 45, "top_m": 20}]'`, `wall_m 3, wall_above_m 4`. Modelled heights: say so (MAP-OPS-010) |
+| Cut every feature by another layer's pieces | `split_by --other pieces.gpkg [--id-field piece]` (STRtree: thousands of lines into dozens of pieces in seconds) |
+| Fewer lines where a network crowds | `thin_lines --cell 2 --units km --max-per-cell 2 [--rank-field importance]` (disclosed on the map) |
+| Two sources of one boundary that disagree at the edges | `reconcile --other extent.gpkg --tolerance 25 --units km [--threshold 0.5] [--id-field piece --param 'overrides={"timgad": true}']` → `<other>_share`, `<other>_share_in` |
 | Density in H3 hexagons | `hexbin [--resolution 8 or auto] [--value rsrp --agg mean|sum|median|max] [--min-count 3]` |
 
 ## Rules

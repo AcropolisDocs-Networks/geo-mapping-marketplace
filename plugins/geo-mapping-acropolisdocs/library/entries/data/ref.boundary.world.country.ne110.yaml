@@ -1,6 +1,6 @@
 id: ref.boundary.world.country.ne110
 type: boundary
-rev: 1
+rev: 2
 status: active
 title: World countries, 110m (Natural Earth)
 summary: Low-resolution country polygons for world and continental context, locators and world choropleths.
@@ -41,6 +41,10 @@ source: {publisher: Natural Earth, product: 'Admin 0 - Countries, 110m', url: 'h
 url_verified_on: 2026-11-02
 vintage: {current: Natural Earth 5.1.1, cadence: static}
 license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+distinct_from:
+- id: ref.boundary.world.historical.basemaps
+  why: These are today's countries; historical-basemaps holds the polities of a past year.
+- ref.boundary.world.historical.awmc
 maintenance:
   owner: acropolisdocs
   reviewed_on: 2026-11-02
@@ -48,3 +52,4 @@ maintenance:
   check: {kind: feature_count_and_hash, features: 177, against: the source archive's SHA-256 above}
   changelog:
   - {rev: 1, date: 2026-11-02, note: Bundled payload built and verified (M1).}
+  - {rev: 2, date: 2026-11-15, note: 'distinct_from names the two historical world entries (1.16.0): this is today''s countries, they are past polities.'}

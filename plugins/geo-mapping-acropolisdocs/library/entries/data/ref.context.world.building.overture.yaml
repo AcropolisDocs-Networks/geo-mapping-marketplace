@@ -1,6 +1,6 @@
 id: ref.context.world.building.overture
 type: context
-rev: 2
+rev: 3
 status: active
 title: Overture Maps buildings (footprints)
 summary: Worldwide building footprints with height and class where known, merged from OpenStreetMap, Microsoft and Google open footprints and other sources,
@@ -54,10 +54,11 @@ delivery:
   format: GeoParquet (S3, read with pyarrow or DuckDB using a bbox filter)
   note: 'Overture publishes each release as GeoParquet on S3: s3://overturemaps-us-west-2/release/<release>/theme=<theme>/type=<type>/*.parquet (listing
     verified 2026-11-04: releases 2026-09-23.0, 2026-09-23.1, 2026-10-21.0; themes addresses, base, buildings, divisions, places, transportation). Files
-    are 700 to 800 MB each, so read them with a bbox filter rather than downloading: pyarrow.dataset(''s3://overturemaps-us-west-2/release/2026-10-21.0/theme=buildings/type=building/'',
-    filesystem=S3FileSystem(anonymous=True, region=''us-west-2'')).to_table(filter=(bbox.xmin > W) & (bbox.xmax < E) & ...), or DuckDB: SELECT ... FROM
-    read_parquet(''s3://.../theme=buildings/type=building/*'', hive_partitioning=1) WHERE bbox.xmin > W AND ...; save the result as GeoParquet and supply
-    it.'
+    are 700 to 800 MB each, so read a window, not the files: overture_io.py read --release 2026-10-21.0 --theme buildings --type building --bbox=W,S,E,N
+    --out F.parquet (anonymous HTTPS range requests, no AWS keys; the row groups and features whose bbox MEETS the window, so a long feature that crosses
+    its edge is kept). A query of your own must use the overlap test (bbox.xmin <= E AND bbox.xmax >= W AND bbox.ymin <= N AND bbox.ymax >= S): an
+    "inside the window" filter dropped 6 of 11 light-rail segments on Day 15. Roads are --theme transportation --type segment, piers --theme base --type
+    infrastructure.'
   columns:
   - id
   - geometry
@@ -97,6 +98,10 @@ maintenance:
   - rev: 1
     date: '2026-11-04'
     note: Verified the S3 release listing on 2026-11-04 and recorded the bbox-filtered read pattern.
+  - rev: 3
+    date: '2026-11-15'
+    note: 'The read route is overture_io.py (anonymous HTTPS, bbox overlap); the inside-the-window filter this note used to show is replaced (1.16.0, Day 15
+      issues 7 and 15).'
   - rev: 2
     date: '2026-11-09'
     note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'

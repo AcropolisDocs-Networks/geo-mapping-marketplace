@@ -1453,6 +1453,8 @@ def _page_engine_view(base_defs, cfg, collections, compare_cfg, ctl, defs, findi
     asked_max = int(iv["max_zoom"]) if iv.get("max_zoom") else None
     if engine == "maplibre" and s3 and (s3["extruded"] or s3["masts"]) and not asked_max:
         bundled_max = max(bundled_max, w3.MAX_ZOOM_3D)              # buildings and masts are seen from street level (M15)
+        if fit >= w3.SITE_FIT_ZOOM:                                  # 1.16.0 (Day 15 issue 6): a site (a stadium, a campus) is walked round
+            bundled_max = max(bundled_max, min(w3.SITE_MAX_ZOOM_3D, fit + 5))
     if engine == "maplibre" and not asked_max:                        # a dense point layer: the page zooms until its points stand apart
         import tiles_out as to
         for d in vector_defs:
@@ -1757,6 +1759,8 @@ def _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_
             page_cfg["ml"]["dem"] = w3.dem_config(p3["dem"])
         if p3 and p3.get("links3d"):
             page_cfg["ml"]["links3d"] = p3["links3d"]          # 1.15.0: links drawn and picked by the page's own WebGL layer
+        if p3 and p3.get("undersides"):
+            page_cfg["ml"]["undersides"] = p3["undersides"]    # 1.16.0: the undersides of raised extrusions (a roof canopy from below)
     if p3:
         page_cfg["view3d"] = p3["cfg"]
     story_in = cfg["story"] or {}

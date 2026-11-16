@@ -2,6 +2,14 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-15
+
+- `ref.boundary.world.country.ne110` rev 2: distinct_from names the two historical world entries (1.16.0): this is today's countries, they are past polities.
+- `ref.boundary.world.historical.awmc` rev 1: New (1.16.0, Day 14 issue 2): the licence read in the README; the Cultural-Data file list read through github_fetch (a sparse clone).
+- `ref.boundary.world.historical.basemaps` rev 1: New (1.16.0, Day 14 issue 2): licence and README read; the 56 files of geojson/ listed through github_fetch (a sparse clone), world_200 read over raw.
+- `ref.context.world.building.overture` rev 3: The read route is overture_io.py (anonymous HTTPS, bbox overlap); the inside-the-window filter this note used to show is replaced (1.16.0, Day 15 issues 7 and 15).
+- `ref.public-service.us-wa.transit.sound-transit` rev 1: New (1.16.0, Day 15 issue 9): the downloads page and the Transit Data Terms of Use read; the feed used on Day 15 (SC-Fall-2026.6).
+
 ## 2026-11-14
 
 - `ref.basemap-provider.carto-positron` rev 6: Live check (1.15.0): basemaps.cartocdn.com answers HTTP 200 with one 2,049-byte "API KEY REQUIRED" tile for every address when the key is missing or wrong (checked at zooms 0 to 13), so a 401 or 403 never comes and the old zoom-0 probe passed a made-up key; a print map came out with the watermark over it. Its SHA-256 is declared as reject.content_sha256: a tile with those bytes is a rejection (MAP-CRED-008), in the probe and in every tile fetch.
