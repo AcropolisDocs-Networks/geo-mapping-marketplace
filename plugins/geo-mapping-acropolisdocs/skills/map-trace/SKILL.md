@@ -2,13 +2,14 @@
 name: map-trace
 disable-model-invocation: true
 description: >
-  Troubleshoot this session's use of the map plugin: which skills, scripts and lints ran, what failed and why, and where the time went.
+  Troubleshoot this session's use of the map plugin: which skills, scripts and lints ran, what failed and why, and where the time went,
+  as an inline report and a branded HTML and PDF page.
 ---
 
 # map-trace
 
-What this session did with the map plugin, where it failed, and where it went round in circles. One script, one inline report, one report
-file with a fix spec. It is the map plugin's own trace: it reads only this plugin's calls (its skills, its scripts and lints, its OGC
+What this session did with the map plugin, where it failed, and where it went round in circles. One script: an inline report, a
+branded HTML and PDF page (1.18.0, laid out like the acropolisdocs run-trace page), and a Markdown report with a fix spec. It is the map plugin's own trace: it reads only this plugin's calls (its skills, its scripts and lints, its OGC
 server), never another plugin's trace files, and writes only `map-trace_*` files in the map working folder, so it runs beside the
 acropolisdocs `run-trace` without touching it. Use that one for acropolisdocs work; use this one for maps.
 
@@ -43,8 +44,9 @@ GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f 
    sentences of cause citing the `file:line` you read. Never guess past the evidence. Change nothing else in the report and no plugin source:
    the spec is the deliverable, a fix is a separate change. Confirm no `DIAGNOSIS PENDING` remains.
 
-4. **Deliver.** Send the `MAP_TRACE_REPORT:` file (the Markdown report and fix spec) with `SendUserFile`; the `MAP_TRACE_EVENTS:` JSON only if
-   asked. Then say, in plain words: how many of the session's calls were the map plugin's, how many failed and their classes, any hotspot or
+4. **Deliver.** Send the `MAP_TRACE_HTML:` page, the `MAP_TRACE_PDF:` file and the `MAP_TRACE_REPORT:` file (the Markdown report and fix
+   spec) with `SendUserFile`; the `MAP_TRACE_EVENTS:` JSON only if asked. `MAP_TRACE_PDF:` is always printed: a path, or `skipped - <reason>`;
+   when it says skipped, say the PDF was not made and why (the map doctor fixes a missing PDF renderer). Without `SendUserFile`, give the paths. Then say, in plain words: how many of the session's calls were the map plugin's, how many failed and their classes, any hotspot or
    iteration loop, and the one or two changes that would save the most time.
 
 5. **Say what is measured and what is inferred.** The `Hooks` line says how many map calls the plugin's timing hook measured (1.17.2); those
@@ -81,6 +83,7 @@ anything reads it (0.6.0), so a key someone pasted into the session never reache
 - `--session <id>` or `--transcript <file>`: another session; `map_trace.py find` lists the transcripts on this machine.
 - `--out-dir <dir>`: where the report files go (default `.geo-mapping/traces/`; `GEO_MAPPING_TRACE_DIR` overrides). `--no-files`: inline only.
 - `--format json`: the summary as JSON instead of the inline report.
+- `--no-pdf`: the HTML page without its PDF. `--no-html`: no page at all (the Markdown and the JSON only).
 - `--strict`: exit 3 when a map call failed (for checks in a pipeline).
 
 ## What it does not do

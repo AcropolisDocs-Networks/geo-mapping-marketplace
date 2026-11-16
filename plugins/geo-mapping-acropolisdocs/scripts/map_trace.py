@@ -69,6 +69,16 @@ DISPOSITION = {"crash": "product", "dependency": "dependency", "lint-block": "in
                "service": "environment", "network": "environment", "environment": "environment", "timeout": "environment", "failed": "unclassified"}
 
 
+READING = {"input": "a gate or the input stopped the run (the spec, the data or the arguments); fix the input, not the plugin.",
+           "dependency": "a package or native library is missing; run the map doctor (`doctor.py --fix --all`).",
+           "environment": "the machine, network or a permission stopped the call; not a plugin defect.",
+           "operator": "a traceback with no frame in this plugin: an inline script of the session's own failed.",
+           "unclassified": "the output does not say why; reproduce before calling it a defect."}
+# 1.18.0: Claude Code reports a hook's refusal as "PreToolUse:<Tool> hook error: [<the hook's command>]: <what the hook printed>". On Windows the
+# bracket holds the whole command (1.17.3's is long), which filled the evidence line; the hook's own words follow it.
+HOOK_ERROR = re.compile(r"^\w+:[\w-]+ hook error: \[.*?\]:\s*")
+
+
 class TraceError(Exception):
     pass
 
@@ -213,6 +223,43 @@ def read_records(path: Path) -> tuple[list[dict], list[str]]:
     return out, [f.name for f in files]
 
 
+def run_shape(records: list[dict], since: dt.datetime | None = None, until: dt.datetime | None = None) -> dict:
+    """1.18.0: the assistant turns by model and by effort level, each with its tool calls, and how many turns reasoned. One turn is one
+    assistant message (its blocks are written as several records). Read from the transcript's own fields; nothing is estimated."""
+    turns: dict[str, dict] = {}
+    for d in records:
+        if d.get("type") != "assistant" or not isinstance(d.get("message"), dict):
+            continue
+        ts = parse_ts(d.get("timestamp"))
+        if (since and ts and ts < since) or (until and ts and ts > until):
+            continue
+        m = d["message"]
+        key = str(m.get("id") or d.get("requestId") or d.get("uuid"))
+        t = turns.setdefault(key, {"model": None, "effort": None, "calls": 0, "reasoned": False})
+        t["model"] = t["model"] or m.get("model") or d.get("requestedModel")
+        eff = d.get("effort") if isinstance(d.get("effort"), str) else None
+        t["effort"] = t["effort"] or eff
+        for c in m.get("content") or []:
+            if isinstance(c, dict) and c.get("type") == "tool_use":
+                t["calls"] += 1
+            elif isinstance(c, dict) and c.get("type") in ("thinking", "redacted_thinking"):
+                t["reasoned"] = True
+        if d.get("thinkingDurationMs"):
+            t["reasoned"] = True
+    models: dict[str, dict] = {}
+    efforts: dict[str, dict] = {}
+    for t in turns.values():
+        if t["model"] in (None, "<synthetic>"):
+            continue
+        for bucket, k in ((models, t["model"]), (efforts, t["effort"])):
+            if k:
+                b = bucket.setdefault(k, {"turns": 0, "calls": 0})
+                b["turns"] += 1
+                b["calls"] += t["calls"]
+    counted = [t for t in turns.values() if t["model"] not in (None, "<synthetic>")]
+    return {"turns": len(counted), "reasoning_turns": sum(1 for t in counted if t["reasoned"]), "models": models, "efforts": efforts}
+
+
 def calls_of(records: list[dict]) -> tuple[list[dict], list[dt.datetime], int]:
     """Tool calls in order with their results, every record time, and the number of user turns."""
     calls: dict[str, dict] = {}
@@ -342,8 +389,11 @@ def _short_paths(s: str) -> str:
 def evidence(text: str) -> str:
     """One line of a failed result: the exception line, else the first line naming an error or a finding, else the first line. Redacted,
     every path cut to its last part, capped."""
-    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
-    lines = [ln for ln in lines if not EXIT.match(ln)]
+    lines = [HOOK_ERROR.sub("", ln.strip()) for ln in (text or "").splitlines() if ln.strip()]
+    lines = [ln for ln in lines if ln and not EXIT.match(ln)]
+    stop = next((ln for ln in lines if HOOK_STOP in ln), None)
+    if stop:                                                     # the pre-export check's own line, from where it starts
+        lines = [stop[stop.index(HOOK_STOP):]]
     pick = next((ln for ln in reversed(lines) if EXC_LINE.match(ln)), None) \
         or next((ln for ln in lines if re.search(r"error|refused|BLOCK|not found|denied|failed|cannot|unable", ln, re.I)), None) \
         or (lines[0] if lines else "")
@@ -547,6 +597,7 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     records, files = read_records(path)
     calls, times, turns = calls_of(records)
     calls, times, win = window_filter(calls, times, since, until)
+    run = run_shape(records, *((min(times), max(times)) if win and times else (None, None)))
     events, window = [], None
     last_trace = max((i for i, c in enumerate(calls) if "map_trace.py" in _command(c)), default=-1)
     for n, c in enumerate(calls, 1):
@@ -665,7 +716,7 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             "first": first.isoformat() if first else None, "last": last.isoformat() if last else None,
             "calls": {"total": len(events), "map": len(mapev), "other": len(events) - len(mapev)},
             "status": {s: sum(1 for e in mapev if e["status"] == s) for s in ("ok", "failed", "blocked", "orphan", "self")},
-            "error_rate": round(len(failed) / len(counted), 3) if counted else 0.0, "user_turns": turns,
+            "error_rate": round(len(failed) / len(counted), 3) if counted else 0.0, "user_turns": turns, "run": run,
             "time": {"wall": round(wall), "tools": round(tool_s), "map_tools": round(map_s), "idle": round(idle), "idle_gaps": len(gaps),
                      "model_overhead_residual": round(model), "round_trip": {"count": len(rtt), "median": round(statistics.median(rtt), 1) if rtt else None,
                                                                           "worst": round(max(rtt), 1) if rtt else None, "total": round(sum(rtt))},
@@ -721,7 +772,8 @@ def fix_spec(failed: list[dict], events: list[dict]) -> list[dict]:
                     "crash_site": first.get("crash_site"), "exception": first.get("exception"), "exit_code": first.get("exit_code"),
                     "calls": [x["n"] for x in es], "lane": first["lane"], "evidence": first.get("evidence"),
                     "recovered": later_ok, "severity": "low" if later_ok else ("high" if disp == "product" else "medium"),
-                    "diagnosis": "DIAGNOSIS PENDING (F-%d)" % i if disp == "product" else None})
+                    "diagnosis": "DIAGNOSIS PENDING (F-%d)" % i if disp == "product" else None,
+                    "reading": None if disp == "product" else READING.get(disp, "")})
     return out
 
 
@@ -833,13 +885,28 @@ def md_report(o: dict, text: str) -> str:
             out += [f"- **Diagnosis:** {f['diagnosis']}",
                     "- **Acceptance:** the call shape above runs without this error, and a test in `tests/` reproduces the failure before the fix and passes after it."]
         else:
-            out.append({"input": "- **Reading:** a gate or the input stopped the run (the spec, the data or the arguments); fix the input, not the plugin.",
-                        "dependency": "- **Reading:** a package or native library is missing; run the map doctor (`doctor.py --fix --all`).",
-                        "environment": "- **Reading:** the machine, network or a permission stopped the call; not a plugin defect.",
-                        "operator": "- **Reading:** a traceback with no frame in this plugin: an inline script of the session's own failed.",
-                        "unclassified": "- **Reading:** the output does not say why; reproduce before calling it a defect."}.get(f["disposition"], ""))
+            out.append(f"- **Reading:** {f['reading']}" if f.get("reading") else "")
         out.append("")
     return "\n".join(out)
+
+
+def write_page(o: dict, stem: Path, pdf: bool = True) -> tuple[str, str]:
+    """1.18.0: the report as a branded page (trace_page), HTML and PDF, beside the Markdown. Returns the two lines to print: a path, or
+    `skipped - <reason>`. A page that cannot be made never fails the trace: the text report and the Markdown already stand."""
+    try:
+        import trace_page
+        page = trace_page.html(o)
+        stem.with_suffix(".html").write_text(page, encoding="utf-8")
+        html_line = str(stem.with_suffix(".html"))
+    except Exception as ex:                                      # noqa: BLE001
+        return f"skipped - the page could not be made ({type(ex).__name__}: {str(ex)[:120]})", "skipped - no HTML page"
+    if not pdf:
+        return html_line, "skipped - --no-pdf"
+    try:
+        stem.with_suffix(".pdf").write_bytes(trace_page.pdf(page))
+        return html_line, str(stem.with_suffix(".pdf"))
+    except Exception as ex:                                      # noqa: BLE001 - WeasyPrint or its native libraries missing: map-doctor says which
+        return html_line, f"skipped - the PDF renderer is not available ({type(ex).__name__}); run the map doctor"
 
 
 def out_dir(arg: str | None) -> Path:
@@ -858,6 +925,8 @@ def main(argv=None) -> int:
     ap.add_argument("--out-dir")
     ap.add_argument("--format", choices=["text", "json"], default="text")
     ap.add_argument("--no-files", action="store_true")
+    ap.add_argument("--no-html", action="store_true", help="no HTML or PDF page (1.18.0)")
+    ap.add_argument("--no-pdf", action="store_true", help="the HTML page without its PDF (1.18.0)")
     ap.add_argument("--strict", action="store_true")
     ap.add_argument("--idle-seconds", type=int, default=IDLE_SECONDS)
     a = ap.parse_args(argv)
@@ -883,6 +952,10 @@ def main(argv=None) -> int:
         (d / f"{stem}.json").write_text(json.dumps(o, indent=1, default=str), encoding="utf-8")
         print(f"\nMAP_TRACE_REPORT: {d / (stem + '.md')}")
         print(f"MAP_TRACE_EVENTS: {d / (stem + '.json')}")
+        if not a.no_html:
+            page_line, pdf_line = write_page(o, d / stem, pdf=not a.no_pdf)
+            print(f"MAP_TRACE_HTML: {page_line}")
+            print(f"MAP_TRACE_PDF: {pdf_line}")
         print(f"MAP_TRACE_FIXSPEC_PENDING: {sum(1 for f in o['fix_spec'] if f['diagnosis'])}")
     if a.strict and o["status"]["failed"]:
         return gc.EXIT_LINT
