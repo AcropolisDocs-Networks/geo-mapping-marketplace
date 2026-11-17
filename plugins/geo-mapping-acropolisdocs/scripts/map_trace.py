@@ -79,6 +79,15 @@ READING = {"input": "a gate or the input stopped the run (the spec, the data or 
 HOOK_ERROR = re.compile(r"^\w+:[\w-]+ hook error: \[.*?\]:\s*")
 
 
+# 1.18.1: the plugin's own session reports (map-trace, map-token-use). Their calls are counted and timed like any map call, but running one
+# again is not a retry or a loop, and the MAP-* ids they print are an earlier report's, not findings of this session's work.
+REPORT_SCRIPTS = {"map_trace", "session_report"}
+
+
+def is_report(e: dict) -> bool:
+    return bool(REPORT_SCRIPTS & set(e.get("scripts") or []))
+
+
 class TraceError(Exception):
     pass
 
@@ -613,7 +622,7 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
              "status": st, "seconds": round(dur, 1) if dur is not None else None, "start": c["start"].isoformat() if c["start"] else None,
              "_key": ev["key"], "_target": ev["target"], "_start": c["start"], "_end": c["end"], "_id": c["id"]}
         if ev["lane"]:
-            e["findings"] = findings_in(c["result"] or "")
+            e["findings"] = {} if is_report(e) else findings_in(c["result"] or "")
             if st == "failed":
                 cls, site, exc = error_class(c["result"] or "")
                 code = EXIT.search(c["result"] or "")
@@ -642,7 +651,7 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             for k in last_by_target:
                 last_by_target[k]["wrote"] = True
             continue
-        if not e["lane"] or not e["_key"]:
+        if not e["lane"] or not e["_key"] or is_report(e):
             continue
         if e["_key"] == last_key and not wrote_since:
             retries.append(e["n"])
