@@ -11,9 +11,9 @@ entries:
   file: entries/data/ref.basemap-provider.carto-positron.yaml
   type: basemap-provider
   status: active
-  rev: 6
+  rev: 7
   tags_digest: d4c20a447479
-  entry_digest: 6e7e1ea21387
+  entry_digest: 5626591c18ed
 - id: ref.basemap-provider.esri-arcgis
   file: entries/data/ref.basemap-provider.esri-arcgis.yaml
   type: basemap-provider
@@ -903,6 +903,13 @@ entries:
   rev: 2
   tags_digest: aea340b94900
   entry_digest: c0efce7e7c7c
+- id: ref.public-service.world.platform.carto
+  file: entries/data/ref.public-service.world.platform.carto.yaml
+  type: public-service
+  status: active
+  rev: 2
+  tags_digest: f4e192a87cf0
+  entry_digest: 5883d3cf240f
 - id: ref.public-service.world.router.ors
   file: entries/data/ref.public-service.world.router.ors.yaml
   type: public-service

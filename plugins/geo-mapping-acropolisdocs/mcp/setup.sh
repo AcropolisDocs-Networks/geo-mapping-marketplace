@@ -50,7 +50,14 @@ if [ ! -x "$VENVPY" ]; then
 fi
 echo "Installing packages. The first run downloads about a hundred megabytes and can take a few minutes."
 "$VENVPY" -m pip install --upgrade --disable-pip-version-check --progress-bar off pip || fail
-"$VENVPY" -m pip install --disable-pip-version-check --progress-bar off -r "$HERE/requirements.txt" || fail
+# the server's packages go in under the same tested versions (constraints.txt) as the full set below, so the full-set step never replaces a newer
+# package (numpy) with the tested one in the same run
+if [ -f "$ROOT/constraints.txt" ] && "$VENVPY" -m pip install --disable-pip-version-check --progress-bar off -r "$HERE/requirements.txt" -c "$ROOT/constraints.txt"; then
+  :
+else
+  [ -f "$ROOT/constraints.txt" ] && echo "The tested versions could not all be installed here; installing the newest that fit instead."
+  "$VENVPY" -m pip install --disable-pip-version-check --progress-bar off -r "$HERE/requirements.txt" || fail
+fi
 "$VENVPY" -c "$IMPORTS" >/dev/null 2>&1 || { echo "The install finished but the packages do not import. Run:  \"$VENVPY\" -m pip check"; fail; }
 cp "$HERE/requirements.txt" "$STAMP"
 

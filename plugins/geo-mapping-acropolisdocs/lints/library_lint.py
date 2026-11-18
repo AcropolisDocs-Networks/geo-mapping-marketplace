@@ -12,7 +12,7 @@ import library_gen as lg
 
 SEV_ORDER = {"BLOCK": 0, "WARN": 1, "INFO": 2}
 _PRIVATE = re.compile(r"\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|localhost|[\w.-]+\.(?:internal|corp|lan|local))\b", re.I)
-_SECRET = re.compile(r"(?i)\b(password|passwd|secret|api[_-]?key|bearer|authorization)\b\s*[:=]\s*(?!\{key\})\S+")     # {key}: a url_template placeholder (Stadia api_key={key})
+_SECRET = re.compile(r"(?i)\b(password|passwd|secret|api[_-]?key|authorization)\b\s*[:=]\s*(?!\{key\})\S+|\bbearer\b\s*[:=]\s*(?!\{key\}|true\b)\S+")     # {key}: a url_template placeholder (Stadia api_key={key})
 _URL = re.compile(r"https?://[^\s\"')>]+", re.I)
 
 
@@ -104,7 +104,7 @@ def credential_findings(e: dict, eid: str) -> list[dict]:
     if len(blocks) > 1:
         out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential is given twice; keep it under delivery"))
     requests = [d.get("request")] + list((d.get("requests") or {}).values())
-    for rq in [r for r in requests if r]:
+    for rq in [r for r in requests if r] + [pr.get("vector_style_template")] * bool(pr.get("vector_style_template")):
         if _KEY_IN_REQUEST.search(str(rq)):
             out.append(f("MAP-CRED-001", "BLOCK", eid, "the request text carries a key or a variable; name the credential in requires_credential instead (the key is added at send time)"))
     if not blocks:
@@ -179,7 +179,8 @@ def credential_findings(e: dict, eid: str) -> list[dict]:
         out.append(f("MAP-LIB-001", "BLOCK", eid, f"requires_credential.reject.status lists {', '.join(map(str, loose))}, which the service can also answer for a malformed "
                      "request; add reject.body, the text its answer carries when the key is wrong", loose))
     hosts = set()
-    for u in [r for r in requests if r] + [b.get("probe"), e.get("url_template")]:
+    # 1.21.1: a vector style template (provider.vector_style_template) carries the same key, so it must name the same host
+    for u in [r for r in requests if r] + [b.get("probe"), e.get("url_template"), (e.get("provider") or {}).get("vector_style_template")]:
         if u:
             m = re.match(r"https?://([^/:?#]+)", str(u).replace("{", "").replace("}", ""))
             if m:

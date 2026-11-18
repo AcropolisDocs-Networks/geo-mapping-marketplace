@@ -3,14 +3,14 @@
 # A pin must never be older than what a computer already has: tools/release.py check --audit fails a pin that is behind the newest release (R8) or has a
 # known vulnerability (R7). To hold one back on purpose, add a line  # hold NAME: the reason  and R8 skips it.
 # mcp/requirements.txt pins the data server's own packages exactly and is not repeated here.
-numpy==2.5.4
+numpy==2.5.5
 pandas==3.1.1
 pyproj==3.8.0
 matplotlib==3.11.2
 pillow==13.0.0
 weasyprint==70.0
-pikepdf==10.18.1
-pypdf==7.1.0
+pikepdf==10.18.2
+pypdf==7.1.1
 pypdfium2==5.15.2
 fonttools==4.68.0
 brotli==1.2.1

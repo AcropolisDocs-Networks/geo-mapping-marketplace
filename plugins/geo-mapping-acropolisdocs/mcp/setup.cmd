@@ -73,8 +73,16 @@ if errorlevel 1 (
 echo Installing packages. The first run downloads about a hundred megabytes and can take a few minutes.
 "%VENVPY%" -m pip install --upgrade --disable-pip-version-check --progress-bar off pip
 if errorlevel 1 goto failed
+rem the server's packages go in under the same tested versions (constraints.txt) as the full set below: installed unconstrained first, pip would take
+rem the newest numpy and the full-set step would then replace it with the tested one (a downgrade in the same run)
+if not exist "%ROOT%constraints.txt" goto plainserver
+"%VENVPY%" -m pip install --disable-pip-version-check --progress-bar off -r "%HERE%requirements.txt" -c "%ROOT%constraints.txt"
+if not errorlevel 1 goto serverdone
+echo The tested versions could not all be installed here; installing the newest that fit instead.
+:plainserver
 "%VENVPY%" -m pip install --disable-pip-version-check --progress-bar off -r "%HERE%requirements.txt"
 if errorlevel 1 goto failed
+:serverdone
 "%VENVPY%" -c "import mcp, httpx, lxml, pyogrio, yaml, jsonschema, shapely, geopandas, pandas, pyarrow, openpyxl" >nul 2>nul
 if errorlevel 1 (
   echo The install finished but the packages do not import. Run:  "%VENVPY%" -m pip check

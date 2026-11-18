@@ -1,0 +1,88 @@
+id: ref.public-service.world.platform.carto
+type: public-service
+rev: 2
+status: active
+title: CARTO platform API (US East region)
+summary: "The person's own CARTO account on the US East platform host (connections, maps, SQL and data services), called with an API access token sent as a bearer token. Other regions use their own host."
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - general
+  use_for:
+  - site-map
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - internal
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - community
+use_when:
+- The person has a CARTO account and wants its data or maps used in a map (map-credentials add carto), with their own API access token.
+avoid_when:
+- The person has no CARTO account, or wants to redistribute what the account holds without checking their own CARTO agreement; the free CARTO basemap tiles are a different service (carto-positron, host basemaps.cartocdn.com, key sent as ?key=).
+- The account is in another region: register that region's host (gcp-europe-west1, gcp-asia-northeast1, gcp-australia-southeast1 .api.carto.com) as its own credential.
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: carto
+    kind: bearer
+    class: secret
+    host: gcp-us-east1.api.carto.com
+    inject:
+      bearer: true
+    reject:
+      status:
+      - 401
+    probe: https://gcp-us-east1.api.carto.com/v3/connections
+    signup_url: https://app.carto.com/
+    note: 'CARTO API reference (docs.carto.com, read 2026-11-18): every request needs the token in the Authorization header with the Bearer scheme; the token is an API access token made in the
+      CARTO workspace (Developers). GET /v3/connections is a documented endpoint and the probe address. The status for a wrong or expired token is NOT documented
+      (assumed 401, not yet seen live); a valid token without the needed grants may answer 403, which is why 403 is not a reject status.'
+  note: 'Regional hosts (docs.carto.com, read 2026-11-18): United States East gcp-us-east1.api.carto.com, Europe West gcp-europe-west1.api.carto.com, Asia Northeast
+    gcp-asia-northeast1.api.carto.com, Australia Southeast gcp-australia-southeast1.api.carto.com. Rate limits answer 429. Tokens can be restricted to specific APIs,
+    data sources, connections and websites.'
+source:
+  publisher: CARTO
+  product: CARTO platform API
+  url: https://docs.carto.com/carto-for-developers/reference/carto-api
+url_verified_on: '2026-11-18'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: false
+  note: 'The person accepts CARTO''s terms to get an account and an API access token, so the plugin asks nothing more (as for every keyed
+    service). Their own CARTO subscription governs: the CARTO Platform Terms & Conditions (Master Agreement, carto.com/legal/tcs, which redirects
+    to a document that could not be read on 2026-11-18). Data in the account is theirs or their organization''s; nothing here grants a licence to
+    redistribute it or use it commercially. Rate limits are per IP address for each API and answer 429 (docs.carto.com, read 2026-11-18).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-18'
+  verify_by: '2027-02-18'
+  changelog:
+  - rev: 1
+    date: '2026-11-18'
+    note: 'Draft: the API reference read (bearer token, regional hosts, GET /v3/connections, 429 on rate limit). The rejection status for a wrong token, the terms
+      of service and plan limits are not confirmed; the probe has not been run against a live token.'
+  - rev: 2
+    date: '2026-11-18'
+    note: 'Active (1.21.1): the terms located (carto.com/legal points to the Platform Terms & Conditions; the text itself could not be read), the
+      licence kept at its most restrictive (no redistribution, no commercial use claimed); the rate-limit page read (per IP, 429).'

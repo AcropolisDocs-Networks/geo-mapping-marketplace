@@ -4,9 +4,12 @@ GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
 ## 2026-11-18
 
+- `ref.basemap-provider.carto-positron` rev 7: Vector styles recorded: style.json URL pattern gl/{style}/style.json?key= for positron-gl-style, dark-matter-gl-style and voyager-gl-style (carto.com/basemaps read 2026-11-18; Voyager and Positron URLs shown on the page, Dark Matter by the same pattern). Data only: the tile registry and web map do not use vector styles yet.
 - `ref.basemap-provider.nasa-gibs` rev 3: provider.getmap (1.19.0, Day 17 issue A1): a print basemap held down by the no-bulk tile cap is fetched as one WMS GetMap picture of the window at the print size (one request for one map), the layer and day read from the resolved tile address. The Day 17 night-lights map used this WMS (epsg3857, VIIRS_Black_Marble) as a raster service picture at full resolution.
 - `ref.gazetteer.us.landform.gnis` rev 1: New (1.19.0, Day 17 issue B6): the geonames service read on 2026-11-18 (14 layers; layer 5 Landforms, MultiPoint, 10 fields, maxRecordCount 2000; copyright "Data Refreshed October, 2026"). The Grand Canyon map of Day 17 used it for its temples and points.
 - `ref.map-type.dot-density` rev 3: The recipe writes symbol.color (1.19.0, Day 17 issue A5): with fill the dots fell back to the default colour. Points now read either.
+- `ref.public-service.world.platform.carto` rev 1: Draft: the API reference read (bearer token, regional hosts, GET /v3/connections, 429 on rate limit). The rejection status for a wrong token, the terms of service and plan limits are not confirmed; the probe has not been run against a live token.
+- `ref.public-service.world.platform.carto` rev 2: Active (1.21.1): the terms located (carto.com/legal points to the Platform Terms & Conditions; the text itself could not be read), the licence kept at its most restrictive (no redistribution, no commercial use claimed); the rate-limit page read (per IP, 429).
 
 ## 2026-11-15
 
