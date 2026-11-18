@@ -333,7 +333,7 @@ def html(o: dict, generated: dt.datetime | None = None) -> str:
 
     # hero
     tiles = [(calls["map"], "Map calls"), (len(lanes), "Lanes"),
-             (f"{round(100 * o.get('error_rate', 0))}%", f"Error rate ({st.get('blocked', 0)} blocked excluded)"),
+             (f"{round(100 * o.get('error_rate', 0))}%", f"Error rate ({st.get('blocked', 0)} blocked" + (f", {o['session_side_failures']} session-side" if o.get("session_side_failures") else "") + " excluded)"),
              (retries, "Retries"), (loops, "Iteration loops"), (fmt_d(t["wall"]), "Wall clock (" + ("measured" if measured else "bounded") + ")")]
     hero = (f'<section class="hero"><div class="wrap"><div><div>{logo_svg(b["logo"], 54, b["name"])}</div>'
             f'<p class="eyebrow">Map trace</p><h1>What this session did with the map plugin</h1>'

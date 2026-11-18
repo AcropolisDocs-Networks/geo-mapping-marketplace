@@ -297,7 +297,7 @@ def title_lines(block: dict, label_pt: float = LABEL_PT, title_pt: float = TITLE
         return []
     if not wrap or tm.width_mm(t, title_pt, 600) <= TITLE_WRAP_MM:
         return [t]
-    content_w, _ = _content_size(block, label_pt)
+    content_w, _ = _content_size(block, label_pt, wrap)
     return tm.wrap(t, max(content_w, TITLE_WRAP_MM), title_pt, 600)
 
 
@@ -308,7 +308,7 @@ def block_size(block: dict, label_pt: float = LABEL_PT, title_pt: float = TITLE_
     if lines:
         w = max(tm.width_mm(x, title_pt, 600) for x in lines)
         h += tm.line_height_mm(title_pt) * len(lines) + 1.0
-    cw, ch = _content_size(block, label_pt)
+    cw, ch = _content_size(block, label_pt, wrap)
     return max(w, cw), h + ch
 
 
@@ -336,7 +336,25 @@ def note_size(block: dict, label_pt: float = LABEL_PT) -> tuple[float, float]:
     return max(tm.width_mm(x, npt, 400) for x in lines), tm.line_height_mm(npt) * len(lines)
 
 
-def _content_size(block: dict, label_pt: float = LABEL_PT) -> tuple[float, float]:
+LABEL_WRAP_MM = 48.0          # 1.21.0 (Day 18 issue 10): an entry's label wraps at this width in fit_legend's second pass
+
+
+def item_lines(label: str, label_pt: float = LABEL_PT, wrap: bool = False) -> list[str]:
+    """An entry's label as drawn. 1.21.0 (Day 18 issue 10): in the wrap pass a label wider than LABEL_WRAP_MM wraps onto more lines beside its
+    swatch, so a long entry ("Horizontal pattern, 3.5 GHz (edge 0 dB, centre -40 dB)") costs a line, not a MAP-SPEC-005 block."""
+    label = str(label)
+    if not wrap or tm.width_mm(label, label_pt, 400, tnum=True) <= LABEL_WRAP_MM:
+        return [label]
+    return tm.wrap(label, LABEL_WRAP_MM, label_pt, 400) or [label]
+
+
+def item_height(it: dict, label_pt: float = LABEL_PT, wrap: bool = False) -> float:
+    """One entry's row height: the swatch or symbol, or its label's lines when they need more."""
+    n = len(item_lines(it["label"], label_pt, wrap))
+    return max(SWATCH_H_MM, tm.line_height_mm(label_pt) * n, it.get("size_mm", 0) + 0.8)
+
+
+def _content_size(block: dict, label_pt: float = LABEL_PT, wrap: bool = False) -> tuple[float, float]:
     """(width, height) of a block below its title."""
     w, h = 0.0, 0.0
     if block["kind"] == "bivariate":
@@ -358,12 +376,11 @@ def _content_size(block: dict, label_pt: float = LABEL_PT) -> tuple[float, float
             h += float(it["h_mm"]) + ROW_GAP_MM
         nw, nh = note_size(block, label_pt)
         return max(w, nw), h + nh
-    row_h = max(SWATCH_H_MM, tm.line_height_mm(label_pt))
     for it in block["items"]:
-        lw = tm.width_mm(it["label"], label_pt, 400, tnum=True)
+        lw = max(tm.width_mm(x, label_pt, 400, tnum=True) for x in item_lines(it["label"], label_pt, wrap))
         icon = max(SWATCH_W_MM, it.get("size_mm", 0) + 1.5) if block["kind"] != "proportional" else max(SWATCH_W_MM, it.get("size_mm", 0))
         w = max(w, icon + 2.0 + lw)
-        h += max(row_h, it.get("size_mm", 0) + 0.8) + ROW_GAP_MM
+        h += item_height(it, label_pt, wrap) + ROW_GAP_MM
     nw, nh = note_size(block, label_pt)
     w, h = max(w, nw), h + nh
     return w, h - ROW_GAP_MM if block["items"] else h
@@ -407,7 +424,10 @@ def fit_legend(blocks: list[dict], max_w_mm: float, max_h_mm: float, *, columns:
     # 1.2.0 (Days 3 and 4): the first pass keeps every block title on one line, as before; when nothing fits, a second pass wraps long titles
     # before the legend is given up on, so a 70-character title costs a line, not the map
     for wrap in (False, True):
-        if wrap and not any(b.get("title") and tm.width_mm(b["title"], start + 1.0, 600) > TITLE_WRAP_MM for b in blocks):
+        if wrap and not any((b.get("title") and tm.width_mm(b["title"], start + 1.0, 600) > TITLE_WRAP_MM)
+                            or any(tm.width_mm(str(it.get("label", "")), start, 400, tnum=True) > LABEL_WRAP_MM for it in (b.get("items") or [])
+                                   if b.get("kind") not in ("ramp", "image", "bivariate"))
+                            for b in blocks):
             break
         for cols in range(max(1, columns), 5):
             pt = start
@@ -415,7 +435,7 @@ def fit_legend(blocks: list[dict], max_w_mm: float, max_h_mm: float, *, columns:
                 m = measure(blocks, cols, pt, pt + 1.0, header, wrap)
                 if m["width"] <= max_w_mm and m["height"] <= max_h_mm:
                     if wrap:
-                        notes.append("long legend titles wrapped onto more lines to fit")
+                        notes.append("long legend titles and labels wrapped onto more lines to fit")
                     if cols != columns:
                         notes.append(f"legend set in {cols} columns to fit")
                     if pt != start:

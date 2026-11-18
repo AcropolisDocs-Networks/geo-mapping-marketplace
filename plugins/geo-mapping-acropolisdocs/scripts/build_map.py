@@ -114,6 +114,21 @@ def map_text_summary(plan: mp.Plan, findings: list[dict]) -> dict:
             "supplied": bool(el.get("text")), "callout": text_lint.summary_lines(findings, client=client)}
 
 
+def outside_raster_window(report: dict, tol: float = 0.002) -> tuple | None:
+    """1.21.0 (Day 18 issue 5): the window to read again (the drawn frame plus a tenth all round) when the frame the fit chose reaches past the
+    window the rasters were read for by more than `tol` of its size; None when it stays inside, or the map has no raster."""
+    rw = report.get("raster_window")
+    vis = (report.get("map_window") or {}).get("extent")
+    if not rw or not vis:
+        return None
+    x0, y0, x1, y1 = (float(v) for v in vis)
+    m = tol * max(x1 - x0, y1 - y0)
+    if x0 >= rw[0] - m and y0 >= rw[1] - m and x1 <= rw[2] + m and y1 <= rw[3] + m:
+        return None
+    pad = 0.1 * max(x1 - x0, y1 - y0)
+    return (x0 - pad, y0 - pad, x1 + pad, y1 + pad)
+
+
 def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, brand: str | None = None, template: str | None = None,
           strict: bool = False, mode: str | None = None, keep: bool = False, export_options: dict | None = None) -> dict:
     """`export_options` (M16): transparent, bleed_mm, crop_marks, pdfa, inkscape, outline_text over the MapSpec's `export:` block
@@ -138,6 +153,13 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     if static or web is None:
         plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template)
         rendered = mr.render(plan)
+        wider = outside_raster_window(rendered.report)
+        if wider is not None:
+            # 1.21.0 (Day 18 issue 5): the fit moved or shrank the frame past the window the rasters, the relief and the ground were read
+            # for (a third of the map had no relief). Read them again for the frame the fit chose, and draw once more.
+            plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, window=wider)
+            rendered = mr.render(plan)
+            plan.notes.append("rasters, relief and ground read a second time: the fit moved the frame past the window they were first read for")
     else:
         plan, rendered = web.plan, web.rendered            # the page's own plan: static scale bar off, bundled basemap
     # write the resolved brand back so a later default change never restyles this map

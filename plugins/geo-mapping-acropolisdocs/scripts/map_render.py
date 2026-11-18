@@ -291,6 +291,120 @@ def raster_led(plan) -> str | None:
 
 
 RASTER_LED_SHARE = 0.9
+CLAMP_MAX_ZOOM = 1.15          # 1.21.0: the fit zooms in at most this much to keep the frame on a raster's data (more is left to MAP-CART-040)
+SHORT_EDGE_MM = 0.5            # 1.21.0: a raster or a filled layer that stops this far inside the frame shows its end as a strip or a line
+CLIP_LINE_PARTS = 3            # 1.21.0: this many separate parts of a layer stopping on one straight line is a clip, not a shape
+INF = float("inf")
+
+
+def _lims(lim) -> tuple:
+    return (lim[0] if lim[0] is not None else -INF, lim[1] if lim[1] is not None else -INF,
+            lim[2] if lim[2] is not None else INF, lim[3] if lim[3] is not None else INF)
+
+
+def onto_data(fr: "lo.Frame", lim, zoom: bool = True) -> "lo.Frame":
+    """1.21.0 (Day 18): the frame moved, and if it must be zoomed in a little (CLAMP_MAX_ZOOM at most), so its window stays on the data of the
+    rasters that fill the map (plan.raster_limits). Moving comes first; a window wider than the data is zoomed only as far as it must be."""
+    if not lim:
+        return fr
+    L0, L1, L2, L3 = _lims(lim)
+    x0, y0, x1, y1 = fr.visible
+    k = 1.0
+    if zoom:
+        if L2 - L0 < x1 - x0:
+            k = max(k, (x1 - x0) / (L2 - L0))
+        if L3 - L1 < y1 - y0:
+            k = max(k, (y1 - y0) / (L3 - L1))
+        if k > CLAMP_MAX_ZOOM:
+            k = 1.0
+    out = lo.Frame(fr.rect, fr.scale * k, fr.cx, fr.cy, fr.inner)
+    x0, y0, x1, y1 = out.visible
+
+    def shift(a0, a1, l0, l1):
+        if a0 < l0 and a1 > l1:
+            return ((l0 - a0) + (l1 - a1)) / 2
+        if a0 < l0:
+            return l0 - a0
+        if a1 > l1:
+            return l1 - a1
+        return 0.0
+    dx, dy = shift(x0, x1, L0, L2), shift(y0, y1, L1, L3)
+    if not dx and not dy and k == 1.0:
+        return fr
+    return lo.Frame(out.rect, out.scale, out.cx + dx, out.cy + dy, out.inner)
+
+
+def room_on_data(fr: "lo.Frame", room: tuple, lim) -> tuple:
+    """The pan room (dx_min, dx_max, dy_min, dy_max mm) cut to the moves that keep the window on the rasters' data; never excludes no move."""
+    if not lim:
+        return room
+    L0, L1, L2, L3 = _lims(lim)
+    x0, y0, x1, y1 = fr.visible
+    s = fr.scale
+    dx_lo, dx_hi = (x1 - L2) * s, (x0 - L0) * s
+    dy_lo, dy_hi = (L1 - y0) * s, (L3 - y1) * s
+    return (min(0.0, max(room[0], dx_lo)), max(0.0, min(room[1], dx_hi)), min(0.0, max(room[2], dy_lo)), max(0.0, min(room[3], dy_hi)))
+
+
+SIDES = ("left", "bottom", "right", "top")
+
+
+def coverage_findings(plan, frame: "lo.Frame") -> list[dict]:
+    """1.21.0 (Day 18 issues 5 and 6, and the strip down the right edge):
+    MAP-CART-040 a relief or a raster that fills the map stops inside the frame (its data ends; the ground shows as a strip);
+    MAP-CART-041 a filled layer stops on a straight line inside the frame, several of its parts on the same line (it was made for a smaller window)."""
+    out = []
+    vx0, vy0, vx1, vy1 = frame.visible
+    s = frame.scale
+    pics = [(b.get("layer_id") or "relief", "relief", b["image"]) for b in plan.basemap if b.get("kind") == "hillshade" and b.get("image")]
+    pics += [(l.id, "raster", (l.raster or {}).get("image")) for l in plan.layers if l.kind == "raster" and (l.raster or {}).get("image")]
+    for lid, what, im in pics:
+        lim = im.get("limits")
+        if not lim or im.get("partial"):
+            continue
+        short = []
+        for side, v, edge, sign in (("left", lim[0], vx0, 1), ("bottom", lim[1], vy0, 1), ("right", lim[2], vx1, -1), ("top", lim[3], vy1, -1)):
+            if v is not None and (v - edge) * sign * s > SHORT_EDGE_MM:
+                short.append((side, (v - edge) * sign * s))
+        if short:
+            where = ", ".join(f"{mm:.1f} mm inside the {side} edge" for side, mm in short)
+            out.append(f("MAP-CART-040", "WARN", f"the {what} '{lid}' ends {where} of the frame: its data stops there and the ground shows as a strip "
+                                                 f"along the map. Read a {'DEM' if what == 'relief' else 'raster'} that covers the whole frame (fetch it for a wider "
+                                                 "window), or narrow the extent", {"sides": {k: round(v, 1) for k, v in short}}, lid))
+    import shapely
+    tol = 0.05 / s                                       # a twentieth of a millimetre on the sheet
+    for l in plan.layers:
+        if l.kind != "polygon" or l.role in ("context", "labels") or l.gdf is None or not len(l.gdf):
+            continue
+        g = l.gdf.geometry
+        g = g[~g.isna() & ~g.is_empty]
+        if not len(g):
+            continue
+        parts = shapely.get_parts(g.values)
+        bx0, by0, bx1, by1 = (float(v) for v in shapely.total_bounds(parts))
+        for side, axis, line, edge, sign in (("left", 0, bx0, vx0, 1), ("right", 0, bx1, vx1, -1), ("bottom", 1, by0, vy0, 1), ("top", 1, by1, vy1, -1)):
+            inside_mm = (line - edge) * sign * s
+            if inside_mm <= 1.0:
+                continue                                 # the layer reaches the frame (or past it): the frame clips it, as it should
+            n, length = 0, 0.0
+            for p in parts:
+                ring = np.asarray(shapely.get_coordinates(shapely.get_exterior_ring(p)))
+                if len(ring) < 2:
+                    continue
+                c = ring[:, axis]
+                on = np.abs(c - line) <= tol
+                seg = on[:-1] & on[1:]
+                if seg.any():
+                    d = np.abs(np.diff(ring[:, 1 - axis]))[seg].sum()
+                    if d * s >= 0.5:
+                        n += 1
+                        length += float(d)
+            span = (vy1 - vy0) if axis == 0 else (vx1 - vx0)
+            if n >= CLIP_LINE_PARTS and length >= 0.1 * span:
+                out.append(f("MAP-CART-041", "WARN", f"layer '{l.id}' stops on a straight line {inside_mm:.1f} mm inside the frame's {side} edge ({n} of its parts end "
+                                                     f"on it, {length * s:.0f} mm in all): it looks cut to a smaller window than the map's. Make it for the whole "
+                                                     "frame, or crop the map to it (extent.crop)", {"side": side, "inside_mm": round(inside_mm, 1), "parts": n}, l.id))
+    return out
 
 
 def explode_points(gdf):
@@ -981,12 +1095,15 @@ def draw_tiles(plan: mp.Plan, frame: lo.Frame, b: dict) -> str:
 def draw_basemap(plan: mp.Plan, frame: lo.Frame, ground_opacity: float = 1.0) -> str:
     t = plan.tokens
     out = []
+    lines_off = mp.bundled_mode(plan.spec) == "land"
     for b in plan.basemap:
         if b["kind"] == "tiles":
             out.append(draw_tiles(plan, frame, b))
             continue
         if b["kind"] == "hillshade":                      # relief: above the land, countries and states; under the lakes and every layer (M12)
             out.append(image_markup(frame, b["image"], "gm-base gm-relief", data_layer=b.get("layer_id")))
+            continue
+        if b["kind"] == "boundary" and lines_off:
             continue
         if b["kind"] == "boundary":                       # 1.10.0: border lines of a vector-tile ground (states thinner than countries)
             geoms, keep = to_sheet(b["gdf"], frame, False)
@@ -1005,6 +1122,8 @@ def draw_basemap(plan: mp.Plan, frame: lo.Frame, ground_opacity: float = 1.0) ->
             fill, stroke, sw = t["land"], t["frame"], 0.14
         else:
             fill, stroke, sw = t["land"], t["frame"], 0.16
+        if lines_off and b["kind"] in ("state", "country"):     # 1.21.0 (Day 18 issue 3): basemap.bundled: land, no boundary lines
+            stroke, sw = "none", 0.0
         gop = f' fill-opacity="{sd.num(ground_opacity)}"' if ground_opacity < 1 and b["kind"] not in ("lake", "ocean") else ""   # 1.4.0: paper shows through
         out.append(f'<g class="gm-base gm-base-{b["kind"]}" fill="{fill}"{gop} stroke="{stroke}" stroke-width="{sw}" stroke-linejoin="round" fill-rule="evenodd">')
         for i in np.where(keep)[0]:
@@ -1140,12 +1259,13 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
     if header:
         out.append(sd.text(cx, cy0 + tpt * PT * 0.85, header, tpt + 0.5, t["label"], weight=700))
         cy0 += tm.line_height_mm(tpt + 0.5) + 1.5
+    wrap = bool(fit.get("wrap") or size.get("wrap"))
     for ci, idxs in enumerate(size["columns"]):
         cy = cy0
         for bi in idxs:
             b = blocks[bi]
             if b.get("title"):
-                tl = lg.title_lines(b, lpt, tpt, bool(fit.get("wrap") or size.get("wrap")))      # 1.2.0: wrapped long titles
+                tl = lg.title_lines(b, lpt, tpt, wrap)      # 1.2.0: wrapped long titles
                 for li, line in enumerate(tl):
                     out.append(sd.text(cx, cy + tpt * PT * 0.85 + li * tm.line_height_mm(tpt), line, tpt, t["label"], weight=600))
                 cy += tm.line_height_mm(tpt) * len(tl) + 1.0
@@ -1161,9 +1281,8 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                     out.append("</g>")
                 cy += lg.BLOCK_GAP_MM
                 continue
-            row_h = max(lg.SWATCH_H_MM, tm.line_height_mm(lpt))
             for it in b["items"]:
-                ih = max(row_h, it.get("size_mm", 0) + 0.8)
+                ih = lg.item_height(it, lpt, wrap)            # 1.21.0 (Day 18 issue 10): a wrapped label's lines set the row
                 mid = cy + ih / 2
                 icon_w = max(lg.SWATCH_W_MM, it.get("size_mm", 0) + 1.5)
                 k0 = len(out)
@@ -1208,7 +1327,10 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                 if kop < 1 and len(out) > k0:                # 1.13.0: a supporting or background layer's key at the layer's own strength
                     out.insert(k0, f'<g opacity="{sd.num(kop)}" data-emphasis="key">')
                     out.append("</g>")
-                out.append(sd.text(cx + icon_w + 2.0, mid + lpt * PT * 0.35, it["label"], lpt, t["label"], num_cls=True))
+                il = lg.item_lines(it["label"], lpt, wrap)
+                lh = tm.line_height_mm(lpt)
+                for li, line in enumerate(il):
+                    out.append(sd.text(cx + icon_w + 2.0, mid - (len(il) - 1) * lh / 2 + li * lh + lpt * PT * 0.35, line, lpt, t["label"], num_cls=True))
                 cy += ih + lg.ROW_GAP_MM
             for line in lg.note_lines(b, lpt):               # the block's note (a hexbin's resolution and edge length), in the room block_size reserves
                 npt = lpt - 1
@@ -1491,11 +1613,12 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
     focus_tree = (data_tree if focus_geoms is data_geoms else (shapely.STRtree(focus_geoms) if focus_geoms is not None and len(focus_geoms) else None))
     auto_locator = inset_on == "auto" and "position" not in inset_cfg
     fgrids: dict = {}
+    data_lim = getattr(plan, "raster_limits", None) if frame is None else None     # 1.21.0 (Day 18): stay on the rasters' data
 
     def evaluate(reserve: tuple, pan: tuple = (0.0, 0.0)) -> dict:
         """Fit the data with `reserve` mm kept free (moved `pan` mm on the sheet), then place the overlays; report how much data they would cover."""
-        base = frame if frame is not None else lo.Frame.fit(map_rect, plan.extent, pad_pct, (reserve[0], reserve[1] + banner_h, reserve[2], reserve[3]))
-        fr = base.panned(*pan)
+        base = frame if frame is not None else onto_data(lo.Frame.fit(map_rect, plan.extent, pad_pct, (reserve[0], reserve[1] + banner_h, reserve[2], reserve[3])), data_lim)
+        fr = onto_data(base.panned(*pan), data_lim, zoom=False)
         oc = lo.occupancy(fr, data_geoms, tree=data_tree) if len(data_geoms) else None
         sb_cfg = els.get("scale_bar") or {}
         inf = sb.scale_info(plan.crs, fr.visible, map_rect.w, units=sb_cfg.get("units", "auto"),
@@ -1553,7 +1676,7 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
         if fit_mode not in ("shrink", "fixed"):
             counted = [r for k, r in zip(pl.keys(), rects_, strict=True) if not (k == "inset" and auto_locator)]
             res["counted"] = counted
-            res["room"] = lo.pan_room(base, _bbox_mm(base), pad_pct)
+            res["room"] = room_on_data(base, lo.pan_room(base, _bbox_mm(base), pad_pct), data_lim)
             key = tuple(round(v, 4) for v in reserve)
             if key not in fgrids:
                 fgrids[key] = lo.focus_grid(base, focus_geoms, res["room"], tree=focus_tree)
@@ -1743,6 +1866,20 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
                                                       f"{fit_limit * 100:g}% limit; the map is never shrunk in this mode (use fit: auto to allow it)"))
     rep["frame_scale_mm_per_unit"] = frame.scale
     rep["map_window"] = {"crs": plan.crs, "extent": [round(float(v), 6) for v in frame.visible], "rect_mm": [map_rect.x0, map_rect.y0, map_rect.x1, map_rect.y1], "page_mm": [W, H]}
+    if plan.basemap or any(l.kind == "raster" for l in plan.layers):
+        # 1.21.0 (Day 18 issue 5): what the rasters, the relief and the ground were read for; build_map reads again when the frame left it
+        rep["raster_window"] = [round(float(v), 6) for v in (getattr(plan, "raster_window", None) or mp.plan_visible_pad(plan))]
+    if data_lim:
+        raw = lo.Frame.fit(map_rect, plan.extent, pad_pct).visible
+        L0, L1, L2, L3 = _lims(data_lim)
+        if raw[0] < L0 or raw[1] < L1 or raw[2] > L2 or raw[3] > L3:
+            k = frame.scale / lo.Frame.fit(map_rect, plan.extent, pad_pct).scale
+            held = [side for side, v in zip(SIDES, data_lim) if v is not None]
+            note = ("the frame was kept on the data of the rasters that fill the map (their files end just past the first frame on the "
+                    + " and ".join(held) + (f"; zoomed in {100 * (k - 1):.0f}%" if k > 1.0005 else "") + "), so no strip of bare ground shows along that edge")
+            rep.setdefault("notes", []).append(note)
+            findings.append(f("MAP-SPEC-009", "INFO", note))
+    findings += coverage_findings(plan, frame)
     rep["frame"] = {"rect_mm": [round(frame.rect.x0, 3), round(frame.rect.y0, 3), round(frame.rect.x1, 3), round(frame.rect.y1, 3)],
                     "scale": frame.scale, "cx": frame.cx, "cy": frame.cy}          # 1.3.0: the frame itself, so a sheet can show its panels share it
     rep["overlay_cover"] = best["cover"]

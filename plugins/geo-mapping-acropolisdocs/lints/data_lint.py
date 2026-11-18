@@ -349,7 +349,7 @@ def _span_deg(extent) -> float:
 
 def lint_crs(display_crs, *, map_type: str | None = None, extent=None, has_tiles: bool = False, user_chosen: bool = False,
              layer_crs: list | None = None, scale_bar: bool = False, rationale: str | None = None,
-             datum_transforms_declared: bool = False) -> list[dict]:
+             datum_transforms_declared: bool = False, map_width_mm: float | None = None) -> list[dict]:
     """MAP-CRS-001 to 005 for the display CRS of a map."""
     out = []
     if display_crs is None:
@@ -373,7 +373,17 @@ def lint_crs(display_crs, *, map_type: str | None = None, extent=None, has_tiles
             out.append(finding("MAP-CRS-003", "WARN", "in Web Mercator, scale varies with latitude by a factor of 1/cos(latitude); the scale bar must be computed at the map's centre latitude and say so"))
     datums = {ce._crs(x).datum.name for x in (layer_crs or []) if x is not None and ce._crs(x).datum} | ({c.datum.name} if c.datum else set())
     if len(datums) > 1 and not datum_transforms_declared:
-        out.append(finding("MAP-CRS-004", "WARN", "layers use different datums (" + "; ".join(sorted(datums)) + ") and no transform is declared; positions can shift by a metre (NAD83/WGS84) or by tens of metres (NAD27)", sorted(datums)))
+        # 1.21.0 (Day 18 issue 8): the shift is weighed on the page, as the per-layer check does. NAD83 against WGS84 is about two metres,
+        # under a quarter of a millimetre on a 1:23,000 sheet: INFO there, WARN only where it can be seen. NAD27 or an unknown pair counts as the ballpark 100 m.
+        names = " ".join(sorted(datums)).lower()
+        shift_m = BALLPARK_ERROR_M if "1927" in names or "nad27" in names or not all(("1983" in d.lower() or "nad83" in d.lower() or "wgs" in d.lower()
+                                                                                        or "world geodetic" in d.lower() or "itrf" in d.lower()) for d in datums) else 2.0
+        span_m = _span_m(extent) if extent is not None else None
+        page_mm = shift_m * float(map_width_mm or MAP_WIDTH_MM) / span_m if span_m else None
+        seen = page_mm is None or page_mm >= VISIBLE_SHIFT_MM
+        msg = ("layers use different datums (" + "; ".join(sorted(datums)) + f") and no transform is declared; positions can shift by about {shift_m:g} m"
+               + (f", about {page_mm:.2g} mm on this map" if page_mm is not None else "") + ("" if seen else "; at this scale the shift cannot be seen"))
+        out.append(finding("MAP-CRS-004", "WARN" if seen else "INFO", msg, sorted(datums)))
     if not rationale:
         out.append(finding("MAP-CRS-005", "WARN", "crs.rationale is empty; the choice of projection is not recorded in the MapSpec"))
     return sorted(out, key=lambda f: (SEV_ORDER[f["severity"]], f["id"]))
@@ -522,16 +532,27 @@ def _units(crs) -> str:
 WATERY = ("sea", "ocean", "water", "lake", "coast", "shore", "bay", "sound", "river")
 
 
-def not_an_outline(layer_id: str, role: str | None = None, title: str | None = None) -> bool:
-    """1.2.0 (Day 10 issue 7): a context polygon, or one that is water (sea, ocean, lakes), is not an outline other layers should sit inside."""
-    if role == "context":
+# 1.21.0 (Day 18 issue 7): a polygon that is the result of an analysis (what terrain hides, a viewshed, a buffer, a coverage or travel-time area,
+# a shadow or a mask) is not a boundary the other layers belong inside: "100% of 'site' falls outside 'blocked'" is the analysis, not a CRS error
+ANALYSIS_WORDS = ("hidden", "blocked", "viewshed", "visible", "shadow", "shade", "buffer", "coverage", "isochrone", "walkshed", "drivetime",
+                  "mask", "nodata", "footprint", "sector", "wedge", "lobe", "null", "exclusion", "keepout")
+ANALYSIS_ROLES = ("coverage", "sector", "isochrone", "viewshed", "buffer", "hexbin", "grid", "heat")
+CONTAIN_MIN_FEATURES = 3          # 1.21.0: one or two features inside an outline's box say nothing about registration (the touch test covers a far one)
+
+
+def not_an_outline(layer_id: str, role: str | None = None, title: str | None = None, spec: dict | None = None) -> bool:
+    """1.2.0 (Day 10 issue 7): a context polygon, or one that is water (sea, ocean, lakes), is not an outline other layers should sit inside.
+    1.21.0 (Day 18 issue 7): nor is an analysis result (by role or name), nor a layer that says `alignment_check: false`."""
+    if role == "context" or role in ANALYSIS_ROLES:
+        return True
+    if isinstance(spec, dict) and spec.get("alignment_check") is False:
         return True
     import re as _re
     words = set(_re.split(r"[^a-z]+", f"{layer_id} {title or ''}".lower()))
-    return any(w in words or (w + "s") in words for w in WATERY)
+    return any(w in words or (w + "s") in words for w in WATERY + ANALYSIS_WORDS)
 
 
-def lint_alignment(layers, crs, *, skip_outlines=(), bbox_extent: bool = False) -> list[dict]:
+def lint_alignment(layers, crs, *, skip_outlines=(), bbox_extent: bool = False, skip_checked=()) -> list[dict]:
     """MAP-CRS-007, after every layer is in the display CRS. `layers` is a list of (layer_id, gdf, kind, assumed) where kind is point, line or polygon.
 
     Two signs that layers are not registered (one of them carries a CRS label that is not the CRS its numbers were written in):
@@ -562,8 +583,9 @@ def lint_alignment(layers, crs, *, skip_outlines=(), bbox_extent: bool = False) 
                               {"nearest": near[0], "gap": round(d, 1), "unit": unit}), "layer": lid})
     skip = set(skip_outlines or ())
     outlines = [o for o in items if o[2] == "polygon" and o[0] not in skip and _fill_share(o[1], o[4]) >= OUTLINE_FILL_MIN]
+    skip_c = set(skip_checked or ())
     for lid, g, k, a, b in items:
-        if lid in flagged:
+        if lid in flagged or lid in skip_c:
             continue
         area_b = max((b[2] - b[0]) * (b[3] - b[1]), 0.0)
         cands = [o for o in outlines if o[0] != lid and o[0] not in flagged and _meets(_grow(b, tol), o[4])
@@ -574,7 +596,7 @@ def lint_alignment(layers, crs, *, skip_outlines=(), bbox_extent: bool = False) 
         otol = CONTAIN_TOL_FRAC * math.hypot(o[4][2] - o[4][0], o[4][3] - o[4][1])
         shift = _shift_of(b, o[4])
         pts = _samples(g, k)
-        if not len(pts):
+        if len(pts) < CONTAIN_MIN_FEATURES:              # 1.21.0: one or two positions (a site) say nothing about registration
             continue
         og = o[1][~o[1].geometry.isna() & ~o[1].geometry.is_empty]
         try:
@@ -589,7 +611,7 @@ def lint_alignment(layers, crs, *, skip_outlines=(), bbox_extent: bool = False) 
                                   f"{share_out:.0%} of layer '{lid}' falls outside '{o[0]}', the outline it overlaps.{moved} "
                                   f"If '{lid}' should lie inside '{o[0]}', the two are not registered: one carries the wrong CRS (zone, units, x/y order) or was shifted"
                                   + (" (a CRS was assumed for one of them)" if a or o[3] else "")
-                                  + ". If it extends past the outline on purpose, this is expected; crs: {alignment_check: false} turns the check off",
+                                  + f". If it extends past the outline on purpose, this is expected; `alignment_check: false` on layer '{lid}' (or crs: {{alignment_check: false}} for the map) turns the check off",
                                   {"outline": o[0], "outside_share": round(share_out, 3), "sampled": int(len(pts)), "shift": shift}), "layer": lid})
     return out
 

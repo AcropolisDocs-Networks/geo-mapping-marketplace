@@ -381,6 +381,9 @@ class Plan:
     style: object = None                             # 1.4.0 (R2-PACK): the style pack, fixed for the whole build (map_style.Style)
     treatments: dict = field(default_factory=dict)  # 1.4.0 (R2-TREAT): the pack's treatments with the MapSpec's style.treatments over them
     vector_ground: dict | None = None                # 1.10.0: roads, rivers and built-up land read from the person's own vector tile file
+    window_override: tuple | None = None             # 1.21.0 (Day 18 issue 5): the build's second pass reads rasters and ground for the frame the fit chose
+    raster_window: tuple | None = None               # 1.21.0: the display-CRS window the rasters were read for (map_raster.prepare)
+    raster_limits: tuple | None = None               # 1.21.0: where frame-filling rasters' data ends: (x0, y0, x1, y1), None on an open side
 
 
 THEME_MODES = {"light": "print", "dark": "screen"}     # the MapSpec says light or dark; the brand pack calls them print and screen
@@ -1127,8 +1130,11 @@ def _agg_spec(ly: dict, info: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------------------------------------------- main
-def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, template: str | None = None, spec_edit=None, use_tiles: bool = True, classic_layout: bool = False) -> Plan:
-    """`spec_edit(spec)` may adjust the loaded spec in memory (the web page turns the static scale bar off); the file is never changed."""
+def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, template: str | None = None, spec_edit=None, use_tiles: bool = True, classic_layout: bool = False,
+            window: tuple | None = None) -> Plan:
+    """`spec_edit(spec)` may adjust the loaded spec in memory (the web page turns the static scale bar off); the file is never changed.
+    1.21.0 (Day 18 issue 5): `window` (display CRS) widens the window rasters and the ground are read for: build_map passes the frame the fit
+    chose when it left the first window."""
     spec_path = Path(spec_path)
     spec = gc.load_mapspec(spec_path)
     gc.note_spec_folder(spec_path)                        # 1.14.0: a cache prepared beside the MapSpec is found from any folder
@@ -1341,7 +1347,8 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     findings += dl.lint_crs(display, map_type="choropleth" if area_stat else spec.get("map_type"), extent=wgs, has_tiles=bool(tiles_rec),
                             user_chosen=bool(crs_spec.get("display") and crs_spec.get("display") != "auto"),
                             datum_transforms_declared=len(str(crs_spec.get("datum_note") or "").strip()) >= 12,
-                            layer_crs=[l.gdf.crs for l in vec], scale_bar=sb_on, rationale=cs["rationale"])
+                            layer_crs=[l.gdf.crs for l in vec], scale_bar=sb_on, rationale=cs["rationale"],
+                            map_width_mm=float((tpl.get("map") or {}).get("w") or dl.MAP_WIDTH_MM))
     # each layer against its own CRS (area of use) and against the display CRS (datum transform accuracy), before anything moves
     findings += dl.lint_layer_crs([(l.id, l.gdf, bool(l.assumed_crs)) for l in vec], display, extent=wgs,
                                   map_width_mm=float((tpl.get("map") or {}).get("w") or dl.MAP_WIDTH_MM))
@@ -1357,7 +1364,8 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     # the layers against each other, now that they share one CRS (MAP-CRS-007); crs.alignment_check: false turns it off
     if crs_spec.get("alignment_check", True) is not False:
         findings += dl.lint_alignment([(l.id, l.gdf, l.kind, bool(l.assumed_crs)) for l in vec], display,
-                                      skip_outlines={l.id for l in vec if dl.not_an_outline(l.id, l.role, l.title)},
+                                      skip_outlines={l.id for l in vec if dl.not_an_outline(l.id, l.role, l.title, l.spec)},
+                                      skip_checked={l.id for l in vec if (l.spec or {}).get("alignment_check") is False},
                                       bbox_extent=mode_e == "bbox")
     if mode_e == "fit_layers":
         extent = _bounds_of(data_layers)
@@ -1367,6 +1375,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
                 tpl=tpl, tpl_name=tpl_name, crs=display, crs_info=crs_info, extent=extent, layers=layers, basemap=[], findings=findings, helpers=helpers,
                 look=look, style=style)
     plan.look_asked = map_look.look_of(spec)
+    plan.window_override = tuple(float(v) for v in window) if window is not None else None
     if (spec.get("extent") or {}).get("crop"):
         crop_extent(plan)
     plan.notes += style_notes
@@ -1498,6 +1507,8 @@ def add_context(plan: Plan) -> None:
     has_tiles = any(b.get("kind") == "tiles" for b in plan.basemap)
     roles = ["points" if l.wedge_info else l.role for l in plan.layers]       # sector wedges are site geometry, not an area fill
     preset, kinds = context_kinds(cfg, roles, has_tiles)
+    if kinds and bundled_mode(plan.spec) == "none" and not has_tiles and not plan.vector_ground:
+        return                                                                 # 1.21.0: basemap.bundled: none, a bare page
     if plan.vector_ground:
         return _context_from_tiles(plan, cfg, preset, kinds)
     if not kinds:
@@ -2419,6 +2430,21 @@ def load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = Fa
     plan.vector_ground = hit["vector_ground"]
 
 
+BUNDLED_MODES = ("auto", "none", "land", "full")
+
+
+def bundled_mode(spec: dict) -> str:
+    """1.21.0 (Day 18 issue 3): basemap.bundled, what the bundled ground draws when no tiles do: auto, none, land (land and water, no boundary
+    lines) or full. true reads as full and false as none."""
+    v = (spec.get("basemap") or {}).get("bundled", "auto")
+    if v is True:
+        return "full"
+    if v is False or v is None:
+        return "none" if v is False else "auto"
+    v = str(v).lower()
+    return v if v in BUNDLED_MODES else "auto"
+
+
 def _load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = False, vector_file: Path | None = None) -> None:
     bm = (plan.spec.get("basemap") or {})
     prov = bm.get("provider", "none")
@@ -2437,7 +2463,14 @@ def _load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = F
         relief = map_raster.needs_ground(plan.spec)              # relief needs land under it (M12)
         if not kinds and not relief:
             return
-        plan.notes.append("ground: the bundled land and water are drawn under the " + ("context pack" if kinds else "relief") + " (basemap provider is none)")
+        # 1.21.0 (Day 18 issue 3): `provider: none` names no tile provider; the bundled ground under the relief or the context pack is its own
+        # choice: basemap.bundled: none leaves the page bare (no land, water, boundary lines or context pack), land drops the boundary lines
+        mode = bundled_mode(plan.spec)
+        if mode == "none":
+            plan.notes.append("ground: none (basemap.bundled: none): no bundled land, water, boundary lines or context pack; the map sits on the paper")
+            return
+        plan.notes.append("ground: the bundled land and water are drawn under the " + ("context pack" if kinds else "relief") + " (basemap provider is none"
+                          + ("; no boundary lines, basemap.bundled: land)" if mode == "land" else "; basemap.bundled: none leaves them out)"))
     if tiles_rec:
         vis = lo.Frame.fit(lo.rect_of(plan.tpl["map"]), plan.extent, float((plan.spec.get("extent") or {}).get("padding_pct", 5))).visible
         bb = tiles_rec["bbox_3857"]
@@ -2786,8 +2819,14 @@ def crop_extent(plan: Plan) -> None:
 
 
 def plan_visible_pad(plan: Plan):
+    """The frame the map is fitted to, plus a tenth of its longer side all round: what rasters and the ground are read for. 1.21.0 (Day 18
+    issue 5): with a window override (the build's second pass, after the fit moved the frame) the union of the two."""
     rect = lo.rect_of(plan.tpl["map"])
     fr = lo.Frame.fit(rect, plan.extent, float((plan.spec.get("extent") or {}).get("padding_pct", 5)))
     x0, y0, x1, y1 = fr.visible
     pad = 0.1 * max(x1 - x0, y1 - y0)
-    return (x0 - pad, y0 - pad, x1 + pad, y1 + pad)
+    out = (x0 - pad, y0 - pad, x1 + pad, y1 + pad)
+    ov = getattr(plan, "window_override", None)
+    if ov:
+        out = (min(out[0], ov[0]), min(out[1], ov[1]), max(out[2], ov[2]), max(out[3], ov[3]))
+    return out

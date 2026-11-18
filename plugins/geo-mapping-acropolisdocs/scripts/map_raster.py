@@ -480,6 +480,145 @@ def grid_transform(win, shape):
 
 
 # --------------------------------------------------------------------------------------------------------------- the plan step
+# --------------------------------------------------------------------------------------------------------------- coverage (1.21.0)
+# Day 18: the DEM the person fetched ended about 5 mm inside the frame's right edge, so the relief and the raster made from it stopped short and
+# a pale strip of bare land ran down the map under the legend and the locator (it read as overlays hanging off the map). The fit now keeps the
+# frame on the data of every raster that fills it (move first, then zoom in a little), the relief is not faded on a side the frame will not
+# reach, and MAP-CART-040 says when a raster still stops inside the frame.
+CLAMP_SLACK = 0.12                 # a data edge at most this share of the first frame inside it is one the fit may clear by moving or zooming
+FILL_SHARE = 0.9                   # a raster layer fills the map when its footprint holds this share of the extent
+
+
+def file_limits(path, display_crs: str, win) -> tuple | None:
+    """Where a raster file's footprint ends, in the display CRS: (x0, y0, x1, y1), the inner axis-aligned box of its bounds as projected,
+    with None on a side that reaches past the read window `win` (open: more could be read). None when the file cannot be read."""
+    try:
+        info = rio.open_info(path) if (rio := _rio()) else None
+    except Exception:  # noqa: BLE001 - coverage is advice; the map draws without it
+        return None
+    if not info or not info.get("crs"):
+        return None
+    try:
+        from pyproj import Transformer
+        bx0, by0, bx1, by1 = info["bounds"]
+        t = Transformer.from_crs(info["crs"], display_crs, always_xy=True)
+        n = 25
+        xs, ys = np.linspace(bx0, bx1, n), np.linspace(by0, by1, n)
+        lx, ly = t.transform(np.full(n, bx0), ys)
+        rx, ry = t.transform(np.full(n, bx1), ys)
+        bxx, byy = t.transform(xs, np.full(n, by0))
+        txx, tyy = t.transform(xs, np.full(n, by1))
+        box = (float(np.nanmax(lx)), float(np.nanmax(byy)), float(np.nanmin(rx)), float(np.nanmin(tyy)))
+    except Exception:  # noqa: BLE001
+        return None
+    if not all(np.isfinite(box)):
+        return None
+    w0, w1, w2, w3 = (float(v) for v in win)
+    eps = 1e-6 * max(w2 - w0, w3 - w1)
+    return (box[0] if box[0] > w0 + eps else None, box[1] if box[1] > w1 + eps else None,
+            box[2] if box[2] < w2 - eps else None, box[3] if box[3] < w3 - eps else None)
+
+
+def drop_empty_sides(lim: tuple | None, valid: np.ndarray, transform, band: int = 3, min_share: float = 0.1) -> tuple | None:
+    """A file's end shows only where its data reaches it: a side whose last few cells inside the end are (almost) all nodata (a population
+    disc, a DEM masked to a coast) is opened, so the frame is not held to an edge no one can see."""
+    if not lim:
+        return lim
+    v = np.asarray(valid, bool)
+    rows, cols = v.shape
+    a, c, e, f = float(transform.a), float(transform.c), float(transform.e), float(transform.f)
+    out = list(lim)
+    for i, x in enumerate(lim):
+        if x is None:
+            continue
+        if i in (0, 2):
+            k = int(round((x - c) / a))
+            sl = v[:, max(0, k):min(cols, k + band)] if i == 0 else v[:, max(0, k - band):min(cols, k)]
+        else:
+            k = int(round((x - f) / e)) if e else 0
+            sl = v[max(0, k - band):min(rows, k), :] if i == 1 else v[max(0, k):min(rows, k + band), :]
+        if not sl.size or sl.mean() < min_share:
+            out[i] = None
+    return tuple(out) if any(x is not None for x in out) else None
+
+
+def merge_limits(a: tuple | None, b: tuple | None) -> tuple | None:
+    """The tighter of two limit boxes, side by side (None is open)."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    pick = (max, max, min, min)
+    return tuple(None if x is None and y is None else (x if y is None else y if x is None else f(x, y)) for f, x, y in zip(pick, a, b))
+
+
+def first_visible(plan) -> tuple:
+    """The frame the map is fitted to before the overlays move it (no padding beyond the template's own)."""
+    import layout as lo
+    return lo.Frame.fit(lo.rect_of(plan.tpl["map"]), plan.extent, float((plan.spec.get("extent") or {}).get("padding_pct", 5))).visible
+
+
+def clearable(lim: tuple | None, vis) -> tuple | None:
+    """The sides of `lim` the fit can clear: those outside the first frame, or inside it by at most CLAMP_SLACK of its size. A side deeper in
+    is the raster's own shape (it covers part of the map), not a short read; it is left to MAP-CART-040."""
+    if not lim:
+        return None
+    x0, y0, x1, y1 = (float(v) for v in vis)
+    sx, sy = CLAMP_SLACK * (x1 - x0), CLAMP_SLACK * (y1 - y0)
+    out = (lim[0] if lim[0] is not None and lim[0] <= x0 + sx else None, lim[1] if lim[1] is not None and lim[1] <= y0 + sy else None,
+           lim[2] if lim[2] is not None and lim[2] >= x1 - sx else None, lim[3] if lim[3] is not None and lim[3] >= y1 - sy else None)
+    return out if any(v is not None for v in out) else None
+
+
+def open_sides_mask(valid: np.ndarray, transform, lim: tuple | None) -> np.ndarray:
+    """`valid` with the cells past each clearable data edge marked valid, so feather_edge does not fade the relief toward an edge the frame
+    will stay inside of (the fade showed as a pale band along the frame)."""
+    if not lim:
+        return valid
+    v = np.asarray(valid, bool).copy()
+    a, c, e, f = float(transform.a), float(transform.c), float(transform.e), float(transform.f)
+    rows, cols = v.shape
+    if lim[0] is not None:
+        v[:, :max(0, min(cols, int(np.ceil((lim[0] - c) / a)) + 1))] = True
+    if lim[2] is not None:
+        v[:, max(0, min(cols, int(np.floor((lim[2] - c) / a)) - 1)):] = True
+    if lim[3] is not None and e:
+        v[:max(0, min(rows, int(np.ceil((lim[3] - f) / e)) + 1)), :] = True
+    if lim[1] is not None and e:
+        v[max(0, min(rows, int(np.floor((lim[1] - f) / e)) - 1)):, :] = True
+    return v
+
+
+def fills_extent(plan, lim_box) -> bool:
+    """Whether a raster whose footprint is `lim_box` (None sides open) holds FILL_SHARE of the map's extent."""
+    ext = plan.extent
+    x0 = max(float(ext[0]), lim_box[0] if lim_box[0] is not None else -np.inf)
+    y0 = max(float(ext[1]), lim_box[1] if lim_box[1] is not None else -np.inf)
+    x1 = min(float(ext[2]), lim_box[2] if lim_box[2] is not None else np.inf)
+    y1 = min(float(ext[3]), lim_box[3] if lim_box[3] is not None else np.inf)
+    ea = max(float(ext[2] - ext[0]), 1e-12) * max(float(ext[3] - ext[1]), 1e-12)
+    return max(0.0, x1 - x0) * max(0.0, y1 - y0) >= FILL_SHARE * ea
+
+
+def record_coverage(plan, win) -> None:
+    """After the rasters are read: plan.raster_window, and plan.raster_limits from every relief picture and every raster layer that fills the
+    extent (render keeps the frame inside them); each picture keeps its own limits for MAP-CART-040."""
+    plan.raster_window = tuple(float(v) for v in win)
+    lims = None
+    for b in plan.basemap:
+        if b.get("kind") == "hillshade" and (b.get("image") or {}).get("limits") is not None:
+            lims = merge_limits(lims, b["image"]["limits"])
+    for l in plan.layers:
+        im = (l.raster or {}).get("image") if l.kind == "raster" else None
+        if im and im.get("limits") is not None:
+            if fills_extent(plan, im["limits"]):
+                lims = merge_limits(lims, im["limits"])
+            else:
+                im["partial"] = True                  # a raster that covers part of the map ends inside it by design
+    # style.look classic draws what 0.16 drew, frame included (tests/golden/classic is never regenerated); MAP-CART-040 still says so
+    plan.raster_limits = None if getattr(plan, "look", "classic") == "classic" else clearable(lims, first_visible(plan))
+
+
 def prepare(plan) -> None:
     """After the extent: every raster, hillshade and contour layer is read for the window, coloured and placed; then terrain as context."""
     import map_plan as mp
@@ -504,6 +643,7 @@ def prepare(plan) -> None:
         terrain_context(plan, win, shape, why, explicit, tier)
     elif "tier" in why:
         plan.notes.append(f"terrain: not drawn ({why})")
+    record_coverage(plan, win)
 
 
 def _source_path(plan, l, win, shape=(512, 512)) -> tuple[str, dict | None, list]:
@@ -644,7 +784,8 @@ def raster_layer(plan, l, win, shape) -> None:
         l.legend_block = None
     rgba = png_rgba(png)
     l.raster.update({"image": {"png": png, "rgba": rgba, "bbox": list(g.bounds), "transform": g.transform, "crs": plan.crs, "opacity": cfg["opacity"],
-                               "shape": [int(rgba.shape[1]), int(rgba.shape[2])]},
+                               "shape": [int(rgba.shape[1]), int(rgba.shape[2])], "limits": drop_empty_sides(file_limits(path, plan.crs, win), ~np.ma.getmaskarray(a), g.transform)
+                               if (l.raster or {}).get("src") == "file" else None},
                      "path": path, "band": cfg["band"], "resampling": cfg["resampling"]})
     src_res = info["res"]
     l.transformations.append(f"band {cfg['band']} of {Path(path).name} ({info['crs']}, cells of {src_res[0]:g} x {src_res[1]:g} units) read through a warped window in "
@@ -842,8 +983,15 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
     if getattr(plan, "look", "classic") != "classic":
         rgba = tinted_relief(rgba, dem, plan.tokens)      # 0.20.0: an elevation tint in the brand's neutrals under a slightly stronger shading
     valid = ~np.ma.getmaskarray(dem)
+    # a DEM the plugin fetched for the window can be fetched again for a wider one (the build's second pass): only a file the person
+    # supplied has an end the frame must respect
+    limits = None if rec.get("source") in ("3dep", "terrarium", "copernicus") else drop_empty_sides(file_limits(dem_path, plan.crs, win),
+                                                                                                    ~np.ma.getmaskarray(dem), g.transform)
     if not valid.all() and valid.any():               # 0.26.0 (TODO M16): a DEM that ends inside the map fades out instead of stopping in a straight edge
-        rgba, faded = feather_edge(rgba, valid)
+        # 1.21.0 (Day 18): not toward an edge the fit will keep the frame inside of; there the fade only drew a pale band along the frame
+        # (style.look classic keeps 0.16's picture, fade included: its baselines are never redrawn)
+        keep = None if getattr(plan, "look", "classic") == "classic" else clearable(limits, first_visible(plan))
+        rgba, faded = feather_edge(rgba, open_sides_mask(valid, g.transform, keep))
         if faded and hasattr(plan, "notes"):
             plan.notes.append(f"relief: the DEM ends inside the map window ({1 - valid.mean():.0%} of it has no elevation); the shading fades out over "
                               f"{faded} px at its edge rather than stopping in a straight line")
@@ -872,7 +1020,8 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
               "row_count": 0, "library_ref": entry_rec.get("id") if entry else None, "library_rev": entry_rec.get("rev") if entry else None,
               "sha256": rec.get("sha256") or _sha(dem_path), "terrain": pub}
     return {"kind": "hillshade", "gdf": None, "entry": entry_rec, "layer_id": layer_id, "title": title,
-            "image": {"png": png, "rgba": rgba, "bbox": list(g.bounds), "transform": g.transform, "crs": plan.crs, "opacity": opacity, "shape": [int(rgba.shape[1]), int(rgba.shape[2])]},
+            "image": {"png": png, "rgba": rgba, "bbox": list(g.bounds), "transform": g.transform, "crs": plan.crs, "opacity": opacity, "shape": [int(rgba.shape[1]), int(rgba.shape[2])],
+                      "limits": limits},
             "record": record, "dem_path": dem_path, "z": z, "sun": sun}
 
 

@@ -65,9 +65,11 @@ EXC_LINE = re.compile(r"^([A-Za-z_][\w.]*(?:Error|Exception|Exit|Refusal|Interru
 OPTION = re.compile(r"(?<![\w-])(--[a-z][a-z0-9-]*)")
 SHELL_WRITE = re.compile(r"(?:^|[;&|\n]\s*)(?:cat|tee|printf|echo)\b[^\n|;]*>{1,2}\s*[^&\s]|>{1,2}\s*[\"']?[\w./~$-]+\.(?:ya?ml|json|geojson|py|md|txt|csv|gpkg|svg|html)\b|\bsed\s+-i\b|\b(?:cp|mv|tee)\b\s")
 EXIT_CLASS = {gc.EXIT_USAGE: "usage", gc.EXIT_LINT: "lint-block", gc.EXIT_REFUSED: "refused", gc.EXIT_SERVICE: "service", gc.EXIT_BRAND_OUTSIDE_BUILD: "brand"}
-DISPOSITION = {"shell-tail": "shell", "crash": "product", "dependency": "dependency", "lint-block": "input", "usage": "input", "refused": "input", "brand": "input",
+DISPOSITION = {"shell-tail": "shell", "inline-script": "operator", "crash": "product", "dependency": "dependency", "lint-block": "input", "usage": "input", "refused": "input", "brand": "input",
                "service": "environment", "network": "environment", "environment": "environment", "timeout": "environment", "failed": "unclassified"}
 
+
+SESSION_SIDE = ("shell-tail", "inline-script")        # 1.21.0: classes whose failure the session's own command set, not the plugin
 
 READING = {"input": "a gate or the input stopped the run (the spec, the data or the arguments); fix the input, not the plugin.",
            "dependency": "a package or native library is missing; run the map doctor (`doctor.py --fix --all`).",
@@ -666,6 +668,10 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
                 code = EXIT.search(c["result"] or "")
                 if cls == "failed" and ev.get("tail") and code and int(code.group(1)) == 1 and not FINDING.search(c["result"] or ""):
                     cls = "shell-tail"
+                if cls == "crash" and not site:
+                    # 1.21.0 (Day 18 trace F-1): a traceback with no frame in this plugin is the session's own script (python -c reading the
+                    # plugin's output, a JSONDecodeError on an empty line): not a crash of the script the call is named after
+                    cls = "inline-script"
                 e.update(error_class=cls, crash_site=site, exception=exc, exit_code=int(code.group(1)) if code else None, evidence=evidence(c["result"] or ""))
                 if HOOK_STOP in (c["result"] or ""):
                     e.update(stopped_by="pre-export hook", exit_code=2)
@@ -754,6 +760,9 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
                 row["severity"] = sev
     counted = [e for e in mapev if e["status"] in ("ok", "failed")]
     failed = [e for e in mapev if e["status"] == "failed"]
+    # 1.21.0 (Day 18 trace): the error rate is the plugin's: a failure set by the session's own command (shell-tail, inline-script) is listed
+    # with its evidence but not counted against the plugin
+    session_side = [e for e in failed if e.get("error_class") in SESSION_SIDE]
     try:
         import session_report as sr
         runs = sr.load_runs()
@@ -765,7 +774,8 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             "first": first.isoformat() if first else None, "last": last.isoformat() if last else None,
             "calls": {"total": len(events), "map": len(mapev), "other": len(events) - len(mapev)},
             "status": {s: sum(1 for e in mapev if e["status"] == s) for s in ("ok", "failed", "blocked", "orphan", "self")},
-            "error_rate": round(len(failed) / len(counted), 3) if counted else 0.0, "user_turns": turns, "run": run,
+            "error_rate": round((len(failed) - len(session_side)) / len(counted), 3) if counted else 0.0, "session_side_failures": len(session_side),
+            "user_turns": turns, "run": run,
             "time": {"wall": round(wall), "tools": round(tool_s), "map_tools": round(map_s), "idle": round(idle), "idle_gaps": len(gaps),
                      "model_overhead_residual": round(model), "round_trip": {"count": len(rtt), "median": round(statistics.median(rtt), 1) if rtt else None,
                                                                           "worst": round(max(rtt), 1) if rtt else None, "total": round(sum(rtt))},
@@ -817,7 +827,11 @@ def fix_spec(failed: list[dict], events: list[dict]) -> list[dict]:
         disp = DISPOSITION.get(cls, "unclassified")
         if cls == "crash" and not first.get("crash_site"):
             disp = "operator"                                  # a traceback with no frame in this plugin: an inline script of the session's own
-        out.append({"id": f"F-{i}", "class": cls, "disposition": disp, "owner": f"scripts/{script}.py" if script and script in plugin_inventory_cache()["scripts"] else script,
+        if disp in ("operator", "shell") and script:
+            owner = f"the session's own command after {script}.py" if script in plugin_inventory_cache()["scripts"] else f"the session's own command ({script})"
+        else:
+            owner = None
+        out.append({"id": f"F-{i}", "class": cls, "disposition": disp, "owner": owner or (f"scripts/{script}.py" if script and script in plugin_inventory_cache()["scripts"] else script),
                     "crash_site": first.get("crash_site"), "exception": first.get("exception"), "exit_code": first.get("exit_code"),
                     "calls": [x["n"] for x in es], "lane": first["lane"], "evidence": first.get("evidence"),
                     "recovered": later_ok, "severity": "low" if later_ok else ("high" if disp == "product" else "medium"),
@@ -858,7 +872,8 @@ def text_report(o: dict) -> str:
         L.append("No call in this window used the map plugin.")
         return "\n".join(L)
     L.append(f"Status    {s['ok']} ok · {s['failed']} failed · {s['blocked']} blocked · {s['orphan']} unfinished" + (" · 1 self" if s["self"] else "")
-             + f"   error rate {100 * o['error_rate']:.1f}% (blocked excluded)")
+             + f"   error rate {100 * o['error_rate']:.1f}% (blocked" + (f" and {o['session_side_failures']} session-side" if o.get("session_side_failures") else "")
+             + " excluded)")
     t = o["time"]
     L.append(f"Time      wall {fmt_d(t['wall'])} · tools {fmt_d(t['tools'])} (map {fmt_d(t['map_tools'])}) · idle {fmt_d(t['idle'])} in {t['idle_gaps']} gap(s)"
              f" · not running a tool {fmt_d(t['model_overhead_residual'])} (residual)")

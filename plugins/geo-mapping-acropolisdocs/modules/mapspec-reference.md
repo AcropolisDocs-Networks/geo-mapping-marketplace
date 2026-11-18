@@ -31,6 +31,8 @@ style: {look: auto}                # auto (default) picks focus (areas), clean (
 #   a one-sun hillshade (sun: auto) the air in shadow and the grazing rays, exact when the cut runs along the sun's bearing
 # 1.19.0: a layer's fit: false makes it annotation (landmark points, a section line): the fit and the cover checks leave it out. A raster other
 #   than the hillshade that fills the extent makes the map picture-led: its vector layers are annotation unless one says fit: true
+# 1.21.0: a relief or raster read from a FILE that ends just past the map's box keeps the frame on its data (moved, then zoomed in at most
+#   15%); one that ends deeper in is MAP-CART-040: fetch the DEM for the whole frame. A layer's alignment_check: false leaves it out of MAP-CRS-007
 # 1.19.0: role hillshade takes one sun: hillshade: {azimuth: 278, altitude: 18, cast_shadows: true, opacity: 0.6, max_px: 4096}
 # 1.19.0: classification.colors works on numeric classes too ([null, null, null, null, '@brand.status.danger']: null keeps the ramp's colour);
 #   manual breaks print at their own precision (5–10); a point layer reads symbol.stroke, stroke_width (0: no casing) and fill as well as color
@@ -47,6 +49,7 @@ task: [market-rollup]              # optional: what the map is for; the library 
 extent: {mode: fit_layers, padding_pct: 6}
 basemap: {provider: bundled}       # or none; streets or terrain: {provider: carto-positron, style: light_all} after the `basemap-render` module's steps have prepared the tiles;
                                    # your own vector tile file as the ground, nothing to prepare: {provider: pmtiles, source: pmtiles:FILE}
+                                   # 1.21.0: bundled: none (a bare page: no land, water, boundary lines or context pack) | land (no boundary lines) | full
 layers:
   - id: counties
     source: {type: ref, id: ref.boundary.us.county.cb}       # or {type: file, path: data.gpkg, layer: counties}

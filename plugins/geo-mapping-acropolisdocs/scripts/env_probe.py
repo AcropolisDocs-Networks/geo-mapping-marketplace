@@ -138,13 +138,43 @@ def version_of(name: str) -> tuple | None:
     return tuple(int(x or 0) for x in m.groups()) if m else None
 
 
+PLUGIN_MARKER = Path("scripts") / "gmap_common.py"
+
+
+def _in_plugin_data(p: Path) -> bool:
+    """1.21.0 (Day 18 issue 1): a folder under ~/.claude/plugins/data is a plugin's DATA folder (the host names it after the plugin, e.g.
+    geo-mapping-acropolisdocs-synced), never an installed plugin."""
+    parts = [x.lower() for x in p.parts]
+    for i in range(len(parts) - 2):
+        if parts[i] == ".claude" and parts[i + 1] == "plugins" and parts[i + 2] == "data":
+            return True
+    return False
+
+
+def is_plugin_copy(d: Path) -> bool:
+    """1.21.0 (Day 18 issue 1): a geo-mapping-* folder counts as an installed edition only when it holds the plugin's code: scripts/gmap_common.py
+    in the folder itself or one level down (a cache's <name>/<version>/ layout). A data, output or working folder named after the plugin is not one."""
+    if _in_plugin_data(d):
+        return False
+    try:
+        if (d / PLUGIN_MARKER).is_file():
+            return True
+        return any((c / PLUGIN_MARKER).is_file() for c in d.iterdir() if c.is_dir())
+    except OSError:
+        return False
+
+
 def installed_editions(own: str) -> list[str]:
-    """Editions of geo-mapping-* directories next to this plugin, by name without a version. Directory names only; nothing is read."""
+    """Editions of geo-mapping-* directories next to this plugin, by name without a version. Directory names and the presence of
+    scripts/gmap_common.py only; no file is read. 1.21.0 (Day 18 issue 1): the plugins' data folders and folders without the plugin's code are
+    skipped (the synced data folder geo-mapping-acropolisdocs-synced stopped every map skill in a cloud session)."""
     names = {own}
     for d in scan_dirs():
+        if _in_plugin_data(d):
+            continue
         try:
             for child in d.iterdir():
-                if fnmatch.fnmatch(child.name, gc.EDITION_GLOB) and child.is_dir():
+                if fnmatch.fnmatch(child.name, gc.EDITION_GLOB) and child.is_dir() and is_plugin_copy(child):
                     names.add(edition_of(child.name))
         except OSError:
             continue

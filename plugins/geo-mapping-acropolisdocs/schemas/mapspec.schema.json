@@ -208,6 +208,10 @@
           "enum": ["auto", "us-tiger", "global-overture", "global-osm-simplified", "bundled-ne"],
           "description": "1.5.0: the ground provider (data/ground-providers.yaml). auto (default): the finest provider whose coverage holds the whole window, whose scales include the map's and whose files are cached (MAP-GND-001); naming one restricts the choice to it, with Natural Earth when it cannot be drawn"
         },
+        "bundled": {
+          "oneOf": [{"enum": ["auto", "none", "land", "full"]}, {"type": "boolean"}],
+          "description": "1.21.0: what the bundled ground draws when no tiles do (provider none names no tile provider; it does not turn the bundled ground off). auto (default) and full: land, water and boundary lines under the relief or the context pack, as before; land: land and water without boundary lines; none: nothing bundled (no land, water, boundary lines or context pack), the map on the paper. true reads as full, false as none"
+        },
         "ground_detail": {
           "type": "boolean",
           "description": "0.11.0: false keeps the bundled Natural Earth ground on a US map finer than 1:1,500,000, where the Census 1:500,000 land and TIGER water (ground_detail.py prepare) would otherwise be drawn from the cache"
@@ -656,6 +660,10 @@
                 "type": "integer"
               }
             }
+          },
+          "alignment_check": {
+            "type": "boolean",
+            "description": "1.21.0: false leaves this layer out of MAP-CRS-007, both as a layer checked against an outline and as an outline"
           },
           "wedges": {
             "type": "object",

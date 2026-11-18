@@ -1,8 +1,8 @@
 {
   "profile": "acropolisdocs",
   "plugin_name": "geo-mapping-acropolisdocs",
-  "version": "1.20.1",
-  "distribution_filename": "geo-mapping-acropolisdocs_v1.20.1.plugin",
+  "version": "1.21.0",
+  "distribution_filename": "geo-mapping-acropolisdocs_v1.21.0.plugin",
   "default_content_brand": "acropolisdocs",
   "house_brand": "acropolisdocs",
   "brands_bundled": [
@@ -17,13 +17,13 @@
       "tokens_sha256": "40e56aeb992c613e8bed12465df6669934a03fbcf5b5bd2417308651fca7674a"
     }
   ],
-  "source_commit": "42931a92c8453c6b99691fbd5c133491273bb280",
-  "content_digest": "5a2e60af6348948d4fcbb3bb18a1b280669595fc73bdba30bb899108979bbec7",
+  "source_commit": "deac570e83a6eb60d75a1abd9f4020c808166bfd",
+  "content_digest": "89c18889130f827f8baf03fd5483c12ff436df84fe60a0fda6342c8280df4406",
   "file_count": 618,
   "library_digest": "1629efe54d24f3960d119dc878a239f9134da6297770545d1e6e2e09e1cb02d4",
   "library_version": "2026.11.31",
   "mcp_digest": "d963e3cee5eb207fcd18f34936facd662f5c7bd042ff44639b7c71db9fc04936",
-  "built_at_utc": "2026-11-18T14:20:27Z",
+  "built_at_utc": "2026-11-18T19:54:14Z",
   "profile_snapshot": {
     "profile": "acropolisdocs",
     "plugin_name": "geo-mapping-acropolisdocs",
