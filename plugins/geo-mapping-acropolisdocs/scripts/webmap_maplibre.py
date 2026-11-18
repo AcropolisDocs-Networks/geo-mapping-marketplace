@@ -241,6 +241,37 @@ def needs_tiles(col: dict) -> bool:
     return n > 2000 and len(json.dumps(col, separators=(",", ":"))) > TILE_LAYER_BYTES
 
 
+DISSOLVE_MAX_GROUPS = 2000     # 1.19.0: an extruded layer with at most this many (height, base, class) values is dissolved, not tiled
+DISSOLVE_KEYS = ("_h", "_b", "_c", "_k")
+
+
+def dissolve_by_value(col: dict) -> tuple[dict, int] | None:
+    """1.19.0 (Day 16 issues 1 and 2): an extruded layer of many same-looking blocks (a square-bin or hexbin grid: 30,138 bars) is one block
+    per drawn value, not a tile pyramid: features with the same height, base and class are dissolved into one MultiPolygon, so the layer stays
+    GeoJSON (154 features, under 3 MB) and shows at every zoom. Returns (collection, groups) or None when the layer has more than
+    DISSOLVE_MAX_GROUPS distinct values (buildings, each its own height). Popups per feature are given up (the caller says so)."""
+    import shapely
+    from shapely.geometry import mapping, shape
+    groups: dict = {}
+    for f in col["features"]:
+        pr = f.get("properties") or {}
+        key = tuple(pr.get(k) for k in DISSOLVE_KEYS)
+        groups.setdefault(key, []).append(f)
+        if len(groups) > DISSOLVE_MAX_GROUPS:
+            return None
+    out = []
+    for key, fs in groups.items():
+        geoms = [shape(f["geometry"]) for f in fs if f.get("geometry")]
+        if not geoms:
+            continue
+        g = shapely.union_all(geoms) if len(geoms) > 1 else geoms[0]
+        g = shapely.set_precision(g, 1e-6)
+        props = {k: v for k, v in zip(DISSOLVE_KEYS, key) if v is not None}
+        props["_n"] = len(fs)
+        out.append({"type": "Feature", "geometry": mapping(g), "properties": props})
+    return {**col, "features": out}, len(out)
+
+
 def collection_gdf(col: dict):
     """The page's GeoJSON collection of a layer as a GeoDataFrame in lon/lat (the properties the page uses, nothing else)."""
     import geopandas as gpd

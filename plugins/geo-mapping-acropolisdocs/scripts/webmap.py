@@ -674,11 +674,18 @@ def source_note_lines(plan) -> list[str]:
     return provenance.source_lines(plan)
 
 
-def raster_overlay(im: dict) -> dict:
+def raster_overlay(im: dict, colors: int | None = None) -> dict:
     """A print picture (raster layer or relief) as a Leaflet imageOverlay: warped to Web Mercator, at most map_raster.WEB_MAX_PX a side, a data URI
-    (the page's CSP already allows data: images; no host is added)."""
+    (the page's CSP already allows data: images; no host is added). `colors` writes it as a palette PNG of that many colours (1.19.0)."""
     import map_raster
-    return map_raster.web_overlay(im["rgba"], im["transform"], im["crs"])
+    return map_raster.web_overlay(im["rgba"], im["transform"], im["crs"], colors=colors)
+
+
+def relief_web_colors(spec: dict) -> int | None:
+    """1.19.0 (Day 16 issue 8): the relief's colours on a page: webmap.relief_colors (0 or false: the full RGBA picture), default 48."""
+    import map_raster
+    v = (spec.get("webmap") or {}).get("relief_colors", map_raster.RELIEF_WEB_COLORS)
+    return None if v in (0, False, None, "full") else int(v)
 
 
 # ---------------------------------------------------------------------------------------------------------------- M14: time, engine, units
@@ -1285,9 +1292,11 @@ def _page_layers(cfg, ctl, findings, live_specs, notes, pfields, plan, s3, spec,
     for b in plan.basemap:                           # relief: the same shading as the print map, warped to Web Mercator, under every layer (M12)
         if b.get("kind") != "hillshade":
             continue
-        ov = raster_overlay(b["image"])
+        ov = raster_overlay(b["image"], relief_web_colors(plan.spec))
         if ov["downsampled"]:
             notes.append(f"relief: the page carries the shading at {ov['width']} x {ov['height']} px (the print picture is larger)")
+        if ov.get("colors"):
+            notes.append(f"relief: a {ov['colors']}-colour palette picture on the page ({ov['bytes'] / 1e6:.1f} MB; webmap.relief_colors: 0 keeps every colour)")
         defs.append({"id": f"relief-{b.get('layer_id')}", "alias": b.get("layer_id"), "title": "Relief", "kind": "image", "role": "hillshade", "visible": True, "style": {}, "popup": None,
                      "searchable": False, "downloadable": False, "context": False, "url": ov["url"], "bounds": ov["bounds"], "opacity": float(b["image"].get("opacity", 0.35)),
                      "slider": False, "pane": "gm-relief"})
@@ -1322,6 +1331,17 @@ def _page_layers(cfg, ctl, findings, live_specs, notes, pfields, plan, s3, spec,
                 raise mp.PlanError(str(ex), gc.EXIT_USAGE) from None
             extra, d3 = {"_h": hs, "_b": bs}, "extrude"             # MAP-WEB-024 reads the heights back from the page (web_lint.check_3d)
             notes += xnotes
+            mom = (l.spec["extrude"] or {}).get("moments")
+            if mom:                                           # 1.19.0 (Day 16 issue 16): values per moment, for a timeline grow: block
+                miss = [c for c in mom if c not in l.gdf.columns]
+                if miss:
+                    raise mp.PlanError(f"layer '{l.id}': extrude.moments names {', '.join(miss)}, which are not fields of the layer", gc.EXIT_USAGE)
+                import numpy as np
+                import pandas as pd
+                arr = np.column_stack([pd.to_numeric(l.gdf[c], errors="coerce").fillna(0).to_numpy(dtype=float) for c in mom])
+                for j_ in range(arr.shape[1]):                 # one scalar per moment (_m0 .. _mN): vector tiles carry no arrays
+                    extra[f"_m{j_}"] = [round(float(v), 3) for v in arr[:, j_]]
+                notes.append(f"layer '{l.id}': {len(mom)} moments per block for a timeline grow: block ({', '.join(mom[:3])}{', ...' if len(mom) > 3 else ''})")
         elif s3 and l.spec.get("mast") and l.kind == "point":
             try:
                 hs = w3.mast_heights(l.id, l.spec["mast"], l.gdf)
@@ -1347,6 +1367,13 @@ def _page_layers(cfg, ctl, findings, live_specs, notes, pfields, plan, s3, spec,
             d["time"] = True
         if d3:
             d["d3"] = d3
+        if d3 == "extrude" and (l.spec.get("extrude") or {}).get("moments"):
+            d["moments"] = len(l.spec["extrude"]["moments"])
+        if d3 == "extrude" and (l.spec.get("extrude") or {}).get("per_unit_m") is not None:
+            d["per_unit_m"] = float(l.spec["extrude"]["per_unit_m"])          # 1.19.0: a bar chart; MAP-WEB-024 reads it
+            if l.legend_block is not None and not l.legend_block.get("note"):
+                u = (l.spec["extrude"].get("unit") or "unit").strip()
+                l.legend_block = {**l.legend_block, "note": f"Height: {d['per_unit_m']:g} m per {u}"}
         if l.role == "contour" and "elevation" in l.gdf.columns:             # index lines heavier, elevations along them at the deeper zooms (TODO M12)
             d["contour"] = {"index_stroke": l.symbol.get("index_stroke") or style["stroke"],
                             "index_weight": round(max(1.0, float(l.symbol.get("index_w_mm") or l.stroke_w_mm * 2) * 3.78), 2),
@@ -1536,6 +1563,17 @@ def _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, c
                 has_classes = any("_c" in f["properties"] for f in col["features"][:50])
                 cl_fill = t["emphasis"] if has_classes else d["style"]["fill"]
                 cl_text = t["legend_bg"] if contrast(t["legend_bg"], cl_fill) >= contrast(t["label"], cl_fill) else t["label"]
+                lspec0 = next((x.spec for x in plan.layers if x.id == d["id"]), {}) or {}
+                if (d.get("d3") == "extrude" and not d.get("time") and not d.get("moments") and wml.needs_tiles(col)
+                        and (lspec0.get("extrude") or {}).get("dissolve", "auto") != "off"):
+                    dz_ = wml.dissolve_by_value(col)
+                    if dz_ is not None and not wml.needs_tiles(dz_[0]):
+                        collections[d["id"]] = col = dz_[0]
+                        d["popup"] = None
+                        d["searchable"] = False
+                        notes.append(f"layer '{d['id']}': {n:,} blocks dissolved into {dz_[1]:,} by height and class, so the layer stays GeoJSON and shows at "
+                                     "every zoom (no popup per block; extrude.dissolve: off tiles them instead)")
+                        n = len(col["features"])
                 if not d["context"] and wml.needs_tiles(col):
                     lspec = next((x.spec for x in plan.layers if x.id == d["id"]), {}) or {}
                     import lod as lod_

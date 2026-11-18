@@ -240,6 +240,8 @@ def check_008(plan) -> list[dict]:
 
 def check_009(plan, report) -> list[dict]:
     out = []
+    if (report or {}).get("picture_led"):           # 1.19.0 (Day 17 issue B3): the picture fills the frame; the points over it are annotation
+        return out
     cover = (report or {}).get("data_cover")
     ext = (report or {}).get("extent_fill")
     if ext is not None and ext < 0.6:

@@ -36,6 +36,8 @@ A timeline (YAML or JSON; every key optional):
   poster_hold: 1.2                   seconds the poster frame is held before the video
   poster_dissolve: 0.6               seconds it dissolves into the first frame
   logo: true                         the brand logo bottom left, above the credits (the print map's corner)
+  date: auto                         1.19.0: the date at the right end of the credits band (auto: today; off; or a text of your own)
+  grow: {layer: bars, start: 3, end: 19}   1.19.0: an extruded layer built with extrude.moments rises through its moments (flythrough)
 
 The camera is never put under min_eye_m (6 m) above the ground: MapLibre clips the ground nearer than its near plane, so a 3 m street-level
 eye showed the page background (Day 15 issue 12). A finding names each keyframe raised.
@@ -81,7 +83,7 @@ def load(src, *, duration: float | None = None) -> dict:
     if not isinstance(d, dict):
         raise TimelineError("a timeline is a mapping (story, counters, keyframes, features, end_hold, poster)")
     known = {"duration", "story", "counters", "keyframes", "features", "end_hold", "poster", "poster_hold", "poster_dissolve", "logo", "fade_s",
-             "min_eye_m"}
+             "min_eye_m", "date", "grow"}
     extra = sorted(set(d) - known)
     if extra:
         raise TimelineError(f"unknown timeline key(s): {', '.join(extra)}; the keys are {', '.join(sorted(known))}")
@@ -89,14 +91,41 @@ def load(src, *, duration: float | None = None) -> dict:
     out = {"duration": dur, "fade_s": float(d.get("fade_s", FADE_S)), "end_hold": max(0.0, float(d.get("end_hold") or 0)),
            "poster": str(d.get("poster") or "none"), "poster_hold": max(0.0, float(d.get("poster_hold", 1.2))),
            "poster_dissolve": max(0.0, float(d.get("poster_dissolve", 0.6))), "logo": d.get("logo", True) is not False,
-           "min_eye_m": float(d.get("min_eye_m", MIN_EYE_M)), "findings": []}
+           "min_eye_m": float(d.get("min_eye_m", MIN_EYE_M)), "findings": [],
+           "date": d.get("date", "auto")}               # 1.19.0 (Day 16 issue 14): the date in the credits band: auto, off or a text
     if out["poster"] not in ("first", "last", "none"):
         raise TimelineError(f"poster is first, last or none, not '{out['poster']}'")
     out["story"] = _story(d.get("story") or [], dur)
     out["counters"] = [_counter(c, i) for i, c in enumerate(d.get("counters") or [])]
     out["keyframes"] = _keyframes(d.get("keyframes") or [], out)
     out["features"] = _features(d.get("features")) if d.get("features") else None
+    out["grow"] = _grow(d["grow"]) if d.get("grow") else None
     return out
+
+
+def _grow(g) -> dict:
+    """1.19.0 (Day 16 issue 16): `grow: {layer, start, end, ease, per_unit_m}`: an extruded layer built with extrude.moments rises through
+    its moments (c0 .. cN) between start and end seconds, each block on its own values, blended between moments."""
+    if not isinstance(g, dict) or not g.get("layer"):
+        raise TimelineError("grow needs layer (an extruded layer built with extrude.moments), start and end (seconds)")
+    a, b = float(g.get("start", 0.0)), float(g.get("end", 0.0))
+    if b <= a:
+        raise TimelineError(f"grow ends ({b:g} s) before it starts ({a:g} s)")
+    return {"layer": str(g["layer"]), "start": a, "end": b, "ease": str(g.get("ease", "linear")),
+            "per_unit_m": float(g["per_unit_m"]) if g.get("per_unit_m") is not None else None}
+
+
+def grow_at(tl: dict, t: float, moments: int) -> dict | None:
+    """Where the grow block stands at t: {layer, i, j, f}, the moment before (i), after (j) and the blend between them (f), or None."""
+    g = tl.get("grow")
+    if not g or moments < 1:
+        return None
+    u = min(1.0, max(0.0, (t - g["start"]) / (g["end"] - g["start"])))
+    u = ease(u, g["ease"]) if g["ease"] != "linear" else u
+    x = u * (moments - 1)
+    i = int(math.floor(x))
+    j = min(moments - 1, i + 1)
+    return {"layer": g["layer"], "i": i, "j": j, "f": round(x - i, 4), "k": g["per_unit_m"]}
 
 
 def _story(items, dur) -> list[dict]:
@@ -452,11 +481,14 @@ def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, b
         logo_w = lg.width + pad
         placed["logo"] = True
     s = story_at(tl, t)
+    cf = ImageFont.truetype(font_path, max(12, int(26 * k)))
     if s:
         text, a = s
         size = max(11, int(22 * k))
         f = ImageFont.truetype(font_path, size)
-        maxw = W - 2 * (pad + logo_w)
+        # 1.19.0 (Day 16 issue 15): a centred story line keeps clear of the logo on the left and of a bottom-right counter on the right
+        right = max((d.textlength(ct, font=cf) + pad for ct, pos in counters_at(tl, t) if pos == "bottom-right"), default=0.0)
+        maxw = W - 2 * (pad + max(logo_w, right))
         while d.textlength(text, font=f) > maxw and size > max(9, int(14 * k)):
             size -= 1
             f = ImageFont.truetype(font_path, size)
@@ -466,7 +498,6 @@ def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, b
         d.rounded_rectangle(bx, radius=int(6 * k), fill=_rgb(bgc, int(215 * a)))
         d.text((x, y), text, font=f, fill=ink[:3] + (int(255 * a),))
         placed["story"] = True
-    cf = ImageFont.truetype(font_path, max(12, int(26 * k)))
     slots = {"top-left": 0, "top-right": 0, "bottom-right": 0, "bottom-left": 0}
     for text, pos in counters_at(tl, t):
         tw = d.textlength(text, font=cf)

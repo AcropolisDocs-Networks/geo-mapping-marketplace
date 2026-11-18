@@ -72,7 +72,7 @@ Exit 0 built; 3 a BLOCK finding (nothing is withheld unless `--strict`, which de
 
 ## Order of work
 
-**A fresh cloud workspace has no map packages** (`python3 -c "import geopandas"` fails): run `python3 "$GMAP_ROOT/scripts/doctor.py" --fix --quick`
+**A fresh cloud workspace has no map packages**: the build's first line installs them there (1.19.0); elsewhere run `doctor.py --fix --quick`
 once, before anything else. It installs what a map needs in one pip step, wheels first, within 10 minutes (1.2.0); never `pip install -r
 requirements-dev.txt`, which brings the test stack. On the person's own computer, ask before installing.
 

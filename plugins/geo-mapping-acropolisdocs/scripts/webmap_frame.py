@@ -397,7 +397,14 @@ def check_required(items: list[dict], required_lines: list[str]) -> list[dict]:
     fulls = " · ".join(_norm(i["full"]) for i in items if i["required"])
     for line in required_lines:
         n = _norm(line)
-        if n and n not in corner and n not in fulls:
+        if n and (n in corner or n in fulls):
+            continue
+        # 1.19.0 (Day 16 issue 4): a layer's attribution that joins two credits ("© OpenStreetMap contributors; ohsome API by HeiGIT") is met
+        # when each credit is in the corner, as the corner lists them apart
+        parts = [_norm(x) for x in re.split(r"\s*(?:;|·|\||\n)\s*", str(line)) if _norm(x)]
+        if len(parts) > 1 and all(x in corner or x in fulls for x in parts):
+            continue
+        if n:
             fs.append(finding("MAP-WEB-030", "BLOCK", f"the required credit '{line.rstrip('.')}' is not in the map's credits corner; give its library entry or the layer's "
                               "provenance an attribution block (attribution.corner) so the corner can carry it", line))
     return fs

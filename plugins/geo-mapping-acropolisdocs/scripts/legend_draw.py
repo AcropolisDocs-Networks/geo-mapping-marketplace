@@ -86,11 +86,13 @@ def bivariate_key(out: list, b: dict, cx: float, cy: float, lpt: float, t: dict)
         out.append(sd.rect(ox, y, lg.SWATCH_W_MM, lg.SWATCH_H_MM, b["nodata"]["fill"], t["legend_frame"], 0.15))
         out.append(sd.text(ox + lg.SWATCH_W_MM + 2.0, y + lg.SWATCH_H_MM / 2 + lpt * PT * 0.35, b["nodata"]["label"], lpt, col))
     bottom = oy + g["h"]
-    if b.get("note"):
+    nl = lg.note_lines(b, lpt)
+    if nl:
         npt = lpt - 1
-        bottom -= tm.line_height_mm(npt)
-        out.append(sd.text(ox, bottom + npt * PT * 0.85, b["note"], npt, col, num_cls=True))
-        bottom += tm.line_height_mm(npt)
+        bottom -= tm.line_height_mm(npt) * len(nl)
+        for line in nl:
+            out.append(sd.text(ox, bottom + npt * PT * 0.85, line, npt, col, num_cls=True))
+            bottom += tm.line_height_mm(npt)
     out.append("</g>")
     return bottom
 

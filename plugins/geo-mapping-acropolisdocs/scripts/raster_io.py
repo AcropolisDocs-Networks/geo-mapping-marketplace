@@ -583,6 +583,52 @@ def hillshade(dem, transform, azimuth: float = 315.0, altitude: float = 45.0, z_
     return out
 
 
+CAST_MAX_STEPS = 4000           # a march never runs past this many cells toward the sun
+
+
+def cast_shadows(dem, transform, azimuth: float, altitude: float, z_factor: float = 1.0, *, crs=None, lat=None, soften_px: float = 1.2) -> np.ndarray:
+    """1.19.0 (Day 17 issue B1): cast shadow, 0 (in the sun) to 1 (in a shadow thrown by higher ground toward the sun), by a march from every
+    cell toward the sun: a cell is shaded when any cell along that line stands above the ray rising from it at `altitude`. The march runs one
+    cell a step, only as far as the DEM's relief can throw a shadow (relief / tan(altitude)), and the edge is softened by `soften_px` (Gaussian)
+    so the shadow line does not stair-step. Nodata is nan."""
+    a = np.ma.masked_invalid(np.ma.asarray(dem, dtype=float))
+    mask = np.ma.getmaskarray(a)
+    z = np.ma.filled(a, np.nan) * float(z_factor)
+    if not np.isfinite(z).any():
+        return np.full(z.shape, np.nan)
+    z = np.where(mask, np.nanmin(z), z)
+    if lat is None and crs is not None:
+        lat = centre_lat(transform, a.shape, crs)
+    dx, dy = cell_size_m(transform, crs, lat)
+    az, alt = math.radians(float(azimuth)), math.radians(max(0.5, float(altitude)))
+    sx, sy = math.sin(az), -math.cos(az)          # toward the sun in (col, row): north is up, rows grow southward
+    step_m = math.hypot(sx * dx, sy * dy)
+    rise = step_m * math.tan(alt)
+    relief = float(np.nanmax(z) - np.nanmin(z))
+    n = int(min(CAST_MAX_STEPS, math.ceil(relief / rise) + 1)) if rise > 0 else 0
+    rows, cols = z.shape
+    shadow = np.zeros(z.shape, dtype=bool)
+    for k in range(1, n + 1):
+        oc, orr = int(round(k * sx)), int(round(k * sy))
+        if abs(oc) >= cols or abs(orr) >= rows:
+            break
+        # the cell k steps toward the sun from each cell, as a view of z (cells whose line leaves the grid are left unshaded)
+        r0, r1 = max(0, -orr), rows - max(0, orr)
+        c0, c1 = max(0, -oc), cols - max(0, oc)
+        ahead = z[r0 + orr:r1 + orr, c0 + oc:c1 + oc]
+        here = z[r0:r1, c0:c1]
+        shadow[r0:r1, c0:c1] |= ahead > here + k * rise
+    out = shadow.astype(float)
+    if soften_px and soften_px > 0:
+        try:
+            from scipy.ndimage import gaussian_filter
+            out = np.clip(gaussian_filter(out, float(soften_px)), 0.0, 1.0)
+        except ImportError:
+            pass
+    out[mask] = np.nan
+    return out
+
+
 def slope(dem, transform, z_factor: float = 1.0, units: str = "degrees", *, crs=None, lat=None) -> np.ndarray:
     """Slope by the Horn method in degrees (default) or percent; nodata is nan."""
     dzdx, dzdy, mask = _gradients(dem, transform, z_factor, crs, lat)

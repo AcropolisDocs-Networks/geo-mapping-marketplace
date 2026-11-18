@@ -308,7 +308,16 @@ def plan_render(spec_path, provider: str | None = None, *, tier: str = "T1", max
         g["effective_px"] = round((mb[2] - mb[0]) / resolution(z2, tile_size))
         g["paper_dpi"] = round(paper_dpi(mb[2] - mb[0], z2, w_mm, tile_size))
         g["label_pt"] = round(label_pt(mb[2] - mb[0], z2, w_mm, tile_size, label_px), 1)
-    if g["limited_by_cap"]:
+    getmap = None
+    if g["limited_by_cap"] and kind == "http" and isinstance(pr.get("getmap"), dict) and zoom is None:
+        # 1.19.0 (Day 17 issue A1): a provider that also serves its imagery as one picture per request (NASA GIBS's WMS) is asked for one
+        # picture of the window at the print size, which is one request for one map (no bulk download), instead of a handful of tiles at
+        # zoom 4 (36 dpi on a two-state map)
+        getmap = getmap_plan(pr["getmap"], src_info.get("url") or "", ex["merc"], need_px)
+    if getmap is not None:
+        fs.append(finding("MAP-TILE-001", "INFO", f"the tile cap ({cap}) would hold the basemap at zoom {g['z']}; {entry.get('title') if entry else provider} also serves one picture "
+                          f"per request, so the window is fetched as one {getmap['width']} x {getmap['height']} px picture (one request) instead", getmap))
+    elif g["limited_by_cap"]:
         fs.append(finding("MAP-WEB-011", "WARN", f"the tile cap ({cap}) limits the basemap to zoom {g['z']}; zoom {g['ideal_zoom']} would suit this map ({g['detail']}). The background will look softer than the data; "
                           "raise the cap only if the provider's terms allow it, or use your own tile file"))
     if g.get("clamped_from") is not None:
@@ -326,7 +335,7 @@ def plan_render(spec_path, provider: str | None = None, *, tier: str = "T1", max
         if labelled and g["label_pt"] < LEGIBLE_LABEL_PT:
             fs.append(finding("MAP-TILE-001", "WARN", f"the basemap's labels print at about {g['label_pt']:g} pt, too small to read; set basemap: {{detail: legible}} "
                               "for readable place names, or use a style without labels when the map's own labels carry the names"))
-        if g["paper_dpi"] < 60:
+        if g["paper_dpi"] < 60 and getmap is None:
             fs.append(finding("MAP-TILE-001", "WARN", f"the basemap prints at about {g['paper_dpi']} dpi, which shows as blocky pixels; "
                               + ("the tile cap holds the zoom down" if g["limited_by_cap"] else "set a higher basemap.zoom, or basemap: {detail: sharp}")))
     if len(g["tiles"]) > cap:
@@ -355,7 +364,7 @@ def plan_render(spec_path, provider: str | None = None, *, tier: str = "T1", max
                                                   "tile_size": tile_size, "tiles": g["tiles"], "cols": len(g["cols"]), "rows": len(g["rows"]), "bbox_3857": list(g["bbox"]),
                                                   "bbox_wgs84": list(wgs), "dpi": dpi, "effective_px": g["effective_px"], "audience": audience, "display_crs": ex["display_crs"],
                                                   "detail": g["detail"], "label_pt": g.get("label_pt"), "paper_dpi": g.get("paper_dpi"), "min_zoom": min_zoom, "max_zoom": max_zoom,
-                                                  "terms_acknowledged": bool(kind == "http" and r.get("terms_acknowledged")),
+                                                  "terms_acknowledged": bool(kind == "http" and r.get("terms_acknowledged")), "getmap": getmap,
                                                   "customization": (r.get("customization") or "") if kind == "http" else ""}}
 
 
@@ -493,6 +502,53 @@ def out_dir(map_id: str) -> Path:
     return gc.workdir() / "basemaps" / re.sub(r"[^A-Za-z0-9_.-]+", "-", map_id)
 
 
+GETMAP_MAX_PX = 4096
+
+
+def getmap_plan(cfg: dict, tile_url: str, merc_bbox, need_px: float) -> dict | None:
+    """The one-picture request for a window (EPSG:3857 metres), from the entry's provider.getmap: {url, layer_from: style | <a fixed layer>,
+    time_from_tile_url: regex with one group, format, max_px}. The layer and the day are read from the resolved tile address so the picture
+    is the same imagery the tiles would have shown. None when the address does not give them."""
+    import re as _re
+    lay = cfg.get("layer")
+    if not lay and cfg.get("layer_from_tile_url"):
+        m = _re.search(cfg["layer_from_tile_url"], tile_url)
+        lay = m.group(1) if m else None
+    if not lay:
+        return None
+    tm_ = None
+    if cfg.get("time_from_tile_url"):
+        m = _re.search(cfg["time_from_tile_url"], tile_url)
+        tm_ = m.group(1) if m else None
+    x0, y0, x1, y1 = (float(v) for v in merc_bbox)
+    w = int(min(int(cfg.get("max_px", GETMAP_MAX_PX)), max(256, round(need_px))))
+    h = max(1, int(round(w * (y1 - y0) / (x1 - x0))))
+    if h > int(cfg.get("max_px", GETMAP_MAX_PX)):
+        k = int(cfg.get("max_px", GETMAP_MAX_PX)) / h
+        w, h = max(1, int(w * k)), int(cfg.get("max_px", GETMAP_MAX_PX))
+    params = {"SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.3.0", "LAYERS": lay, "STYLES": "", "CRS": "EPSG:3857",
+              "BBOX": f"{x0!r},{y0!r},{x1!r},{y1!r}", "WIDTH": str(w), "HEIGHT": str(h), "FORMAT": cfg.get("format", "image/png"), "TRANSPARENT": "FALSE"}
+    if tm_ and tm_ != "default":
+        params["TIME"] = tm_
+    return {"url": cfg["url"], "params": params, "width": w, "height": h, "layer": lay, "time": tm_, "bbox_3857": [x0, y0, x1, y1]}
+
+
+def render_getmap(pl: dict, http=None) -> tuple:
+    """(PIL image, bbox_3857, error) for a plan whose provider is asked for one picture (1.19.0)."""
+    from PIL import Image
+    gm = pl["getmap"]
+    http = http or oh.SafeHTTP(limits={"timeout_s": 120, "max_bytes": 80_000_000})
+    try:
+        r = http.get(gm["url"], gm["params"], expect="any")
+    except oh.ServiceError as e:
+        return None, None, oh.untrusted(e, 160)
+    try:
+        img = Image.open(io.BytesIO(r.content)).convert("RGB")
+    except Exception:  # noqa: BLE001
+        return None, None, f"the service did not return a picture (HTTP {getattr(r, 'status', '?')}): {oh.untrusted(r.content[:200].decode('utf-8', 'replace'), 120)}"
+    return img, gm["bbox_3857"], None
+
+
 def render(spec_path, provider: str | None = None, *, tier: str = "T1", max_tiles: int | None = None, zoom: int | None = None, source: str | None = None,
            http=None, env=None, entries=None, style: str | None = None, sleep=time.sleep, outroot: Path | None = None, pause_s: float | None = None,
            terms_acknowledged: bool | None = None, detail: str | None = None, scheme: str | None = None) -> dict:
@@ -502,6 +558,12 @@ def render(spec_path, provider: str | None = None, *, tier: str = "T1", max_tile
     if not p["ok"]:
         return {"ok": False, "findings": p["findings"]}
     pl, fs = p["plan"], list(p["findings"])
+    if pl.get("getmap"):
+        img, bb, err = render_getmap(pl, http)
+        if img is None:
+            return {"ok": False, "findings": fs + [finding("MAP-WEB-011", "BLOCK", f"the one-picture request failed ({err}); no composite was written")]}
+        return write_composite(pl, fs, img, tier, outroot, {"tiles": 0, "fetched": 1, "from_cache": 0, "missing": [], "bbox_3857": bb, "requests": 1,
+                                                          "getmap": {k: v for k, v in pl["getmap"].items() if k != "params"}})
     if pl["kind"] == "mbtiles":
         if pl["source"]["meta"].get("unsupported"):
             return {"ok": False, "findings": fs + [finding("MAP-WEB-015", "BLOCK", f"this MBTiles file holds {pl['source']['meta']['unsupported']} (vector) tiles, which a static raster basemap cannot draw in this release")]}
@@ -542,6 +604,11 @@ def render(spec_path, provider: str | None = None, *, tier: str = "T1", max_tile
         return {"ok": False, "findings": fs + [finding("MAP-WEB-011", "BLOCK", f"{len(missing)} of {len(pl['tiles'])} tiles could not be read ({'; '.join(errs[:3]) or 'missing or unreadable'}{how}); no composite was written")]}
     if missing:
         fs.append(finding("MAP-WEB-011", "WARN", f"{len(missing)} tile(s) are blank in the basemap: {', '.join(missing[:5])}"))
+    return write_composite(pl, fs, img, tier, outroot, {"tiles": len(pl["tiles"]), "fetched": getattr(src, "fetched", 0), "from_cache": getattr(src, "cached", 0),
+                                                      "missing": missing, "bbox_3857": pl["bbox_3857"]})
+
+
+def write_composite(pl: dict, fs: list, img, tier: str, outroot, got: dict) -> dict:
     d = (Path(outroot) if outroot else out_dir(pl["map_id"]))
     d.mkdir(parents=True, exist_ok=True)
     png = d / "composite.png"
@@ -550,8 +617,8 @@ def render(spec_path, provider: str | None = None, *, tier: str = "T1", max_tile
     attribution = pl["source"].get("attribution") or (entry.get("license") or {}).get("attribution_text")
     rec = {"composite_version": 1, "map_id": pl["map_id"], "provider": pl["provider"], "entry": entry.get("id"), "entry_rev": entry.get("rev"), "source": pl["kind"], "style": pl["source"].get("style"),
            "zoom": pl["zoom"], "detail": pl.get("detail"), "label_pt": pl.get("label_pt"), "paper_dpi": pl.get("paper_dpi"), "zoom_range": [pl.get("min_zoom"), pl.get("max_zoom")],
-           "scheme": pl["source"].get("scheme") if pl["kind"] == "dir" else ("tms" if pl["kind"] == "mbtiles" else "xyz"), "tile_size": size, "tiles": len(pl["tiles"]), "fetched": getattr(src, "fetched", 0), "from_cache": getattr(src, "cached", 0), "missing": missing,
-           "bbox_3857": pl["bbox_3857"], "bbox_wgs84": pl["bbox_wgs84"], "display_crs": pl.get("display_crs") or "EPSG:3857", "pixels": [img.width, img.height], "attribution": attribution, "license": (entry.get("license") or {}).get("class"),
+           "scheme": pl["source"].get("scheme") if pl["kind"] == "dir" else ("tms" if pl["kind"] == "mbtiles" else "xyz"), "tile_size": pl["tile_size"], "tiles": got["tiles"], "fetched": got["fetched"], "from_cache": got["from_cache"], "missing": got["missing"],
+           "bbox_3857": got["bbox_3857"], **({"getmap": got["getmap"]} if got.get("getmap") else {}), "bbox_wgs84": pl["bbox_wgs84"], "display_crs": pl.get("display_crs") or "EPSG:3857", "pixels": [img.width, img.height], "attribution": attribution, "license": (entry.get("license") or {}).get("class"),
            "retrieved_at": dt.date.today().isoformat() if not __import__("os").environ.get("GMAP_FIXED_DATE") else __import__("os").environ["GMAP_FIXED_DATE"],
            "sha256": hashlib.sha256(png.read_bytes()).hexdigest(), "tier": tier, "terms_acknowledged": bool(pl.get("terms_acknowledged")), "customization": pl.get("customization") or "", "title": entry.get("title") or (pl["source"].get("meta") or {}).get("name")}
     (d / "composite.json").write_text(json.dumps(rec, indent=2))

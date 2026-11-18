@@ -1,0 +1,102 @@
+id: ref.gazetteer.us.landform.gnis
+type: gazetteer
+rev: 1
+status: active
+title: USGS GNIS named landforms (summits, buttes, canyons, ridges, valleys)
+summary: The federal names of natural landforms in the United States (Geographic Names Information System) from The National Map's geonames
+  service, layer 5 Landforms, as MultiPoints with their feature class, state and county. Public domain.
+tags:
+  geography:
+  - us
+  level:
+  - place
+  domain:
+  - general
+  use_for:
+  - label-reference
+  - context-basemap
+  avoid_for:
+  - site-precision
+  - legal-boundary
+  scale:
+  - local
+  - metro
+  - regional
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Named natural features on a terrain or relief map (Grand Canyon temples and points, summits, buttes, mesas, canyons, ridges), which the bundled
+  gazetteer of populated places does not carry.
+- 'Pick by class: filter gaz_featureclass (Summit, Cliff, Ridge, Valley, Basin, Bench, Arch, Pillar, Gap, Range, Flat, Plain, Cape, Island,
+  Bar, Crater, Slope).'
+avoid_when:
+- 'A national pull: query with the map''s window (bbox); a metro window holds a few hundred to a few thousand names.'
+- Populated places or water names (use layers 1 to 3 and 6 to 7 of the same service, or the bundled gazetteer).
+distinct_from:
+- id: ref.gazetteer.world.place.geonames
+  why: GeoNames is a world gazetteer of mostly populated places (CC BY 4.0), not the federal names of US landforms
+- id: ref.gazetteer.world.place.ne10
+  why: Natural Earth populated places, the bundled place names
+join:
+  key: gaz_id
+  type: integer
+  note: The GNIS feature id (permanent); gaz_name is the official name, gaz_featureclass the class, state_alpha and county_name where it lies.
+crs: EPSG:3857
+delivery:
+  mode: service
+  profile: usgs-nationalmap
+  protocol: arcgis
+  layer: geonames/MapServer/5
+  max_record_count: 2000
+  geometry: point
+  columns:
+  - gaz_id
+  - gaz_name
+  - gaz_featureclass
+  - fcode
+  - state_alpha
+  - county_name
+  request: service_query.py fetch --profile usgs-nationalmap --layer geonames/MapServer/5 --protocol arcgis
+  note: Layer 5 'Landforms' (esriGeometryMultipoint, maxRecordCount 2000, read 2026-11-18). Each feature is one MultiPoint, usually of one point;
+    the print map labels a MultiPoint once (1.19.0). The service's own labels leave out names matching '%Squaw%'; the features carry them, so
+    filter or exclude them for print (names.exclude does not reach a layer's labels; use the layer's filter).
+source:
+  publisher: U.S. Geological Survey
+  product: 'The National Map: Geographic Names Information System (GNIS), Landforms'
+  url: https://carto.nationalmap.gov/arcgis/rest/services/geonames/MapServer/5
+url_verified_on: '2026-11-18'
+vintage:
+  current: refreshed October 2026 (the service's copyright text)
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Names: USGS The National Map, Geographic Names Information System.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-18'
+  verify_by: '2027-11-18'
+  check:
+    kind: http_get
+    url: https://carto.nationalmap.gov/arcgis/rest/services/geonames/MapServer/5?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-18'
+    note: 'New (1.19.0, Day 17 issue B6): the geonames service read on 2026-11-18 (14 layers; layer 5 Landforms, MultiPoint, 10 fields,
+      maxRecordCount 2000; copyright "Data Refreshed October, 2026"). The Grand Canyon map of Day 17 used it for its temples and points.'

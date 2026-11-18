@@ -1,6 +1,6 @@
 id: ref.map-type.dot-density
 type: map-type
-rev: 2
+rev: 3
 status: active
 title: Dot density
 summary: Scatters dots in each area, one dot per fixed quantity, to show where a population or count concentrates (the dot_density op, drawn as a points
@@ -33,7 +33,7 @@ recommended:
     per: <one dot = N>
   symbol:
     size: 2.4
-    fill: '@brand.emphasis'
+    color: '@brand.emphasis'
   legend_note: One dot = N <units>, placed at random within each <area>
   outline: 'the same polygons as a role: context layer under the dots'
 guarded_by:
@@ -46,7 +46,7 @@ license:
   bulk_ok: true
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-15'
+  reviewed_on: '2026-11-18'
   verify_by: '2027-11-15'
   check: the gallery map builds (tests/test_release_1170.py)
   changelog:
@@ -57,3 +57,6 @@ maintenance:
     date: '2026-11-15'
     note: 'Active (1.17.0): the dot_density op (thematic.py) places one dot per `per` units at random inside each polygon (stochastic rounding, seeded)
       and the points layer draws them; MAP-OPS-011 says the dots are not locations. Gallery: dot-density.yaml.'
+  - rev: 3
+    date: '2026-11-18'
+    note: 'The recipe writes symbol.color (1.19.0, Day 17 issue A5): with fill the dots fell back to the default colour. Points now read either.'

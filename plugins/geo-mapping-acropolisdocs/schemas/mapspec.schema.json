@@ -257,6 +257,28 @@
               "properties": {"protocol": {"enum": ["wms", "arcgis"]}}
             },
             "properties": {
+              "widen": {"type": "number", "minimum": 1, "maximum": 10, "description": "1.19.0: a library service layer is read for this many times the map window (a role: context layer on a web page: 2 by default, so a zoomed-out page still shows it)"},
+              "variant": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": [
+                        "string",
+                        "integer"
+                      ]
+                    }
+                  }
+                ],
+                "description": "a library entry's per-variant file (a state FIPS such as 04); 1.19.0: a list ([04, 35]) merges the variants into one layer, each row keeping its variant in _variant"
+              },
               "cds": {"type": "object", "required": ["job", "variable"], "additionalProperties": false,
                       "properties": {"job": {"type": "string"}, "variable": {"type": "string"}, "time": {"type": ["string", "integer"]}},
                       "description": "1.3.0: a fetched Copernicus CDS job's variable (and one time: its band), read as a raster layer; the job's record supplies the credit"},
@@ -375,7 +397,7 @@
               "swap_colors": {"type": "boolean"}
             }
           },
-          "extrude": {"type": "object", "additionalProperties": false, "description": "a polygon layer drawn as 3D blocks on a 3D web page (M15): heights in metres above the ground; a slab at a height with at_field or at_m and slab_m (sector wedges at antenna height)", "properties": {"height_field": {"type": "string"}, "height_m": {"type": "number"}, "base_field": {"type": "string"}, "base_m": {"type": "number"}, "floors_field": {"type": "string"}, "floor_m": {"type": "number", "minimum": 1, "maximum": 10}, "default_m": {"type": "number"}, "at_field": {"type": "string"}, "at_m": {"type": "number"}, "slab_m": {"type": "number", "minimum": 0.5, "maximum": 50}, "lod": {"enum": ["auto", "off"], "description": "1.6.0: auto (default): a tiled layer carries every footprint from the top zoom (at most page zoom 16) and a level-of-detail pyramid of blocks below it; off: the 1.5.0 tiling"}, "merge_gap_m": {"type": "number", "minimum": 0, "maximum": 50, "description": "1.6.0: footprints this close (or half a pixel of the zoom, when wider) are dissolved into one block (default 1)"}, "height_band_m": {"type": "number", "exclusiveMinimum": 0, "description": "1.6.0: only footprints whose heights fall in the same band of this many metres are merged (default 3)"}, "lod_height": {"enum": ["max", "mean"], "description": "1.6.0: a block's height: its highest footprint (default) or the area-weighted mean"}, "min_zoom": {"anyOf": [{"const": "auto"}, {"type": "integer", "minimum": 1, "maximum": 17}], "description": "1.6.0: the lowest page zoom with blocks (auto: the page's minimum)"}, "opacity": {"type": "number", "minimum": 0.05, "maximum": 1, "description": "1.16.0: the blocks' opacity (default 0.92); a see-through roof or glass"}, "underside": {"type": "boolean", "description": "1.16.0: draw the underside of a block raised off the ground (a roof canopy, a deck) so it reads from below (default true)"}}},
+          "extrude": {"type": "object", "additionalProperties": false, "description": "a polygon layer drawn as 3D blocks on a 3D web page (M15): heights in metres above the ground; a slab at a height with at_field or at_m and slab_m (sector wedges at antenna height)", "properties": {"dissolve": {"enum": ["auto", "off"], "description": "1.19.0: auto (default): a large extruded layer with at most 2,000 distinct heights and classes (a square-bin or hexbin grid) is dissolved into one block per value and stays GeoJSON at every zoom; off: tiled as before (popups per block kept)"}, "moments": {"type": "array", "minItems": 2, "items": {"type": "string"}, "description": "1.19.0: numeric fields, one per moment (c0 .. cN, year ends): the page keeps each block's values so a timeline grow: block raises the bars through them in a flythrough (no dissolve)"}, "per_unit_m": {"type": "number", "exclusiveMinimum": 0, "description": "1.19.0: a bar chart: height = value_field (or height_field) x this many metres; the legend says the scale and MAP-WEB-024 does not read tall bars as a units mistake"}, "value_field": {"type": "string", "description": "1.19.0: with per_unit_m, the field the bars stand for"}, "unit": {"type": "string", "description": "1.19.0: with per_unit_m, the legend's word for one unit (collaborator)"}, "height_field": {"type": "string"}, "height_m": {"type": "number"}, "base_field": {"type": "string"}, "base_m": {"type": "number"}, "floors_field": {"type": "string"}, "floor_m": {"type": "number", "minimum": 1, "maximum": 10}, "default_m": {"type": "number"}, "at_field": {"type": "string"}, "at_m": {"type": "number"}, "slab_m": {"type": "number", "minimum": 0.5, "maximum": 50}, "lod": {"enum": ["auto", "off"], "description": "1.6.0: auto (default): a tiled layer carries every footprint from the top zoom (at most page zoom 16) and a level-of-detail pyramid of blocks below it; off: the 1.5.0 tiling"}, "merge_gap_m": {"type": "number", "minimum": 0, "maximum": 50, "description": "1.6.0: footprints this close (or half a pixel of the zoom, when wider) are dissolved into one block (default 1)"}, "height_band_m": {"type": "number", "exclusiveMinimum": 0, "description": "1.6.0: only footprints whose heights fall in the same band of this many metres are merged (default 3)"}, "lod_height": {"enum": ["max", "mean"], "description": "1.6.0: a block's height: its highest footprint (default) or the area-weighted mean"}, "min_zoom": {"anyOf": [{"const": "auto"}, {"type": "integer", "minimum": 1, "maximum": 17}], "description": "1.6.0: the lowest page zoom with blocks (auto: the page's minimum)"}, "opacity": {"type": "number", "minimum": 0.05, "maximum": 1, "description": "1.16.0: the blocks' opacity (default 0.92); a see-through roof or glass"}, "underside": {"type": "boolean", "description": "1.16.0: draw the underside of a block raised off the ground (a roof canopy, a deck) so it reads from below (default true)"}}},
           "lod": {"type": "object", "additionalProperties": false, "description": "1.6.0: a level-of-detail pyramid for any large polygon layer on a web page (as extrude's lod keys)", "properties": {"lod": {"enum": ["auto", "off"], "description": "1.6.0: auto (default): a tiled layer carries every footprint from the top zoom (at most page zoom 16) and a level-of-detail pyramid of blocks below it; off: the 1.5.0 tiling"}, "merge_gap_m": {"type": "number", "minimum": 0, "maximum": 50, "description": "1.6.0: footprints this close (or half a pixel of the zoom, when wider) are dissolved into one block (default 1)"}, "height_band_m": {"type": "number", "exclusiveMinimum": 0, "description": "1.6.0: only footprints whose heights fall in the same band of this many metres are merged (default 3)"}, "lod_height": {"enum": ["max", "mean"], "description": "1.6.0: a block's height: its highest footprint (default) or the area-weighted mean"}, "min_zoom": {"anyOf": [{"const": "auto"}, {"type": "integer", "minimum": 1, "maximum": 17}], "description": "1.6.0: the lowest page zoom with blocks (auto: the page's minimum)"}}},
           "mast": {"type": "object", "additionalProperties": false, "description": "a point layer of sites drawn as masts on a 3D web page (M15): a thin column to the antenna height, in metres above the ground", "properties": {"height_field": {"type": "string"}, "height_m": {"type": "number"}, "default_m": {"type": "number"}}},
           "time": {
@@ -726,6 +748,10 @@
             "type": "string",
             "description": "1.16.0: layers that are parts of one thing (a stadium's stands, wall and roof) share a group; the colour checks (MAP-CART-016) do not ask them to be told apart"
           },
+          "fit": {
+            "type": "boolean",
+            "description": "1.19.0: false: annotation (landmarks over a relief, a section line): the fit, the element cover checks and MAP-CART-009 leave the layer out. true: counted even on a picture-led map (a raster other than the hillshade that fills the extent, where vector layers are annotation by default)"
+          },
           "thin": {
             "type": "boolean",
             "description": "M16: a point layer only. Of the points of one class that fall within half a symbol width of each other on the sheet, draw the first. Never applied unless asked; the number not drawn is in the methods note and provenance."
@@ -863,8 +889,13 @@
           "hillshade": {
             "type": "object",
             "additionalProperties": false,
-            "description": "role hillshade: relief drawn in two brand neutrals",
+            "description": "role hillshade: relief drawn in two brand neutrals; one low sun with cast shadows on request (1.19.0)",
             "properties": {
+              "azimuth": {"type": "number", "minimum": 0, "maximum": 360, "description": "1.19.0: one sun, clockwise from north (with altitude); multidirectional turns off unless asked"},
+              "altitude": {"type": "number", "minimum": 1, "maximum": 90, "description": "1.19.0: the sun's height above the horizon in degrees (default 45); a low sun (10 to 25) for a dramatic relief"},
+              "multidirectional": {"type": "boolean", "description": "1.19.0: the default blend of 225, 270, 315 and 360 degrees (true when no azimuth or altitude is given)"},
+              "cast_shadows": {"type": "boolean", "description": "1.19.0: with one sun, shadows thrown by higher ground toward the sun (a march from every cell), softened at the edge"},
+              "max_px": {"type": "integer", "minimum": 256, "maximum": 4096, "description": "1.19.0: the relief picture's longer side (default 2048)"},
               "opacity": {
                 "type": "number",
                 "minimum": 0,
@@ -1260,6 +1291,19 @@
           },
           "uniqueItems": true,
           "description": "providers offered by the basemap switcher, first is the default"
+        },
+        "relief_colors": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 256
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "description": "1.19.0: the relief picture on the page as a palette PNG of this many colours (default 48: a sixth of the size, the same look); 0 or false keeps every colour"
         },
         "basemap_switcher": {
           "type": "boolean"

@@ -91,7 +91,10 @@ def check_svg(text: str, filename: str | None = None) -> list[dict]:
     out = []
     try:
         from lxml import etree
-        root = etree.fromstring(text.encode("utf-8"), _SAFE_XML())
+        # 1.19.0 (Day 17 issues A6, B4): a map with an embedded relief or night-lights picture holds one base64 text node over libxml2's 10 MB
+        # default, which is a parser limit, not an XML error. huge_tree lifts only that limit; entities, the DTD and the network stay off, so
+        # the parse is still safe on a file a person hands in.
+        root = etree.fromstring(text.encode("utf-8"), _SAFE_XML(huge=True))
     except Exception as e:  # noqa: BLE001
         return [finding("MAP-OUT-003", "BLOCK", f"the SVG is not valid XML: {str(e)[:120]}", None)]
     ext = []

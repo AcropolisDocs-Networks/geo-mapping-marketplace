@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+import re
+from pathlib import Path
 
 import numpy as np
 
@@ -428,3 +430,102 @@ def _nice(s: str, plan=None) -> str:
         return gl.plan_date_text(plan, d) if plan is not None else gl.date_text(d, "en-US")
     except ValueError:
         return s
+
+
+# ---------------------------------------------------------------------------------------------------------------- 1.19.0: figures
+FIGURE_MARGIN_MM = 4.0
+FIGURE_GAP_MM = 2.0
+CORNERS = ("lower-left", "lower-right", "upper-left", "upper-right")
+
+
+class FigureError(Exception):
+    pass
+
+
+def _figure_svg(path: Path, prefix: str) -> tuple[str, list[float]]:
+    """The inner markup and viewBox of a figure's SVG file, its ids prefixed so two figures (or the map) never share one. A figure with script,
+    foreign content or references outside itself is refused (the map's own SVG check would block it anyway)."""
+    import map_export as mx
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(r"^\s*<\?xml[^>]*>\s*", "", text)
+    text = re.sub(r"<!DOCTYPE[^>]*>", "", text, flags=re.I)
+    if re.search(r"<(?:script|foreignObject|iframe)\b", text, re.I):
+        raise FigureError(f"{path.name} holds script or foreign content")
+    if re.search(r"""(?:href\s*=\s*["'](?!#|data:)|url\(\s*["']?(?!#|data:))""", text, re.I):
+        raise FigureError(f"{path.name} refers to files or addresses outside itself; embed pictures as data: URIs")
+    m = re.search(r"<svg\b([^>]*)>(.*)</svg>\s*$", text, re.S)
+    if not m:
+        raise FigureError(f"{path.name} is not an SVG file")
+    attrs, inner = m.group(1), m.group(2)
+    vb = re.search(r'viewBox\s*=\s*"([^"]+)"', attrs)
+    if vb:
+        box = [float(v) for v in re.split(r"[\s,]+", vb.group(1).strip())[:4]]
+    else:
+        w = re.search(r'\bwidth\s*=\s*"([\d.]+)', attrs)
+        h = re.search(r'\bheight\s*=\s*"([\d.]+)', attrs)
+        if not (w and h):
+            raise FigureError(f"{path.name} has no viewBox and no width and height")
+        box = [0.0, 0.0, float(w.group(1)), float(h.group(1))]
+    inner, _n = mx.split_paint_order(inner)                    # the PDF path ignores paint-order (Day 17 issue B9)
+    ids = set(re.findall(r'\bid\s*=\s*"([^"]+)"', inner))
+    for i in sorted(ids, key=len, reverse=True):
+        inner = re.sub(r'(\bid\s*=\s*")' + re.escape(i) + '"', r"\g<1>" + prefix + i + '"', inner)
+        inner = re.sub(r'(#)' + re.escape(i) + r'(?=["\')\s])', r"\g<1>" + prefix + i, inner)
+    return inner, box
+
+
+def place_figures(plan, map_rect: Rect, placed: dict, cfg: dict, base: Path) -> tuple[str, list[Rect], list[dict], list[str]]:
+    """elements.figures (1.19.0, Day 17 issues B8 and B10): {on, items: [{svg, position | rect_mm, w_mm, title}]}. Each item is an SVG drawn
+    into the map frame at its corner (lower-left by default: under the title, beside nothing) or at rect_mm ([x, y, w, h] from the frame's top
+    left), at w_mm wide (its own aspect kept). A corner already holding an element (logo, scale bar, inset, legend) stacks the figure beside
+    it, away from the edge. Labels keep clear of the figures, and the figure is drawn again on every build, so a section box or a chart made
+    once stays with the map through every rebuild. Returns (svg, rects, findings, notes)."""
+    items = cfg.get("items") or []
+    out, rects, fs, notes = [], [], [], []
+    taken = [v["rect"] for v in placed.values()]
+    for k, it in enumerate(items):
+        src = it.get("svg")
+        if not src:
+            fs.append({"id": "MAP-SPEC-005", "severity": "WARN", "message": f"elements.figures item {k + 1} has no svg file; it was left out", "detail": None})
+            continue
+        p = Path(src)
+        p = p if p.is_absolute() else base / p
+        try:
+            inner, box = _figure_svg(p, f"gmfig{k}-")
+        except (OSError, FigureError) as ex:
+            fs.append({"id": "MAP-SPEC-005", "severity": "WARN", "message": f"elements.figures item {k + 1}: {ex}; it was left out", "detail": str(src)})
+            continue
+        aspect = box[3] / box[2] if box[2] else 1.0
+        if it.get("rect_mm"):
+            x, y, w, h = (float(v) for v in it["rect_mm"])
+            r = Rect(map_rect.x0 + x, map_rect.y0 + y, map_rect.x0 + x + w, map_rect.y0 + y + h)
+        else:
+            w = float(it.get("w_mm") or min(120.0, map_rect.w * 0.45))
+            h = float(it.get("h_mm") or w * aspect)
+            corner = str(it.get("position") or "lower-left")
+            if corner not in CORNERS:
+                corner = "lower-left"
+            left, low = corner.endswith("left"), corner.startswith("lower")
+            x0 = map_rect.x0 + FIGURE_MARGIN_MM if left else map_rect.x1 - FIGURE_MARGIN_MM - w
+            y0 = map_rect.y1 - FIGURE_MARGIN_MM - h if low else map_rect.y0 + FIGURE_MARGIN_MM
+            r = Rect(x0, y0, x0 + w, y0 + h)
+            for _try in range(6):                                 # step away from the edge past anything already in the corner
+                hit = [t_ for t_ in taken + rects if r.hits(t_)]
+                if not hit:
+                    break
+                if low:
+                    y0 = min(t_.y0 for t_ in hit) - FIGURE_GAP_MM - h
+                else:
+                    y0 = max(t_.y1 for t_ in hit) + FIGURE_GAP_MM
+                r = Rect(x0, y0, x0 + w, y0 + h)
+            if r.y0 < map_rect.y0 or r.y1 > map_rect.y1:
+                fs.append({"id": "MAP-SPEC-005", "severity": "WARN", "message": f"elements.figures item {k + 1} does not fit in the {corner} corner beside the "
+                           "elements there; give rect_mm or a smaller w_mm", "detail": str(src)})
+                continue
+        title = it.get("title") or p.stem
+        out.append(f'<g class="gm-figure" data-figure="{sd.esc(str(title))}"><svg x="{sd.num(r.x0)}" y="{sd.num(r.y0)}" width="{sd.num(r.w)}" '
+                   f'height="{sd.num(r.h)}" viewBox="{" ".join(sd.num(v) for v in box)}" preserveAspectRatio="xMidYMid meet" overflow="hidden">'
+                   f"<title>{sd.esc(str(title))}</title>{inner}</svg></g>")
+        rects.append(r)
+        notes.append(f"figure '{title}' at {r.x0:.1f}, {r.y0:.1f} mm, {r.w:.1f} x {r.h:.1f} mm")
+    return "".join(out), rects, fs, notes

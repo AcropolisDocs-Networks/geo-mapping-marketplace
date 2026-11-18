@@ -436,9 +436,10 @@ def _inter_ttf(weight: int) -> Path:
     return out
 
 
-def hud(img, *, title: str | None, lines: list[str], credits: str, tokens: dict, info: dict | None = None):
-    """The overlay drawn on a frame: the title top left, the clock and distance lines under it, the credits along the bottom on a band.
-    -> (image, placed: {title, lines, credits: bool})."""
+def hud(img, *, title: str | None, lines: list[str], credits: str, tokens: dict, info: dict | None = None, date_text: str | None = None):
+    """The overlay drawn on a frame: the title top left, the clock and distance lines under it, the credits along the bottom on a band, and
+    (1.19.0, Day 16 issue 14) the date at the band's right end in the credits' face, as the print map's footer carries it.
+    -> (image, placed: {title, lines, credits, date: bool})."""
     from PIL import Image, ImageDraw, ImageFont
     W, H = img.size
     k = H / 720.0
@@ -468,20 +469,49 @@ def hud(img, *, title: str | None, lines: list[str], credits: str, tokens: dict,
         placed["title"] = bool(title)
         placed["lines"] = any(lines)
         info["top_px"] = int(y + 6 * k)
-    if credits:
+    if date_text:
+        placed["date"] = False
+    if credits or date_text:
         size = cred_size
-        while size >= max(7, int(8 * k)):
+        df = ImageFont.truetype(str(_inter_ttf(400)), size)
+        dw = (d.textlength(date_text, font=df) + 24 * k) if date_text else 0.0
+        cf = df
+        while credits and size >= max(7, int(8 * k)):
             cf = ImageFont.truetype(str(_inter_ttf(400)), size)
-            if d.textlength(credits, font=cf) <= W - 32 * k:
+            if d.textlength(credits, font=cf) <= W - 32 * k - dw:
                 break
             size -= 1
-        if d.textlength(credits, font=cf) <= W - 32 * k:
-            band = int(size * 1.9)
+        fits = (not credits) or d.textlength(credits, font=cf) <= W - 32 * k - dw
+        if not fits and date_text:                   # the credits come first: the date steps aside when both do not fit
+            date_text, dw = None, 0.0
+            cf = df
+            fits = d.textlength(credits, font=cf) <= W - 32 * k
+        if fits:
+            band = int(max(size, cred_size if not credits else size) * 1.9)
             d.rectangle([0, H - band, W, H], fill=bg)
-            d.text((int(16 * k), H - band + int(size * 0.45)), credits, font=cf, fill=ink)
-            placed["credits"] = True
+            if credits:
+                d.text((int(16 * k), H - band + int(size * 0.45)), credits, font=cf, fill=ink)
+                placed["credits"] = True
+            if date_text:
+                df = ImageFont.truetype(str(_inter_ttf(400)), size)
+                d.text((W - int(16 * k) - d.textlength(date_text, font=df), H - band + int(size * 0.45)), date_text, font=df, fill=ink)
+                placed["date"] = True
             info["band_px"] = band
     return Image.alpha_composite(im, over).convert("RGB"), placed
+
+
+def date_line(tl: dict) -> str | None:
+    """The timeline's date: auto (today, or GMAP_FIXED_DATE, written "16 November 2026"), a text of its own, or off."""
+    import datetime as _dt
+    import os
+    v = tl.get("date", "auto")
+    if v in (None, False, "off", "none", ""):
+        return None
+    if v != "auto":
+        return str(v)
+    fixed = os.environ.get("GMAP_FIXED_DATE")
+    day = _dt.date.fromisoformat(fixed) if fixed else _dt.date.today()
+    return f"{day.day} {day.strftime('%B')} {day.year}"
 
 
 # ------------------------------------------------------------------------------------------------------------------- capture
@@ -496,8 +526,9 @@ def playwright_ok() -> str | None:
 class Capture:
     """One Chromium page in capture mode; frame(cam) jumps, waits for idle, places the marker and returns the PNG bytes."""
 
-    def __init__(self, page_html: Path, size, gl: str = "auto", timeout_s: float = 60.0):
+    def __init__(self, page_html: Path, size, gl: str = "auto", timeout_s: float = 60.0, hooks: dict | None = None):
         from playwright.sync_api import sync_playwright
+        self.hooks = hooks or {}
         self._pw = sync_playwright().start()
         gl = gl_auto(gl)
         args = GL_ARGS.get(gl, GL_ARGS["llvmpipe"])
@@ -513,6 +544,11 @@ class Capture:
         self.page.goto(Path(page_html).resolve().as_uri() + "?gm-capture=1", wait_until="load")
         self.page.wait_for_function("window.__gmMap && window.__gmMap.loaded()", timeout=timeout_s * 1000)
         self.timeout_s = timeout_s
+        # 1.19.0 (Day 16 issue 17): MapLibre reports a bad layer or filter as an error event, not an exception; the capture collects them
+        self.page.evaluate("() => { window.__gmErrors = []; window.__gmMap.on('error', (e) => window.__gmErrors.push(String((e && e.error && e.error.message) || e))); }")
+        if self.hooks.get("ready"):              # 1.19.0: the capture's own on_ready, run once the page has settled (its restyle is done)
+            self.page.evaluate("() => new Promise((r) => { const m = window.__gmMap; if (m.isStyleLoaded() && !m.isMoving()) r(); else m.once('idle', () => r()); })")
+            self.page.evaluate(f"(map) => {{ {self.hooks['ready']} }}", None)
         try:                                     # 1.6.2: which renderer WebGL got, so a GPU run that fell back to software says so
             self.renderer = self.page.evaluate(RENDERER_JS)
         except Exception:  # noqa: BLE001
@@ -527,7 +563,15 @@ class Capture:
             ctx["logo_png"] = None
         return ctx
 
+    def errors(self) -> list[str]:
+        try:
+            return list(self.page.evaluate("() => (window.__gmErrors || []).splice(0)") or [])
+        except Exception:  # noqa: BLE001
+            return []
+
     def frame(self, cam: dict, marker: bool) -> bytes:
+        if self.hooks.get("frame"):              # 1.19.0: on_frame(map, cam) before the camera moves (a layer set per frame)
+            self.page.evaluate(f"(cam) => {{ const map = window.__gmMap; {self.hooks['frame']} }}", cam)
         self.page.evaluate("""(c) => new Promise((res) => {
             const m = window.__gmMap;
             if (c.time != null && window.__gmCtx.setTime) window.__gmCtx.setTime(c.time);
@@ -537,6 +581,10 @@ class Capture:
               if (window.__gmCtx.setOpacity) { window.__gmCtx.setOpacity(id, c.opacity[id]); return; }
               (m.getStyle().layers || []).forEach((l) => { if (l.type === 'fill-extrusion' && l.metadata && l.metadata['gm:layer'] === id)
                 m.setPaintProperty(l.id, 'fill-extrusion-opacity', c.opacity[id]); }); });
+            if (c.grow) (m.getStyle().layers || []).forEach((l) => {                       // 1.19.0: each block blended between two moments
+              if (l.type !== 'fill-extrusion' || !l.metadata || l.metadata['gm:layer'] !== c.grow.layer) return;
+              const g = c.grow, at = (n) => ['to-number', ['get', '_m' + n], 0];
+              m.setPaintProperty(l.id, 'fill-extrusion-height', ['*', g.k, ['+', ['*', 1 - g.f, at(g.i)], ['*', g.f, at(g.j)]]]); });
             if (c.fov && m.setVerticalFieldOfView) m.setVerticalFieldOfView(c.fov);
             if (c.free) {                                                                  // 1.16.0: a free camera, heights above the ground
               if (m.getMaxPitch() < 115) m.setMaxPitch(115);
@@ -569,13 +617,17 @@ class Capture:
 
 
 # ------------------------------------------------------------------------------------------------------------------- encoding
-def encode(frames_dir: Path, out: Path, fps: float, meta: dict) -> dict:
+WEB_MB = 15.0                     # 1.19.0 (Day 16 issue 12): an artifact or a post takes a file up to about this size
+WEB_CRFS = (26, 28, 30, 32)
+
+
+def encode(frames_dir: Path, out: Path, fps: float, meta: dict, crf: int = 20) -> dict:
     import animate
     exe = animate.ffmpeg_exe()
     if not exe:
         raise FlyError(animate.FFMPEG_MISSING.replace("; the GIF was written without it", ""), gc.EXIT_RUNTIME)
     cmd = [exe, "-y", "-loglevel", "error", "-framerate", f"{fps:g}", "-i", str(frames_dir / "frame_%05d.png"), "-c:v", "libx264", "-preset", "veryfast",
-           "-crf", "20", "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-r", f"{fps:g}", "-movflags", "+faststart"]
+           "-crf", str(int(crf)), "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-r", f"{fps:g}", "-movflags", "+faststart"]
     for k, v in meta.items():
         cmd += ["-metadata", f"{k}={v}"]
     cmd.append(str(out))
@@ -583,6 +635,21 @@ def encode(frames_dir: Path, out: Path, fps: float, meta: dict) -> dict:
     if r.returncode != 0:
         raise FlyError(f"ffmpeg failed: {r.stderr.strip()[:300]}")
     return {"path": str(out), "bytes": out.stat().st_size}
+
+
+def web_copy(frames_dir: Path, mp4: Path, fps: float, meta: dict, cap_mb: float = WEB_MB) -> dict | None:
+    """A `<stem>_web.mp4` beside an MP4 over `cap_mb`: the same frames at CRF 26, then 28, 30 and 32, until one is under the cap. None when
+    the MP4 is already under it (or the cap is 0)."""
+    if not cap_mb or mp4.stat().st_size <= cap_mb * 1e6:
+        return None
+    out = mp4.with_name(mp4.stem + "_web.mp4")
+    r = None
+    for crf in WEB_CRFS:
+        r = encode(frames_dir, out, fps, meta, crf=crf)
+        r["crf"] = crf
+        if r["bytes"] <= cap_mb * 1e6:
+            break
+    return r
 
 
 def write_gif(frames_dir: Path, out: Path, fps: float, n: int, comment: str = "") -> dict:
@@ -603,7 +670,7 @@ def plan(n_frames: int, sec_per_frame: float | None) -> dict:
 def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, duration: float = 32.0, fps: float = 25.0, size: str = "1280x720",
         marker: str | None = None, hud_on: bool = True, quality: str = "final", resume: bool = False, gl: str = "auto", frames: int | None = None,
         title: str | None = None, warmup_only: bool = False, capture_factory=None, steady_s: float = STEADY_S, max_turn: float = MAX_TURN,
-        timeline=None, poster: str | None = None) -> dict:
+        timeline=None, poster: str | None = None, web_mb: float = WEB_MB, hooks: dict | None = None) -> dict:
     """Capture, composite and encode. `frames` overrides duration x fps (tests). Returns the report: files, frames done and skipped, the seconds
     a frame took, the findings (MAP-OUT-013 from the read-back, MAP-OUT-020 when a credit could not be placed)."""
     import map_brand
@@ -638,13 +705,29 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
     fdir.mkdir(parents=True, exist_ok=True)
     man_p = fdir / "manifest.json"
     man = json.loads(man_p.read_text()) if (resume and man_p.is_file()) else {}
-    cap = (capture_factory or Capture)(page_html, wh, gl=gl)
+    cap = (capture_factory or Capture)(page_html, wh, gl=gl, **({"hooks": hooks} if hooks else {}))
     findings: list[dict] = []
     try:
         ctx = cap.context()
         cams = with_periods(cameras(mode, n, ctx, size=wh, layer=layer, fps=fps, steady_s=steady_s, max_turn=max_turn, tl=tl), mode, ctx, layer)
         cams = with_layers(cams, mode, ctx)
         notes = []
+        if quality == "draft" and size in SIZES and SIZES[size][0] != wh[0]:
+            # 1.19.0 (Day 16 issue 11): page zooms are in pixels, so the 640 px draft framed twice the area of the 1280 px final and looked
+            # right where the final was too wide. The draft is drawn at the final's field of view, scaled down.
+            dz = math.log2(wh[0] / float(SIZES[size][0]))
+            cams = [({**c, "zoom": float(c["zoom"]) + dz} if isinstance(c.get("zoom"), (int, float)) else c) for c in cams]
+            notes.append(f"draft: zooms {dz:+.0f} so the {wh[0]} px draft shows the {SIZES[size][0]} px final's field of view")
+        date_text = date_line(tl)
+        if hooks and hooks.get("frame"):
+            cams = [{**c, "t": round(i / fps, 4)} for i, c in enumerate(cams)]
+        if tl.get("grow"):                               # 1.19.0 (Day 16 issue 16): the layer's blocks rise through their moments
+            gd = next((d for d in (ctx["cfg"].get("layers") or []) if d.get("id") == tl["grow"]["layer"]), None)
+            if not gd or not gd.get("moments"):
+                raise FlyError(f"timeline grow: layer '{tl['grow']['layer']}' has no moments on this page; build it with extrude.moments", gc.EXIT_USAGE)
+            k = tl["grow"]["per_unit_m"] or gd.get("per_unit_m") or 1.0
+            cams = [{**c, "grow": {**tlm.grow_at(tl, i / fps, int(gd["moments"])), "k": float(k)}} for i, c in enumerate(cams)]
+            notes.append(f"grow: '{gd['id']}' rises through {gd['moments']} moments from {tl['grow']['start']:g} to {tl['grow']['end']:g} s at {k:g} m per unit")
         findings += tl["findings"]
         if ctx.get("can_layers") is False:
             notes.append("the page was built before 1.16.0, so the capture cannot set its layers (it starts on the first story chapter's): rebuild it")
@@ -694,12 +777,18 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
                     lines.append(str(labs[cams[i]["time"]]))
             info = {"band_px": 0, "top_px": 0}
             if hud_on or credits:
-                im, placed = hud(im, title=title if hud_on else None, lines=lines if hud_on else [], credits=credits, tokens=tokens, info=info)
+                im, placed = hud(im, title=title if hud_on else None, lines=lines if hud_on else [], credits=credits, tokens=tokens, info=info,
+                                 date_text=date_text if hud_on else None)
                 if credits and not placed["credits"] and not any(f["id"] == "MAP-OUT-020" for f in findings):
                     findings.append({"id": "MAP-OUT-020", "severity": "BLOCK",
                                      "message": f"the provider credits ({credits[:80]}...) could not be placed on the frame at {wh[0]} x {wh[1]}; a larger size carries them"})
             if hud_on:                                  # 1.16.0: the logo, the story line and the counters
                 im, _pl = tlm.paint(im, i / fps, tl, tokens, font_path=font_tl, logo=logo, bottom_px=info["band_px"], top_px=info["top_px"])
+            errs = cap.errors() if hasattr(cap, "errors") else []
+            if errs and not any(f.get("detail") == "maplibre" for f in findings):
+                findings.append({"id": "MAP-OUT-013", "severity": "WARN", "detail": "maplibre",
+                                 "message": f"the page reported an error while frame {i} was drawn (MapLibre raises a bad layer or filter as an event, so it "
+                                            f"would pass silently): {errs[0][:200]}"})
             im.save(fp)
             frames_rec[str(i)] = h
             done += 1
@@ -732,6 +821,12 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
         rep["files"].append(encode(seq_dir, mp4, fps, meta)["path"])
         import output_lint as ol
         rep["findings"] += ol.check_mp4(str(mp4), tuple(w - w % 2 for w in wh), n_out / fps)
+        if quality == "final":
+            wc = web_copy(seq_dir, mp4, fps, meta, web_mb)
+            if wc:
+                rep["files"].append(wc["path"])
+                rep["notes"].append(f"the MP4 is {mp4.stat().st_size / 1e6:.1f} MB, over {web_mb:g} MB: a web copy at CRF {wc['crf']} is "
+                                    f"{wc['bytes'] / 1e6:.1f} MB ({Path(wc['path']).name}) for an artifact or a post")
     except FlyError as ex:
         rep["findings"].append({"id": "MAP-OUT-013", "severity": "WARN", "message": str(ex)})
     if n_out / fps <= GIF_MAX_S:
@@ -763,12 +858,16 @@ def main(argv=None) -> int:
     ap.add_argument("--warmup", action="store_true", help="capture the first 10 frames and report the seconds a frame takes")
     ap.add_argument("--timeline", help="1.16.0: a timeline (YAML or JSON): keyframes, story line, counters, poster, end hold (timeline.py)")
     ap.add_argument("--poster", choices=("first", "last", "none"), help="1.16.0: open the video on a held first or last frame")
+    ap.add_argument("--on-ready", metavar="READY.js", help="1.19.0: JavaScript run once the page has settled (map is the MapLibre map): add a layer that stays")
+    ap.add_argument("--on-frame", metavar="FRAME.js", help="1.19.0: JavaScript run before each frame (map, cam: the frame's camera, its t in cam.t)")
+    ap.add_argument("--web-mb", type=float, default=WEB_MB, help="1.19.0: a final MP4 over this many MB also gets a _web.mp4 copy under it (0: none)")
     a = ap.parse_args(argv)
     mode = "path" if a.path else "chapters" if a.chapters else "slider" if a.slider else "keyframes" if a.keyframes else "orbit"
     try:
         rep = run(a.page, a.out, mode=mode, layer=a.path, duration=a.duration, fps=a.fps, size=a.size, marker=a.marker, hud_on=a.hud == "on",
                   quality=a.quality, resume=a.resume, gl=a.gl, warmup_only=a.warmup, steady_s=a.steady, max_turn=a.max_turn,
-                  timeline=a.timeline or a.keyframes, poster=a.poster)
+                  timeline=a.timeline or a.keyframes, poster=a.poster, web_mb=a.web_mb,
+                  hooks={k: Path(v).read_text(encoding="utf-8") for k, v in (("ready", a.on_ready), ("frame", a.on_frame)) if v} or None)
     except FlyError as ex:
         print(f"flythrough: {ex}", file=sys.stderr)
         return ex.code

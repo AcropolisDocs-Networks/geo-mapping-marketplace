@@ -666,8 +666,10 @@ def check_3d(text: str) -> list[dict]:
         if neg:
             out.append(finding("MAP-WEB-024", "WARN", f"layer '{d['id']}': {neg} height(s) are negative or below their base, so they are drawn flat; check the field's sign "
                                "or the base field", neg))
-        if big:
+        if big and d.get("per_unit_m") is None:            # 1.19.0 (Day 16 issue 5): a declared bar chart (extrude.per_unit_m) may stand tall
             out.append(finding("MAP-WEB-024", "WARN", f"layer '{d['id']}': {big} height(s) are over {HEIGHT_MAX_M:,.0f} m: feet or centimetres read as metres?", big))
+        elif big:
+            out.append(finding("MAP-WEB-024", "INFO", f"layer '{d['id']}': {big} bar(s) stand over {HEIGHT_MAX_M:,.0f} m, a chart at {d['per_unit_m']:g} m per unit (extrude.per_unit_m)", big))
     return out
 
 

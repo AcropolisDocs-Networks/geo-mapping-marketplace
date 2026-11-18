@@ -268,6 +268,31 @@ def sheet_points(gdf, frame: lo.Frame):
     return mx, my, vis
 
 
+def raster_led(plan) -> str | None:
+    """The id of a raster layer (not the hillshade, not contours) that covers at least RASTER_LED_SHARE of the map's extent, or None. Such a map
+    is picture-led: its vector layers are annotation for the fit and the cover checks unless one says `fit: true` (1.19.0)."""
+    ext = getattr(plan, "extent", None)
+    if not ext:
+        return None
+    ew, eh = float(ext[2] - ext[0]), float(ext[3] - ext[1])
+    if ew <= 0 or eh <= 0:
+        return None
+    for l in plan.layers:
+        if l.kind != "raster" or l.role in ("hillshade", "contour") or l.gdf is None or not len(l.gdf):
+            continue
+        try:
+            b = [float(v) for v in l.gdf.total_bounds]
+        except Exception:  # noqa: BLE001
+            continue
+        iw, ih = max(0.0, min(b[2], ext[2]) - max(b[0], ext[0])), max(0.0, min(b[3], ext[3]) - max(b[1], ext[1]))
+        if iw * ih >= RASTER_LED_SHARE * ew * eh:
+            return l.id
+    return None
+
+
+RASTER_LED_SHARE = 0.9
+
+
 def explode_points(gdf):
     """MultiPoints become one row per point. Returns (gdf, src): `src[i]` is the row of the original frame that exploded row `i` came from, so
     anything assigned per original row (a class, a value) can be carried to every part instead of falling to no-data (P0-12)."""
@@ -557,7 +582,11 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
             # a large layer draws round symbols as dots: the outline colour at the outer diameter, then the fill at the inner one, so each
             # symbol looks as before at two commands a point (M16); squares, triangles, diamonds and crosses keep their outlines
             dots = n > LARGE_LAYER
-            stroked = l.stroke not in (None, "", "none")
+            stroked = l.stroke not in (None, "", "none") and sw > 0
+            # 1.19.0 (Day 17 issue A4): a smaller layer is one path per class, and a path paints all its fills before all its strokes, so
+            # where symbols overlap every casing covered every fill (Phoenix and Tucson turned solid). Overlapping symbols are drawn in two
+            # passes as the large layers are: every casing first, then every fill; a layer whose symbols never touch is drawn as before.
+            two_pass = stroked and not dots and _points_overlap(mx[vis], my[vis], d_mm + sw)
 
             rot = _point_rotations(plan, l, gdf) if l.symbol.get("rotate_field") else None
 
@@ -575,8 +604,15 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
                     if stroked:
                         g.append(f'<path fill="none" stroke="{l.stroke}" stroke-width="{sd.num(d_mm + sw)}" stroke-linecap="round" d="{path}"/>')
                     g.append(f'<path fill="none" stroke="{col}" stroke-width="{sd.num(max(d_mm - sw, d_mm / 2) if stroked else d_mm)}" stroke-linecap="round" d="{path}"/>')
+                elif two_pass:
+                    casings.append(f'<path fill="{l.stroke}" stroke="{l.stroke}" stroke-width="{sd.num(sw)}" d="' + "".join(sd.symbol_paths(shp, mx[sel], my[sel], d_mm)) + '"/>')
+                    fills.append(f'<path fill="{col}" stroke="none" d="' + "".join(sd.symbol_paths(shp, mx[sel], my[sel], d_mm)) + '"/>')
+                elif not stroked:
+                    g.append(f'<path fill="{col}" stroke="none" d="' + "".join(sd.symbol_paths(shp, mx[sel], my[sel], d_mm)) + '"/>')
                 else:
                     g.append(f'<path fill="{col}" stroke="{l.stroke}" stroke-width="{sd.num(sw)}" d="' + "".join(sd.symbol_paths(shp, mx[sel], my[sel], d_mm)) + '"/>')
+            casings: list[str] = []
+            fills: list[str] = []
             if l.cls is not None:
                 for ci in list(range(l.cls.k)) + [-1]:
                     sel = np.where(vis & (assigned == ci))[0]
@@ -589,6 +625,9 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
                 idx = np.where(vis)[0]
                 if len(idx):
                     symbols(l.fill, shape, idx)
+            g.extend(casings + fills)
+            if two_pass:
+                rep.setdefault("compact", {})[l.id] = "casings, then fills (symbols overlap)"
             if dots:
                 rep.setdefault("compact", {})[l.id] = "round symbols as dots"
             if n <= 3000:
@@ -597,6 +636,18 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
     g.append(ld.layer_patterns(l, frame, t, to_sheet))                     # hatch over patterned classes (M15); "" for most layers
     g.append("</g>")
     return "".join(g)
+
+
+def _points_overlap(x, y, d_mm: float) -> bool:
+    """Whether any two of these symbol centres are closer than one symbol width (they would overlap on the sheet)."""
+    if len(x) < 2 or d_mm <= 0:
+        return False
+    try:
+        from scipy.spatial import cKDTree
+        return bool(len(cKDTree(np.column_stack([x, y])).query_pairs(float(d_mm), output_type="ndarray")))
+    except ImportError:                                          # a grid of one symbol width: two centres in one cell overlap
+        cells = np.floor(np.column_stack([x, y]) / float(d_mm)).astype("int64")
+        return len(np.unique(cells, axis=0)) < len(cells)
 
 
 def prop_group(plan: mp.Plan, l) -> list:
@@ -1159,9 +1210,9 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                     out.append("</g>")
                 out.append(sd.text(cx + icon_w + 2.0, mid + lpt * PT * 0.35, it["label"], lpt, t["label"], num_cls=True))
                 cy += ih + lg.ROW_GAP_MM
-            if b.get("note"):                                # the block's note (a hexbin's resolution and edge length), in the room block_size reserves
+            for line in lg.note_lines(b, lpt):               # the block's note (a hexbin's resolution and edge length), in the room block_size reserves
                 npt = lpt - 1
-                out.append(sd.text(cx, cy + npt * PT * 0.85, b["note"], npt, t["label"], num_cls=True))
+                out.append(sd.text(cx, cy + npt * PT * 0.85, line, npt, t["label"], num_cls=True))
                 cy += tm.line_height_mm(npt)
             cy += lg.gap_after(blocks, bi) - lg.ROW_GAP_MM
         cx += size["col_widths"][ci] + lg.COL_GAP_MM
@@ -1201,9 +1252,9 @@ def draw_legend_special(out: list, b: dict, cx: float, cy: float, lpt: float, t:
             out.append(f'<image class="gm-legend-img" x="{sd.num(cx)}" y="{sd.num(cy)}" width="{sd.num(it["w_mm"])}" height="{sd.num(it["h_mm"])}" '
                        f'preserveAspectRatio="xMinYMin meet" href="{it["href"]}"/>')
             cy += float(it["h_mm"]) + lg.ROW_GAP_MM
-    if b.get("note"):
+    for line in lg.note_lines(b, lpt):
         npt = lpt - 1
-        out.append(sd.text(cx, cy + npt * PT * 0.85, b["note"], npt, t["label"], num_cls=True))
+        out.append(sd.text(cx, cy + npt * PT * 0.85, line, npt, t["label"], num_cls=True))
         cy += tm.line_height_mm(npt)
     return cy
 
@@ -1755,6 +1806,14 @@ def _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rec
         obstacles += co_rects
         findings += co_fs
         rep["callouts"] = co_recs
+    fg_cfg = els.get("figures") or {}                       # 1.19.0: figures take their room before the labels do, and are drawn over the data
+    if fg_cfg.get("on", bool(fg_cfg.get("items"))) and fg_cfg.get("items"):
+        fg_svg, fg_rects, fg_fs, fg_notes = mex.place_figures(plan, map_rect, placed, fg_cfg, plan.spec_path.parent)
+        co_svg += fg_svg
+        obstacles += fg_rects
+        findings += fg_fs
+        rep.setdefault("notes", []).extend(fg_notes)
+        rep["figures"] = [[round(r.x0, 2), round(r.y0, 2), round(r.w, 2), round(r.h, 2)] for r in fg_rects]
     return body, co_svg, findings, i_map, obstacles, point_obstacles, trm, trt
 
 
@@ -1896,8 +1955,16 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
     map_rect = lo.rect_of(tpl["map"])
     pad_pct = float((spec.get("extent") or {}).get("padding_pct", 5))
     import shapely
+    # 1.19.0 (Day 17 issue B3): a layer with `fit: false` is annotation (named landmarks over a relief, a section line): the fit, the cover
+    # checks and MAP-CART-009 leave it out. On a picture-led map (a raster other than the hillshade that fills the extent) every vector layer
+    # is annotation unless it says `fit: true`: the picture is the subject and fills the frame, so the map is not moved toward the points over
+    # it and the locator keeps its corner
+    picture_led = raster_led(plan)
+    if picture_led:
+        rep["picture_led"] = picture_led
     data_parts = [np.asarray(l.gdf.geometry.values, dtype=object) for l in plan.layers
-                  if l.role not in ("context", "labels", "contour") and l.kind != "raster"]     # a raster fills the frame: overlays may sit on it (M12)
+                  if l.role not in ("context", "labels", "contour") and l.kind != "raster"     # a raster fills the frame: overlays may sit on it (M12)
+                  and (l.spec.get("fit") is True or (l.spec.get("fit") is not False and not picture_led))]
     data_geoms = np.concatenate(data_parts) if data_parts else np.array([], dtype=object)
     data_tree = shapely.STRtree(data_geoms) if len(data_geoms) else None          # built once for every layout the overlays try (M16)
 
@@ -2060,6 +2127,12 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
             sizes = getattr(l, "_drawn_sizes", None)
             sizes = sizes if (l.role == "proportional" and sizes is not None and len(sizes) == len(gp)) else None
             idx, vals = labelled(gp, np.where(vis)[0])
+            # 1.19.0 (Day 17 issue B5): a MultiPoint is one feature, so it gets one label, at its first part on the map (GNIS keeps its
+            # landforms as MultiPoints, and Point Sublime printed twice)
+            if _src is not None and len(idx):
+                _, first = np.unique(np.asarray(_src)[idx], return_index=True)
+                keep = np.sort(first)
+                idx, vals = idx[keep], np.asarray(vals, dtype=object)[keep]
             prio = priorities(gp, idx, -idx.astype("float64"))
             pick = top(prio)
             idx, vals, prio = idx[pick], vals[pick], prio[pick]
@@ -2199,6 +2272,29 @@ def select_places(gdf, cfg: dict, tier: dict):
     if cfg["max"] is not None:
         g = g.head(int(cfg["max"]))
     return g
+
+
+WATER_WORDS = {"river", "lake", "creek", "reservoir", "bay", "sound", "sea", "gulf", "rio", "the", "of"}
+
+
+def names_said_twice(cands: list, said: list, exclude) -> tuple[list, int, int]:
+    """1.19.0 (Day 17 issue B7): water and state names from the bundled gazetteer, less the ones `names.exclude` removes and the ones a data
+    label on the map already says ("Colorado" beside a data label "Colorado River"). Returns (kept, excluded, same_as_label). The places
+    had this since 1.14.0; water and state names could print a name a second time."""
+    keys = [k for k, _x, _y in said]
+    kept, n_ex, n_same = [], 0, 0
+    for c in cands:
+        raw = str(c.text)
+        if exclude and mp.name_excluded(raw, exclude):
+            n_ex += 1
+            continue
+        k = name_key(raw)
+        if k and any(lk == k or (lk.startswith(k + " ") and all(w in WATER_WORDS for w in lk[len(k):].split()))
+                     or (k.startswith(lk + " ") and all(w in WATER_WORDS for w in k[len(lk):].split())) for lk in keys if lk):
+            n_same += 1
+            continue
+        kept.append(c)
+    return kept, n_ex, n_same
 
 
 @_role("label")
@@ -2442,6 +2538,9 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
             cands = [c for c in cands if wsheet is not None and wsheet.intersects(shapely.Point(c.x, c.y).buffer(1.5))]
             if n0 - len(cands):
                 wstats["not_on_the_files_water"] = n0 - len(cands)
+        cands, n_ex, n_same = names_said_twice(cands, getattr(plan, "_data_label_texts", None) or [], cfg["exclude"])
+        if n_ex or n_same:
+            wstats.update({"excluded": n_ex, "same_as_label": n_same})
         if cands:
             res = le.place(cands, map_rect, taken, wsize, 400, floor)
             wstats.update(res.as_dict() | {"candidates": len(cands)})
@@ -2487,6 +2586,9 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                                           weight=500, tracking=track, style={"tier": "admin"}))
             if len(cands) < 2 and tier["tier"] in ("local", "metro"):
                 cands = []                                    # a city map inside one state does not say which state it is in; the title and the locator do
+            cands, n_ex, n_same = names_said_twice(cands, getattr(plan, "_data_label_texts", None) or [], cfg["exclude"])
+            if n_ex or n_same:
+                astats.update({"excluded": n_ex, "same_as_label": n_same})
             if cands:
                 res = le.place(cands, map_rect, taken, asize, 500, floor, avoid=on_line)
                 astats.update(res.as_dict() | {"candidates": len(cands)})

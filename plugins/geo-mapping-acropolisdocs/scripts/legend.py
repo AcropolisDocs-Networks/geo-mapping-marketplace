@@ -256,11 +256,11 @@ def bivariate_layout(block: dict, label_pt: float = LABEL_PT) -> dict:
             axis_x + tm.width_mm(block["y"]["title"], label_pt, 600), grid_left + tm.width_mm(block["x"]["title"], label_pt, 600))
     if nodata:
         w = max(w, SWATCH_W_MM + 2.0 + tm.width_mm(block["nodata"]["label"], label_pt, 400))
-    if block.get("note"):
-        w = max(w, tm.width_mm(block["note"], label_pt - 1, 400))
+    nw, nh = note_size(block, label_pt)
+    w = max(w, nw)
     return {"n": n, "cell": cell, "axis_x": axis_x, "grid_left": grid_left, "grid_right": grid_right, "grid_top": grid_top, "grid_bottom": grid_bottom,
             "arrow_top": arrow_top, "arrow_right": arrow_right, "x_axis_y": x_axis_y, "x_tick_base": x_tick_base, "x_title_base": x_title_base,
-            "y_title_base": y_title_base, "nodata": nodata, "w": w, "h": bottom + (tm.line_height_mm(label_pt - 1) if block.get("note") else 0.0)}
+            "y_title_base": y_title_base, "nodata": nodata, "w": w, "h": bottom + nh}
 
 
 def nested_layout(block: dict, label_pt: float = LABEL_PT) -> dict:
@@ -312,6 +312,30 @@ def block_size(block: dict, label_pt: float = LABEL_PT, title_pt: float = TITLE_
     return max(w, cw), h + ch
 
 
+NOTE_WRAP_MM = 48.0           # 1.19.0 (Day 17 issue A9): a block note wraps at its content's width or this, whichever is wider
+
+
+def note_lines(block: dict, label_pt: float = LABEL_PT) -> list[str]:
+    """A block's note as drawn, one size under the labels. 1.19.0 (Day 17 issue A9): a long note wraps at the block's own width (or
+    NOTE_WRAP_MM) instead of widening the legend until MAP-SPEC-005 blocks the whole map."""
+    n = block.get("note")
+    if not n:
+        return []
+    npt = label_pt - 1
+    if tm.width_mm(str(n), npt, 400) <= NOTE_WRAP_MM:
+        return [str(n)]
+    cw, _ = _content_size({**block, "note": None}, label_pt)
+    return tm.wrap(str(n), max(cw, NOTE_WRAP_MM), npt, 400)
+
+
+def note_size(block: dict, label_pt: float = LABEL_PT) -> tuple[float, float]:
+    lines = note_lines(block, label_pt)
+    if not lines:
+        return 0.0, 0.0
+    npt = label_pt - 1
+    return max(tm.width_mm(x, npt, 400) for x in lines), tm.line_height_mm(npt) * len(lines)
+
+
 def _content_size(block: dict, label_pt: float = LABEL_PT) -> tuple[float, float]:
     """(width, height) of a block below its title."""
     w, h = 0.0, 0.0
@@ -326,27 +350,22 @@ def _content_size(block: dict, label_pt: float = LABEL_PT) -> tuple[float, float
         overhang = (tm.width_mm(labs[0], label_pt, 400, tnum=True) + tm.width_mm(labs[-1], label_pt, 400, tnum=True)) / 2 if labs else 0.0
         w = max(w, RAMP_W_MM + overhang)
         h += RAMP_H_MM + 0.8 + tm.line_height_mm(label_pt)
-        if block.get("note"):
-            w = max(w, tm.width_mm(block["note"], label_pt - 1, 400))
-            h += tm.line_height_mm(label_pt - 1)
-        return w, h
+        nw, nh = note_size(block, label_pt)
+        return max(w, nw), h + nh
     if block["kind"] == "image":
         for it in block["items"]:
             w = max(w, float(it["w_mm"]))
             h += float(it["h_mm"]) + ROW_GAP_MM
-        if block.get("note"):
-            w = max(w, tm.width_mm(block["note"], label_pt - 1, 400))
-            h += tm.line_height_mm(label_pt - 1)
-        return w, h
+        nw, nh = note_size(block, label_pt)
+        return max(w, nw), h + nh
     row_h = max(SWATCH_H_MM, tm.line_height_mm(label_pt))
     for it in block["items"]:
         lw = tm.width_mm(it["label"], label_pt, 400, tnum=True)
         icon = max(SWATCH_W_MM, it.get("size_mm", 0) + 1.5) if block["kind"] != "proportional" else max(SWATCH_W_MM, it.get("size_mm", 0))
         w = max(w, icon + 2.0 + lw)
         h += max(row_h, it.get("size_mm", 0) + 0.8) + ROW_GAP_MM
-    if block.get("note"):
-        w = max(w, tm.width_mm(block["note"], label_pt - 1, 400))
-        h += tm.line_height_mm(label_pt - 1)
+    nw, nh = note_size(block, label_pt)
+    w, h = max(w, nw), h + nh
     return w, h - ROW_GAP_MM if block["items"] else h
 
 

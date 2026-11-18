@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 
 WEIGHT_RATIO = 0.6
+CONTEXT_CONTRAST_RELIEF = 2.6        # 1.19.0: the budget when a relief is drawn under the map
 CONTEXT_CONTRAST_MAX = 1.8
 POINT_MIN_MM = 1.4
 OVERLAP_MAX = 0.15
@@ -98,15 +99,19 @@ def check_030(plan) -> list[dict]:
         return []
     land = plan.tokens["land"]
     out = []
+    # 1.19.0 (Day 16 issue 10): over a relief the land is mostly shaded, so a context line needs more contrast with the plain land colour
+    # to show at all (neutral 2 at 0.8 vanished over the Phoenix relief; neutral 3 was flagged)
+    relief = any(b.get("kind") == "hillshade" for b in (getattr(plan, "basemap", None) or []))
+    budget = CONTEXT_CONTRAST_RELIEF if relief else CONTEXT_CONTRAST_MAX
     for l in _context(plan):
         if l.kind != "line" or not str(l.stroke or "").startswith("#"):
             continue
         c = cl.contrast(l.stroke, land)
         eff = 1 + (c - 1) * float(getattr(l, "stroke_opacity", 1.0) or 1.0)       # a see-through line reads about this strong
-        if eff > CONTEXT_CONTRAST_MAX + 1e-9:
-            out.append(finding("MAP-CART-030", "WARN", f"context layer '{l.id}' stands at {eff:.1f}:1 against the land (the budget is {CONTEXT_CONTRAST_MAX:g}:1 "
-                               "while data is drawn): it competes with the data; use context: {opacity: 0.6} or a lighter neutral",
-                               {"contrast": round(eff, 2)}, l.id))
+        if eff > budget + 1e-9:
+            out.append(finding("MAP-CART-030", "WARN", f"context layer '{l.id}' stands at {eff:.1f}:1 against the land (the budget is {budget:g}:1 "
+                               + ("over a relief " if relief else "") + "while data is drawn): it competes with the data; use context: {opacity: 0.6} or a lighter neutral",
+                               {"contrast": round(eff, 2), "budget": budget}, l.id))
     return out
 
 

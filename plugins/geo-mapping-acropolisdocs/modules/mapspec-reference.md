@@ -24,6 +24,17 @@ style: {look: auto}                # auto (default) picks focus (areas), clean (
 # a library service layer's filter goes in its source: {type: ref, id: ..., where: "VOLT_CLASS IN ('345','500')"}; a file layer uses filter: {column, in}
 # elements.callouts: {on: true, items: [{text: "Large-load queue", figure: "692 MW", at: [lon, lat] | layer: id, where: {field: value}}]}: the figure set large
 # elements.title.halo: glow (default: a soft cloud of the page colour under the title block) | crisp | thin | none
+# 1.19.0: elements.figures: {on: true, items: [{svg: section.svg, position: lower-left | upper-left | ..., w_mm: 110} | {svg: ..., rect_mm: [x, y, w, h]}]}:
+#   an SVG drawn into the map frame on every build (a section box, a chart), stacked beside the corner's elements; labels keep clear of it
+# 1.19.0: a layer's fit: false makes it annotation (landmark points, a section line): the fit and the cover checks leave it out. A raster other
+#   than the hillshade that fills the extent makes the map picture-led: its vector layers are annotation unless one says fit: true
+# 1.19.0: role hillshade takes one sun: hillshade: {azimuth: 278, altitude: 18, cast_shadows: true, opacity: 0.6, max_px: 4096}
+# 1.19.0: classification.colors works on numeric classes too ([null, null, null, null, '@brand.status.danger']: null keeps the ramp's colour);
+#   manual breaks print at their own precision (5–10); a point layer reads symbol.stroke, stroke_width (0: no casing) and fill as well as color
+# 1.19.0: source.variant: [04, 35] merges two states' files of one library entry into one layer (each row keeps _variant)
+# 1.19.0 web: extrude: {per_unit_m: 25, value_field: n, unit: collaborator} draws a bar chart (the legend says the scale); extrude.moments:
+#   [c0, ..., c18] keeps values per moment for a flythrough timeline grow: {layer, start, end}; a large extruded grid is dissolved by value
+#   (extrude.dissolve: off tiles it); webmap.relief_colors (48) writes the page relief as a palette PNG; source.widen reads a layer wider
 # change a MapSpec with map_restyle.py --set (or gmap_common.dump_mapspec): plain PyYAML writes on: back as true: (read as on again since 1.13.0)
 focus: {mask: auto, lift: true}    # auto: a choropleth or grid fades the land around it and sits on a soft shadow; area: <layer id> picks the outline
 # elements.source_note.style: consolidated (one Sources: line, each organization once; default on slide and social) or detailed (print default)

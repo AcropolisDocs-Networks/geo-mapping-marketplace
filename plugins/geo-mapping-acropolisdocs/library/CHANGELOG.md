@@ -2,6 +2,12 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-18
+
+- `ref.basemap-provider.nasa-gibs` rev 3: provider.getmap (1.19.0, Day 17 issue A1): a print basemap held down by the no-bulk tile cap is fetched as one WMS GetMap picture of the window at the print size (one request for one map), the layer and day read from the resolved tile address. The Day 17 night-lights map used this WMS (epsg3857, VIIRS_Black_Marble) as a raster service picture at full resolution.
+- `ref.gazetteer.us.landform.gnis` rev 1: New (1.19.0, Day 17 issue B6): the geonames service read on 2026-11-18 (14 layers; layer 5 Landforms, MultiPoint, 10 fields, maxRecordCount 2000; copyright "Data Refreshed October, 2026"). The Grand Canyon map of Day 17 used it for its temples and points.
+- `ref.map-type.dot-density` rev 3: The recipe writes symbol.color (1.19.0, Day 17 issue A5): with fill the dots fell back to the default colour. Points now read either.
+
 ## 2026-11-15
 
 - `ref.basemap-provider.os-maps` rev 4: Active (1.17.0): the rate-limiting policy (600 a minute live, 50 in development), the layers page (OpenData zooms 7 to 16, Premium 17 to 20 in EPSG:3857) and the branding statement with its year read from docs.os.uk and OS's branding repository; the plan page itself still needs JavaScript.

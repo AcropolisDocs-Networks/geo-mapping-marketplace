@@ -116,11 +116,20 @@ VERSION_TAIL = re.compile(r"[-_.]v?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.]+)?$")
 COPY_SEARCH_DEPTH = 4
 
 
+SYNC_TAIL = re.compile(r"(?:~[A-Za-z0-9]{1,8}| \(\d+\)|(?: -|[-_ ]) ?copy(?: \d+)?)$", re.I)
+
+
 def edition_of(name: str) -> str:
     """The edition a folder or package name stands for, without its version: geo-mapping-acropolisdocs_v1.12.0 -> geo-mapping-acropolisdocs.
-    1.13.0 (Day 12 issue 8): two versions of one edition side by side are one edition, not two (1.12 refused to run)."""
+    1.13.0 (Day 12 issue 8): two versions of one edition side by side are one edition, not two (1.12 refused to run).
+    1.19.0 (Day 17 issue A10): a synced or copied folder's marker is not an edition either: the cloud workspace's geo-mapping-acropolisdocs~g2
+    (the plugin-files copy beside the synced one), "... (1)" and "... - Copy" are the same edition."""
     n = name[:-len(".plugin")] if name.endswith(".plugin") else name
-    return VERSION_TAIL.sub("", n)
+    prev = None
+    while prev != n:
+        prev = n
+        n = VERSION_TAIL.sub("", SYNC_TAIL.sub("", n))
+    return n
 
 
 def version_of(name: str) -> tuple | None:
@@ -212,6 +221,33 @@ def status_line(env: dict) -> str:
     return f"Tier {tier}: {parts} ({egress_txt}; GDAL {env['gdal']['version'] or 'missing'})."
 
 
+def cloud_workspace() -> bool:
+    """A Claude cloud workspace (a Linux container with the /mnt/user-data folders, or CLAUDE_CODE_REMOTE set), not the person's computer."""
+    return platform.system() == "Linux" and (os.environ.get("CLAUDE_CODE_REMOTE") == "true" or Path("/mnt/user-data").is_dir())
+
+
+def auto_install() -> list[dict]:
+    """1.19.0 (Day 16 issue 7, Day 17 issue A11): a fresh cloud workspace has no map packages, and every build began with a failed import and a
+    hand-run `doctor.py --fix --quick`. The build's first step now installs them itself (the same one pip call, wheels only, 10 minutes at
+    most) when geopandas is missing; GMAP_NO_AUTO_INSTALL=1 turns this off. Messages go to stderr so `--value` still prints the token alone."""
+    import importlib.util
+    if os.environ.get("GMAP_NO_AUTO_INSTALL") == "1" or importlib.util.find_spec("geopandas") is not None:
+        return []
+    if not cloud_workspace():                     # on the person's own computer the skill asks before installing; nothing is installed here
+        return []
+    try:
+        import doctor
+        print("map-env-probe: the map packages are not installed in this workspace; installing them now (one pip step)", file=sys.stderr, flush=True)
+        log = doctor.fix_quick(doctor.check_deps())
+    except Exception as ex:  # noqa: BLE001 - the build then stops on its own import and names doctor.py
+        print(f"map-env-probe: the automatic install did not run ({type(ex).__name__}); run doctor.py --fix --quick", file=sys.stderr)
+        return []
+    bad = [r["package"] for r in log if not r.get("installed")]
+    print("map-env-probe: " + (f"could not install {', '.join(bad)}; run doctor.py --fix --quick to see why" if bad else f"installed {len(log)} package(s)"),
+          file=sys.stderr, flush=True)
+    return log
+
+
 def begin_build(spec: str) -> str:
     wd = gc.workdir(create=True) / "run" / "tokens"
     wd.mkdir(parents=True, exist_ok=True)
@@ -267,6 +303,7 @@ def main(argv=None) -> int:
         if not a.spec:
             print("--begin-build needs --spec", file=sys.stderr)
             return gc.EXIT_USAGE
+        auto_install()
         tok = begin_build(a.spec)
         print(tok if a.value else f"GMAP_BUILD_TOKEN={tok}")
         nl = newer_line(own, manifest.get("version"))

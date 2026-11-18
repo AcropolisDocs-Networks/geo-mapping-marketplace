@@ -392,6 +392,10 @@ def classify_numeric(values, method: str = "quantile", classes: int = 5, manual_
         d = fmt.decimals
     elif res.integer_data:
         d = 0
+    elif method == "manual" and len(edges) > 2:
+        # 1.19.0 (Day 17 issue A8): manual breaks are shown at their own precision (5, 10, 20, 35 read 5–10, not 5.0–10.0, whatever the
+        # data's own decimals); a numeric `rounding` step sets it instead when given
+        d = _decimals_exact([float(rounding)]) if isinstance(rounding, (int, float)) and not isinstance(rounding, bool) else _decimals_exact(edges[1:-1])
     elif method == "pretty" or any("rounded to round" in n for n in res.notes):
         d = _decimals_exact(edges if method == "pretty" else edges[1:-1])
     else:                                    # fine enough that rounding moves a break by under a hundredth of a class width

@@ -318,8 +318,61 @@ def fetch_3dep_with_fallback(bounds, target_m_per_px: float, out: Path, *, http=
             tried.append((res, oh.untrusted(str(ex), 120)))
             if k == steps or not _retryable(ex):
                 raise
+            if k == 0:
+                # 1.19.0 (Day 17 issue B2): before giving up resolution, the same window in 2 x 2 overlapping quarters at the asked cell size
+                # (the Grand Canyon at 12 m failed whole and came back at 24 m, while four 12 m quarters all succeeded)
+                try:
+                    rec = fetch_3dep_tiled(bounds, res, out, http=http, max_px=max_px, url=url)
+                    tried.append((res, "ok in 4 quarters"))
+                    return rec, tried
+                except Exception as ex2:  # noqa: BLE001
+                    tried.append((res, "quarters: " + oh.untrusted(str(ex2), 100)))
+                    if not _retryable(ex2):
+                        raise
             res *= 2.0
     raise RuntimeError("unreachable")
+
+
+THREEDEP_SPLIT = 2               # 1.19.0: quarters (2 x 2) before a coarser cell size
+THREEDEP_OVERLAP_CELLS = 4       # each part reaches this many cells into its neighbours, so the mosaic has no seam
+
+
+def fetch_3dep_tiled(bounds, target_m_per_px: float, out: Path, *, http=None, max_px: int = THREEDEP_MAX_PX, url: str = THREEDEP_URL,
+                     n: int = THREEDEP_SPLIT) -> dict:
+    """The window as n x n overlapping exportImage parts at the same cell size, mosaicked into one GeoTIFF at `out` (the first value where parts
+    overlap; the cells are the service's own, so overlaps agree). A part that fails raises, and the caller then coarsens the whole window."""
+    import tempfile
+    x0, y0, x1, y1 = bounds
+    _W, _H, res_m, _capped = threedep_size(bounds, target_m_per_px, max_px * n)
+    lat = (y0 + y1) / 2.0
+    ox = THREEDEP_OVERLAP_CELLS * res_m / (rio.M_PER_DEG_LON_EQ * math.cos(math.radians(lat)))
+    oy = THREEDEP_OVERLAP_CELLS * res_m / rio.M_PER_DEG_LAT
+    xs = [x0 + (x1 - x0) * i / n for i in range(n + 1)]
+    ys = [y0 + (y1 - y0) * j / n for j in range(n + 1)]
+    recs, paths = [], []
+    with tempfile.TemporaryDirectory(prefix="gm-3dep-") as td:
+        for j in range(n):
+            for i in range(n):
+                b = (max(x0, xs[i] - ox), max(y0, ys[j] - oy), min(x1, xs[i + 1] + ox), min(y1, ys[j + 1] + oy))
+                q = Path(td) / f"part_{j}_{i}.tif"
+                recs.append(fetch_3dep(b, res_m, q, http=http, max_px=max_px, url=url))
+                paths.append(q)
+        import rasterio
+        from rasterio.merge import merge
+        srcs = [rasterio.open(q) for q in paths]
+        try:
+            arr, tr = merge(srcs, nodata=NODATA)
+            crs = srcs[0].crs
+        finally:
+            for d in srcs:
+                d.close()
+    a = arr[0].astype(np.float32)
+    marr = np.ma.masked_array(a, mask=(a == NODATA) | ~np.isfinite(a))
+    w = rio.write_geotiff(out, marr, tr, crs or "EPSG:4326", nodata=NODATA)
+    first = recs[0]
+    return {**first, "res_m": res_m, "res_deg": [float(abs(tr.a)), float(abs(tr.e))], "pixels": [int(a.shape[1]), int(a.shape[0])],
+            "requests": [c for r_ in recs for c in r_.get("requests", [])], "bytes": w["bytes"], "sha256": w["sha256"], "path": str(out),
+            "bbox_wgs84": list(bounds), "parts": n * n, "missing_share": float(marr.mask.mean()) if np.ndim(marr.mask) else 0.0}
 
 
 def fetch_3dep(bounds, target_m_per_px: float, out: Path, *, http=None, max_px: int = THREEDEP_MAX_PX, url: str = THREEDEP_URL) -> dict:

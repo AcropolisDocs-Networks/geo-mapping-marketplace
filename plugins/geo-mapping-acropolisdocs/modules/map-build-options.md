@@ -42,3 +42,7 @@ The brand's logo, stamps, hidden accreditation and footer credit stay under ever
 names carry its id. Ornaments and treatments also work on a default map: `elements.frame.style: double | bar-border`,
 `elements.title.box: cartouche | title-block`, `elements.north_arrow.style: compass-rose`, `elements.scale_bar.style: ladder`,
 `elements.legend.frame: ruled | cartouche`, `style.treatments: {water_lining: true, place_glyphs: true, hill_glyphs: {dem: FILE}}`.
+
+A helper script of your own (a box drawn into the map, a wrapper around a plugin script) resolves the plugin's folder on every run, the way
+the skills' first line does, and never keeps a path from an earlier call: a plugin update moves the synced folder (`...~g2`) mid-session.
+A figure that belongs on the map goes in `elements.figures` (1.19.0), so every rebuild draws it again instead of losing it.

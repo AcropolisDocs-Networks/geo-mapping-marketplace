@@ -396,6 +396,57 @@ def text_path(s: str, x: float, y: float, size_mm: float, weight: int = 400, anc
     return pen.getCommands(), total
 
 
+PAINT_ORDER = re.compile(r'<text\b(?P<a>[^>]*?)\spaint-order\s*=\s*"(?:stroke|stroke fill|stroke markers fill|stroke fill markers)"(?P<b>[^>]*)>(?P<body>.*?)</text>', re.S)
+PAINT_ORDER_STYLE = re.compile(r'<text\b(?P<a>[^>]*?)\sstyle\s*=\s*"(?P<st>[^"]*paint-order\s*:\s*stroke[^"]*)"(?P<b>[^>]*)>(?P<body>.*?)</text>', re.S)
+
+
+def split_paint_order(svg: str) -> tuple[str, int]:
+    """1.19.0 (Day 17 issue B9): a <text> haloed with paint-order="stroke" (text a person or a script added to the map) prints as a white blob
+    through the PDF path: WeasyPrint ignores paint-order and strokes over the fill. Each such text becomes the map's own two-element halo,
+    the stroked copy (halo colour for fill and stroke) under an unstroked copy in the text's fill. Returns (svg, texts rewritten)."""
+    n = 0
+
+    def attr(a: str, k: str):
+        m = re.search(r'\s' + k + r'\s*=\s*"([^"]*)"', a)
+        return m.group(1) if m else None
+
+    def drop(a: str, keys) -> str:
+        for k in keys:
+            a = re.sub(r'\s' + k + r'\s*=\s*"[^"]*"', "", a)
+        return a
+
+    def rewrite(attrs: str, body: str) -> str | None:
+        nonlocal n
+        stroke = attr(attrs, "stroke")
+        if not stroke or stroke == "none":
+            return None
+        n += 1
+        base = drop(attrs, ("stroke", "stroke-width", "stroke-linejoin", "stroke-opacity", "fill", "id"))
+        halo = f'<text{base} fill="{stroke}" stroke="{stroke}" stroke-width="{attr(attrs, "stroke-width") or "0.3"}" stroke-linejoin="round" aria-hidden="true">{body}</text>'
+        ink = f'<text{drop(attrs, ("stroke", "stroke-width", "stroke-linejoin", "stroke-opacity"))}>{body}</text>'
+        return halo + ink
+
+    def sub_attr(m):
+        out = rewrite(m.group("a") + m.group("b"), m.group("body"))
+        return out if out is not None else m.group(0)
+
+    def sub_style(m):
+        st = m.group("st")
+        decl = dict((k.strip(), v.strip()) for k, v in (x.split(":", 1) for x in st.split(";") if ":" in x))
+        a = m.group("a") + m.group("b")
+        for k in ("stroke", "stroke-width", "stroke-linejoin", "fill"):
+            if k in decl and attr(a, k) is None:
+                a += f' {k}="{decl[k]}"'
+        rest = "; ".join(f"{k}: {v}" for k, v in decl.items() if k not in ("paint-order", "stroke", "stroke-width", "stroke-linejoin", "fill"))
+        a = a + (f' style="{rest}"' if rest else "")
+        out = rewrite(a, m.group("body"))
+        return out if out is not None else m.group(0)
+
+    svg = PAINT_ORDER.sub(sub_attr, svg)
+    svg = PAINT_ORDER_STYLE.sub(sub_style, svg)
+    return svg, n
+
+
 def outline_text_svg(svg: str, style=None) -> tuple[str, dict]:
     """1.12.0: under a style pack that brings its own faces (`style`, a map_style.Style) each text is outlined in the face it is set in: the
     title face on `.gm-r-title`, the label face on `.gm-r-label`, the body face elsewhere; a role the pack leaves to the brand stays Inter.
@@ -745,6 +796,7 @@ def main(argv=None) -> int:
     a.formats = a.formats or "pdf,png"
     import map_brand
     svg = Path(a.svg).read_text(encoding="utf-8")
+    svg, n_po = split_paint_order(svg)
     m = re.search(r'data-map-brand="([^"]+)"', svg)
     slug = a.brand or (m.group(1) if m else None)
     if not slug:
@@ -768,6 +820,9 @@ def main(argv=None) -> int:
     sys.path.insert(0, str(HERE.parent / "lints"))
     import output_lint
     res["findings"] = output_lint.check_export(res, svg)
+    if n_po:
+        res["findings"].append({"id": "MAP-OUT-030", "severity": "INFO", "message": f"{n_po} text(s) haloed with paint-order were redrawn as the map's two-pass halo "
+                                "(halo copy under the ink) because the PDF renderer ignores paint-order; the given SVG file is unchanged", "detail": n_po})
     prov = Path(a.svg).with_name(Path(a.svg).stem + ".provenance.json")
     if prov.is_file():                          # 1.3.0 (R1-TERMS): the export's own terms register, from the map's provenance
         import terms_register as tr

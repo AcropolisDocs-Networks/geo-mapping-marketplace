@@ -1,6 +1,6 @@
 id: ref.basemap-provider.nasa-gibs
 type: basemap-provider
-rev: 2
+rev: 3
 status: active
 title: NASA GIBS satellite imagery
 summary: 'Satellite imagery tiles from NASA''s Global Imagery Browse Services: daily MODIS and VIIRS true colour for a chosen day, the Blue Marble relief
@@ -59,6 +59,11 @@ maintenance:
   - rev: 2
     date: '2026-11-09'
     note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+  - rev: 3
+    date: '2026-11-18'
+    note: 'provider.getmap (1.19.0, Day 17 issue A1): a print basemap held down by the no-bulk tile cap is fetched as one WMS GetMap picture of
+      the window at the print size (one request for one map), the layer and day read from the resolved tile address. The Day 17 night-lights map
+      used this WMS (epsg3857, VIIRS_Black_Marble) as a raster service picture at full resolution.'
   check:
     kind: http_get
     url: https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/default/GoogleMapsCompatible_Level8/0/0/0.jpg
@@ -85,6 +90,12 @@ provider:
     BlueMarble_ShadedRelief_Bathymetry: {matrix: GoogleMapsCompatible_Level8, ext: jpg, daily: false, max_zoom: 8}
     VIIRS_CityLights_2012: {matrix: GoogleMapsCompatible_Level8, ext: jpg, daily: false, max_zoom: 8}
     VIIRS_Black_Marble: {matrix: GoogleMapsCompatible_Level8, ext: png, daily: false, max_zoom: 8}
+  getmap:
+    url: https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi
+    layer_from_tile_url: /best/([A-Za-z0-9_]+)/default/
+    time_from_tile_url: /default/([0-9]{4}-[0-9]{2}-[0-9]{2})/
+    format: image/png
+    max_px: 4096
 attribution:
   corner: 'Imagery: NASA GIBS, part of ESDIS'
   links:

@@ -427,7 +427,24 @@ def tinted_relief(shade: np.ndarray, dem, tokens: dict) -> np.ndarray:
     return out
 
 
-def web_overlay(rgba: np.ndarray, transform, crs, max_px: int = WEB_MAX_PX) -> dict:
+RELIEF_WEB_COLORS = 48          # 1.19.0 (Day 16 issue 8): a relief picture on a page as a 48-colour palette PNG (6.2 MB to 0.8 MB, the same look)
+
+
+def png_palette_bytes(rgba: np.ndarray, colors: int) -> bytes:
+    """bands x rows x cols uint8 RGBA -> a palette PNG of at most `colors` colours, alpha kept (PIL's fast octree, no dithering, so the soft
+    relief shows no noise). A picture that already has fewer colours is written as it is."""
+    from PIL import Image
+    a = np.ascontiguousarray(np.moveaxis(np.asarray(rgba, dtype=np.uint8), 0, -1))
+    im = Image.fromarray(a, "RGBA")
+    q = im.quantize(colors=max(2, min(256, int(colors))), method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
+    buf = io.BytesIO()
+    q.save(buf, format="PNG", optimize=True)
+    out = buf.getvalue()
+    full = png_bytes(rgba)
+    return out if len(out) < len(full) else full
+
+
+def web_overlay(rgba: np.ndarray, transform, crs, max_px: int = WEB_MAX_PX, colors: int | None = None) -> dict:
     """The picture warped to Web Mercator for a Leaflet imageOverlay: {url (data URI), bounds [[south, west], [north, east]], width, height,
     downsampled}. The colours are the print picture's own; only the grid changes."""
     from rasterio.warp import calculate_default_transform, reproject, Resampling
@@ -452,7 +469,9 @@ def web_overlay(rgba: np.ndarray, transform, crs, max_px: int = WEB_MAX_PX) -> d
     tr = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
     w_, s_ = tr.transform(mb[0], mb[1])
     e_, n_ = tr.transform(mb[2], mb[3])
-    return {"url": data_uri(png_bytes(dst)), "bounds": [[round(s_, 6), round(w_, 6)], [round(n_, 6), round(e_, 6)]], "width": int(dw), "height": int(dh), "downsampled": down}
+    data = png_palette_bytes(dst, colors) if colors else png_bytes(dst)
+    return {"url": data_uri(data), "bounds": [[round(s_, 6), round(w_, 6)], [round(n_, 6), round(e_, 6)]], "width": int(dw), "height": int(dh), "downsampled": down,
+            "bytes": len(data), **({"colors": int(colors)} if colors else {})}
 
 
 def grid_transform(win, shape):
@@ -778,18 +797,46 @@ def apply_dem_provenance(item: dict, prov: dict) -> None:
     item["entry"] = ent
 
 
-def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z: float, layer_id: str, entry: dict | None, title: str) -> dict:
-    """A plan.basemap item {kind: hillshade}: the DEM read for the window (at most 2,048 px), multidirectional hillshade, drawn in brand neutrals."""
+RELIEF_MAX_PX_LIMIT = 4096                # 1.19.0: hillshade.max_px may raise the relief picture to this
+CAST_SHADOW_DEPTH = 0.75                  # 1.19.0: a cast shadow takes this share of the light off the cells it falls on
+
+
+def sun_config(hs: dict | None) -> dict:
+    """1.19.0 (Day 17 issue B1): the sun of a `role: hillshade` layer. With neither azimuth nor altitude given: the multidirectional default
+    (225, 270, 315 and 360 degrees at 45). An azimuth or altitude gives one sun (multidirectional: false unless asked), with cast shadows when
+    `cast_shadows: true`; `max_px` (up to 4,096) raises the relief picture's longer side."""
+    hs = dict(hs or {})
+    one = "azimuth" in hs or "altitude" in hs
+    multi = bool(hs.get("multidirectional", not one))
+    return {"azimuth": float(hs.get("azimuth", 315.0)), "altitude": float(hs.get("altitude", 45.0)), "multidirectional": multi,
+            "cast_shadows": bool(hs.get("cast_shadows", False)) and not multi,
+            "max_px": int(min(RELIEF_MAX_PX_LIMIT, max(256, int(hs.get("max_px", RELIEF_MAX_PX))))), "custom": one or "multidirectional" in hs}
+
+
+def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z: float, layer_id: str, entry: dict | None, title: str, sun: dict | None = None) -> dict:
+    """A plan.basemap item {kind: hillshade}: the DEM read for the window (at most 2,048 px unless `sun.max_px`), multidirectional hillshade or
+    one low sun with cast shadows (`sun`, 1.19.0), drawn in brand neutrals."""
     import terrain_fetch as tf
     rio = _rio()
-    target = window_shape(plan, win, RELIEF_MAX_PX) if shape is None else _cap(shape, RELIEF_MAX_PX)
+    sun = sun or sun_config(None)
+    max_px = sun["max_px"]
+    target = window_shape(plan, win, max_px) if shape is None else _cap(shape, max_px)
     native = native_limited(target, win, rio.open_info(dem_path), plan.crs, factor=1.0)
     g = rio.read_window(dem_path, win, plan.crs, out_shape=native, resampling="bilinear")      # shaded on the DEM's own cells: no interpolation facets
     dem = np.ma.masked_invalid(np.ma.asarray(g.array, dtype=float))
     dem = np.ma.masked_where(np.ma.filled(dem, np.nan) <= tf.NODATA + 1, dem)
     if dem.count() == 0:
         raise RasterLayerError("the DEM holds no elevation inside the map window")
-    hs = rio.hillshade(dem, g.transform, z_factor=z, multidirectional=True, crs=g.crs)
+    if sun["multidirectional"]:
+        hs = rio.hillshade(dem, g.transform, z_factor=z, multidirectional=True, crs=g.crs)
+    else:
+        # one sun: shading relative to flat ground at that sun, so a low sun darkens every face turned from it rather than the whole map
+        hs = rio.hillshade(dem, g.transform, azimuth=sun["azimuth"], altitude=sun["altitude"], z_factor=z, crs=g.crs)
+        flat = math.sin(math.radians(max(0.5, sun["altitude"])))
+        hs = np.clip(hs / flat * FLAT_SHADE, 0.0, 1.0)
+        if sun["cast_shadows"]:
+            cs = rio.cast_shadows(dem, g.transform, sun["azimuth"], sun["altitude"], z_factor=z, crs=g.crs)
+            hs = np.where(np.isfinite(cs), hs * (1.0 - CAST_SHADOW_DEPTH * np.nan_to_num(cs)), hs)
     hs[_grow(np.ma.getmaskarray(dem))] = np.nan       # a cell beside nodata has no true slope: no line along the DEM's edge
     rgba = relief_rgba(hs, plan.tokens)
     if getattr(plan, "look", "classic") != "classic":
@@ -806,7 +853,10 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
     attribution = rec.get("attribution")
     src_name = {"3dep": "USGS 3D Elevation Program (3DEP) bare-earth DEM", "terrarium": "Terrain Tiles on AWS (Mapzen Terrarium)",
                 "copernicus": "Copernicus DEM GLO-30 (surface model)"}.get(rec.get("source"), f"DEM supplied by the person ({Path(dem_path).name})")
-    step = (f"multidirectional hillshade (225, 270, 315 and 360 degrees, Horn method) of the {src_name} read for the map window at "
+    how = ("multidirectional hillshade (225, 270, 315 and 360 degrees, Horn method)" if sun["multidirectional"] else
+           f"hillshade with one sun at azimuth {sun['azimuth']:g} and {sun['altitude']:g} degrees above the horizon (Horn method, relative to flat ground)"
+           + (", with cast shadows marched toward the sun" if sun["cast_shadows"] else ""))
+    step = (f"{how} of the {src_name} read for the map window at "
             f"{rgba.shape[2]} x {rgba.shape[1]} px in {plan.crs}, vertical exaggeration {z:g}; drawn in two brand neutrals at {opacity:.0%} opacity above the land "
             f"and under everything else; never in the legend or the extent")
     pub = tf.public_record(rec)
@@ -915,7 +965,7 @@ def hillshade_layer(plan, l, win, shape) -> None:
                 plan.notes.append(f"layer '{l.id}': hillshade not drawn (" + "; ".join(f["message"] for f in fs if f["id"] in ("MAP-WEB-011", "MAP-TER-001", "MAP-TER-004"))[:300] + ")")
                 return
             plan.findings += [{**f, "layer": l.id} for f in r.get("findings") or []]
-        item = relief_item(plan, r["path"], r["record"], win, None, opacity=opacity, z=z, layer_id=l.id, entry=l.entry, title=l.title)
+        item = relief_item(plan, r["path"], r["record"], win, None, opacity=opacity, z=z, layer_id=l.id, entry=l.entry, title=l.title, sun=sun_config(hs))
     except Exception as ex:  # noqa: BLE001 - a relief never blocks a map
         import ogc_http as oh
         plan.findings.append(finding("MAP-TER-004", "WARN", f"layer '{l.id}': the hillshade could not be made ({oh.untrusted(ex, 200)}); the map was built without it", layer=l.id))
@@ -924,7 +974,9 @@ def hillshade_layer(plan, l, win, shape) -> None:
     if l.spec.get("provenance"):
         apply_dem_provenance(item, l.spec["provenance"])
     insert_relief(plan, item)
-    plan.notes.append(f"layer '{l.id}': hillshade from {Path(r['path']).name}, exaggeration {z:g}, {opacity:.0%} opacity, under every layer")
+    sc = sun_config(hs)
+    sun_txt = "" if sc["multidirectional"] else f", sun at {sc['azimuth']:g}/{sc['altitude']:g} degrees" + (" with cast shadows" if sc["cast_shadows"] else "")
+    plan.notes.append(f"layer '{l.id}': hillshade from {Path(r['path']).name}, exaggeration {z:g}, {opacity:.0%} opacity{sun_txt}, under every layer")
 
 
 def terrain_context(plan, win, shape, why: str, explicit: bool, tier: str) -> None:
@@ -1269,12 +1321,12 @@ def service_legend(plan, l, src, proto, url, layers, key, cached: bool) -> dict 
     if data is None:
         if offline():
             plan.notes.append(f"layer '{l.id}': the service legend is not cached (offline); the map legend names the layer only")
-            return lg.image_block(l.spec | {"title": l.title}, None, plan.tokens, note="legend not available")
+            return label_only_block(plan, l)
         try:
             data = fetch_service_legend(src, proto, url, layers, service_http())
         except Exception as ex:  # noqa: BLE001 - a legend is a courtesy; the picture is drawn without it
             plan.notes.append(f"layer '{l.id}': the service legend could not be read ({oh.untrusted(ex, 120)}); the map legend names the layer only")
-            return lg.image_block(l.spec | {"title": l.title}, None, plan.tokens, note="legend not available from the service")
+            return label_only_block(plan, l)
         cdir.mkdir(parents=True, exist_ok=True)
         lp.write_text(json.dumps({"kind": data["kind"], "png": base64.b64encode(data["png"]).decode() if data.get("png") else None,
                                   "entries": [(base64.b64encode(p).decode(), lab) for p, lab in data.get("entries", [])]}))
@@ -1284,7 +1336,16 @@ def service_legend(plan, l, src, proto, url, layers, key, cached: bool) -> dict 
                                  note=(l.spec.get("legend") or {}).get("note") or "symbols from the service")
     if data.get("png"):
         return lg.image_block(l.spec | {"title": title}, data_uri(data["png"]), plan.tokens, px=_png_size(data["png"]), note=(l.spec.get("legend") or {}).get("note") or "legend from the service")
-    return lg.image_block(l.spec | {"title": title}, None, plan.tokens, note="legend not available from the service")
+    plan.notes.append(f"layer '{l.id}': the service gives no legend; the map legend names the layer only")
+    return label_only_block(plan, l)
+
+
+def label_only_block(plan, l) -> dict:
+    """1.19.0 (Day 17 issue A2): a service picture with no legend of its own is keyed by its name alone (legend.label, else legend.title, else
+    the layer title: "Night lights, 2016"), not by "legend not available from the service" printed on the map. A legend.note still prints."""
+    import legend as lg
+    lgd = l.spec.get("legend") or {}
+    return lg.image_block(l.spec | {"title": lgd.get("label") or lgd.get("title") or l.title}, None, plan.tokens, note=lgd.get("note"))
 
 
 def _png_size(png: bytes) -> tuple[int, int]:

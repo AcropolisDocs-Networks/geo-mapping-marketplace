@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 161 entries (159 active); basemap-provider 14, boundary 33, boundary-derived 2, context 16, crosswalk 1, gazetteer 5, infrastructure 16, map-type 11, palette 2, public-service 36, statistic 14, symbol-set 1, template 6, terrain 4.
+Library: 162 entries (160 active); basemap-provider 14, boundary 33, boundary-derived 2, context 16, crosswalk 1, gazetteer 6, infrastructure 16, map-type 11, palette 2, public-service 36, statistic 14, symbol-set 1, template 6, terrain 4.
 
 ### Usable now
 
@@ -68,6 +68,7 @@ Library: 161 entries (159 active); basemap-provider 14, boundary 33, boundary-de
 | `ref.context.world.rivers.ne10` | World rivers and lake centerlines, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (1.22 MB) | public-domain |  |
 | `ref.context.world.urban.ne10` | World urban areas, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (2.54 MB) | public-domain |  |
 | `ref.crosswalk.us.county-cbsa.omb2023` | US county to metro/micro area crosswalk (OMB July 2023 delineations) | US Census Bureau, Population Division, from OMB Bulletin 23-01, OMB July 2023 | bundled (0.2 MB) | public-domain | county_geoid (string, 5 chars) |
+| `ref.gazetteer.us.landform.gnis` | USGS GNIS named landforms (summits, buttes, canyons, ridges, valleys) | U.S. Geological Survey, refreshed October 2026 (the service's copyright text) | web service | public-domain | gaz_id (integer) |
 | `ref.gazetteer.world.place.geonames` | GeoNames populated places (cities15000) | GeoNames, daily dump (downloaded 2026-11-05) | downloaded on first use | attribution |  |
 | `ref.gazetteer.world.place.ne10` | World populated places, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (0.33 MB) | public-domain |  |
 | `ref.gazetteer.world.place.ne110` | World populated places, 110m (Natural Earth) | Natural Earth 5.1.2 | bundled (0.03 MB) | public-domain |  |

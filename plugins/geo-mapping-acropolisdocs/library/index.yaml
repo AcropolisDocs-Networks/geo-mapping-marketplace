@@ -46,9 +46,9 @@ entries:
   file: entries/data/ref.basemap-provider.nasa-gibs.yaml
   type: basemap-provider
   status: active
-  rev: 2
+  rev: 3
   tags_digest: e98274643e06
-  entry_digest: bca4aef76873
+  entry_digest: c8174127b593
 - id: ref.basemap-provider.os-maps
   file: entries/data/ref.basemap-provider.os-maps.yaml
   type: basemap-provider
@@ -462,6 +462,13 @@ entries:
   rev: 1
   tags_digest: 06ab6a5a8230
   entry_digest: f981c04ab5da
+- id: ref.gazetteer.us.landform.gnis
+  file: entries/data/ref.gazetteer.us.landform.gnis.yaml
+  type: gazetteer
+  status: active
+  rev: 1
+  tags_digest: 7765652d315b
+  entry_digest: 7a021085e2a1
 - id: ref.gazetteer.world.place.geonames
   file: entries/data/ref.gazetteer.world.place.geonames.yaml
   type: gazetteer
@@ -634,9 +641,9 @@ entries:
   file: entries/method/ref.map-type.dot-density.yaml
   type: map-type
   status: active
-  rev: 2
+  rev: 3
   tags_digest: 699ad782a3bc
-  entry_digest: f8db14b51d3f
+  entry_digest: 96e0777ea581
 - id: ref.map-type.flow-line
   file: entries/method/ref.map-type.flow-line.yaml
   type: map-type

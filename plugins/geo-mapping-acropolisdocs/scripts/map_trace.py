@@ -65,7 +65,7 @@ EXC_LINE = re.compile(r"^([A-Za-z_][\w.]*(?:Error|Exception|Exit|Refusal|Interru
 OPTION = re.compile(r"(?<![\w-])(--[a-z][a-z0-9-]*)")
 SHELL_WRITE = re.compile(r"(?:^|[;&|\n]\s*)(?:cat|tee|printf|echo)\b[^\n|;]*>{1,2}\s*[^&\s]|>{1,2}\s*[\"']?[\w./~$-]+\.(?:ya?ml|json|geojson|py|md|txt|csv|gpkg|svg|html)\b|\bsed\s+-i\b|\b(?:cp|mv|tee)\b\s")
 EXIT_CLASS = {gc.EXIT_USAGE: "usage", gc.EXIT_LINT: "lint-block", gc.EXIT_REFUSED: "refused", gc.EXIT_SERVICE: "service", gc.EXIT_BRAND_OUTSIDE_BUILD: "brand"}
-DISPOSITION = {"crash": "product", "dependency": "dependency", "lint-block": "input", "usage": "input", "refused": "input", "brand": "input",
+DISPOSITION = {"shell-tail": "shell", "crash": "product", "dependency": "dependency", "lint-block": "input", "usage": "input", "refused": "input", "brand": "input",
                "service": "environment", "network": "environment", "environment": "environment", "timeout": "environment", "failed": "unclassified"}
 
 
@@ -73,6 +73,8 @@ READING = {"input": "a gate or the input stopped the run (the spec, the data or 
            "dependency": "a package or native library is missing; run the map doctor (`doctor.py --fix --all`).",
            "environment": "the machine, network or a permission stopped the call; not a plugin defect.",
            "operator": "a traceback with no frame in this plugin: an inline script of the session's own failed.",
+           "shell": "a command after the plugin's script on the same line (grep or findstr with no match, a test) set the exit code; "
+                    "the script printed no error. Not a plugin defect.",
            "unclassified": "the output does not say why; reproduce before calling it a defect."}
 # 1.18.0: Claude Code reports a hook's refusal as "PreToolUse:<Tool> hook error: [<the hook's command>]: <what the hook printed>". On Windows the
 # bracket holds the whole command (1.17.3's is long), which filled the evidence line; the hook's own words follow it.
@@ -82,6 +84,13 @@ HOOK_ERROR = re.compile(r"^\w+:[\w-]+ hook error: \[.*?\]:\s*")
 # 1.18.1: the plugin's own session reports (map-trace, map-token-use). Their calls are counted and timed like any map call, but running one
 # again is not a retry or a loop, and the MAP-* ids they print are an earlier report's, not findings of this session's work.
 REPORT_SCRIPTS = {"map_trace", "session_report"}
+# 1.19.0 (map-trace of Day 17): a build is usually one shell line, `env_probe --begin-build && mapspec_lint && build_map`, and 1.18 named the
+# call after its first script, so env_probe.py and mapspec_lint.py showed 30 s to 80 s calls that were the build's. The call is named after
+# its last script that is not one of these set-up steps; the others still appear in its scripts.
+PREAMBLE_SCRIPTS = ("gmap_common", "redact", "env_probe", "mapspec_lint", "modules", "map_guide")
+# 1.19.0: a command after the plugin's last script on the same line (`modules.py read x > m.md; wc -l m.md; grep -c y m.md`) sets the call's
+# exit code; grep and findstr return 1 for "no match". Such a failure with no error from the plugin is the shell line's, not the script's.
+TAIL_CMD = re.compile(r"""(?:\|\||&&|[;|\n])\s*(?:grep|egrep|fgrep|rg|findstr|select-string|sls|wc|head|tail|test|\[|diff|cmp|find|ls|dir|where|which|type|cat|sed|awk|sort|uniq)\b""", re.I)
 
 
 def is_report(e: dict) -> bool:
@@ -363,7 +372,10 @@ def classify(call: dict, inv: dict, pname: str, window: str | None) -> dict:
     found, how = map_scripts(cmd, inv)
     if not found:
         return ev
-    main = next((s for s in found if s not in ("gmap_common", "redact")), found[0])
+    main = next((s for s in reversed(found) if s not in PREAMBLE_SCRIPTS), None) or next((s for s in found if s not in ("gmap_common", "redact")), found[0])
+    found = [main] + [s for s in found if s != main]
+    last_run = max((m.end() for m in shell_calls.RUN.finditer(cmd)), default=0) if how == "path" else 0
+    ev["tail"] = bool(how == "path" and TAIL_CMD.search(cmd[last_run:]))
     owner = inv["owners"].get(main)
     lane = window if (window and window in inv["skills"] and owner in (None, window)) else (owner or f"({main})")
     ev.update(lane=lane, basis=how if lane != window else "window", scripts=found, op=_op_after(cmd, main) if how == "path" else None,
@@ -461,6 +473,31 @@ def plugin_inventory_cache() -> dict:
     return _INV
 
 
+_SEV = None
+SEV_IN_CODE = re.compile(r"""\b(?:finding|f|_f|fnd|add|mk)\(\s*["'](MAP-[A-Z0-9]+-[0-9A-Z]+)["']\s*,\s*["'](BLOCK|WARN|INFO)["']""")
+
+
+def severities_in_code(root: Path = PLUGIN_ROOT) -> dict[str, str]:
+    """1.19.0 (map-trace of Day 17): the severity each MAP-* id is raised with in this plugin's own code, the highest when an id is raised at
+    more than one. A result that names an id without its severity (a skill's summary line, a PlanError) then shows it, not "?"."""
+    global _SEV
+    if _SEV is not None:
+        return _SEV
+    rank = {"INFO": 0, "WARN": 1, "BLOCK": 2}
+    out: dict[str, str] = {}
+    for d in ("scripts", "lints", "mcp"):
+        for p in (root / d).glob("*.py"):
+            try:
+                text = p.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            for fid, sev in SEV_IN_CODE.findall(text):
+                if rank[sev] > rank.get(out.get(fid, ""), -1):
+                    out[fid] = sev
+    _SEV = out
+    return out
+
+
 def findings_in(text: str) -> dict[str, str]:
     """MAP-* ids a result names, with the severity printed beside them when there is one."""
     out: dict[str, str] = {}
@@ -473,7 +510,8 @@ def findings_in(text: str) -> dict[str, str]:
         if rank[sev] > rank.get(out.get(fid, "?"), -1):
             out[fid] = sev
     for fid in FINDING.findall(text or ""):
-        out.setdefault(fid, "BLOCK" if HOOK_STOP in (text or "") else "?")    # 1.17.2: the pre-export check lists blocking findings only
+        # 1.17.2: the pre-export check lists blocking findings only; 1.19.0: else the severity the plugin's code raises the id with
+        out.setdefault(fid, "BLOCK" if HOOK_STOP in (text or "") else (severities_in_code().get(fid) or "?"))
     return out
 
 
@@ -626,6 +664,8 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             if st == "failed":
                 cls, site, exc = error_class(c["result"] or "")
                 code = EXIT.search(c["result"] or "")
+                if cls == "failed" and ev.get("tail") and code and int(code.group(1)) == 1 and not FINDING.search(c["result"] or ""):
+                    cls = "shell-tail"
                 e.update(error_class=cls, crash_site=site, exception=exc, exit_code=int(code.group(1)) if code else None, evidence=evidence(c["result"] or ""))
                 if HOOK_STOP in (c["result"] or ""):
                     e.update(stopped_by="pre-export hook", exit_code=2)

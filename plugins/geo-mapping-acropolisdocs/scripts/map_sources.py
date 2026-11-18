@@ -207,8 +207,32 @@ def _bounds4326(gdf):
     return tuple(float(v) for v in g.total_bounds)
 
 
+WEB_CONTEXT_WIDEN = 2.0      # 1.19.0 (Day 16 issue 9): a context layer on a web page is read for twice the map window's width and height
+
+
 def window(spec: dict, tpl: dict | None, layer: dict, loaded: dict, base: Path) -> tuple:
-    """(lon/lat box, what it came from) for a library service layer. `loaded` holds the frames of the layers loaded so far, by id."""
+    """(lon/lat box, what it came from) for a library service layer. `loaded` holds the frames of the layers loaded so far, by id.
+    1.19.0 (Day 16 issue 9): a reference layer (role context) on a web page is read for a wider box than the map window, because a page is
+    zoomed out past its first view and roads cut at the window sat entirely under the data; `source.widen` (a factor, 1 for none) sets it
+    for any layer."""
+    box, why = _window(spec, tpl, layer, loaded, base)
+    src = layer.get("source") or {}
+    k = src.get("widen")
+    if k is None and layer.get("role") == "context" and spec.get("webmap") is not None and not src.get("bbox"):
+        k = WEB_CONTEXT_WIDEN
+    try:
+        k = float(k) if k is not None else 1.0
+    except (TypeError, ValueError):
+        k = 1.0
+    if k > 1.0:
+        x0, y0, x1, y1 = box
+        cx, cy, hw, hh = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) * k / 2, (y1 - y0) * k / 2
+        box = _round_out([max(-180.0, cx - hw), max(-85.0, cy - hh), min(180.0, cx + hw), min(85.0, cy + hh)])
+        why = f"{why}, widened {k:g} times" + (" for the page's wider views" if src.get("widen") is None else " (source.widen)")
+    return box, why
+
+
+def _window(spec: dict, tpl: dict | None, layer: dict, loaded: dict, base: Path) -> tuple:
     import map_plan as mp
     src = layer.get("source") or {}
     ext = spec.get("extent") or {}

@@ -481,7 +481,36 @@ def frame_session():
         _SESSION = outer
 
 
-def load_ref_layer(entry_id: str, variant: str | None = None):
+def load_ref_layer(entry_id: str, variant=None):
+    """One library layer. 1.19.0 (Day 17 issue A7): `variant` may be a list ([04, 35]): each variant's cached file is read and the rows are
+    merged into one layer (the first variant's CRS), each row keeping the variant it came from in `_variant`, so a two-state map needs no
+    hand-merged file and no hand-written provenance."""
+    if isinstance(variant, (list, tuple)):
+        vs = [str(v) for v in variant]
+        if len(vs) == 1:
+            return load_ref_layer(entry_id, vs[0])
+        import pandas as pd
+        import geopandas as gpd
+        frames, e = [], None
+        missing = []
+        for v in vs:
+            try:
+                g, e = load_ref_layer(entry_id, v)
+            except PlanError as ex:
+                if "not in the cache yet" in str(ex):
+                    missing.append(v)
+                    continue
+                raise
+            if frames and g.crs is not None and frames[0].crs is not None and g.crs != frames[0].crs:
+                g = g.to_crs(frames[0].crs)
+            g = g.copy()
+            g["_variant"] = v
+            frames.append(g)
+        if missing:
+            raise PlanError(f"library entry '{entry_id}' is fetched on demand and variant(s) {', '.join(missing)} are not in the cache yet; run: "
+                            + "; ".join(f"ref_fetch.py fetch {entry_id} --variant {v}" for v in missing), gc.EXIT_REFUSED)
+        merged = gpd.GeoDataFrame(pd.concat(frames, ignore_index=True), geometry=frames[0].geometry.name, crs=frames[0].crs)
+        return merged, e
     if _SESSION is None:
         return _load_ref_layer(entry_id, variant)
     key = (entry_id, variant)
@@ -732,7 +761,18 @@ def source_file_hash(layer_spec: dict, entry: dict | None, base: Path) -> tuple[
             path = (gc.plugin_root() / d["path"]) if entry["_scope"] == "shipped" else (gc.workdir() / d["path"])
         elif d.get("mode") == "fetch":
             import ref_fetch
-            path = ref_fetch.cached_path(entry, src.get("variant"))
+            v = src.get("variant")
+            if isinstance(v, (list, tuple)) and len(v) > 1:       # 1.19.0: merged variants: every file's name, one hash over them in order
+                paths = [ref_fetch.cached_path(entry, str(x)) for x in v]
+                if any(q is None or not q.is_file() for q in paths):
+                    return None, None
+                h = hashlib.sha256()
+                for q in paths:
+                    with open(q, "rb") as f:
+                        for chunk in iter(lambda: f.read(1 << 20), b""):
+                            h.update(chunk)
+                return " + ".join(q.name for q in paths), h.hexdigest()
+            path = ref_fetch.cached_path(entry, str(v[0]) if isinstance(v, (list, tuple)) and v else v)
     if path is None or not path.is_file():
         return None, None
     h = hashlib.sha256()
@@ -1884,12 +1924,15 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
             colors = cf.palette(t, pk, res.k, bool(pal.get("reverse")), anchor=anchor)["colors"]
         except cf.ClassifyError as ex:
             raise PlanError(f"layer '{l.id}': {ex}", gc.EXIT_USAGE)
-        if res.kind == "categorical" and c.get("colors"):
+        if c.get("colors"):
+            # 1.19.0 (Day 16 issue 2): numeric classes take colours too (manual breaks with the top class in brand red); an entry left null
+            # keeps the ramp's own colour for that class, so one class can be called out without restating the rest
             cc = list(c["colors"])
+            what = "categories" if res.kind == "categorical" else "classes"
             if len(cc) != res.k:
-                raise PlanError(f"layer '{l.id}': classification.colors has {len(cc)} entries but there are {res.k} categories ({', '.join(res.labels)})", gc.EXIT_USAGE)
-            colors = [resolve_color(x, t, f"layer '{l.id}' class color") for x in cc]
-            pk = "status"
+                raise PlanError(f"layer '{l.id}': classification.colors has {len(cc)} entries but there are {res.k} {what} ({', '.join(res.labels)})", gc.EXIT_USAGE)
+            colors = [colors[i] if x in (None, "", "auto") else resolve_color(x, t, f"layer '{l.id}' class color") for i, x in enumerate(cc)]
+            pk = "status" if res.kind == "categorical" else pk
         integer_style = bool(getattr(res, "integer_data", False)) and int(getattr(res, "decimals", 0) or 0) == 0 and c.get("label_style") != "continuous"
         if res.kind != "categorical" and plan.look == "classic":
             res.labels = cf.classic_labels(res.labels, integer_style)       # 1.2.0: the classic look keeps "a to under b"
@@ -1984,9 +2027,15 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
             l.legend_block = {**l.legend_block, "kind": "lines", "items": [{"label": it["label"], "stroke": it["fill"], "width_mm": max(0.5, l.stroke_w_mm)}
                                                                            for it in l.legend_block["items"]]}
     else:
-        l.fill = sym.get("_color") or t["emphasis"]
-        l.stroke = t["background"]
-        sym["_stroke_mm"] = lk["proportional_stroke_mm"] if l.role == "proportional" else lk["point_stroke_mm"]
+        # 1.19.0 (Day 17 issues A3, A5): a point reads symbol.fill as well as symbol.color (the dot-density recipe wrote fill and the dots fell
+        # to the default colour), and symbol.stroke and stroke_width (pt; 0 or stroke: none for no casing) as the lines and areas do
+        l.fill = sym.get("_color") or sym.get("_fill") or t["emphasis"]
+        no_casing = str(sym.get("stroke", "")).lower() == "none" or ("stroke_width" in sym and float(sym["stroke_width"] or 0) <= 0)
+        l.stroke = "none" if no_casing else (sym.get("_stroke") or t["background"])
+        if "stroke_width" in sym and not no_casing:
+            sym["_stroke_mm"] = float(sym["stroke_width"]) * 0.3528
+        else:
+            sym["_stroke_mm"] = 0.0 if no_casing else (lk["proportional_stroke_mm"] if l.role == "proportional" else lk["point_stroke_mm"])
         if l.role != "proportional":
             d_ = point_size(plan, l, lk)
             if d_:

@@ -239,6 +239,27 @@ def extrude_heights(lid: str, ex: dict, gdf) -> tuple[list, list, list, dict]:
             bs.append(round(max(0.5, f - slab / 2), 2))           # a slab near the ground rests on it rather than reaching under it
         notes.append(f"layer '{lid}': drawn in 3D as {slab:g} m slabs at " + (f"the height in '{ex['at_field']}'" if ex.get("at_field") else f"{float(ex['at_m']):g} m"))
         return hs, bs, notes, stats
+    if ex.get("per_unit_m") is not None:
+        # 1.19.0 (Day 16 issue 5): an exaggerated bar chart: height = value x per_unit_m (25 m per collaborator), from value_field or
+        # height_field; the page says so (the legend's height line and MAP-WEB-024 reads it as a chart, not a building height)
+        k = float(ex["per_unit_m"])
+        vf = ex.get("value_field") or ex.get("height_field")
+        if not vf or vf not in cols:
+            raise Web3DError(f"layer '{lid}': extrude.per_unit_m needs extrude.value_field (or height_field) naming a numeric field")
+        hs, bs = [], []
+        base = col("base_field") if ex.get("base_field") else [ex.get("base_m", 0.0)] * n
+        for v, b in zip(gdf[vf].tolist(), base):
+            f = _num(v)
+            if f is None:
+                stats["not_numeric"] += 1
+                f = 0.0
+            else:
+                stats["from_field"] += 1
+            hs.append(round(max(0.0, f) * k, 2))
+            bs.append(round(_num(b) or 0.0, 2))
+        stats["per_unit_m"] = k
+        notes.append(f"layer '{lid}': heights are a chart, {k:g} m per unit of '{vf}' (not real heights)")
+        return hs, bs, notes, stats
     top = col("height_field")
     floors = col("floors_field")
     base = col("base_field") if ex.get("base_field") else [ex.get("base_m", 0.0)] * n
