@@ -1,9 +1,9 @@
 {
-  "description": "1.17.3: three hooks. The pre-export lint and the credentials reminder (on since 1.17.0, spike P7) and the timing hook that measures this plugin's own calls for map-trace. The shell matchers name PowerShell as well as Bash: on Windows, Claude Code's PowerShell tool is the primary shell. Each command picks the plugin's own Python on Windows (the private environment setup.cmd builds, else python3) and starts its script through a guarded -c program: a missing script (a plugin updated while a chat is open, or an unexpanded ${CLAUDE_PLUGIN_ROOT}) exits 0, never 2, so it can never refuse a tool call; only the pre-export check's own verdict exits 2. The program drops the working folder from the import path first. Nothing rewrites this file any more. Hooks act only on this plugin's own calls (MAP-ED-005). hooks/README.md says how to turn one off.",
+  "description": "1.17.3: three hooks, for Claude Cowork (Bash in the session workspace, the device shell on a linked computer, both matched since 1.20.1) and Claude Code. The pre-export lint and the credentials reminder (on since 1.17.0, spike P7) and the timing hook that measures this plugin's own calls for map-trace. The shell matchers name PowerShell as well as Bash (on Windows, Claude Code's PowerShell tool is the primary shell) and the device shell. Each command picks the plugin's own Python on Windows (the private environment setup.cmd builds, else python3) and starts its script through a guarded -c program: a missing script (a plugin updated while a chat is open, or an unexpanded ${CLAUDE_PLUGIN_ROOT}) exits 0, never 2, so it can never refuse a tool call; only the pre-export check's own verdict exits 2. The program drops the working folder from the import path first. Nothing rewrites this file any more. Hooks act only on this plugin's own calls (MAP-ED-005). hooks/README.md says how to turn one off.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|PowerShell",
+        "matcher": "Bash|PowerShell|mcp__.*device_bash",
         "hooks": [
           {
             "type": "command",

@@ -1,4 +1,4 @@
-# geo-mapping-acropolisdocs 1.20.0
+# geo-mapping-acropolisdocs 1.20.1
 
 Cartographic maps from a request or your own geodata: print maps (SVG, PDF, PNG), interactive web maps (one self-contained HTML page), data
 conversion and analysis, public data services, travel-time areas and terrain, each checked before it is handed over and each with its sources.
@@ -8,7 +8,9 @@ formats, the API-key setup and the **Customization** tab (your own brand, style 
 
 ## Install
 
-Install the `.plugin` file in Claude (desktop app or Claude Code). Install one `geo-mapping-*` plugin only: if an older edition is still
+Install it in Claude Cowork: **Customize → Plugins → Add → Add marketplace**, enter `AcropolisDocs-Networks/geo-mapping-marketplace` and
+install the plugin from **Discover** (updates: **Check for updates** on the marketplace), or upload the `.plugin` file there. It is saved to
+your Claude account, so chat and Claude Code have it too. Install one `geo-mapping-*` plugin only: if an older edition is still
 installed beside this one, every map skill stops and names both, so remove the old one.
 
 Nothing has to be installed by hand. The first time the plugin starts, its data server builds a private Python environment and installs the
@@ -23,7 +25,7 @@ map packages, the optional extras and Chromium (for web-map checks and flythroug
 
 **macOS and Linux, one step.** A plugin's server entry cannot yet name a different launcher per operating system, and the default is the
 Windows one. From the plugin's folder run `sh mcp/use-posix.sh` once (again after a plugin update), then restart the plugin. It rewrites
-`.mcp.json` to start `mcp/launch.sh`; `sh mcp/use-posix.sh --windows` puts the Windows entry back. In Claude Code on macOS or Linux the map
+`.mcp.json` to start `mcp/launch.sh`; `sh mcp/use-posix.sh --windows` puts the Windows entry back. In Claude Code (through the account sync) on macOS or Linux the map
 skills themselves work without the server (they run the same scripts in your shell); the server adds the typed service tools and the
 credential folder.
 

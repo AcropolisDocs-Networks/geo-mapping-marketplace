@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pre-export lint hook (spec 5 and 12, gap analysis P1-13). On since 1.17.0 (spike P7): see hooks/README.md.
 
-A Claude Code `PreToolUse` hook on the Bash and PowerShell tools (PowerShell since 1.17.3: Claude Code's primary shell on Windows). It reads the hook's JSON from stdin and acts only when the command runs this plugin's
+A `PreToolUse` hook (Claude Cowork and Claude Code) on the Bash, PowerShell and device shell tools (PowerShell since 1.17.3: Claude Code's primary shell on Windows; the device shell of a Cowork session linked to a computer since 1.20.1). It reads the hook's JSON from stdin and acts only when the command runs this plugin's
 own `build_map.py`, `webmap.py` or `map_restyle.py --build` with a `--spec` (through `$GMAP_ROOT`, the skills' resolver, or this plugin's
 root path). For any other command it exits 0 at once and prints nothing, so it scopes itself by the command line, since a hook matcher
 selects tools, not files. When it acts, it runs the spec lint (MAP-SPEC-*, and the `ops:` checks inside it) on that MapSpec; a BLOCK
@@ -101,7 +101,10 @@ def spec_arg(command: str, script: str) -> str | None:
 
 def decide(event: dict) -> tuple[int, str]:
     """(exit code, message for stderr): 0 and '' to let the command run, 2 and the findings to stop it."""
-    if event.get("tool_name") not in ("Bash", "PowerShell"):            # 1.17.3: PowerShell, Claude Code's primary shell on Windows
+    tool = str(event.get("tool_name") or "")
+    # Bash: the shell of a Cowork session's workspace (and of Claude Code); 1.17.3: PowerShell, Claude Code's primary shell on Windows;
+    # 1.20.1: the device shell of a Cowork session linked to the person's computer (mcp__...__device_bash), where builds run on their files
+    if tool not in ("Bash", "PowerShell") and not tool.endswith("device_bash"):
         return 0, ""
     command = _cmd(str((event.get("tool_input") or {}).get("command") or ""))
     script = ours(command)
