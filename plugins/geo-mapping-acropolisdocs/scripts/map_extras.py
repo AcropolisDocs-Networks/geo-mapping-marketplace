@@ -485,16 +485,19 @@ def place_figures(plan, map_rect: Rect, placed: dict, cfg: dict, base: Path) -> 
     taken = [v["rect"] for v in placed.values()]
     for k, it in enumerate(items):
         src = it.get("svg")
-        if not src:
+        if it.get("_svg") is not None:                   # 1.20.0: a figure the plugin drew itself (elements.section)
+            inner, box, p = it["_svg"], list(it["_box"]), Path(str(it.get("title") or "figure"))
+        elif not src:
             fs.append({"id": "MAP-SPEC-005", "severity": "WARN", "message": f"elements.figures item {k + 1} has no svg file; it was left out", "detail": None})
             continue
-        p = Path(src)
-        p = p if p.is_absolute() else base / p
-        try:
-            inner, box = _figure_svg(p, f"gmfig{k}-")
-        except (OSError, FigureError) as ex:
-            fs.append({"id": "MAP-SPEC-005", "severity": "WARN", "message": f"elements.figures item {k + 1}: {ex}; it was left out", "detail": str(src)})
-            continue
+        else:
+            p = Path(src)
+            p = p if p.is_absolute() else base / p
+            try:
+                inner, box = _figure_svg(p, f"gmfig{k}-")
+            except (OSError, FigureError) as ex:
+                fs.append({"id": "MAP-SPEC-005", "severity": "WARN", "message": f"elements.figures item {k + 1}: {ex}; it was left out", "detail": str(src)})
+                continue
         aspect = box[3] / box[2] if box[2] else 1.0
         if it.get("rect_mm"):
             x, y, w, h = (float(v) for v in it["rect_mm"])

@@ -873,7 +873,7 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
               "sha256": rec.get("sha256") or _sha(dem_path), "terrain": pub}
     return {"kind": "hillshade", "gdf": None, "entry": entry_rec, "layer_id": layer_id, "title": title,
             "image": {"png": png, "rgba": rgba, "bbox": list(g.bounds), "transform": g.transform, "crs": plan.crs, "opacity": opacity, "shape": [int(rgba.shape[1]), int(rgba.shape[2])]},
-            "record": record, "dem_path": dem_path, "z": z}
+            "record": record, "dem_path": dem_path, "z": z, "sun": sun}
 
 
 RELIEF_FEATHER_FRAC = 0.035        # 0.26.0: the fade at a DEM's edge inside the map, as a share of the picture's longer side

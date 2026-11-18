@@ -1806,8 +1806,22 @@ def _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rec
         obstacles += co_rects
         findings += co_fs
         rep["callouts"] = co_recs
-    fg_cfg = els.get("figures") or {}                       # 1.19.0: figures take their room before the labels do, and are drawn over the data
-    if fg_cfg.get("on", bool(fg_cfg.get("items"))) and fg_cfg.get("items"):
+    fg_cfg = dict(els.get("figures") or {})                 # 1.19.0: figures take their room before the labels do, and are drawn over the data
+    if not fg_cfg.get("on", bool(fg_cfg.get("items"))):
+        fg_cfg["items"] = []
+    sc_cfg = els.get("section") or {}
+    if sc_cfg.get("on", bool(sc_cfg.get("line"))) and sc_cfg.get("line"):
+        import section as sec                                # 1.20.0 (Day 17 issue 8): a terrain cross-section, drawn as a figure
+        try:
+            sc = sec.for_map(plan, sc_cfg)
+            fg_cfg["items"] = list(fg_cfg.get("items") or []) + [sc["figure"]]
+            body.append(sec.map_line(plan, frame, *sc["line"], sc["ends"], t, float(fonts["label"]), to_sheet))
+            rep.setdefault("notes", []).extend(sc["notes"])
+            rep["section"] = {"length_m": round(sc["profile"]["length_m"], 1), "shadow_share": sc["profile"].get("shadow_share"),
+                              "sun_off_deg": sc["profile"].get("sun_off_deg")}
+        except Exception as ex:  # noqa: BLE001 - a section never stops a map
+            findings.append(f("MAP-SPEC-005", "WARN", f"the section could not be drawn ({str(ex)[:200]}); the map was built without it"))
+    if fg_cfg.get("items"):
         fg_svg, fg_rects, fg_fs, fg_notes = mex.place_figures(plan, map_rect, placed, fg_cfg, plan.spec_path.parent)
         co_svg += fg_svg
         obstacles += fg_rects

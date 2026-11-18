@@ -584,7 +584,12 @@ class Capture:
             if (c.grow) (m.getStyle().layers || []).forEach((l) => {                       // 1.19.0: each block blended between two moments
               if (l.type !== 'fill-extrusion' || !l.metadata || l.metadata['gm:layer'] !== c.grow.layer) return;
               const g = c.grow, at = (n) => ['to-number', ['get', '_m' + n], 0];
-              m.setPaintProperty(l.id, 'fill-extrusion-height', ['*', g.k, ['+', ['*', 1 - g.f, at(g.i)], ['*', g.f, at(g.j)]]]); });
+              const v = ['+', ['*', 1 - g.f, at(g.i)], ['*', g.f, at(g.j)]];
+              m.setPaintProperty(l.id, 'fill-extrusion-height', ['*', g.k, v]);
+              if (g.classes) {                                                             // 1.20.0: each block in its class at that moment
+                const st = ['step', v, g.classes.colors[0]];
+                g.classes.edges.forEach((e, n) => { st.push(e, g.classes.colors[n + 1]); });
+                m.setPaintProperty(l.id, 'fill-extrusion-color', st); } });
             if (c.fov && m.setVerticalFieldOfView) m.setVerticalFieldOfView(c.fov);
             if (c.free) {                                                                  // 1.16.0: a free camera, heights above the ground
               if (m.getMaxPitch() < 115) m.setMaxPitch(115);
@@ -726,7 +731,9 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
             if not gd or not gd.get("moments"):
                 raise FlyError(f"timeline grow: layer '{tl['grow']['layer']}' has no moments on this page; build it with extrude.moments", gc.EXIT_USAGE)
             k = tl["grow"]["per_unit_m"] or gd.get("per_unit_m") or 1.0
-            cams = [{**c, "grow": {**tlm.grow_at(tl, i / fps, int(gd["moments"])), "k": float(k)}} for i, c in enumerate(cams)]
+            mc = gd.get("moment_classes") if tl["grow"].get("recolor", True) else None
+            cams = [{**c, "grow": {**tlm.grow_at(tl, i / fps, int(gd["moments"])), "k": float(k), **({"classes": mc} if mc else {})}}
+                    for i, c in enumerate(cams)]
             notes.append(f"grow: '{gd['id']}' rises through {gd['moments']} moments from {tl['grow']['start']:g} to {tl['grow']['end']:g} s at {k:g} m per unit")
         findings += tl["findings"]
         if ctx.get("can_layers") is False:

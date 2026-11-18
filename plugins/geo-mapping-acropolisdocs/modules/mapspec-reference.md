@@ -26,6 +26,9 @@ style: {look: auto}                # auto (default) picks focus (areas), clean (
 # elements.title.halo: glow (default: a soft cloud of the page colour under the title block) | crisp | thin | none
 # 1.19.0: elements.figures: {on: true, items: [{svg: section.svg, position: lower-left | upper-left | ..., w_mm: 110} | {svg: ..., rect_mm: [x, y, w, h]}]}:
 #   an SVG drawn into the map frame on every build (a section box, a chart), stacked beside the corner's elements; labels keep clear of it
+# 1.20.0: elements.section: {on: true, line: [[lon, lat], [lon, lat]] | {layer: cut}, sun: auto, labels: [{text, at: [lon, lat]}], ends: [A, "A′"],
+#   title, position, w_mm, dem}: a terrain cross-section box (true scale, or the least exaggeration that fits), the cut dashed on the map; with
+#   a one-sun hillshade (sun: auto) the air in shadow and the grazing rays, exact when the cut runs along the sun's bearing
 # 1.19.0: a layer's fit: false makes it annotation (landmark points, a section line): the fit and the cover checks leave it out. A raster other
 #   than the hillshade that fills the extent makes the map picture-led: its vector layers are annotation unless one says fit: true
 # 1.19.0: role hillshade takes one sun: hillshade: {azimuth: 278, altitude: 18, cast_shadows: true, opacity: 0.6, max_px: 4096}

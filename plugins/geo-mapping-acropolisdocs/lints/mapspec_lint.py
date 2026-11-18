@@ -34,7 +34,7 @@ def op_layer_refs(layer: dict) -> list[str]:
     return out
 
 ELEMENTS = {"title", "legend", "north_arrow", "scale_bar", "graticule", "neatline", "inset_map", "logo", "source_note", "attribution",
-            "date_stamp", "crs_note", "disclaimer", "confidentiality_banner", "trademark_line", "callouts", "figures", "data_table", "methods_page",
+            "date_stamp", "crs_note", "disclaimer", "confidentiality_banner", "trademark_line", "callouts", "figures", "section", "data_table", "methods_page",
             "names", "context", "terrain", "frame"}   # names, context and terrain are top-level blocks too; elements.<name> carries the on/off toggle (1.4.0: frame)
 PALETTES = {"brand_sequential", "brand_diverging", "brand_categorical", "brand_neutral"}
 POSITIONS = {"upper-left", "upper-right", "lower-left", "lower-right", "auto"}      # auto: the layout may move it off the data

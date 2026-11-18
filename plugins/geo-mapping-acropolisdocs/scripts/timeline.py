@@ -37,7 +37,8 @@ A timeline (YAML or JSON; every key optional):
   poster_dissolve: 0.6               seconds it dissolves into the first frame
   logo: true                         the brand logo bottom left, above the credits (the print map's corner)
   date: auto                         1.19.0: the date at the right end of the credits band (auto: today; off; or a text of your own)
-  grow: {layer: bars, start: 3, end: 19}   1.19.0: an extruded layer built with extrude.moments rises through its moments (flythrough)
+  grow: {layer: bars, start: 3, end: 19}   1.19.0: an extruded layer built with extrude.moments rises through its moments (flythrough);
+                                     1.20.0: its classes recolour as the values grow (recolor: false keeps the final colours)
 
 The camera is never put under min_eye_m (6 m) above the ground: MapLibre clips the ground nearer than its near plane, so a 3 m street-level
 eye showed the page background (Day 15 issue 12). A finding names each keyframe raised.
@@ -112,7 +113,7 @@ def _grow(g) -> dict:
     if b <= a:
         raise TimelineError(f"grow ends ({b:g} s) before it starts ({a:g} s)")
     return {"layer": str(g["layer"]), "start": a, "end": b, "ease": str(g.get("ease", "linear")),
-            "per_unit_m": float(g["per_unit_m"]) if g.get("per_unit_m") is not None else None}
+            "per_unit_m": float(g["per_unit_m"]) if g.get("per_unit_m") is not None else None, "recolor": g.get("recolor", True) is not False}
 
 
 def grow_at(tl: dict, t: float, moments: int) -> dict | None:

@@ -45,4 +45,5 @@ names carry its id. Ornaments and treatments also work on a default map: `elemen
 
 A helper script of your own (a box drawn into the map, a wrapper around a plugin script) resolves the plugin's folder on every run, the way
 the skills' first line does, and never keeps a path from an earlier call: a plugin update moves the synced folder (`...~g2`) mid-session.
-A figure that belongs on the map goes in `elements.figures` (1.19.0), so every rebuild draws it again instead of losing it.
+A figure that belongs on the map goes in `elements.figures` (1.19.0), so every rebuild draws it again instead of losing it; a terrain
+cross-section is `elements.section` (1.20.0), drawn from the map's own DEM and sun.

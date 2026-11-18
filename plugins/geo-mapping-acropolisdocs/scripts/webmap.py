@@ -1369,6 +1369,10 @@ def _page_layers(cfg, ctl, findings, live_specs, notes, pfields, plan, s3, spec,
             d["d3"] = d3
         if d3 == "extrude" and (l.spec.get("extrude") or {}).get("moments"):
             d["moments"] = len(l.spec["extrude"]["moments"])
+            if l.cls is not None and getattr(l.cls, "kind", "") != "categorical" and l.colors and len(l.cls.edges) > 2:
+                # 1.20.0: the classes recoloured as the values grow: each block takes the class of its value at that moment (the moments
+                # must count what value_field counts)
+                d["moment_classes"] = {"edges": [float(e) for e in l.cls.edges[1:-1]], "colors": list(l.colors)}
         if d3 == "extrude" and (l.spec.get("extrude") or {}).get("per_unit_m") is not None:
             d["per_unit_m"] = float(l.spec["extrude"]["per_unit_m"])          # 1.19.0: a bar chart; MAP-WEB-024 reads it
             if l.legend_block is not None and not l.legend_block.get("note"):

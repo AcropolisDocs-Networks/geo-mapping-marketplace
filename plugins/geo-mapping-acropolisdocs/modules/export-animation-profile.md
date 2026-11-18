@@ -45,7 +45,8 @@ description: >
   hold`). A keyframe may set `layers: [...]` and `opacity: {roof: 0.25}` (a factor of the layer's own, eased, a see-through roof).
 - **"The bars grow year by year", "date in the corner", "small enough to post"** (1.19.0): build the page with `extrude: {per_unit_m: 25,
   value_field: n, moments: [c2008, ..., c2026]}` and give the timeline `grow: {layer: bars, start: 3, end: 19}`: each block rises through its
-  own values, blended between moments. `date: auto` (default; or `off`, or your own text) prints the date at the right of the credits band, as
+  own values, blended between moments, and a classed layer takes each block's class at that moment (1.20.0; `recolor: false` keeps the
+  final colours; the moments must count what value_field counts). `date: auto` (default; or `off`, or your own text) prints the date at the right of the credits band, as
   the print footer does. A story line keeps clear of a bottom-right counter. The draft is drawn at the final's field of view. A final MP4 over
   15 MB also gets `<stem>_web.mp4` under it (`--web-mb`). `--on-ready READY.js` (once the page has settled) and `--on-frame FRAME.js` (before
   each frame, with `map` and `cam`) run your own MapLibre code; a page error (a bad layer or filter) is reported as MAP-OUT-013, not lost.
