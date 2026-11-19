@@ -43,6 +43,18 @@
         },
         "tagline": {
           "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 2
+          },
+          "description": "2.2.1 (documents plugin 11.28.0): the short names a document uses for this brand besides `name` and `owner`. Used by the documents plugin; the map plugin carries the key and does not read it."
+        },
+        "contracting_entity": {
+          "type": "string",
+          "description": "2.2.1 (documents plugin 11.28.0): the legal entity that signs supplier agreements, where it differs from `owner`. Used by the documents plugin; the map plugin carries the key and does not read it."
         }
       }
     },
@@ -328,6 +340,10 @@
         "provenance_metadata": {
           "type": "boolean",
           "description": "1.16.0 (documents plugin 11.27.0): whether a file in this brand names the house in its metadata (the hidden accreditation). The house is true."
+        },
+        "colophon": {
+          "type": "string",
+          "description": "2.2.1 (documents plugin 11.28.0): the closing line of the documents plugin's research sheets on the house entry. The map plugin carries the key and does not read it."
         }
       }
     },
@@ -510,6 +526,18 @@
               "description": "Ordered light-to-dark ramp for intensity."
             }
           }
+        },
+        "grad_cool": {
+          "type": "string",
+          "description": "2.2.1 (documents plugin 11.30.0): the CSS gradient for emphasised text in the documents plugin's pages. Optional; the map plugin carries the key and does not read it."
+        },
+        "grad_warm": {
+          "type": "string",
+          "description": "2.2.1 (documents plugin 11.30.0): the warm counterpart of grad_cool. Optional; the map plugin carries the key and does not read it."
+        },
+        "bg_code": {
+          "$ref": "#/$defs/hexColor",
+          "description": "2.2.1 (documents plugin 11.30.0): a code block's ground in the documents plugin's pages. Optional; the map plugin carries the key and does not read it."
         }
       }
     },

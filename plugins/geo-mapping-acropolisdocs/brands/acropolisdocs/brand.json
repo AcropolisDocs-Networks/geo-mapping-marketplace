@@ -13,6 +13,7 @@
     "full": "Powered by AcropolisDocs · acropolisdocs.com",
     "html_label": "AcropolisDocs",
     "href": "https://acropolisdocs.com",
+    "colophon": "Produced with AcropolisDocs.",
     "mode": "full",
     "provenance_metadata": true
   },
@@ -27,9 +28,12 @@
       "accent_text_warm": "#A89F80",
       "grad_hero": "linear-gradient(120deg,#8085A8 0%,#A88085 45%,#B6B9CD 100%)",
       "grad_section": "linear-gradient(90deg,#8085A8 0%,#A88085 100%)",
+      "grad_cool": "linear-gradient(90deg, #8085A8 0%, #80A889 100%)",
+      "grad_warm": "linear-gradient(90deg, #E87686 0%, #C4A066 100%)",
       "bg_primary": "#0d0d0d",
       "bg_surface": "#141414",
       "bg_elevated": "#1c1c1c",
+      "bg_code": "#111318",
       "text_primary": "#f0ede6",
       "text_secondary": "#b0aea5",
       "text_tertiary": "#6b6962",
@@ -38,7 +42,7 @@
       "border_strong": "#555555",
       "semantic": {
         "success": "#80A889",
-        "warning": "#A89F80",
+        "warning": "#C4A066",
         "danger": "#E87686",
         "info": "#8085A8"
       },
@@ -62,9 +66,12 @@
       "accent_text_warm": "#7a6a30",
       "grad_hero": "linear-gradient(120deg,#4a5088 0%,#7a4a52 45%,#2A2D4D 100%)",
       "grad_section": "linear-gradient(90deg,#4a5088 0%,#7a4a52 100%)",
+      "grad_cool": "linear-gradient(90deg, #4a5088 0%, #387044 100%)",
+      "grad_warm": "linear-gradient(90deg, #b84a58 0%, #8a5d12 100%)",
       "bg_primary": "#ffffff",
       "bg_surface": "#f7f6f3",
       "bg_elevated": "#f0ede8",
+      "bg_code": "#f4f3f0",
       "text_primary": "#1a1814",
       "text_secondary": "#4a4640",
       "text_tertiary": "#8a8278",
@@ -73,7 +80,7 @@
       "border_strong": "#a8a59e",
       "semantic": {
         "success": "#387044",
-        "warning": "#7a6a30",
+        "warning": "#8a5d12",
         "danger": "#b84a58",
         "info": "#4a5088"
       },

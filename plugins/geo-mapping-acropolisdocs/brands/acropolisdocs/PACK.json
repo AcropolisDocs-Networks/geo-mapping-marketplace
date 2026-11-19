@@ -4,16 +4,16 @@
   "house": true,
   "source": {
     "plugin": "acropolisdocs",
-    "version": "11.27.0",
+    "version": "11.30.0",
     "path": "skills/brand-registry/references/brands/acropolisdocs.json",
     "root": "/root/.claude/plugins/synced/8a2a9221-fe78-4130-b3c5-e8457f7230b6_407fd03a-2c0d-4203-b30e-936781f069a7/acropolisdocs"
   },
-  "imported_on": "2026-11-16T00:40:48Z",
+  "imported_on": "2026-11-19T22:57:21Z",
   "brand_schema_version": "unknown",
-  "source_sha256": "15c3865bb5ce570d37f601a1b3bc683dc86557460ac68249f509ea95b40bb113",
+  "source_sha256": "bc45b85e7c8941dcb8c60313cba85dfaaf981521b35a4ab8f42c6de96dd467ef",
   "files": {
-    "brand.json": "15c3865bb5ce570d37f601a1b3bc683dc86557460ac68249f509ea95b40bb113",
-    "map-tokens.yaml": "40e56aeb992c613e8bed12465df6669934a03fbcf5b5bd2417308651fca7674a"
+    "brand.json": "bc45b85e7c8941dcb8c60313cba85dfaaf981521b35a4ab8f42c6de96dd467ef",
+    "map-tokens.yaml": "4d55e3c95cf97922a01e6f55349756eb20adb96008f935659f77ad8acf80fcda"
   },
   "accreditation": {
     "text": "Powered by AcropolisDocs",
@@ -21,6 +21,7 @@
     "full": "Powered by AcropolisDocs \u00b7 acropolisdocs.com",
     "html_label": "AcropolisDocs",
     "href": "https://acropolisdocs.com",
+    "colophon": "Produced with AcropolisDocs.",
     "mode": "full",
     "provenance_metadata": true
   },
