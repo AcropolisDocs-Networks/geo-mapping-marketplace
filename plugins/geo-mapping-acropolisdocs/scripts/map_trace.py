@@ -65,7 +65,7 @@ EXC_LINE = re.compile(r"^([A-Za-z_][\w.]*(?:Error|Exception|Exit|Refusal|Interru
 OPTION = re.compile(r"(?<![\w-])(--[a-z][a-z0-9-]*)")
 SHELL_WRITE = re.compile(r"(?:^|[;&|\n]\s*)(?:cat|tee|printf|echo)\b[^\n|;]*>{1,2}\s*[^&\s]|>{1,2}\s*[\"']?[\w./~$-]+\.(?:ya?ml|json|geojson|py|md|txt|csv|gpkg|svg|html)\b|\bsed\s+-i\b|\b(?:cp|mv|tee)\b\s")
 EXIT_CLASS = {gc.EXIT_USAGE: "usage", gc.EXIT_LINT: "lint-block", gc.EXIT_REFUSED: "refused", gc.EXIT_SERVICE: "service", gc.EXIT_BRAND_OUTSIDE_BUILD: "brand"}
-DISPOSITION = {"shell-tail": "shell", "inline-script": "operator", "crash": "product", "dependency": "dependency", "lint-block": "input", "usage": "input", "refused": "input", "brand": "input",
+DISPOSITION = {"plugin-moved": "host", "shell-tail": "shell", "inline-script": "operator", "crash": "product", "dependency": "dependency", "lint-block": "input", "usage": "input", "refused": "input", "brand": "input",
                "service": "environment", "network": "environment", "environment": "environment", "timeout": "environment", "failed": "unclassified"}
 
 
@@ -77,7 +77,14 @@ READING = {"input": "a gate or the input stopped the run (the spec, the data or 
            "operator": "a traceback with no frame in this plugin: an inline script of the session's own failed.",
            "shell": "a command after the plugin's script on the same line (grep or findstr with no match, a test) set the exit code; "
                     "the script printed no error. Not a plugin defect.",
-           "unclassified": "the output does not say why; reproduce before calling it a defect."}
+           "unclassified": "the output does not say why; reproduce before calling it a defect.",
+           "host": "the plugin's folder moved during the session (an update put a new copy beside the old one, ~g2): a command or script that "
+                   "named the old folder found nothing. Find the folder in each command (the skills' root finder takes the newest copy); "
+                   "never write it into a script. Not a plugin defect."}
+# 2.1.0 (Day 19 trace): reading the plugin's own instructions is not raising a finding; a call of these names no finding
+READING_SCRIPTS = {"modules", "map_guide"}
+# 2.1.0: programs a shell command runs beside the plugin's script; its time is then the whole command's, not the script's
+OTHER_RUN = re.compile(r"""(?:^|[\s;&|(])(?:[^\s"';&|()]*python3?(?:\.\d+)?(?:\.exe)?|py)(?:\s+-[A-Za-z]+)*\s+["']?([^\s"';&|]+\.py)\b|(?:^|[\s;&|(])(ffmpeg|node|npx|Rscript|ogr2ogr|gdalwarp)\b""")
 # 1.18.0: Claude Code reports a hook's refusal as "PreToolUse:<Tool> hook error: [<the hook's command>]: <what the hook printed>". On Windows the
 # bracket holds the whole command (1.17.3's is long), which filled the evidence line; the hook's own words follow it.
 HOOK_ERROR = re.compile(r"^\w+:[\w-]+ hook error: \[.*?\]:\s*")
@@ -378,6 +385,11 @@ def classify(call: dict, inv: dict, pname: str, window: str | None) -> dict:
     found = [main] + [s for s in found if s != main]
     last_run = max((m.end() for m in shell_calls.RUN.finditer(cmd)), default=0) if how == "path" else 0
     ev["tail"] = bool(how == "path" and TAIL_CMD.search(cmd[last_run:]))
+    plugin_py = {f"{s}.py" for s in inv["scripts"]}
+    others = [m.group(1) or m.group(2) for m in OTHER_RUN.finditer(shell_calls.normalized(cmd))]
+    others = [Path(o).name for o in others if o and Path(o).name not in plugin_py]
+    if others:
+        ev["shared"] = list(dict.fromkeys(others))[:4]       # 2.1.0 (Day 19 trace): the call's time is the whole command's
     owner = inv["owners"].get(main)
     lane = window if (window and window in inv["skills"] and owner in (None, window)) else (owner or f"({main})")
     ev.update(lane=lane, basis=how if lane != window else "window", scripts=found, op=_op_after(cmd, main) if how == "path" else None,
@@ -426,6 +438,20 @@ def evidence(text: str) -> str:
     return pick if len(pick) <= EVIDENCE_CAP else pick[:EVIDENCE_CAP - 1] + "…"
 
 
+def plugin_moved(text: str) -> bool:
+    """A path in `text` inside a folder named for this plugin (or a ~N copy of it) that is not there now, while this plugin runs from another
+    folder: the plugin moved under the session (2.1.0, Day 19 trace)."""
+    name = plugin_name()
+    for m in re.finditer(r"""['"]?((?:[A-Za-z]:)?[/\\][^\s'"]*?""" + re.escape(name) + r"""[^/\\\s'"]*[/\\][^\s'":]+)""", text or ""):
+        p = Path(m.group(1).rstrip(".,;)"))
+        try:
+            if not p.exists() and PLUGIN_ROOT.resolve() not in p.resolve().parents:
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def error_class(text: str) -> tuple[str, str | None, str | None]:
     """(class, crash site inside this plugin or None, exception name or None)."""
     t = text or ""
@@ -446,6 +472,8 @@ def error_class(text: str) -> tuple[str, str | None, str | None]:
     low = t.lower()
     if HOOK_STOP in t:                                     # 1.17.2: the plugin's own pre-export hook stopped the build before it ran
         return "lint-block", None, None
+    if ("no such file or directory" in low or "can't open file" in low) and plugin_moved(t):
+        return "plugin-moved", None, exc                   # 2.1.0 (Day 19 trace #117): not a missing package
     if exc in ("ModuleNotFoundError", "ImportError") or "cannot load library" in low or "no module named" in low:
         return "dependency", site, exc
     if "connecterror" in low or "connection refused" in low or "name or service not known" in low or "map-svc-010" in low:
@@ -661,8 +689,13 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
              "scripts": ev["scripts"], "op": ev["op"], "options": ev["options"], "mcp_tool": ev["mcp_tool"], "write": ev["write"],
              "status": st, "seconds": round(dur, 1) if dur is not None else None, "start": c["start"].isoformat() if c["start"] else None,
              "_key": ev["key"], "_target": ev["target"], "_start": c["start"], "_end": c["end"], "_id": c["id"]}
+        if ev.get("shared"):
+            e["shared_with"] = ev["shared"]
+        if "installing them now" in (c["result"] or "") and "env_probe" in (ev["scripts"] or []):
+            e["note"] = "includes the first-run package install"        # 2.1.0 (Day 19 trace): not env_probe's own time
         if ev["lane"]:
-            e["findings"] = {} if is_report(e) else findings_in(c["result"] or "")
+            reading = c["tool"] == "Skill" or bool(ev["scripts"] and ev["scripts"][0] in READING_SCRIPTS)
+            e["findings"] = {} if is_report(e) or reading else findings_in(c["result"] or "")
             if st == "failed":
                 cls, site, exc = error_class(c["result"] or "")
                 code = EXIT.search(c["result"] or "")
@@ -917,7 +950,8 @@ def text_report(o: dict) -> str:
         L.append("Slowest map calls")
         for e in o["slowest"]:
             what = (e["scripts"][0] + ".py" + (f" {e['op']}" if e["op"] else "")) if e["scripts"] else (e["mcp_tool"] or e["lane"])
-            L.append(f"  #{e['n']:<5} {what[:30]:<30} {fmt_d(e['seconds']):>7}  {e['status']}")
+            why = (f"  whole command, also ran {', '.join(e['shared_with'])}" if e.get("shared_with") else "") + (f"  ({e['note']})" if e.get("note") else "")
+            L.append(f"  #{e['n']:<5} {what[:30]:<30} {fmt_d(e['seconds']):>7}  {e['status']}{why}")
     if o["runs"]:
         rr = o["run_rework"] or {}
         L.append("")

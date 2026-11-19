@@ -13,12 +13,9 @@ a provenance record and the GeoPandas and PostGIS expression that does the same 
 
 ```bash
 GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
-if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
-  for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
-    [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
-  done
-fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || GMAP_ROOT=$(for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs* "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
+  [ -f "$d/scripts/gmap_common.py" ] && echo "$(grep -o '"version": *"[0-9.]*' "$d/.claude-plugin/plugin.json" 2>/dev/null | tr -dc 0-9.) $d"; done | sort -V | tail -1 | cut -d' ' -f2-)
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found" >&2; false; }
 GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/geo_analyze.py" ops                                     # the ops and their parameters
 python3 "$GMAP_ROOT/scripts/geo_analyze.py" buffer --in sites.csv --distance 2 --units km --dissolve --out footprint.gpkg --report footprint.json
@@ -33,12 +30,9 @@ These are this plugin's reference pages, not skills: read one with the line belo
 
 ```bash
 GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
-if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
-  for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
-    [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
-  done
-fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || GMAP_ROOT=$(for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs* "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
+  [ -f "$d/scripts/gmap_common.py" ] && echo "$(grep -o '"version": *"[0-9.]*' "$d/.claude-plugin/plugin.json" 2>/dev/null | tr -dc 0-9.) $d"; done | sort -V | tail -1 | cut -d' ' -f2-)
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found" >&2; false; }
 GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/modules.py" read projections-guide        # any module in the table
 ```
@@ -80,7 +74,7 @@ MapSpec layer, so a map can carry its own analysis.
 | Cut every feature by another layer's pieces | `split_by --other pieces.gpkg [--id-field piece]` (STRtree: thousands of lines into dozens of pieces in seconds) |
 | Fewer lines where a network crowds | `thin_lines --cell 2 --units km --max-per-cell 2 [--rank-field importance]` (disclosed on the map) |
 | Where a count concentrates, one dot per N | `dot_density --value population --per 1000 [--seed 1]` → points with `dot_value` (draw as `role: points`, small, `@brand.emphasis`; the dots are not locations: MAP-OPS-011) |
-| A smoothed surface from many points | `density_surface [--bandwidth 1.5 --units km] [--classes 5] [--weight w]` → bands with `band` 1 to k (draw as a choropleth on `band` with labels Lowest to Highest; a pattern, not values: MAP-OPS-012) |
+| A smoothed surface from many points | `density_surface [--bandwidth 1.5 --units km] [--classes 5] [--weight w]` (spec options `cap`, `scale`, `within`, `outside`, `by`) → bands with `band` 1 to k (draw as a choropleth on `band` with labels Lowest to Highest; a pattern, not values: MAP-OPS-012) |
 | Movement between places | `flow_lines --to-x d_lon --to-y d_lat --value trips [--bend 0.18] [--top 20]` on a table whose points are the origins (read with `x:` and `y:`), or `--to-id dest --other places.gpkg --id-field code` → curved lines with `flow` (draw as lines, `symbol: {graduated: true}` on `flow`: MAP-OPS-013) |
 | Two sources of one boundary that disagree at the edges | `reconcile --other extent.gpkg --tolerance 25 --units km [--threshold 0.5] [--id-field piece --param 'overrides={"timgad": true}']` → `<other>_share`, `<other>_share_in` |
 | Density in H3 hexagons | `hexbin [--resolution 8 or auto] [--value rsrp --agg mean|sum|median|max] [--min-count 3]` |

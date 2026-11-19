@@ -131,8 +131,10 @@ def counter_xy(report: dict, ppm: float, size, font_px: int) -> tuple[int, int]:
 
 
 def draw_frame(base, events: list[dict], k: int, fps: float, *, r_px: float, colours: dict, counter: str | None, font, date_text,
-               at: tuple[int, int] | None = None) -> "object":
-    """One frame: the base map, every event that has appeared by frame k (popping, rippling or settled), and the counter."""
+               at: tuple[int, int] | None = None, flash_n: int | None = None, fields: dict | None = None) -> "object":
+    """One frame: the base map, every event that has appeared by frame k (popping, rippling or settled), and the counter. 2.1.0: with
+    `flash_n` an event is drawn only for its first flash_n frames, fading out (the settle trail: what stays is the heat under it); `fields`
+    are more values for the counter's text ({period})."""
     from PIL import Image, ImageDraw
     w, h = base.size
     over = Image.new("RGBA", (w * SS, h * SS), (0, 0, 0, 0))
@@ -149,23 +151,28 @@ def draw_frame(base, events: list[dict], k: int, fps: float, *, r_px: float, col
         reached = e["t"] if reached is None or e["t"] > reached else reached
         x, y = e["px"][0] * SS, e["px"][1] * SS
         age = k - a
+        if flash_n and age >= flash_n:
+            continue
+        fade = 1.0 - age / flash_n if flash_n else 1.0
         col = colours["hl"] if e["hl"] else colours["event"]
         if e["hl"] and age < rip_n:
             for j in range(RIPPLE_RINGS):
                 f = age / rip_n - j * 0.25
                 if 0 <= f <= 1:
                     rr = r_px * SS * (1.5 + 5.0 * f)
-                    alpha = int(220 * (1 - f))
+                    alpha = int(220 * (1 - f) * fade)
                     d.ellipse([x - rr, y - rr, x + rr, y + rr], outline=(*col, alpha), width=max(1, round(SS * 1.6)))
         scale = _ease_pop(age / pop_n) if age < pop_n else 1.0
         rr = r_px * SS * (1.4 if e["hl"] else 1.0) * scale
         if rr > 0:
-            d.ellipse([x - rr, y - rr, x + rr, y + rr], fill=(*col, 235), outline=(*colours["edge"], 255), width=max(1, round(SS * 0.6)))
+            d.ellipse([x - rr, y - rr, x + rr, y + rr], fill=(*col, int(235 * fade)), outline=(*colours["edge"], int(255 * fade)),
+                      width=max(1, round(SS * 0.6)))
     over = over.resize((w, h), Image.LANCZOS)
     im = base.copy().convert("RGBA")
     im.alpha_composite(over)
     if counter:
-        text = counter.format(n=f"{n:,}", hl=f"{hl:,}", date=date_text(reached) if reached is not None else "")
+        text = counter.format(**{"n": f"{n:,}", "hl": f"{hl:,}", "date": date_text(reached) if reached is not None else "", "period": "",
+                                 **(fields or {})})
         dd = ImageDraw.Draw(im)
         tx, ty = at or (round(w * 0.03), round(h * 0.86))       # 1.14.0: above the logo, never over it
         dd.text((tx, ty), text, font=font, fill=(*colours["ink"], 255), stroke_width=max(2, round(font.size * 0.14)), stroke_fill=(*colours["halo"], 255))
@@ -306,6 +313,11 @@ class Pieces:
         return tlm.end_collisions(boxes)
 
 
+def base_dpi(dpi: float, scale: float) -> int:
+    """The base map's dpi for a picture `scale` times the size's own (2.1.0): a whole number, never below 72 (the MapSpec's floor)."""
+    return max(72, int(round(float(dpi) * float(scale))))
+
+
 def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand: str | None, scale: float = 1.0, also: tuple = ()):
     """The map without the event layer (keyed in the legend only), at the size's template and dpi. `also`: more layers keyed in the legend
     only (1.16.0: a timeline's feature layer, drawn by the overlay). -> (RGB image, report, plan, events frame or None, colour, dpi, {id: plan})."""
@@ -335,7 +347,10 @@ def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand:
             extra[lid] = lp
         lay.setdefault("legend", {})["only"] = True
     spec["template"] = cfg["template"]
-    spec["export"] = {**(spec.get("export") or {}), "dpi": cfg["dpi"] * scale}
+    # 2.1.0 (Day 19 video issue 12): the dpi is a whole number of at least 72. 2.0 passed 108.0 x scale, a decimal the MapSpec refuses, and the
+    # draft's 0.5 gave 54 dpi: the draft and every scale but 1.0 stopped. The base is drawn at that dpi and fitted to the frame's pixels.
+    dpi = base_dpi(cfg["dpi"], scale)
+    spec["export"] = {**(spec.get("export") or {}), "dpi": dpi}
     work.mkdir(parents=True, exist_ok=True)
     tmp = spec_path.parent / f".{spec_path.stem}.events-base.yaml"          # beside the MapSpec, so its relative data paths still resolve
     tmp.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), encoding="utf-8")
@@ -351,15 +366,34 @@ def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand:
         raise EventsError("the map has blocking findings: " + "; ".join(f["message"] for f in blocks[:3]), gc.EXIT_LINT)
     png = Path(next(f for f in res["files"] if f.endswith(".png"))).read_bytes()
     px = (round(cfg["px"][0] * scale) // 2 * 2, round(cfg["px"][1] * scale) // 2 * 2)
+    if dpi != float(cfg["dpi"]) * float(scale):
+        import io
+
+        from PIL import Image
+        im = Image.open(io.BytesIO(png)).convert("RGB")       # drawn at the 72 dpi floor: scaled down to the draft's pixels
+        if abs(im.width - px[0]) > 2:
+            im = im.resize((px[0], round(im.height * px[0] / im.width)), Image.LANCZOS)
+            buf = io.BytesIO()
+            im.save(buf, format="PNG")
+            png = buf.getvalue()
     base = animate.fit_frame(png, *px, _rgb(obj["plan"].tokens["background"]))
-    return base, obj["rendered"].report, obj["plan"], events_gdf, layer_colour, cfg["dpi"] * scale, extra
+    # the frame's own pixels per inch (the base is fitted to them), not the dpi it was drawn at: the overlays are placed by it
+    return base, obj["rendered"].report, obj["plan"], events_gdf, layer_colour, float(cfg["dpi"]) * float(scale), extra
 
 
 def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None = None, highlight: str | None = None, size: str = "slide",
         duration: float = 30.0, fps: float = 25.0, intro: float = 2.0, counter: str | None = "{n} events", quality: str = "final",
-        brand: str | None = None, frames: int | None = None, timeline=None, poster: str | None = None) -> dict:
+        brand: str | None = None, frames: int | None = None, timeline=None, poster: str | None = None, trail: str = "stay",
+        periods: str | None = None, bandwidth: float | None = None, fade: float = 0.8) -> dict:
     """Build the base map, place the events, draw the frames, encode the MP4. `frames` overrides duration x fps (tests). 1.16.0: a timeline
-    (story line, counters, feature events, poster, end hold); with a timeline the point event layer is optional."""
+    (story line, counters, feature events, poster, end hold); with a timeline the point event layer is optional. 2.1.0 (heat_anim): `trail`
+    settle (each event flashes and fades into a heat surface on the end's scale), `periods` (a heat surface per value of a column, all on the
+    busiest period's scale, cross-faded over `fade` seconds), `bandwidth` (the heat's kernel in metres), and a timeline's `chart:` panel."""
+    import heat_anim as ha
+    if trail not in ("stay", "settle"):
+        raise EventsError(f"--trail is stay or settle, not '{trail}'")
+    if (trail == "settle" or periods) and not layer:
+        raise EventsError("--trail settle and --periods need --layer (the point layer of events)")
     import animate
     import flythrough as fl
     import map_brand
@@ -389,6 +423,12 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
     events, kind = [], "number"
     if layer:
         tf = time_field or (plan.spec and next((ly.get("time_field") for ly in plan.spec.get("layers") or [] if ly.get("id") == layer), None))
+        if periods and periods not in gdf.columns:
+            raise EventsError(f"--periods names '{periods}', which layer '{layer}' does not have; its columns: "
+                              f"{', '.join(c for c in gdf.columns if c != gdf.geometry.name)}")
+        if periods and (not tf or tf not in gdf.columns):
+            gdf = gdf.assign(_gm_t=0.0)                   # a period video needs no time of its own: each period is shown whole
+            tf = "_gm_t"
         if not tf or tf not in gdf.columns:
             raise EventsError(f"give --time-field: one of {', '.join(c for c in gdf.columns if c != gdf.geometry.name)}")
         hl = parse_highlight(highlight)
@@ -397,10 +437,12 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
         times, kind = event_times(gdf[tf].tolist())
         app = appear_frames(times, n, intro_f)
         xs, ys = gdf.geometry.x.to_numpy(), gdf.geometry.y.to_numpy()
+        pv = gdf[periods].tolist() if periods else [None] * len(gdf)
         for i in range(len(gdf)):
             if not (math.isfinite(xs[i]) and math.isfinite(ys[i])):
                 continue
-            events.append({"px": to_px(xs[i], ys[i], win, ppm), "frame": app[i], "t": times[i], "hl": bool(hl and hl[1](gdf[hl[0]].iloc[i]))})
+            events.append({"px": to_px(xs[i], ys[i], win, ppm), "frame": app[i], "t": times[i], "hl": bool(hl and hl[1](gdf[hl[0]].iloc[i])),
+                           "period": pv[i]})
     else:
         tf, counter = None, None
     events.sort(key=lambda e: (e["frame"], e["hl"]))                    # highlighted events are drawn over the others of their frame
@@ -426,12 +468,31 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
     font_tl = str(fl._inter_ttf(600))
     avoid = [[v * ppm for v in (o or {}).get("rect_mm")] for o in ((report or {}).get("overlays") or {}).values()
              if isinstance(o, dict) and (o or {}).get("rect_mm")]
+    heat = _heat_setup(ha, plan, gdf, events, win, ppm, base.size, t, trail=trail, periods=periods, bandwidth=bandwidth, n=n, fps=fps,
+                       intro_f=intro_f, fade=fade) if (trail == "settle" or periods) else None
+    if heat and periods and counter == "{n} events":
+        counter = "{period}: {n} events"
+    chart = tl.get("chart")
+    if chart and heat and heat.get("periods"):          # rows with no start become the periods' own, in order
+        for r_, p_ in zip(chart["rows"], heat["periods"]):
+            if r_["start"] is None:
+                r_["start"] = p_["start"]
+    chart_rect = None
     for k in range(n):
         tk = k / fps
         b = pieces.draw(base, tk) if pieces else base
-        im = draw_frame(b, events, k, fps, r_px=r_px, colours=colours, counter=counter, font=font, date_text=date_text, at=at)
+        fields = None
+        if heat:
+            b, shown, fields = _heat_frame(ha, heat, b, k, fps, events)
+        else:
+            shown = events
+        im = draw_frame(b, shown, k, fps, r_px=r_px, colours=colours, counter=counter, font=font, date_text=date_text, at=at,
+                        flash_n=heat and heat.get("flash_n"), fields=fields)
+        if chart:
+            im, chart_rect = ha.paint_chart(im, tk, chart, t, font_path=font_tl, avoid=avoid, ramp=heat["field"].ramp if heat else None)
         if tl["story"] or tl["counters"]:
-            im, _pl = tlm.paint(im, tk, tl, t, font_path=font_tl, logo=None, bottom_px=bottom_px, top_px=round(win["rect_mm"][1] * ppm), avoid=avoid)
+            im, _pl = tlm.paint(im, tk, tl, t, font_path=font_tl, logo=None, bottom_px=bottom_px, top_px=round(win["rect_mm"][1] * ppm),
+                                avoid=avoid + ([chart_rect] if chart_rect else []))
         im.save(fdir / f"frame_{k:05d}.png")
     if pieces:
         findings += pieces.end_findings((n - 1) / fps)
@@ -440,7 +501,9 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
     comment = "; ".join(f"{k_}: {v}" for k_, v in props.items() if k_ in ("Author", "Accreditation", "BrandPack", "Software"))
     rep = {"ok": True, "frames": n, "fps": fps, "size": list(base.size), "events": len(events), "highlighted": sum(e["hl"] for e in events),
            "intro_s": intro_f / fps, "time_field": tf, "files": [], "findings": findings, "frames_dir": str(fdir),
-           "pieces": len(pieces.ids) if pieces else 0,
+           "pieces": len(pieces.ids) if pieces else 0, "trail": trail,
+           "heat": {k_: v for k_, v in (heat or {}).items() if k_ in ("scale_peak", "sigma_px", "masked", "bandwidth_m", "periods")} or None,
+           "chart": chart_rect,
            "notes": [f"{len(events):,} events over {n / fps:.1f} s; the map built once at {size} ({base.size[0]} x {base.size[1]} px)"]}
     mp4 = out / f"{stem}.mp4"
     seq_dir, n_out = tlm.assemble(fdir, n, fps, tl)
@@ -455,6 +518,59 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
         rep["findings"].append({"id": "MAP-OUT-013", "severity": "WARN", "message": str(ex)})
     rep["ok"] = not any(f["severity"] == "BLOCK" for f in rep["findings"])
     return rep
+
+
+def _heat_setup(ha, plan, gdf, events, win, ppm, size, tokens, *, trail, periods, bandwidth, n, fps, intro_f, fade) -> dict:
+    """The heat of a settle trail or a period video: the field, its fixed scale, the land mask and (periods) the order and timing."""
+    try:
+        geographic = bool(gdf.crs and gdf.crs.is_geographic)
+        ex = win["extent"]
+        bw = float(bandwidth) if bandwidth else None
+        if not bw:                                          # a fiftieth of the window's width: a neighbourhood on a city, a county on a state
+            w_m = (ex[2] - ex[0]) * (111_320.0 if geographic else 1.0)
+            bw = max(50.0, w_m / 50.0)
+        sig = ha.sigma_px(bw, win, ppm, geographic)
+        mask = ha.land_mask(plan, win, ppm, size)
+        f = ha.Field([e["px"] for e in events], size, sig, tokens, mask=mask)
+        out = {"field": f, "sigma_px": round(sig, 2), "masked": mask is not None, "bandwidth_m": round(bw, 1)}
+        if periods:
+            vals = [e["period"] for e in events]
+            hold = max(0.4, ((n - intro_f) / fps - fade * max(0, len(set(vals)) - 1)) / max(1, len(set(vals))))
+            pl = ha.period_plan(vals, hold_s=hold, fade_s=fade, intro_s=intro_f / fps)
+            keyv = [p["value"] for p in pl]
+            pe = [e["period"].item() if hasattr(e["period"], "item") else e["period"] for e in events]
+            grids = [f.grid([v == pv for v in pe]) for pv in keyv]
+            f.fix_scale(grids)
+            out.update({"periods": pl, "grids": grids, "fade": fade, "counts": [sum(1 for v in pe if v == pv) for pv in keyv]})
+        else:
+            frames = [e["frame"] for e in events]
+            f.fix_scale([f.grid([0 <= a for a in frames])])
+            out.update({"frames": frames, "flash_n": max(1, round(ha.FLASH_S * fps)), "cache": (None, None)})
+        out["scale_peak"] = round(f.peak, 4)
+        return out
+    except ha.HeatError as ex:
+        raise EventsError(f"heat: {ex}") from None
+
+
+def _heat_frame(ha, heat, base, k, fps, events):
+    """The base with the heat at frame k. -> (image, the events to draw over it, the counter's fields)."""
+    f = heat["field"]
+    im = base.convert("RGBA")
+    if heat.get("periods"):
+        i, j, b = ha.period_at(heat["periods"], k / fps, heat["fade"])
+        z = heat["grids"][i] * (1 - b) + heat["grids"][j] * b
+        im.alpha_composite(f.image(z))
+        cur = j if b >= 0.5 else i
+        p = heat["periods"][cur]
+        return im.convert("RGB"), [], {"period": str(p["value"]), "n": f"{heat['counts'][cur]:,}"}
+    shown = sum(1 for a in heat["frames"] if 0 <= a <= k)
+    ck, cimg = heat["cache"]
+    if ck != shown:                                         # the surface changes only when an event arrives
+        cimg = f.image(f.grid([0 <= a <= k for a in heat["frames"]])) if shown else None
+        heat["cache"] = (shown, cimg)
+    if cimg is not None:
+        im.alpha_composite(cimg)
+    return im.convert("RGB"), events, None
 
 
 # 1.14.0's name for event_times, kept for scripts that import it (inside run() the name is the --timeline argument).
@@ -477,10 +593,16 @@ def main(argv=None) -> int:
     ap.add_argument("--brand")
     ap.add_argument("--timeline", help="1.16.0: story line, counters, feature events, poster and end hold (timeline.py)")
     ap.add_argument("--poster", choices=("first", "last", "none"), help="1.16.0: open the video on a held first or last frame")
+    ap.add_argument("--trail", choices=("stay", "settle"), default="stay",
+                    help="2.1.0: stay (events stay as dots) or settle (each flashes, fades and adds to a heat surface on one fixed scale)")
+    ap.add_argument("--periods", metavar="COLUMN", help="2.1.0: one heat surface per value of COLUMN (a month, a year) on one shared scale, cross-faded")
+    ap.add_argument("--bandwidth", type=float, metavar="METRES", help="2.1.0: the heat's kernel (default a fiftieth of the map's width)")
+    ap.add_argument("--fade", type=float, default=0.8, help="2.1.0: the cross-fade between periods, in seconds")
     a = ap.parse_args(argv)
     try:
         rep = run(a.spec, a.out, layer=a.layer, time_field=a.time_field, highlight=a.highlight, size=a.size, duration=a.duration, fps=a.fps,
-                  intro=a.intro, counter=a.counter or None, quality=a.quality, brand=a.brand, timeline=a.timeline, poster=a.poster)
+                  intro=a.intro, counter=a.counter or None, quality=a.quality, brand=a.brand, timeline=a.timeline, poster=a.poster,
+                  trail=a.trail, periods=a.periods, bandwidth=a.bandwidth, fade=a.fade)
     except EventsError as ex:
         print(f"events: {ex}", file=sys.stderr)
         return ex.code

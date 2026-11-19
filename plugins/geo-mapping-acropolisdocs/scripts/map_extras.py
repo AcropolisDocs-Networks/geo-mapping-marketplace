@@ -83,7 +83,51 @@ def callout_anchor(plan, item: dict, frame) -> tuple[float, float] | None:
     return float(mx[0]), float(my[0])
 
 
-def draw_callouts(plan, frame, cfg: dict, taken: list[Rect], fonts: dict) -> tuple[str, list[Rect], list[dict], list[dict]]:
+STRONG_OVERLAP = 0.08      # 2.1.0: a callout box may cover at most this share of itself with the map's strongest data before another place is tried
+
+
+def strong_data_mm(plan, frame):
+    """2.1.0 (Day 19 issue 5): what the map's message rests on, in sheet mm: the top two classes of each classed polygon layer (the top one
+    when it has three classes or fewer) and a layer's highlighted features. A callout keeps off them when it can, as labels keep off the
+    symbols. -> a shapely geometry, or None."""
+    import shapely
+    parts = []
+    for l in plan.layers:
+        if getattr(l, "legend_only", False) or l.kind != "polygon" or not len(l.gdf):
+            continue
+        g = np.asarray(l.gdf.geometry.values, dtype=object)
+        keep = None
+        hl = getattr(l, "highlight", None)
+        if isinstance(hl, np.ndarray) and len(hl) == len(g) and hl.any() and not hl.all():
+            keep = np.asarray(hl, dtype=bool)
+        elif l.cls is not None and len(getattr(l.cls, "assigned", [])) == len(g) and int(getattr(l.cls, "k", 0) or 0) >= 2:
+            k = int(l.cls.k)
+            a = np.asarray(l.cls.assigned)
+            keep = a >= (k - 2 if k > 3 else k - 1)
+        if keep is None or not keep.any():
+            continue
+        sub = g[keep]
+        sub = sub[~shapely.is_missing(sub) & ~shapely.is_empty(sub)]
+        if len(sub):
+            parts.append(shapely.transform(sub, lambda c: np.column_stack(frame.to_mm(c[:, 0], c[:, 1]))))
+    if not parts:
+        return None
+    try:
+        u = shapely.union_all(shapely.make_valid(np.concatenate(parts)))
+    except Exception:  # noqa: BLE001 - a geometry the union refuses: the callouts are placed by the overlays alone, as before
+        return None
+    return None if u.is_empty else u
+
+
+def _covers_strong(r: Rect, strong) -> bool:
+    if strong is None:
+        return False
+    import shapely
+    b = shapely.box(r.x0, r.y0, r.x1, r.y1)
+    return strong.intersects(b) and strong.intersection(b).area > STRONG_OVERLAP * b.area
+
+
+def draw_callouts(plan, frame, cfg: dict, taken: list[Rect], fonts: dict, strong_data=None) -> tuple[str, list[Rect], list[dict], list[dict]]:
     """elements.callouts: {on, items: [{text, figure?, at | layer+where, direction?}]} (figure, 1.13.0: a key number set large and bold above
     the words). Each box is tried around its anchor (the direction asked for
     first, then the eight directions at growing distances) and joined to it by a leader line; boxes avoid the overlays, the other callouts and
@@ -119,12 +163,16 @@ def draw_callouts(plan, frame, cfg: dict, taken: list[Rect], fonts: dict) -> tup
             dirs.remove(want)
             dirs.insert(0, want)
         box = None
-        for dist in CALLOUT_RINGS_MM:
-            for dx, dy in dirs:
-                cx, cy = ax + dx * dist, ay + dy * dist
-                r = Rect(cx - bw / 2 + dx * bw / 2, cy - bh / 2 + dy * bh / 2, cx + bw / 2 + dx * bw / 2, cy + bh / 2 + dy * bh / 2)
-                if _free(r, area, taken + rects):
-                    box = r
+        # 2.1.0: first a place off the map's strongest data (its top classes, its highlight), then, if there is none, the old rule
+        for avoid_strong in ((True, False) if strong_data is not None else (False,)):
+            for dist in CALLOUT_RINGS_MM:
+                for dx, dy in dirs:
+                    cx, cy = ax + dx * dist, ay + dy * dist
+                    r = Rect(cx - bw / 2 + dx * bw / 2, cy - bh / 2 + dy * bh / 2, cx + bw / 2 + dx * bw / 2, cy + bh / 2 + dy * bh / 2)
+                    if _free(r, area, taken + rects) and not (avoid_strong and _covers_strong(r, strong_data)):
+                        box = r
+                        break
+                if box:
                     break
             if box:
                 break
@@ -147,7 +195,8 @@ def draw_callouts(plan, frame, cfg: dict, taken: list[Rect], fonts: dict) -> tup
         out.append("</g>")
         rects.append(box)
         rects.append(Rect(min(ax, ex) - 0.4, min(ay, ey) - 0.4, max(ax, ex) + 0.4, max(ay, ey) + 0.4))
-        recs.append({"n": i + 1, "text": txt[:80], **({"figure": fig} if fig else {}), "anchor_mm": [round(ax, 2), round(ay, 2)], "box_mm": [round(box.x0, 2), round(box.y0, 2), round(box.x1, 2), round(box.y1, 2)]})
+        recs.append({"n": i + 1, "text": txt[:80], **({"figure": fig} if fig else {}), "anchor_mm": [round(ax, 2), round(ay, 2)], "box_mm": [round(box.x0, 2), round(box.y0, 2), round(box.x1, 2), round(box.y1, 2)],
+                     "on_strong_data": bool(_covers_strong(box, strong_data))})
     return "".join(out), rects, recs, fs
 
 

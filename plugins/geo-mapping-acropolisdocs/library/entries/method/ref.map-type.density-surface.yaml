@@ -1,6 +1,6 @@
 id: ref.map-type.density-surface
 type: map-type
-rev: 2
+rev: 3
 status: active
 title: Density surface (heat)
 summary: 'A smoothed surface from point density, for patterns in many points (the density_surface op: a Gaussian kernel cut into bands, drawn as a choropleth
@@ -13,6 +13,7 @@ use_when:
 - There are thousands of points and the pattern matters more than any one.
 avoid_when:
 - The points are few; show them as symbols.
+- A surface per month re-scaled to its own peak; use `by:` so every period shares one set of bands.
 - The reader needs values; a smoothed surface has none.
 pairs_with:
 - ref.infrastructure.us.tower.fcc-asr
@@ -31,6 +32,9 @@ recommended:
   - op: density_surface
     bandwidth: <distance with units, or leave out for the points' spread>
     classes: 5
+    cap: <10 when one address holds many of the points (MAP-OPS-014)>
+    scale: <linear; sqrt or log when a few dense spots push the rest into the lowest band>
+    within: <the land layer's id, so the bands stay off the water>
   value_field: band
   classification:
     method: manual
@@ -50,6 +54,7 @@ recommended:
   legend_note: A <bandwidth> kernel; a pattern, not values
 guarded_by:
 - MAP-OPS-012
+- MAP-OPS-014
 - MAP-OPS-008
 license:
   class: open
@@ -58,7 +63,7 @@ license:
   bulk_ok: true
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-15'
+  reviewed_on: '2026-11-19'
   verify_by: '2027-11-15'
   check: the gallery map builds (tests/test_release_1170.py)
   changelog:
@@ -69,3 +74,7 @@ maintenance:
     date: '2026-11-15'
     note: 'Active (1.17.0): the density_surface op (thematic.py) builds a kernel density grid (scipy''s Gaussian filter, or numpy) and cuts it into bands
       with matplotlib''s filled contours; MAP-OPS-012 says it shows pattern, not values. Gallery: density-surface.yaml.'
+  - rev: 3
+    date: '2026-11-19'
+    note: 'Day 19 (2.1.0): cap (one location counted at most N times, MAP-OPS-014 when one holds over 2 percent), scale (linear, sqrt, log, quantile),
+      peak, within and outside (keep to the land), by (one surface per period on shared band edges).'

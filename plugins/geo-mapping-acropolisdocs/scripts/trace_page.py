@@ -133,7 +133,7 @@ td{padding:11px 12px;border-bottom:1px solid var(--line2);vertical-align:top}
 .hero .wrap>*{min-width:0}
 .ev td{border-bottom:1px solid var(--line2);padding-top:0;color:var(--text2)}
 .pill{display:inline-block;border:1px solid currentColor;border-radius:10px;padding:0 8px;font-size:12px}
-.pill.bad{color:var(--bad)}.pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}.pill.info{color:var(--info)}
+.muted{color:var(--text2)}.pill.bad{color:var(--bad)}.pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}.pill.info{color:var(--info)}
 .budget{display:flex;height:22px;border-radius:4px;overflow:hidden;border:1px solid var(--line);margin:14px 0 6px}
 .budget i{display:block;height:100%}
 .legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--text2)}
@@ -444,8 +444,9 @@ def html(o: dict, generated: dt.datetime | None = None) -> str:
 
     # slowest
     if o.get("slowest"):
-        rows = [[f'#{e["n"]}', esc(call_name(e)), esc(e.get("lane") or ""), fmt_d(e.get("seconds")) + ("" if e.get("measured") else " (bound)"),
-                 esc(outcome(e))] for e in o["slowest"]]
+        rows = [[f'#{e["n"]}', esc(call_name(e)) + (f' <span class="muted">(whole command, also ran {esc(", ".join(e["shared_with"]))})</span>' if e.get("shared_with") else "")
+                 + (f' <span class="muted">({esc(e["note"])})</span>' if e.get("note") else ""),
+                 esc(e.get("lane") or ""), fmt_d(e.get("seconds")) + ("" if e.get("measured") else " (bound)"), esc(outcome(e))] for e in o["slowest"]]
         parts.append(section("Where map time went", "Slowest map calls", table(["Call", "Script or tool", "Lane", "Time", "Outcome"], rows, {3})))
 
     # errors

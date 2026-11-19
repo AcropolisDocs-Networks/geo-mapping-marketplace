@@ -2,6 +2,10 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-19
+
+- `ref.map-type.density-surface` rev 3: Day 19 (2.1.0): cap (one location counted at most N times, MAP-OPS-014 when one holds over 2 percent), scale (linear, sqrt, log, quantile), peak, within and outside (keep to the land), by (one surface per period on shared band edges).
+
 ## 2026-11-18
 
 - `ref.basemap-provider.carto-positron` rev 7: Vector styles recorded: style.json URL pattern gl/{style}/style.json?key= for positron-gl-style, dark-matter-gl-style and voyager-gl-style (carto.com/basemaps read 2026-11-18; Voyager and Positron URLs shown on the page, Dark Matter by the same pattern). Data only: the tile registry and web map do not use vector styles yet.

@@ -1,0 +1,313 @@
+"""heat_anim: heat in a video, on one fixed scale (2.1.0, Day 19 video issues 11, 14 and 15).
+
+Day 19's video was drawn by hand: 47,000 events as solid dots that never faded blanketed the city, so the month-by-month heat, the chart of
+complaint shares and the average-high line were drawn by a script of the session's own. This module gives the events video three things:
+
+- **settle** (`events_anim --trail settle`): each event flashes and fades, and what it leaves behind is a heat surface that grows on one scale,
+  fixed at the end's peak, so the city warms up as the events come in, never re-scaled from frame to frame.
+- **periods** (`events_anim --periods COLUMN`): one heat surface per value of a column (a month, a year), every one on the same scale (the
+  peak of the busiest period), held and cross-faded in order. An atlas by time re-scales each period to its own peak and hides the seasons.
+- **chart** (a timeline's `chart:` block): bars, and a line on its own axis, one row per period or moment, the current row marked as the
+  video reaches it; the panel keeps clear of the map's legend, inset, title and logo.
+
+The surface is drawn in the frame's own pixels: the events are counted on a grid of `cell_px` pixels and smoothed with a Gaussian kernel of
+the bandwidth asked for (metres on the map), kept on land when the map has a ground, and coloured from the brand's sequential ramp, clear at
+the low end, so the base map shows through where there is little.
+"""
+from __future__ import annotations
+
+import math
+
+import numpy as np
+
+CELL_PX = 3                  # the grid the events are counted on, in frame pixels
+LOW_CLEAR = 0.04             # below this share of the scale nothing is drawn
+MAX_ALPHA = 0.86             # the strongest heat, as opacity
+FLASH_S = 1.0                # settle: how long an event's flash takes to fade
+CHART_W, CHART_H = 0.36, 0.22    # the chart panel's share of the frame
+
+
+class HeatError(ValueError):
+    pass
+
+
+def _blur(h, sigma: float):
+    try:
+        from scipy.ndimage import gaussian_filter
+        return gaussian_filter(h, sigma=sigma, mode="constant")
+    except ImportError:                                            # numpy only: a separable kernel along each axis
+        r = int(math.ceil(4 * sigma))
+        k = np.exp(-0.5 * (np.arange(-r, r + 1) / max(sigma, 1e-6)) ** 2)
+        k /= k.sum()
+        z = np.apply_along_axis(lambda a: np.convolve(a, k, mode="same"), 0, h)
+        return np.apply_along_axis(lambda a: np.convolve(a, k, mode="same"), 1, z)
+
+
+def _hex(h: str) -> tuple[int, int, int]:
+    h = str(h).lstrip("#")
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def ramp_of(tokens: dict, n: int = 64) -> np.ndarray:
+    """n colours (n x 3, 0-255) from the brand's sequential ramp, light to dark, interpolated; the emphasis colour alone when there is none."""
+    r = tokens.get("sequential_ramp") or tokens.get("_brand_sequential_ramp") or []       # the ramp a raster reads under the map's look
+    r = [c for c in (r if isinstance(r, (list, tuple)) else []) if isinstance(c, str) and c.startswith("#")]
+    if len(r) < 2:
+        e = _hex(tokens["emphasis"])                       # the brand's tokens always carry these two
+        bg = _hex(tokens["background"])
+        r = ["#%02x%02x%02x" % tuple(int(bg[i] + (e[i] - bg[i]) * f) for i in range(3)) for f in (0.25, 1.0)]
+    cs = np.array([_hex(c) for c in r], dtype=float)
+    t = np.linspace(0, 1, len(cs))
+    u = np.linspace(0, 1, n)
+    return np.stack([np.interp(u, t, cs[:, i]) for i in range(3)], axis=1)
+
+
+class Field:
+    """Events in frame pixels -> heat images on one scale. `px`: (n, 2) pixel positions; `size`: (w, h); `sigma_px`: the kernel in pixels;
+    `mask`: an (h, w) array of 0..1 (land) or None."""
+
+    def __init__(self, px, size, sigma_px: float, tokens: dict, mask=None, weights=None):
+        self.w, self.h = int(size[0]), int(size[1])
+        self.gw, self.gh = max(1, math.ceil(self.w / CELL_PX)), max(1, math.ceil(self.h / CELL_PX))
+        p = np.asarray(px, dtype=float).reshape(-1, 2)
+        ok = np.isfinite(p).all(axis=1)
+        self.gx = np.clip((p[:, 0] / CELL_PX).astype(int), 0, self.gw - 1)
+        self.gy = np.clip((p[:, 1] / CELL_PX).astype(int), 0, self.gh - 1)
+        self.ok = ok & (p[:, 0] >= 0) & (p[:, 0] < self.w) & (p[:, 1] >= 0) & (p[:, 1] < self.h)
+        self.wt = np.ones(len(p)) if weights is None else np.asarray(weights, dtype=float)
+        self.sigma = max(0.6, sigma_px / CELL_PX)
+        self.ramp = ramp_of(tokens)
+        self.mask = None
+        if mask is not None:
+            from PIL import Image
+            m = Image.fromarray((np.clip(mask, 0, 1) * 255).astype(np.uint8)).resize((self.gw, self.gh), Image.BILINEAR)
+            self.mask = np.asarray(m, dtype=float) / 255.0
+        self.peak = None
+
+    def grid(self, keep) -> np.ndarray:
+        """The smoothed count of the events `keep` selects (a boolean array), on the grid."""
+        k = np.asarray(keep, dtype=bool) & self.ok
+        h = np.zeros((self.gh, self.gw), dtype=float)
+        np.add.at(h, (self.gy[k], self.gx[k]), self.wt[k])
+        z = _blur(h, self.sigma)
+        if self.mask is not None:
+            z = z * self.mask
+        return z
+
+    def fix_scale(self, grids) -> float:
+        """The scale every frame shares: the highest cell of the given grids (the end of a settle, the busiest period)."""
+        self.peak = max(float(np.max(g)) for g in grids) if grids else 0.0
+        if self.peak <= 0:
+            raise HeatError("the heat has no weight: no event falls inside the map")
+        return self.peak
+
+    def image(self, z, strength: float = 1.0):
+        """An RGBA image of the frame's size for grid z on the fixed scale."""
+        from PIL import Image
+        if self.peak is None:
+            self.fix_scale([z])
+        u = np.clip(z / self.peak, 0, 1)
+        u = np.sqrt(u)                                             # a perceptual lift: the low end is not lost against the ground
+        idx = np.clip((u * (len(self.ramp) - 1)).astype(int), 0, len(self.ramp) - 1)
+        rgb = self.ramp[idx]
+        a = np.where(u < LOW_CLEAR, 0.0, np.clip((u - LOW_CLEAR) / (1 - LOW_CLEAR), 0, 1) ** 0.7 * MAX_ALPHA) * float(strength)
+        arr = np.dstack([rgb, a[..., None] * 255]).astype(np.uint8)
+        return Image.fromarray(arr, "RGBA").resize((self.w, self.h), Image.BILINEAR)
+
+
+def land_mask(plan, win: dict, ppm: float, size) -> np.ndarray | None:
+    """The map's land in frame pixels (1 on land, 0 on water), from the plan's ground; None when the map has no land ground."""
+    import shapely
+    from PIL import Image, ImageDraw
+
+    import events_anim as ea
+    land, lakes = [], []
+    for b in plan.basemap or []:
+        g = b.get("gdf")
+        if g is None or not len(g):
+            continue
+        if b.get("kind") in ("land", "country", "state"):
+            land += [x for x in g.geometry.values if x is not None and not x.is_empty]
+        elif b.get("kind") == "lake":
+            lakes += [x for x in g.geometry.values if x is not None and not x.is_empty]
+    if not land:
+        return None
+    ex0, ey0, ex1, ey1 = win["extent"]
+    box = shapely.box(ex0, ey0, ex1, ey1)
+    geom = shapely.intersection(shapely.union_all(shapely.make_valid(np.asarray(land, dtype=object))), box)
+    if lakes:
+        geom = shapely.difference(geom, shapely.union_all(shapely.make_valid(np.asarray(lakes, dtype=object))))
+    w, h = int(size[0]), int(size[1])
+    im = Image.new("L", (w, h), 0)
+    d = ImageDraw.Draw(im)
+    for poly in shapely.get_parts(np.asarray([geom], dtype=object)):
+        if poly.geom_type != "Polygon":
+            continue
+        rings = [np.asarray(poly.exterior.coords)] + [np.asarray(r.coords) for r in poly.interiors]
+        for j, r in enumerate(rings):
+            xs, ys = ea.to_px(r[:, 0], r[:, 1], win, ppm)
+            pts = list(zip(np.asarray(xs).tolist(), np.asarray(ys).tolist(), strict=True))
+            if len(pts) >= 3:
+                d.polygon(pts, fill=255 if j == 0 else 0)
+    m = np.asarray(im, dtype=float) / 255.0
+    return m if m.any() else None
+
+
+def sigma_px(bandwidth_m: float, win: dict, ppm: float, crs_is_geographic: bool) -> float:
+    """A kernel in metres as frame pixels, through the map window (the extent in the map's CRS over the rectangle it fills)."""
+    ex0, _ey0, ex1, _ey1 = win["extent"]
+    rx0, _ry0, rx1, _ry1 = win["rect_mm"]
+    px_per_unit = (rx1 - rx0) * ppm / max(ex1 - ex0, 1e-12)
+    units_per_m = 1.0 / 111_320.0 if crs_is_geographic else 1.0
+    return max(0.8, float(bandwidth_m) * units_per_m * px_per_unit)
+
+
+# ---------------------------------------------------------------------------------------------------------------- periods
+def period_plan(values, *, hold_s: float, fade_s: float, intro_s: float = 0.0) -> list[dict]:
+    """The periods in order, each held `hold_s` after a cross-fade of `fade_s` from the one before: [{value, start, end}] in seconds."""
+    keys = [v for v in dict.fromkeys(list(values)) if v is not None and not (isinstance(v, float) and math.isnan(v))]
+    try:
+        keys = sorted(keys)
+    except TypeError:
+        pass
+    if not 1 <= len(keys) <= 120:
+        raise HeatError(f"{len(keys)} periods; a period video takes 1 to 120 of them")
+    out, t = [], float(intro_s)
+    for i, v in enumerate(keys):
+        start = t
+        t += (fade_s if i else 0.0) + hold_s
+        out.append({"value": v.item() if hasattr(v, "item") else v, "start": round(start, 3), "end": round(t, 3)})
+    return out
+
+
+def period_at(periods: list[dict], t: float, fade_s: float) -> tuple[int, int, float]:
+    """(i, j, f): the period before, the one after and the blend at t (f = 0 shows i alone)."""
+    for j, p in enumerate(periods):
+        if t < p["end"]:
+            if j == 0:
+                return 0, 0, 0.0
+            f = (t - p["start"]) / fade_s if fade_s > 0 else 1.0
+            return (j - 1, j, float(min(1.0, max(0.0, f)))) if f < 1 else (j, j, 0.0)
+    return len(periods) - 1, len(periods) - 1, 0.0
+
+
+# ---------------------------------------------------------------------------------------------------------------- the chart panel
+def load_chart(c) -> dict | None:
+    """A timeline's `chart:` block, checked: {rows: [{label, bar, line?, start?}], bar_label, line_label, title, position, line_format,
+    bar_format}. `start` (seconds) is when a row becomes the current one; a period video fills it in from its periods."""
+    if not c:
+        return None
+    if not isinstance(c, dict) or not isinstance(c.get("rows"), list) or not c["rows"]:
+        raise HeatError("chart needs rows: [{label, bar, line, start}, ...]")
+    rows = []
+    for i, r in enumerate(c["rows"]):
+        if not isinstance(r, dict) or "label" not in r or "bar" not in r:
+            raise HeatError(f"chart row {i + 1} needs label and bar")
+        rows.append({"label": str(r["label"]), "bar": float(r["bar"]), "line": None if r.get("line") is None else float(r["line"]),
+                     "start": None if r.get("start") is None else float(r["start"])})
+    pos = str(c.get("position", "auto"))
+    if pos not in ("auto", "top-left", "top-right", "bottom-left", "bottom-right", "left", "right"):
+        raise HeatError(f"chart position is auto, top-left, top-right, bottom-left, bottom-right, left or right, not '{pos}'")
+    return {"rows": rows, "title": str(c.get("title") or ""), "bar_label": str(c.get("bar_label") or ""), "line_label": str(c.get("line_label") or ""),
+            "position": pos, "bar_format": str(c.get("bar_format") or "{:,.0f}"), "line_format": str(c.get("line_format") or "{:,.0f}"),
+            "key": c.get("key", True) is not False}
+
+
+def chart_current(ch: dict, t: float) -> int:
+    cur = 0
+    for i, r in enumerate(ch["rows"]):
+        if r["start"] is not None and r["start"] <= t:
+            cur = i
+    return cur
+
+
+def place_panel(size, w: int, h: int, avoid, want: str = "auto", pad: int = 16) -> tuple[int, int]:
+    """Where a w x h panel goes: the asked corner, else the free place (corners, then the middle of each side) with the least overlap with
+    the overlays in `avoid` (pixel rectangles)."""
+    W, H = size
+    spots = {"top-left": (pad, pad), "top-right": (W - w - pad, pad), "bottom-left": (pad, H - h - pad), "bottom-right": (W - w - pad, H - h - pad),
+             "left": (pad, (H - h) // 2), "right": (W - w - pad, (H - h) // 2)}
+    if want in spots:
+        return spots[want]
+
+    def overlap(x, y):
+        return sum(max(0, min(x + w, a[2]) - max(x, a[0])) * max(0, min(y + h, a[3]) - max(y, a[1])) for a in avoid or [])
+    order = ["bottom-left", "top-left", "bottom-right", "top-right", "left", "right"]
+    best = min(order, key=lambda k: (overlap(*spots[k]), order.index(k)))
+    return spots[best]
+
+
+def paint_chart(img, t: float, ch: dict, tokens: dict, *, font_path: str, avoid=None, ramp=None):
+    """The chart panel on a frame: bars (the current row in the emphasis colour, the others lighter), the line on its own axis with a dot on
+    the current row, the row labels, the two series' names, and the heat key (Fewer, More) when `ramp` is given. -> (image, panel rect)."""
+    from PIL import Image, ImageDraw, ImageFont
+    W, H = img.size
+    k = H / 720.0
+    pw, ph = int(W * CHART_W), int(H * CHART_H)
+    x0, y0 = place_panel((W, H), pw, ph, avoid, ch["position"], pad=int(16 * k))
+    over = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(over)
+    bg = _hex(tokens.get("legend_bg") or tokens["background"])
+    ink = _hex(tokens["label"])
+    emph = _hex(tokens["emphasis"])
+    danger = _hex(((tokens.get("status") or {}).get("danger")) or tokens["emphasis"])
+    soft = tuple(int(bg[i] + (emph[i] - bg[i]) * 0.38) for i in range(3))
+    d.rounded_rectangle([x0, y0, x0 + pw, y0 + ph], radius=int(6 * k), fill=(*bg, 225))
+    f_s = ImageFont.truetype(font_path, max(9, int(11 * k)))
+    f_t = ImageFont.truetype(font_path, max(10, int(13 * k)))
+    pad = int(10 * k)
+    top = y0 + pad
+    if ch["title"]:
+        d.text((x0 + pad, top), ch["title"], font=f_t, fill=(*ink, 255))
+        top += int(f_t.size * 1.35)
+    names = " · ".join(x for x in (ch["bar_label"], ch["line_label"]) if x)
+    if names:
+        d.text((x0 + pad, top), names, font=f_s, fill=(*ink, 200))
+        top += int(f_s.size * 1.35)
+    key_h = int(f_s.size * 1.6) if ramp is not None and ch.get("key") else 0
+    base_y = y0 + ph - pad - int(f_s.size * 1.4) - key_h
+    rows = ch["rows"]
+    n = len(rows)
+    cur = chart_current(ch, t)
+    bw_all = pw - 2 * pad
+    slot = bw_all / n
+    bmax = max(r["bar"] for r in rows) or 1.0
+    lv = [r["line"] for r in rows if r["line"] is not None]
+    lmin, lmax = (min(lv), max(lv)) if lv else (0.0, 1.0)
+    span = (lmax - lmin) or 1.0
+    hh = max(4, base_y - top)
+    pts = []
+    for i, r in enumerate(rows):
+        bx0 = x0 + pad + i * slot + slot * 0.15
+        bx1 = x0 + pad + (i + 1) * slot - slot * 0.15
+        bh = hh * r["bar"] / bmax
+        d.rectangle([bx0, base_y - bh, bx1, base_y], fill=(*(emph if i == cur else soft), 255))
+        if r["line"] is not None:
+            pts.append(((bx0 + bx1) / 2, base_y - hh * 0.08 - (hh * 0.84) * (r["line"] - lmin) / span))
+        step = max(1, math.ceil(n / 12))
+        if i % step == 0 or i == cur:
+            lab = r["label"][:3] if n > 6 else r["label"]
+            tw = d.textlength(lab, font=f_s)
+            d.text(((bx0 + bx1) / 2 - tw / 2, base_y + int(2 * k)), lab, font=f_s, fill=(*ink, 255 if i == cur else 170))
+    if len(pts) >= 2:
+        d.line(pts, fill=(*danger, 255), width=max(2, int(2 * k)))
+    if pts and rows[cur]["line"] is not None:
+        cx, cy = pts[min(cur, len(pts) - 1)]
+        rr = max(3, int(3.5 * k))
+        d.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=(*danger, 255), outline=(*bg, 255))
+    vals = ch["bar_format"].format(rows[cur]["bar"]) + (("  ·  " + ch["line_format"].format(rows[cur]["line"])) if rows[cur]["line"] is not None else "")
+    tw = d.textlength(vals, font=f_s)
+    d.text((x0 + pw - pad - tw, y0 + pad), vals, font=f_s, fill=(*ink, 255))
+    if key_h:
+        ky = y0 + ph - pad - int(f_s.size * 1.1)
+        lw = d.textlength("Fewer", font=f_s)
+        kx0, kx1 = x0 + pad + lw + int(6 * k), x0 + pw - pad - d.textlength("More", font=f_s) - int(6 * k)
+        d.text((x0 + pad, ky - int(f_s.size * 0.15)), "Fewer", font=f_s, fill=(*ink, 255))
+        d.text((kx1 + int(6 * k), ky - int(f_s.size * 0.15)), "More", font=f_s, fill=(*ink, 255))
+        for i in range(int(kx1 - kx0)):
+            c = ramp[int(i / max(1, kx1 - kx0 - 1) * (len(ramp) - 1))]
+            a = int(255 * (0.25 + 0.75 * i / max(1, kx1 - kx0 - 1)))
+            d.line([(kx0 + i, ky), (kx0 + i, ky + int(f_s.size * 0.7))], fill=(int(c[0]), int(c[1]), int(c[2]), a))
+    im = img.convert("RGBA")
+    im.alpha_composite(over)
+    return im.convert("RGB"), [x0, y0, x0 + pw, y0 + ph]

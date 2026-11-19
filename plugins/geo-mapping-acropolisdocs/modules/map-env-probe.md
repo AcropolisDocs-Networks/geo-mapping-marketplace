@@ -11,16 +11,15 @@ Runs first in every map pipeline. Writes `env.json` to the working directory and
 
 ```bash
 GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
-if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
-  for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
-    [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
-  done
-fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || GMAP_ROOT=$(for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs* "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
+  [ -f "$d/scripts/gmap_common.py" ] && echo "$(grep -o '"version": *"[0-9.]*' "$d/.claude-plugin/plugin.json" 2>/dev/null | tr -dc 0-9.) $d"; done | sort -V | tail -1 | cut -d' ' -f2-)
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found" >&2; false; }
 GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/env_probe.py" --device-bridge <yes|no|unknown> --web-tools <yes|no|unknown>
 python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml    # prints GMAP_BUILD_TOKEN=...
 export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)   # 1.13.0: the token alone, ready to export
+# 2.1.0: stdout holds the token alone; the first-run install and every message go to stderr. Do not add 2>&1 inside the $(...): it takes the
+# install lines too (Day 19). The plugin's folder can move when it updates; find it in each command (the root finder above), never pin it.
 ```
 
 - **Single-edition guard.** The script lists sibling plugin directory NAMES that match `geo-mapping-*`. If another

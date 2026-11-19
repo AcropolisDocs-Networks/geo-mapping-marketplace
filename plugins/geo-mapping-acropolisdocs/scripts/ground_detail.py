@@ -361,6 +361,28 @@ def window_of_spec(spec: str):
     return mp.detail_window(plan), mp.scale_denominator(plan)
 
 
+def fetch_spec_layers(spec_path: str, refresh: bool = False) -> list[dict]:
+    """2.1.0 (Day 19 issue 6): the library layers a MapSpec uses that are fetched on demand, fetched in the same step as the ground, so the
+    build does not stop once per uncached layer. -> one record per file: {layer, entry, variant, status, error?}."""
+    import gmap_common as gc_
+    import map_plan as mp
+    import ref_fetch as rf
+    spec = gc_.load_mapspec(spec_path)
+    todo = mp.uncached_ref_layers(spec) if not refresh else [
+        {"layer": ly.get("id"), "entry": ly["source"]["id"], "variant": None} for ly in spec.get("layers") or []
+        if isinstance(ly.get("source"), dict) and ly["source"].get("type") == "ref"
+        and (mp.library_entry(ly["source"]["id"]).get("delivery") or {}).get("mode") == "fetch"]
+    out = []
+    for m in todo:
+        try:
+            rf.fetch(mp.library_entry(m["entry"]), m["variant"], refresh=refresh)
+            out.append({**m, "status": "fetched"})
+        except Exception as ex:  # noqa: BLE001 - one file that cannot be fetched is said; the others still are
+            out.append({**m, "status": "failed", "error": str(ex).splitlines()[0][:200]})
+            print(f"ground_detail: {m['entry']} was not fetched: {str(ex).splitlines()[0][:200]}", file=sys.stderr)
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("cmd", choices=("prepare", "status"))
@@ -388,6 +410,7 @@ def main(argv=None) -> int:
             with gc.outputs_in(Path(a.spec).resolve().parent) as od:
                 res = prepare_window(win, den, refresh=a.refresh, provider=a.provider, cap_bytes=int(a.cap_mb * 1e6) if a.cap_mb else None)
                 res["cache"] = str(od / "cache")
+                res["library_layers"] = fetch_spec_layers(a.spec, refresh=a.refresh)
             print(json.dumps(res, indent=2, default=str))
             return gc.EXIT_OK
         if a.cmd == "status":

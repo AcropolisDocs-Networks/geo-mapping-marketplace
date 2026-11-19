@@ -1617,10 +1617,53 @@ def op_dot_density(gdf, p: dict, ctx: Ctx) -> OpResult:
                     _prov("dot_density", p, len(gdf), len(out), crs, dots=len(out), per=per))
 
 
+DENSITY_SCALES = ("linear", "sqrt", "log", "quantile")
+HOT_SPOT_SHARE = 0.02          # 2.1.0: one location holding more than this share of the points is said (MAP-OPS-014): it can make a bullseye
+
+
+def density_levels(z, peak: float, floor: float, k: int, scale: str):
+    """The k+1 band edges of a density surface (2.1.0, Day 19 issue 4): from floor x peak to the peak, spaced linearly (1.17.0), on a square
+    root or a log scale (a few dense spots no longer push everything else into the lowest band), or at quantiles of the drawn cells."""
+    lo = floor * peak
+    if scale == "sqrt":
+        lv = np.linspace(np.sqrt(lo), np.sqrt(peak), k + 1) ** 2
+    elif scale == "log":
+        lv = np.geomspace(max(lo, peak * 1e-6), peak, k + 1)
+    elif scale == "quantile":
+        drawn = np.asarray(z)[np.asarray(z) >= lo]
+        lv = np.quantile(drawn, np.linspace(0, 1, k + 1)) if drawn.size > k else np.linspace(lo, peak, k + 1)
+        lv[0] = lo
+        lv = np.maximum.accumulate(lv)
+        for i in range(1, len(lv)):                     # quantiles of a flat surface can repeat: keep the edges strictly rising
+            if lv[i] <= lv[i - 1]:
+                lv[i] = lv[i - 1] * (1 + 1e-9) + 1e-12
+    else:
+        lv = np.linspace(lo, peak, k + 1)
+    lv = np.asarray(lv, dtype=float)
+    lv[-1] = max(lv[-1], peak) * 1.000001
+    return lv
+
+
+def _location_weights(x, y, cap: int) -> tuple[np.ndarray, dict]:
+    """Each location (the same point to 1 m) counted at most `cap` times: weight min(1, cap / n) on its n points (2.1.0, Day 19: two addresses
+    with 615 and 577 reports made bullseyes). -> (weights, {kept share, locations capped})."""
+    key = np.round(x).astype(np.int64) * 1_000_003 + np.round(y).astype(np.int64)
+    _u, inv, cnt = np.unique(key, return_inverse=True, return_counts=True)
+    n = cnt[inv].astype(float)
+    w = np.minimum(1.0, cap / n)
+    return w, {"kept_share": round(float(w.sum() / len(w)), 4), "locations_capped": int((cnt > cap).sum())}
+
+
 def op_density_surface(gdf, p: dict, ctx: Ctx) -> OpResult:
-    """density_surface {bandwidth, cell, classes, weight, floor}: many points become a kernel density surface cut into `classes` bands
-    (1.17.0, map type density surface): polygons with `band` (1 lowest), `density_min` and `density_max` (per km2) and `band_label`."""
+    """density_surface {bandwidth, cell, classes, weight, floor, cap, scale, peak, within, outside, by}: many points become a kernel density
+    surface cut into `classes` bands (1.17.0, map type density surface): polygons with `band` (1 lowest), `density_min` and `density_max`
+    (per km2) and `band_label`. 2.1.0 (Day 19): `cap` counts each location at most N times; `scale` spaces the bands (linear, sqrt, log,
+    quantile); `peak` fixes the top of the scale (per km2) so separate maps share it; `within` keeps the bands inside another layer (the land)
+    and `outside` cuts another layer out (the water); `by` makes one surface per value of a column (a month, a year) on one shared set of
+    band edges, each row carrying that value."""
     import geopandas as gpd
+    import shapely
+
     import thematic as tm
     _require_crs(gdf, "density_surface")
     if _families(gdf) - {"Point"}:
@@ -1650,26 +1693,101 @@ def op_density_surface(gdf, p: dict, ctx: Ctx) -> OpResult:
     if not 2 <= k <= 9:
         raise OpsError("density_surface classes is between 2 and 9")
     floor = float(p.get("floor", 0.05))
+    scale = str(p.get("scale", "linear")).lower()
+    if scale not in DENSITY_SCALES:
+        raise OpsError(f"density_surface scale is one of {', '.join(DENSITY_SCALES)}, not '{scale}'")
+    find, steps, extra = [], [], {}
+    # a location (one address) holding many of the points: said, and capped when asked
+    key = np.round(x).astype(np.int64) * 1_000_003 + np.round(y).astype(np.int64)
+    _u, cnt = np.unique(key, return_counts=True)
+    if cnt.max() > max(10, HOT_SPOT_SHARE * len(x)) and not p.get("cap"):
+        find.append({"id": "MAP-OPS-014", "severity": "WARN", "message": f"density_surface: one location holds {int(cnt.max()):,} of the {len(x):,} points "
+                     f"({cnt.max() / len(x):.0%}); it can make a bullseye that pushes the rest into the lowest band. cap: 10 counts each location at "
+                     "most 10 times; scale: sqrt or log spaces the bands for a few dense spots"})
+    if p.get("cap"):
+        cap = int(p["cap"])
+        if cap < 1:
+            raise OpsError("density_surface cap is a whole number of 1 or more (how many times one location counts at most)")
+        cw, info = _location_weights(x, y, cap)
+        w = cw if w is None else w * cw
+        extra.update(cap=cap, **info)
+        steps.append(f"each location counted at most {cap} times ({info['locations_capped']:,} location(s) capped; {info['kept_share']:.0%} of the points' weight kept)")
+    # the periods: one surface each, on one grid and one set of band edges
+    by = p.get("by")
+    if by is not None and by not in gdf.columns:
+        raise OpsError(f"density_surface: the by column '{by}' is not in the layer")
+    groups = [(None, np.ones(len(x), dtype=bool))]
+    if by is not None:
+        vals = gdf[by].to_numpy()
+        keys = [v for v in dict.fromkeys(vals.tolist()) if v is not None and not (isinstance(v, float) and np.isnan(v))]
+        try:
+            keys = sorted(keys)
+        except TypeError:
+            pass
+        if not 1 <= len(keys) <= 120:
+            raise OpsError(f"density_surface by '{by}': {len(keys)} values; one surface per value takes 1 to 120 of them")
+        groups = [(v, vals == v) for v in keys]
+    pad = 3 * bw
     try:
-        xs, ys, z = tm.density_grid(x, y, w, bw, cell, 3 * bw)
+        whole = tm.density_grid(x, y, w, bw, cell, pad)          # the shared grid: every period's surface on the same cells
     except tm.ThematicError as ex:
         raise OpsError(f"density_surface: {ex}") from None
-    peak = float(z.max())
+    xs, ys, zall = whole
+    surfaces = []
+    for v, m in groups:
+        if v is None:
+            z = zall
+        else:
+            if m.sum() < 1:
+                continue
+            gx = np.concatenate([x[m], [x.min(), x.max()]])        # two weightless points at the whole layer's corners: the same grid
+            gy = np.concatenate([y[m], [y.min(), y.max()]])
+            gw = np.concatenate([(w[m] if w is not None else np.ones(int(m.sum()))), [0.0, 0.0]])
+            _xs, _ys, z = tm.density_grid(gx, gy, gw, bw, cell, pad)
+            z = _fit_grid(z, zall.shape)
+        surfaces.append((v, z))
+    peak = float(p["peak"]) if p.get("peak") is not None else max(float(z.max()) for _v, z in surfaces)
     if peak <= 0:
         raise OpsError("density_surface: the points carry no weight")
-    levels = np.linspace(floor * peak, peak, k + 1)
-    levels[-1] = peak * 1.000001
-    parts = tm.bands(xs, ys, z, levels)
+    levels = density_levels(np.concatenate([z.ravel() for _v, z in surfaces]), peak, floor, k, scale)
     names = _band_names(k)
-    rows = [{"band": i + 1, "density_min": round(lo, 4), "density_max": round(hi, 4), "band_label": names[i]} for i, (lo, hi, _g) in enumerate(parts)]
-    out = gpd.GeoDataFrame(rows, geometry=[g for _lo, _hi, g in parts], crs=crs)
+    rows, geoms = [], []
+    for v, z in surfaces:
+        for i, (lo, hi, g) in enumerate(tm.bands(xs, ys, np.minimum(z, levels[-1] * 0.9999999), levels)):
+            rows.append({**({by: v} if by is not None else {}), "band": i + 1, "density_min": round(lo, 4), "density_max": round(hi, 4), "band_label": names[i]})
+            geoms.append(g)
+    out = gpd.GeoDataFrame(rows, geometry=geoms, crs=crs)
+    # the land: kept inside one layer, another cut out (2.1.0, Day 19 issue 3: two helper layers and two more ops did this by hand)
+    for key_, how in (("within", "inside"), ("outside", "outside")):
+        if p.get(key_):
+            other = ctx.other(p[key_], "density_surface")
+            if _families(other) - {"Polygon"}:
+                raise OpsError(f"density_surface {key_}: layer '{p[key_]}' must be polygons (a land, a county, a water layer)")
+            mask = shapely.union_all(shapely.make_valid(np.asarray(_in_measure(other, crs).geometry.values, dtype=object)))
+            gs = np.asarray(out.geometry.values, dtype=object)
+            gs = shapely.intersection(gs, mask) if key_ == "within" else shapely.difference(gs, mask)
+            out = out.set_geometry(gpd.GeoSeries(gs, crs=crs))
+            out = out[~out.geometry.is_empty].reset_index(drop=True)
+            steps.append(f"kept {how} layer '{p[key_]}'")
     out = _back(out, gdf.crs)
     unit = f"{p['weight']} per km2" if p.get("weight") else "points per km2"
-    find = [{"id": "MAP-OPS-012", "severity": "INFO", "message": f"density_surface: smoothed with a {_fmt(bw)} m kernel" + (" (from the points' spread)" if auto else "")
-             + f"; the bands show where {len(gdf):,} points concentrate, not values at a place; below {floor:.0%} of the peak nothing is drawn"}]
-    return OpResult(out, [f"Density of {len(gdf):,} points ({unit}), a {_fmt(bw)} m kernel on a {_fmt(cell)} m grid, {len(out)} band(s) from {_fmt(levels[0])} "
-                          f"to {_fmt(peak)}, measured in {crs}."], find,
-                    _prov("density_surface", p, len(gdf), len(out), crs, bandwidth_m=round(bw, 1), cell_m=round(cell, 1), peak=round(peak, 4)))
+    find.insert(0, {"id": "MAP-OPS-012", "severity": "INFO", "message": f"density_surface: smoothed with a {_fmt(bw)} m kernel" + (" (from the points' spread)" if auto else "")
+                    + f"; the bands show where {len(gdf):,} points concentrate, not values at a place; below {floor:.0%} of the peak nothing is drawn"
+                    + (f"; bands on a {scale} scale" if scale != "linear" else "")
+                    + (f"; {len(surfaces)} surfaces (one per {by}) share one set of band edges" if by is not None else "")})
+    return OpResult(out, [f"Density of {len(gdf):,} points ({unit}), a {_fmt(bw)} m kernel on a {_fmt(cell)} m grid, {k} band(s) from {_fmt(levels[0])} "
+                          f"to {_fmt(peak)}{f' ({scale} scale)' if scale != 'linear' else ''}" + (f", one surface per {by} ({len(surfaces)})" if by is not None else "")
+                          + f", measured in {crs}." + ("".join(f" {s[0].upper() + s[1:]}." for s in steps))], find,
+                    _prov("density_surface", p, len(gdf), len(out), crs, bandwidth_m=round(bw, 1), cell_m=round(cell, 1), peak=round(peak, 4),
+                          levels=[round(float(v), 6) for v in levels], scale=scale, **({"periods": [v.item() if hasattr(v, "item") else v for v, _z in surfaces]} if by is not None else {}), **extra))
+
+
+def _fit_grid(z, shape):
+    """A period's grid on the shared grid's shape: the same origin and cell, so at most a row or column more or less; cut or padded with 0."""
+    out = np.zeros(shape, dtype=float)
+    r, c = min(shape[0], z.shape[0]), min(shape[1], z.shape[1])
+    out[:r, :c] = z[:r, :c]
+    return out
 
 
 def op_flow_lines(gdf, p: dict, ctx: Ctx) -> OpResult:

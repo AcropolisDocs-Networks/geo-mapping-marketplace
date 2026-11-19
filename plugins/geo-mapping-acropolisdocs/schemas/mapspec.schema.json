@@ -270,8 +270,7 @@
       "items": {
         "type": "object",
         "required": [
-          "id",
-          "role"
+          "id"
         ],
         "properties": {
           "id": {
@@ -990,6 +989,8 @@
           }
         },
         "allOf": [
+          {"description": "2.1.0 (Day 19 issue 9): a layer the map draws needs a role; a draw: false helper may leave it out (it is read as polygons)",
+           "if": {"properties": {"draw": {"const": false}}, "required": ["draw"]}, "then": {}, "else": {"required": ["role"]}},
           {
             "if": {
               "properties": {

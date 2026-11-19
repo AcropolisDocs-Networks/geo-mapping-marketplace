@@ -143,8 +143,14 @@ counted into H3 hexagons (`hexbin: {resolution: 0-15 | auto, value, agg: count|s
 (`grid: {size: 1, units: km, value, agg, min_count}`) and the cells are drawn like a choropleth of `count` (or `<value>_<agg>`) on the sequential
 ramp in round-number classes, with a hexagon (or square) legend key, the cell size in the legend title ("Sites per hex (about 7.5 km across)",
 "Sites per 1 km cell") and the H3 resolution and edge length in a note. `auto` picks the resolution at which cells average about four features
-over the extent. `role: heat` is `hexbin` at automatic resolution with a count: the plugin draws density as hex cells a reader can count, never
-as a smoothed kernel surface, and the methods page says so. A cell count is not a raw count over unequal units (cells are equal), so MAP-CART-001
+over the extent. `role: heat` is `hexbin` at automatic resolution with a count: hex cells a reader can count, and the methods page says so.
+**A smoothed heat map is the `density_surface` op** (2.1.0 wording: this role was said to never make one, and the op does): a point layer with
+`role: choropleth`, `ops: [{op: density_surface, bandwidth: 300, units: m}]` and `value_field: band` (the map type
+`ref.map-type.density-surface` has the full block). Use the hexbin when a reader should count; the surface when the pattern matters more than
+any cell. The surface's options: `within:` / `outside:` a layer (keep it on land, off the water), `cap:` (one address counts at most N
+times), `scale: linear | sqrt | log | quantile` (how the bands are cut), `peak:` (the top of the scale, per km2, so separate maps share it) and `by:`
+(one surface per period on shared bands, each row carrying its period: draw it with `split_by` or an atlas by time). MAP-OPS-014 (WARN) says
+when one location holds more than 2 percent of the points and no `cap` is given: it would make a bullseye. A cell count is not a raw count over unequal units (cells are equal), so MAP-CART-001
 does not apply; MAP-DATA-008 and MAP-CART-011 (too many points to draw) point here.
 
 ```yaml

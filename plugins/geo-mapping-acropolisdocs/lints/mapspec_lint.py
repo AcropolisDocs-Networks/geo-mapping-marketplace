@@ -18,7 +18,8 @@ import gmap_common as gc  # noqa: E402
 import ops_lint  # noqa: E402
 
 CATEGORICAL_METHODS = {"categorical", "unique", "categories"}      # classify.ALIASES maps the last two to categorical
-LAYER_REF_KEYS = ("layer", "clip_layer", "to")                     # the keys of an op that name another layer of the spec (`to`: line_of_sight, M12)
+LAYER_REF_KEYS = ("layer", "clip_layer", "to", "within", "outside")  # the keys of an op that name another layer of the spec (`to`: line_of_sight, M12;
+                                                                     # `within`, `outside`: density_surface, 2.1.0)
 
 
 def op_layer_refs(layer: dict) -> list[str]:

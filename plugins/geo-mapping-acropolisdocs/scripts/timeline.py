@@ -84,7 +84,7 @@ def load(src, *, duration: float | None = None) -> dict:
     if not isinstance(d, dict):
         raise TimelineError("a timeline is a mapping (story, counters, keyframes, features, end_hold, poster)")
     known = {"duration", "story", "counters", "keyframes", "features", "end_hold", "poster", "poster_hold", "poster_dissolve", "logo", "fade_s",
-             "min_eye_m", "date", "grow"}
+             "min_eye_m", "date", "grow", "chart"}
     extra = sorted(set(d) - known)
     if extra:
         raise TimelineError(f"unknown timeline key(s): {', '.join(extra)}; the keys are {', '.join(sorted(known))}")
@@ -101,6 +101,11 @@ def load(src, *, duration: float | None = None) -> dict:
     out["keyframes"] = _keyframes(d.get("keyframes") or [], out)
     out["features"] = _features(d.get("features")) if d.get("features") else None
     out["grow"] = _grow(d["grow"]) if d.get("grow") else None
+    import heat_anim                                  # 2.1.0 (Day 19 video issue 15): bars and a line, the current row marked
+    try:
+        out["chart"] = heat_anim.load_chart(d.get("chart"))
+    except heat_anim.HeatError as ex:
+        raise TimelineError(str(ex)) from None
     return out
 
 
@@ -469,6 +474,46 @@ def _rgb(hx, a: int = 255) -> tuple:
     return tuple(int(hx[i:i + 2], 16) for i in (0, 2, 4)) + (a,)
 
 
+def story_room(d, text, font_path, size, min_size, y, avoid, pad, W, H, lo, hi, k):
+    """Where the story line goes (2.1.0): on its row between `lo` and `hi` less every overlay rectangle of `avoid` the row meets, the widest
+    such gap, the type made smaller (to `min_size`) to fit it; when no gap holds it, the row moves up past the overlays. -> (x, y, size, font, w)."""
+    from PIL import ImageFont
+
+    def gaps(y0, y1):
+        cuts = sorted((a[0], a[2]) for a in avoid or [] if a[1] < y1 and a[3] > y0 and a[2] > lo and a[0] < hi)
+        out, cur = [], lo
+        for a0, a1 in cuts:
+            if a0 - pad > cur:
+                out.append((cur, a0 - pad))
+            cur = max(cur, a1 + pad)
+        if hi > cur:
+            out.append((cur, hi))
+        return out
+
+    yy = y
+    for _ in range(8):
+        y0, y1 = yy - 8 * k, yy + size * 1.3 + 6 * k
+        room = max(gaps(y0, y1), key=lambda g: g[1] - g[0], default=(lo, lo))
+        s = size
+        f = ImageFont.truetype(font_path, s)
+        while d.textlength(text, font=f) + 28 * k > room[1] - room[0] and s > min_size:
+            s -= 1
+            f = ImageFont.truetype(font_path, s)
+        tw = d.textlength(text, font=f)
+        if tw + 28 * k <= room[1] - room[0] or not avoid:
+            mid = (room[0] + room[1]) / 2
+            if room == (lo, hi):
+                mid = W / 2                                   # nothing in the way: centred on the frame, as before
+            return max(room[0] + 14 * k, mid - tw / 2), yy, s, f, tw
+        above = [a[1] for a in avoid if a[1] < y1 and a[3] > y0]
+        yy = min(above) - 6 * k - size * 1.3 - 8 * k if above else yy
+        if yy < pad:
+            break
+    f = ImageFont.truetype(font_path, size)
+    tw = d.textlength(text, font=f)
+    return (W - tw) / 2, y, size, f, tw
+
+
 def _clear(box, avoid, down: bool):
     """Move box (x0, y0, x1, y1) down (or up) past every rectangle of `avoid` it meets."""
     x0, y0, x1, y1 = box
@@ -520,7 +565,11 @@ def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, b
             f = ImageFont.truetype(font_path, size)
         tw = d.textlength(text, font=f)
         x, y = (W - tw) / 2, H - bottom_px - pad - size * 1.6
+        # 2.1.0 (Day 19 video issue 16): the line keeps clear of the map's overlays (the locator inset bottom right, the legend) as the
+        # counters do: it is centred in the room left between them on its row, made smaller to fit, or moved up past them
+        x, y, size, f, tw = story_room(d, text, font_path, size, max(9, int(14 * k)), y, avoid, pad, W, H, pad + logo_w, W - pad - right, k)
         bx = [x - 14 * k, y - 8 * k, x + tw + 14 * k, y + size * 1.3 + 6 * k]
+        placed["story_box"] = [round(v, 1) for v in bx]
         d.rounded_rectangle(bx, radius=int(6 * k), fill=_rgb(bgc, int(215 * a)))
         d.text((x, y), text, font=f, fill=ink[:3] + (int(255 * a),))
         placed["story"] = True

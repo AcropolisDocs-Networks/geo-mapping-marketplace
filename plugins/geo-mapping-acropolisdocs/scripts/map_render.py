@@ -1908,6 +1908,19 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
             x0, y0, x1, y1 = bx[:, 0].min(), bx[:, 1].min(), bx[:, 2].max(), bx[:, 3].max()
             vx0, vy0, vx1, vy1 = frame.visible
             rep["extent_fill"] = float(min(1.0, ((x1 - x0) * frame.scale) * ((y1 - y0) * frame.scale) / (frame.inner.w * frame.inner.h)))
+            if rep["extent_fill"] < 0.6 and plan.basemap:
+                # 2.1.0 (Day 19 issue 10): a city on a harbour fills little of its frame because much of the frame is water. The share of the
+                # frame's land the data covers says whether the frame is too wide; MAP-CART-009 reads it
+                try:
+                    import treatments as trm
+                    land, _w = trm._land_and_water(plan, frame, True)
+                    if land is not None and not land.is_empty:
+                        lv = land.intersection(shapely.box(vx0, vy0, vx1, vy1))
+                        if lv.area > 0:
+                            rep["land_share"] = round(float(lv.area / ((vx1 - vx0) * (vy1 - vy0))), 3)
+                            rep["land_fill"] = round(float(lv.intersection(shapely.box(x0, y0, x1, y1)).area / lv.area), 3)
+                except Exception:  # noqa: BLE001 - the plain fill stands when the ground cannot be read
+                    pass
             rep["clipped_features"] = int(((bx[:, 0] < vx0) | (bx[:, 1] < vy0) | (bx[:, 2] > vx1) | (bx[:, 3] > vy1)).sum())
     return frame, info, inset, placed
 
@@ -1957,7 +1970,7 @@ def _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rec
     co_cfg = els.get("callouts") or {}                      # 0.15.0: callouts take their room before the labels do
     co_svg = ""
     if co_cfg.get("on", bool(co_cfg.get("items"))) and co_cfg.get("items"):
-        co_svg, co_rects, co_recs, co_fs = mex.draw_callouts(plan, frame, co_cfg, obstacles, fonts)
+        co_svg, co_rects, co_recs, co_fs = mex.draw_callouts(plan, frame, co_cfg, obstacles, fonts, strong_data=mex.strong_data_mm(plan, frame))
         obstacles += co_rects
         findings += co_fs
         rep["callouts"] = co_recs
@@ -2479,7 +2492,8 @@ def caps(text: str) -> str:
 def select_places(gdf, cfg: dict, tier: dict):
     """The places a map may name, from the gazetteer frame (any CRS): rows kept, each with its tier and priority. The scale decides the deepest
     scalerank (SCALE_TIERS); `names.places` narrows it to capitals or major cities; `names.min_pop` applies on the local tier; `names.exclude`
-    removes names; `names.max` keeps the top N by tier and population."""
+    removes names (here by the gazetteer's own name and its ASCII form; the caller also tests the name as drawn, 2.1.0); `names.max` keeps the
+    top N by tier and population."""
     import pandas as pd
     if cfg["places"] == "none" or not len(gdf):
         return gdf.iloc[0:0].copy()
@@ -2496,7 +2510,8 @@ def select_places(gdf, cfg: dict, tier: dict):
     elif cfg["places"] == "major":
         g = g[g["_tier"].isin(["capital", "city"])]
     if cfg["exclude"]:
-        g = g[[not mp.name_excluded(v, cfg["exclude"]) for v in g["name"]]]
+        keys = [c for c in ("name", "nameascii") if c in g.columns]
+        g = g[[not any(mp.name_excluded(v, cfg["exclude"]) for v in row) for row in zip(*(g[c] for c in keys), strict=True)]]
     pop = pd.to_numeric(g["pop_max"], errors="coerce").fillna(0)
     g["_prio"] = [NAME_TIER_PRIORITY[t] * 1e9 + p for t, p in zip(g["_tier"], pop, strict=True)]
     g = g.sort_values("_prio", ascending=False)
@@ -2627,6 +2642,11 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                 continue
             tr = str(sel["_tier"].iloc[i])
             text = str(sel_names[i])
+            if cfg["exclude"] and mp.name_excluded(text, cfg["exclude"]):
+                # 2.1.0 (Day 19 issue 1): `names.exclude` also matches the name as drawn. The gazetteer keys New York City as "New York", so
+                # excluding the drawn "New York City" did nothing, and "new york" took the state's name too
+                pstats["excluded"] = pstats.get("excluded", 0) + 1
+                continue
             pk = name_key(text)
             if any(says_place(k, pk) and abs(lx - x) < SAME_NAME_MM and abs(ly - y) < SAME_NAME_MM for k, lx, ly in said):
                 pstats["same_as_label"] = pstats.get("same_as_label", 0) + 1      # 1.14.0 (Day 11 issue 12): Bremerton was named twice

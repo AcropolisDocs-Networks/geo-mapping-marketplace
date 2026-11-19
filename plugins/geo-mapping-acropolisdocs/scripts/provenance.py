@@ -212,10 +212,28 @@ def short_credit(text: str) -> str:
     return f"{first} (its sources are credited in full in the methods note)"
 
 
+def credited(l) -> bool:
+    """2.1.0 (Day 19 issue 5): `provenance: {credit: false}` marks the map maker's own annotation (borough names placed by hand): it keeps its
+    record and its methods-page entry, and is left out of the source note. A licence that asks for an attribution still gets it."""
+    p = l.provenance or {}
+    if p.get("credit") is not False:
+        return True
+    return bool(p.get("attribution")) and str(p.get("license") or "").strip().lower() not in NO_CREDIT_NEEDED
+
+
+def _credit_key(s: str) -> str:
+    """A credit as compared: without a leading "Source(s):", the final full stop, case and runs of spaces (2.1.0: the TIGER entries'
+    "Source: U.S. Census Bureau, TIGER/Line Shapefiles." was printed again beside the source line that already said it)."""
+    s = re.sub(r"^\s*sources?\s*:\s*", "", str(s), flags=re.I)
+    return re.sub(r"\s+", " ", s.strip().rstrip(".").lower())
+
+
 def source_lines(plan) -> list[str]:
     seen, srcs, atts = set(), [], []
     ctx_atts = []
     for l in all_layers(plan):
+        if not credited(l):
+            continue
         if l.role == "context":
             a = (l.provenance or {}).get("attribution")       # a context layer is not a source of the map, but its publisher is still credited
             if a and a.rstrip(".") not in ctx_atts:
@@ -229,7 +247,7 @@ def source_lines(plan) -> list[str]:
             seen.add(item)
             srcs.append(item)
         a = p.get("attribution")
-        if a and a not in atts:
+        if a and a not in atts:                 # one that repeats a source already named is dropped below, by its key (2.1.0, Day 19: TIGER twice)
             atts.append(a)
     base = []
     relief = []
@@ -254,7 +272,9 @@ def source_lines(plan) -> list[str]:
     lines = []
     if srcs:
         lines.append("Source: " + "; ".join(srcs) + ".")
-    own = [a for a in atts if a not in base and a.rstrip(".") not in relief]
+    said = [_credit_key(x) for x in srcs + base + relief]
+    own = [a for a in atts if not any(_credit_key(a) == k or _credit_key(a) in k for k in said)]
+    own = list(dict.fromkeys(own, None).keys()) if own else own
     if own:
         lines.append(" ".join(own))
     if base:

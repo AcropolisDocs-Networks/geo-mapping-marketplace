@@ -244,6 +244,8 @@ def normalize_roles(spec):
     if not isinstance(spec, dict):
         return spec
     for ly in spec.get("layers") or []:
+        if isinstance(ly, dict) and ly.get("draw") is False and not ly.get("role"):
+            ly["role"] = "polygons"             # 2.1.0 (Day 19 issue 9): a helper is not drawn; its role only names its kind of data
         src = ly.get("source") if isinstance(ly, dict) else None
         if isinstance(src, dict) and src.get("type") == "ref" and ly.get("where") and not src.get("where"):
             # 1.13.0 (Day 12 issue 1): a library service layer's filter written beside the source, not in it; 1.12 dropped it and fetched

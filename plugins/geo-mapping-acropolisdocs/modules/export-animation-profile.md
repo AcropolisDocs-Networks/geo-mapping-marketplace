@@ -34,6 +34,13 @@ description: >
   the counter runs in the lower left. A custom overlay of your own lines up with the map through the build report's `map_window`: `extent` (the
   map's window in its own CRS) fills `rect_mm` (millimetres on the page); a point's page position is rect_x0 + (x - x0) / (x1 - x0) x width,
   and rect_y0 + (y1 - y) / (y1 - y0) x height, times dpi / 25.4 for pixels.
+- **"Heat that builds up", "the city warms as the reports come in", "month by month"** (2.1.0): on the events video, `--trail settle` flashes
+  each event and fades it into a heat surface that grows on one scale (the end's peak, never re-scaled per frame); `--periods month` shows one
+  surface per value of a column, all on the busiest period's scale, cross-faded (`--fade 0.8` s), the counter reading "{period}: {n} events".
+  The heat is kept on the map's land, coloured from the sequential ramp, clear at the low end; `--bandwidth` sets its kernel in metres (default
+  a fiftieth of the map's width). A timeline's `chart: {title, bar_label, line_label, rows: [{label, bar, line, start}]}` adds a panel of bars
+  and a line on its own axis, the current row marked and a Fewer-More key for the heat; with `--periods` the rows follow the periods in order.
+  It keeps clear of the legend, inset, title and logo (`position: auto`, or a corner). Use this, not a drawing script of your own.
 - **"A narrated video", "captions along the bottom", "a year counter", "fly the camera exactly here"** (1.16.0): a timeline file
   (`--timeline T.yaml`, scripts/timeline.py) works with the flythrough and with the map videos alike. `story:` lines (start, end, text) run
   along the bottom, faded over 0.45 s; `counters:` run a number through key times ("AD {v}", "{v} fans"); `end_hold:` holds the last frame;

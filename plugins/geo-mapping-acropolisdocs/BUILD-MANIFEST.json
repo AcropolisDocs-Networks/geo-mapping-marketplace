@@ -1,8 +1,8 @@
 {
   "profile": "acropolisdocs",
   "plugin_name": "geo-mapping-acropolisdocs",
-  "version": "2.0.1",
-  "distribution_filename": "geo-mapping-acropolisdocs_v2.0.1.plugin",
+  "version": "2.1.0",
+  "distribution_filename": "geo-mapping-acropolisdocs_v2.1.0.plugin",
   "default_content_brand": "acropolisdocs",
   "house_brand": "acropolisdocs",
   "brands_bundled": [
@@ -17,13 +17,13 @@
       "tokens_sha256": "40e56aeb992c613e8bed12465df6669934a03fbcf5b5bd2417308651fca7674a"
     }
   ],
-  "source_commit": "80db571e2ff230360e94e3a25c5c9ab4f80191d2",
-  "content_digest": "4f41f50cfd36989f7fd9c43bb3a2f307a940b2a76138442e2542af78d427fa60",
-  "file_count": 627,
-  "library_digest": "7e4772c6e4422ee4fa433b1dc5097c545ae70c927f62c15d01143e0a5798cbaf",
+  "source_commit": "d784f16691395d0f62ac3d1d1569bb0e2cf6f678",
+  "content_digest": "e0692ab0580c7d6da1e0f0128e0cf7be2536e62255af80804a6e8be0c8f5e005",
+  "file_count": 628,
+  "library_digest": "7f5c007fbbfafef6c415f57ead4332e054a2993d13f4e6e5fda477363767dd67",
   "library_version": "2026.11.32",
   "mcp_digest": "d60aadfbd9ade996f79e41042ac995cef1a89a33336678f8c2a4b726233a8e49",
-  "built_at_utc": "2026-11-19T05:47:17Z",
+  "built_at_utc": "2026-11-19T19:04:01Z",
   "profile_snapshot": {
     "profile": "acropolisdocs",
     "plugin_name": "geo-mapping-acropolisdocs",

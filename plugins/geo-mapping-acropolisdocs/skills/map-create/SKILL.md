@@ -11,12 +11,9 @@ Turns a request into a finished map. One message in, three files out (SVG master
 
 ```bash
 GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
-if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
-  for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
-    [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
-  done
-fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || GMAP_ROOT=$(for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs* "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
+  [ -f "$d/scripts/gmap_common.py" ] && echo "$(grep -o '"version": *"[0-9.]*' "$d/.claude-plugin/plugin.json" 2>/dev/null | tr -dc 0-9.) $d"; done | sort -V | tail -1 | cut -d' ' -f2-)
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found" >&2; false; }
 GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)
 python3 "$GMAP_ROOT/lints/mapspec_lint.py" map.yaml                       # spec check, before any data is read
@@ -30,12 +27,9 @@ These are this plugin's reference pages, not skills: read one with the line belo
 
 ```bash
 GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
-if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
-  for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
-    [ -f "$d/scripts/gmap_common.py" ] && GMAP_ROOT="$d" && break
-  done
-fi
-[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || GMAP_ROOT=$(for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs* "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
+  [ -f "$d/scripts/gmap_common.py" ] && echo "$(grep -o '"version": *"[0-9.]*' "$d/.claude-plugin/plugin.json" 2>/dev/null | tr -dc 0-9.) $d"; done | sort -V | tail -1 | cut -d' ' -f2-)
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found" >&2; false; }
 GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the table
 ```
@@ -85,15 +79,15 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
    (the `ref-library` module has every option). A layer is used as `source: {type: ref, id: <entry id>}`. Say which entry was chosen and why in one phrase. Entries that are not
    `active` are never used. Exit 4 ("no reference entry fits") hands over to `geo-find-data`; ask for a file if the web has nothing usable. A table the person
    supplies is joined on the entry's join key: read the key column as text, keep leading zeros. A service entry (FEMA flood zones, HIFLD cellular towers,
-   FCC CMAs, transmission lines) is drawn the same way: the build fetches it once for the map window through its shipped profile and keeps the capture, so a
-   rebuild sends nothing; `source: {type: ref, id: ..., where: "SFHA_TF = 'T'"}` filters at the service (the `where` goes inside `source`). Venue, site or business addresses become points with
+   FCC CMAs, transmission lines) is fetched once for the map window and kept, so a rebuild sends nothing. `source: {type: ref, id: ..., where: "SFHA_TF = 'T'"}`
+   filters any library entry, a service or a file (the `where` goes inside `source`). Venue, site or business addresses become points with
    `source: {type: geocode, table: venues.csv, address: [street, city, state, zip], purpose: venues}` (the `geocode-addresses` rules apply).
 4. **Pick the map type from the data**, never from habit:
    - a rate or share per area → `role: choropleth` with `value_field` (normalized: per capita, per household, per sq mi, a percent);
    - a count per area → divide first, or proportional symbols, or dots (op `dot_density`); many points → op `density_surface`; movement
      between places → op `flow_lines` (recipes: gallery `dot-density`, `density-surface`, `flow-lines`);
    - sites or events → `role: points`; a measure at each site → `role: proportional`; roads or paths → `role: lines`;
-   - a grid of values (a GeoTIFF: signal strength, population per cell, a propagation model) → `role: raster`; terrain → `role: hillshade` or `contour`; building footprints (raised on a 3D web page) → `role: buildings`.
+   - a grid of values (a GeoTIFF: signal, population per cell) → `role: raster`; terrain → `hillshade` or `contour`; footprints → `role: buildings`.
    **Routing note.** A plain site map (where the sites are, what kind each is) is built here. A site list with azimuth and band columns whose
    reader should see sector footprints goes to the coverage-map pipeline (`/geo-mapping-acropolisdocs:map-run coverage-map`): it draws the wedges, applies
    coordinate privacy and words them as sectors, not coverage. A tracker with a status per location goes to `/geo-mapping-acropolisdocs:map-run program-map`; a client table to roll
@@ -134,4 +128,4 @@ remain, a note when the legend or scale bar moved or was hidden and why). Then t
 result) and every line of `map_text.callout`, as written ("Map text: N findings (not blocking)" and one line per finding with its suggested fix);
 these never count against the three and never block. Then the message check the same way (every line of `story.callout`). Change supplied text only when the person says so. Offer one next step: `map-restyle` for a look change, `map-export` for another size.
 Files are named `<brand prefix><id>_<template>_v<YYYYMMDD>.<ext>`. A provenance sidecar (`.provenance.json`) is written beside the map; send it only if asked.
-When the person wants a map they can pan, zoom and click, use `webmap-create` (one HTML file) instead of, or beside, these three files. When the person wants to show how the map was made, turn on `methods_page` and send the one-page Data and Methods file with the map. For a map told in steps (a story, a carousel), finish it here, then use `map-story`.
+A map to pan, zoom and click is `webmap-create` (one HTML file). To show how the map was made, turn on `methods_page` and send its one-page Data and Methods file. A map told in steps (a story, a carousel) is finished here, then `map-story`.

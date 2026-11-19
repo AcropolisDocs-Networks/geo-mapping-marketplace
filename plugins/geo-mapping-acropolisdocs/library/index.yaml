@@ -634,9 +634,9 @@ entries:
   file: entries/method/ref.map-type.density-surface.yaml
   type: map-type
   status: active
-  rev: 2
+  rev: 3
   tags_digest: dc26dcb39e44
-  entry_digest: 61fd9bd42c1c
+  entry_digest: 4e93909297eb
 - id: ref.map-type.dot-density
   file: entries/method/ref.map-type.dot-density.yaml
   type: map-type

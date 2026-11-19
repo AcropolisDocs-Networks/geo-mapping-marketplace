@@ -244,7 +244,11 @@ def check_009(plan, report) -> list[dict]:
         return out
     cover = (report or {}).get("data_cover")
     ext = (report or {}).get("extent_fill")
-    if ext is not None and ext < 0.6:
+    land_fill = (report or {}).get("land_fill")
+    if ext is not None and ext < 0.6 and land_fill is not None and land_fill >= 0.6:
+        # 2.1.0 (Day 19 issue 10): the rest of the frame is mostly water: the frame is as tight as the land allows
+        out.append(finding("MAP-CART-009", "INFO", f"the data fills {ext:.0%} of the map frame, but {land_fill:.0%} of the land in it: the rest is water", ext))
+    elif ext is not None and ext < 0.6:
         out.append(finding("MAP-CART-009", "WARN", f"the data fills only {ext:.0%} of the map frame; zoom the extent or choose a template that fits the shape better", ext))
     elif cover is not None and cover < 0.03:
         out.append(finding("MAP-CART-009", "INFO", "the data covers very little of the frame", cover))

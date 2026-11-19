@@ -529,6 +529,35 @@ def load_ref_layer(entry_id: str, variant=None):
     return gdf.copy(), e
 
 
+def uncached_ref_layers(spec: dict) -> list[dict]:
+    """2.1.0 (Day 19 issue 6): every library layer of a MapSpec that is fetched on demand and not cached yet, in one list, so a build that
+    would stop names them all at once (it stopped at the first, exit 4, one fetch and one rebuild per layer). -> [{layer, entry, variant}]."""
+    import ref_fetch
+    out = []
+    for ly in spec.get("layers") or []:
+        src = ly.get("source") if isinstance(ly, dict) else None
+        if not isinstance(src, dict) or src.get("type") != "ref" or not src.get("id"):
+            continue
+        try:
+            e = library_entry(str(src["id"]))
+        except PlanError:
+            continue                                  # the load says what is wrong with the id itself
+        if (e.get("delivery") or {}).get("mode") != "fetch" or e.get("status") != "active":
+            continue
+        v = src.get("variant")
+        for one in (v if isinstance(v, (list, tuple)) else [v]):
+            if ref_fetch.cached_path(e, None if one is None else str(one)) is None:
+                out.append({"layer": ly.get("id"), "entry": e["id"], "variant": None if one is None else str(one)})
+    return out
+
+
+def uncached_message(missing: list[dict]) -> str:
+    cmds = [f"ref_fetch.py fetch {m['entry']}" + (f" --variant {m['variant']}" if m["variant"] else "") for m in missing]
+    return (f"{len(missing)} library layer(s) are fetched on demand and not in the cache yet ("
+            + ", ".join(f"'{m['layer']}' ({m['entry']})" for m in missing) + "). Fetch them all in one step: ground_detail.py prepare --spec "
+            "<this MapSpec> (it fetches the ground and every library layer the spec uses), or run: " + "; ".join(dict.fromkeys(cmds)))
+
+
 def _load_ref_layer(entry_id: str, variant: str | None = None):
     e = library_entry(entry_id)
     st = e.get("status")
@@ -568,7 +597,20 @@ def load_source(layer: dict, base: Path, window=None):
             return map_sources.load_service_layer(layer, base, window)
     if t == "ref":
         gdf, e = load_ref_layer(src["id"], src.get("variant"))
-        return gdf, e, False, [], None
+        notes = []
+        if src.get("where"):
+            # 2.1.0 (Day 19 issue 2): a `where` on a library entry that is a file (not a service) was dropped without a word, and the five
+            # boroughs' clip ran against all 3,235 US counties. It is read as a file layer's `where` is (DuckDB, or GDAL for the rest)
+            try:
+                gdf = geo_io._post_filter(gdf, str(src["where"]), None, None, notes_io := [])
+            except Exception as ex:  # noqa: BLE001 - a filter GDAL cannot read is the person's to fix, said in full
+                raise PlanError(f"MAP-SPEC-005: layer '{layer['id']}': source.where could not be read on library entry '{src['id']}' "
+                                f"({str(ex).splitlines()[0][:160]}); write it in SQL as ogr2ogr reads it, or use the layer's filter: block", gc.EXIT_USAGE) from None
+            notes = [{"message": f"{n.msg}"} for n in notes_io] + [{"message": f"source.where kept {len(gdf):,} feature(s) of library entry '{src['id']}'",
+                                                                    "step": f"kept the features of {src['id']} where {src['where']}"}]
+            if not len(gdf):
+                raise PlanError(f"MAP-SPEC-005: layer '{layer['id']}': source.where ({src['where']}) keeps no feature of library entry '{src['id']}'", gc.EXIT_USAGE)
+        return gdf, e, False, notes, None
     if t == "file":
         p = Path(src["path"])
         p = p if p.is_absolute() else (base / p)
@@ -1290,6 +1332,9 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         for ref in ml.op_layer_refs(ly):
             used_by.setdefault(ref, []).append(ly["id"])
     pre_notes: list[str] = []                 # notes made before the Plan exists (a layer repair, an op); appended to plan.notes below
+    missing = uncached_ref_layers(spec)       # 2.1.0: every uncached library layer named at once, before any is read
+    if missing:
+        raise PlanError(uncached_message(missing), gc.EXIT_REFUSED)
     import map_sources                        # M13: library service layers load after the layers their window is fitted to
     for ly in map_sources.defer(load_order(spec["layers"]), spec):     # a layer named by another layer's ops loads first
         lid = ly["id"]
@@ -1404,7 +1449,9 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     # ---- extent in WGS84 first, to choose the display CRS
     ext = spec.get("extent") or {}
     mode_e = ext.get("mode", "fit_layers")
-    placed = [l for l in layers if len(l.gdf) and not getattr(l, "legend_only", False)]   # a fetched or service raster has no footprint yet
+    # 2.1.0 (Day 19 video issue 13): a legend-only layer with features (the events a video draws over the map) is part of what the map shows,
+    # so the frame fits it too; the square video zoomed in on the other layers until a bbox was written
+    placed = [l for l in layers if len(l.gdf)]              # a fetched or service raster has no footprint yet
     # a library service layer is fetched for the window, not fitted to (M13)
     data_layers = [l for l in placed if l.role in DATA_ROLES and l.role not in ("hillshade", "contour") and not (l.entry and l.capture)] or placed
     if not data_layers and mode_e in ("fit_layers", "fit_message"):

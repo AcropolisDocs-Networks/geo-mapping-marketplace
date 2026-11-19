@@ -144,7 +144,7 @@ def basemap_item(b: dict) -> Item | None:
 def items(plan) -> list[Item]:
     import provenance as pv
     # 1.2.0 (Day 9 issue 2): a draw: false helper is a source of the map's numbers, so it is credited too (the skill says so)
-    layers = list(pv.all_layers(plan))
+    layers = [l for l in pv.all_layers(plan) if pv.credited(l)]      # 2.1.0: provenance.credit: false is the map maker's own annotation
     out = [layer_item(l, "data") for l in layers if l.role != "context"]
     out += [basemap_item(b) for b in plan.basemap if b.get("kind") != "hillshade"]
     out += [basemap_item(b) for b in plan.basemap if b.get("kind") == "hillshade"]
