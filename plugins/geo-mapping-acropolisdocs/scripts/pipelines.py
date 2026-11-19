@@ -1672,6 +1672,51 @@ WEBMAP_STAGES = [("probe", "Detect the tier", stage_probe), ("spec-lint", "Check
                  ("package", "Write the deliverable folder", stage_webmap_package)]
 
 
+# ---------------------------------------------------------------------------------------------------------------- map-evaluate (2.2.0)
+# Observe only (map evaluator spec, D1 and I1): these stages are the only place this module touches the evaluator, and they only make the
+# evaluation packets. No other stage, and no build, imports map_evaluate or reads what it writes (tests/test_evaluator_isolation.py).
+def plan_eval(inp: dict, opt: dict) -> dict:
+    import map_evaluate as me
+    outs, _fs, _specs = me.plan_outputs(inp.get("files") or [], inp.get("outputs"), opt.get("anchors"))
+    if not outs:
+        raise PipelineInputError("no finished map output was found among the files given (previews, mute and draft pictures and sidecars are left out)")
+    passes = eval_passes(opt)
+    frames = sum(me.frame_count_estimate(o) for o in outs)
+    reads = len(outs) * (1 + passes)
+    svgs = sum(1 for o in outs if o.get("svg") or o["kind"] == "svg")
+    return {"files_read": sum(len(o["files"]) for o in outs), "bytes_in": sum(Path(f).stat().st_size for o in outs for f in o["files"] if Path(f).is_file()),
+            "renders": 6 * svgs, "network_requests": 0, "est_seconds": 20 * frames + 6 * svgs + 75 * reads,
+            "lines": [f"{len(outs)} output(s), {frames} frame(s) to read",
+                      f"{reads} image read(s) by fresh agents ({len(outs)} cold read(s) and {passes} graded read(s) per output)",
+                      "measured here; nothing is sent anywhere but to the agents that read the pictures"]}
+
+
+def eval_passes(opt: dict) -> int:
+    if opt.get("passes"):
+        return max(1, min(5, int(opt["passes"])))
+    return 3 if (opt.get("mode") == "calibration" or opt.get("anchors")) else 1      # O4: one day to day, three for calibration and the review
+
+
+class PipelineInputError(Exception):
+    fid = "MAP-RUN-002"
+
+
+def stage_eval_packets(c: Ctx) -> dict:
+    import map_evaluate as me
+    outs, fs, _specs = me.plan_outputs(c.inputs.get("files") or [], c.inputs.get("outputs"), c.options.get("anchors"))
+    opts = {"passes": eval_passes(c.options), "mode": c.options.get("mode") or ("calibration" if c.options.get("anchors") else "day"),
+            "outcome": c.options.get("outcome"), "secondary": c.options.get("secondary"), "trace": c.options.get("trace"), "model": c.params.get("model")}
+    run, ev, f2 = me.start_run(c.run_dir.name, outs, opts)
+    fs = [dict(f, id=f["id"]) for f in fs + f2]
+    c.add_file(run / "evaluation.json", "evaluation")
+    st = me.status(run)
+    c.results["awaiting_reads"] = {"evaluation_run": str(run), "reads": len(st["pending"]), "outputs": ev["outputs"], "skipped": [s["id"] for s in ev["skipped"]],
+                                   "next": f'map_evaluate.py status --run "{run}"', "trace": opts["trace"]}
+    if not ev["outputs"] or len(ev["skipped"]) == len(ev["outputs"]):
+        return {"ok": False, "summary": "no output could be read", "findings": fs + [finding("MAP-EVAL-005", "BLOCK", "no output could be turned into frames; see the findings")]}
+    return {"ok": True, "summary": f"{len(ev['outputs']) - len(ev['skipped'])} packet(s), {len(st['pending'])} read(s) to make", "findings": fs}
+
+
 REGISTRY = {
     "webmap-build": {"title": "Web map build", "purpose": "One self-contained interactive web page from a MapSpec, linted, with its MapSpec, provenance, lint report, methods and page report.",
                      "inputs": {"spec": "path"}, "options": {"out": "folder (default ./maps)", "overwrite": "bool", "brand": "slug", "template": "name",
@@ -1798,6 +1843,15 @@ REGISTRY = {
         "inputs": {"file_id": "the file id fcc_bdc_list returned"}, "options": {"kind": "availability|challenge", "format": "csv|shapefile|gpkg"},
         "plan": plan_fcc, "stages": [("fcc", "Download and read the file", stage_fcc)], "delivers": False,
     },
+    "map-evaluate": {
+        "title": "Map evaluation (observe only)", "purpose": "Grade finished maps from their pictures against the evaluation rubric, by fresh agents, for improving the plugin later; it never changes a map or a build.",
+        "inputs": {"files": "list of finished outputs: png, svg, pdf, html, mp4 (optional)", "outputs": "a map-trace outputs list (optional)"},
+        "options": {"passes": "graded reads per output (default 1; 3 with mode=calibration or anchors)", "mode": "day|calibration", "anchors": "an anchor set (anchors.yaml)",
+                    "outcome": "explain|compare|locate|inventory|monitor|explore|sequence|evoke (what the map is for, when the person says)", "secondary": "a second outcome",
+                    "trace": "the map-trace JSON whose page gets the Map quality section"},
+        "params": {"model": "the model id the agents run on (recorded, not planned)"},
+        "plan": plan_eval, "stages": [("packets", "Frames, measurements and the cold-read prompts", stage_eval_packets)], "delivers": False,
+    },
     "service-refresh": {
         "title": "Service refresh", "purpose": "Ask a service again for one capture and report what changed; apply on request.",
         "inputs": {"capture": "capture id"}, "options": {"key": "field"}, "params": {"apply": "bool"}, "plan": plan_refresh, "stages": [("refresh", "Re-query and compare", stage_refresh)], "delivers": False,
@@ -1806,7 +1860,7 @@ REGISTRY = {
 
 
 # ---------------------------------------------------------------------------------------------------------------- plan and run
-PATH_INPUTS = {"spec", "src", "files", "sites", "table", "tracker", "coordinates", "request", "page"}
+PATH_INPUTS = {"spec", "src", "files", "sites", "table", "tracker", "coordinates", "request", "page", "outputs"}
 
 
 def normalize(pipeline: str, inputs: dict, options: dict) -> tuple[dict, dict]:
@@ -1822,7 +1876,7 @@ def normalize(pipeline: str, inputs: dict, options: dict) -> tuple[dict, dict]:
             opt[k] = [x.strip() for x in opt[k].split(",") if x.strip()]
     if isinstance(inp.get("layers"), str):
         inp["layers"] = [x.strip() for x in inp["layers"].split(",") if x.strip()]
-    for k in ("out", "coverage", "library"):
+    for k in ("out", "coverage", "library", "anchors", "trace"):
         if k in opt:
             opt[k] = str(Path(opt[k]).resolve())
     for k in NA_FILE_OPTIONS:                       # a file path is resolved; a library entry id (population=ref.*) is left as it is
@@ -1843,8 +1897,10 @@ def plan(pipeline: str, inputs: dict, options: dict | None = None) -> dict:
             fs.append(finding("MAP-RUN-002", "BLOCK", f"{pipeline} needs '{k}' ({reg['inputs'][k]})"))
     if pipeline == "map-qa" and not (inp.get("spec") or inp.get("files")):
         fs.append(finding("MAP-RUN-002", "BLOCK", "map-qa needs a MapSpec, finished files, or both"))
+    if pipeline == "map-evaluate" and not (inp.get("files") or inp.get("outputs") or opt.get("anchors")):
+        fs.append(finding("MAP-RUN-002", "BLOCK", "map-evaluate needs finished files, a map-trace outputs list, or an anchor set (option anchors=)"))
     hashes, budget = {}, [HASH_BUDGET]
-    for k in ("spec", "src", "files", "capture", "sites", "table", "tracker", "coordinates", "coverage") + NA_FILE_OPTIONS:
+    for k in ("spec", "src", "files", "capture", "sites", "table", "tracker", "coordinates", "coverage", "outputs") + NA_FILE_OPTIONS:
         v = inp.get(k) if k not in ("coverage",) + NA_FILE_OPTIONS else opt.get(k)
         if not v:
             continue
@@ -1879,6 +1935,14 @@ def plan(pipeline: str, inputs: dict, options: dict | None = None) -> dict:
                         pass
         except Exception as ex:  # noqa: BLE001
             fs.append(finding("MAP-RUN-002", "BLOCK", f"the MapSpec cannot be read: {str(ex)[:200]}"))
+    if pipeline == "map-evaluate" and not blocked(fs):
+        # 2.2.0: the outputs a list or an anchor set names are inputs too, so a re-built map changes the plan and its token
+        try:
+            import map_evaluate as me
+            outs, _f, _s = me.plan_outputs([], inp.get("outputs"), opt.get("anchors"))
+            hashes["output_files"] = {f: hash_path(Path(f), budget) for o in outs for f in o["files"]}
+        except Exception as ex:  # noqa: BLE001
+            fs.append(finding("MAP-RUN-002", "BLOCK", f"the outputs cannot be read: {str(ex)[:200]}"))
     if pipeline == "reference-refresh":
         try:
             import ref_library as rl
@@ -1958,6 +2022,12 @@ def run(pipeline: str, inputs: dict, options: dict | None = None, *, confirm: st
     base_dir = None
     if reg["delivers"] and status == "ok":
         base_dir = Path(c.results["dest"]) if c.results.get("dest") else (Path(c.outdir) if c.outdir else None)
+    if base_dir is not None:                        # 2.2.0 (MAP-OUT-031): the evaluator's records never ship with a deliverable
+        import output_lint as _ol
+        evf = _ol.check_no_evaluation(base_dir)
+        if evf:
+            c.findings += evf
+            status, base_dir = "blocked", None
     det = sorted((str(Path(o["path"]).name), o["sha256"]) for o in outputs if o["deterministic"])
     digest = hashlib.sha256(canon([mid, det]).encode()).hexdigest()
     extra = {}
@@ -1965,6 +2035,9 @@ def run(pipeline: str, inputs: dict, options: dict | None = None, *, confirm: st
         extra["verdict"] = c.results["verdict"]
     if c.results.get("map_text"):
         extra["map_text"] = c.results["map_text"]
+    if c.results.get("awaiting_reads") and status == "ok":           # 2.2.0: map-evaluate stops here; fresh agents make the reads, then map_evaluate.py record
+        status = "awaiting-reads"
+        extra["awaiting_reads"] = c.results["awaiting_reads"]
     if c.results.get("needs_size_confirmation"):
         status = "needs-size-confirmation" if status == "ok" else status
         extra["needs_size_confirmation"] = c.results["needs_size_confirmation"]
@@ -1980,7 +2053,7 @@ def run(pipeline: str, inputs: dict, options: dict | None = None, *, confirm: st
         (base_dir / "manifest.json").write_text(json.dumps(deliver, indent=2), encoding="utf-8")
         rec["deliverable"] = str(base_dir)
         (run_dir / "run.json").write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
-    return {"ok": status in ("ok", "needs-size-confirmation"), "run": rec, "run_dir": str(run_dir), "findings": rec["findings"]}
+    return {"ok": status in ("ok", "needs-size-confirmation", "awaiting-reads"), "run": rec, "run_dir": str(run_dir), "findings": rec["findings"]}
 
 
 def show(run_id: str) -> dict:
@@ -2024,6 +2097,7 @@ def main(argv=None) -> int:
     ap.add_argument("--table", help="client table (market-map)")
     ap.add_argument("--tracker", help="program tracker (program-map)")
     ap.add_argument("--coordinates", help="venue coordinates table (program-map)")
+    ap.add_argument("--outputs", help="a map-trace outputs list (map-evaluate)")
     ap.add_argument("--option", action="append", default=[], help="key=value (out, to, formats, data_package ...)")
     ap.add_argument("--param", action="append", default=[], help="key=value, not part of the plan (apply, confirm_total)")
     ap.add_argument("--confirm")
@@ -2036,7 +2110,7 @@ def main(argv=None) -> int:
         print(json.dumps(r, indent=2, default=str))
         return 0 if r["ok"] else 3
     inputs = {k: v for k, v in {"spec": a.spec, "src": a.src, "profile": a.profile, "capture": a.capture,
-                                "sites": a.sites, "table": a.table, "tracker": a.tracker, "coordinates": a.coordinates,
+                                "sites": a.sites, "table": a.table, "tracker": a.tracker, "coordinates": a.coordinates, "outputs": a.outputs,
                                 "files": a.files.split(",") if a.files else None, "layers": a.layers.split(",") if a.layers else None}.items() if v}
     opts = kv(a.option)
     if a.op == "plan":

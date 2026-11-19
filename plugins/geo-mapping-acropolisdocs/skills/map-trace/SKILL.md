@@ -46,7 +46,25 @@ GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f 
    when it says skipped, say the PDF was not made and why (the map doctor fixes a missing PDF renderer). Without `SendUserFile`, give the paths. Then say, in plain words: how many of the session's calls were the map plugin's, how many failed and their classes, any hotspot or
    iteration loop, and the one or two changes that would save the most time.
 
-5. **Say what is measured and what is inferred.** The `Hooks` line says how many map calls the plugin's timing hook measured (1.17.2); those
+5. **Offer the map evaluation (2.2.0).** When the run prints `MAP_TRACE_OUTPUTS:` with a number above 0, the session wrote finished maps,
+   and `MAP_TRACE_EVALUATE:` is the cost of grading them from their pictures (outputs, frames, and how many image reads fresh agents will
+   make). Show that cost line and ask whether to run it; it is observe only and never changes a map. On a clear yes, read the pipeline's
+   module and run the `MAP_TRACE_EVALUATE_RUN:` arguments through `pipelines.py`, then follow the module's steps 3 to 5, recording with
+   `--trace` so this report's page gains its Map quality section; send the updated page and the evaluation report. On no, or with
+   `MAP_TRACE_EVALUATE: skipped`, say nothing more about it. `--no-evaluate` leaves the offer out; `--evaluate-only` offers it again on
+   the newest trace of this session without tracing again.
+
+   ```bash
+   GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || GMAP_ROOT=$(for d in "$HOME"/.claude/plugins/cache/*/geo-mapping-acropolisdocs/* "$HOME"/.claude/plugins/marketplaces/*/geo-mapping-acropolisdocs "$HOME"/mnt/.remote-plugins/plugin_* /mnt/skills/plugin-files/geo-mapping-acropolisdocs* "$HOME"/mnt/*-plugin /mnt/skills "$PWD"; do
+  [ -f "$d/scripts/gmap_common.py" ] && echo "$(grep -o '"version": *"[0-9.]*' "$d/.claude-plugin/plugin.json" 2>/dev/null | tr -dc 0-9.) $d"; done | sort -V | tail -1 | cut -d' ' -f2-)
+[ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found" >&2; false; }
+GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
+   python3 "$GMAP_ROOT/scripts/modules.py" read map-evaluate
+   python3 "$GMAP_ROOT/scripts/pipelines.py" <the MAP_TRACE_EVALUATE_RUN: arguments>
+   ```
+
+6. **Say what is measured and what is inferred.** The `Hooks` line says how many map calls the plugin's timing hook measured (1.17.2); those
    durations are measurements, the rest are bounds from transcript timestamps, and with no timing log for the session (`no timing log`)
    all of them are. A build the pre-export hook stopped is a `lint-block` with disposition `input`: the gate worked, so fix the MapSpec, not
    the plugin. "Not running a tool" is a residual (wall
@@ -67,6 +85,7 @@ GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f 
 | Time | Wall clock, tool time (map tool time on its own), idle gaps of 2 minutes or more, the residual, and the slowest map calls; a map call's time is measured when the timing hook logged it, else bounded |
 | Hooks | From the plugin's own hook log (`.geo-mapping/traces/hooks/<session>.ndjson`, joined by the call's id): how many map calls were measured, how many builds the pre-export check stopped (also read from the transcript when there is no log), how many times the credentials reminder fired. Never a command, an argument or a message |
 | Pipeline runs | This plugin's run records in the working folder: repeated or blocked pipeline jobs |
+| Outputs (2.2.0) | Finished maps named in the results of the plugin's map-writing scripts that ran ok and still exist (previews, mute and draft pictures and sidecars left out); their paths go only into the outputs list beside the report. The map evaluator's own calls are counted on their own line, never as map work |
 | Fix spec | One finding per class, script and crash site, each with one disposition: `product` (a crash inside the plugin: needs a diagnosis), `input` (a gate, the spec, the data or the arguments stopped it), `dependency`, `environment`, `operator` (a traceback with no frame in the plugin: the session's own inline script), `unclassified`; severity by whether a later run of the same target recovered |
 
 Printed: skill, script and tool names, option names (never their values), call numbers, timings, exit codes, MAP-* ids, and for each
@@ -82,6 +101,7 @@ anything reads it (0.6.0), so a key someone pasted into the session never reache
 - `--format json`: the summary as JSON instead of the inline report.
 - `--no-pdf`: the HTML page without its PDF. `--no-html`: no page at all (the Markdown and the JSON only).
 - `--strict`: exit 3 when a map call failed (for checks in a pipeline).
+- `--no-evaluate`: no outputs list and no evaluation offer. `--evaluate-only`: the offer alone, on the newest trace of this session.
 
 ## What it does not do
 

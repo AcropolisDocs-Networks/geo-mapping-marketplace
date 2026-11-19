@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acropolisdocs.com/schemas/geo-mapping/map-eval-1.json",
+  "title": "Map evaluator scorecard (map-eval/1, 2.2.0)",
+  "description": "One finished output graded from its pictures against the evaluation rubric. Observe only: nothing that makes a map reads it. Written to <working folder>/evaluations/<run>/<output>.eval.json; never beside a deliverable.",
+  "type": "object",
+  "required": ["schema", "rubric_version", "measure_version", "evaluated_at", "run", "output", "intent", "cold_read", "applicability", "scores", "areas", "headline", "passes"],
+  "properties": {
+    "schema": {"const": "map-eval/1"},
+    "rubric_version": {"type": "string", "pattern": "^\\d+\\.\\d+$"},
+    "measure_version": {"type": "string"},
+    "plugin_version": {"type": ["string", "null"]},
+    "model": {"type": ["string", "null"]},
+    "evaluated_at": {"type": "string"},
+    "run": {"type": "string"},
+    "mode": {"enum": ["day", "calibration"]},
+    "output": {
+      "type": "object",
+      "required": ["id", "files", "kind", "medium", "frames"],
+      "properties": {
+        "id": {"type": "string"},
+        "files": {"type": "array", "items": {"type": "string", "pattern": "^[^/\\\\]+$"}, "description": "file names only, never a path"},
+        "sha256": {"type": "object"},
+        "kind": {"enum": ["still", "svg", "pdf", "web", "video", "sequence"]},
+        "medium": {"enum": ["print", "slide", "social", "web", "video", "story"]},
+        "frames": {"type": "integer", "minimum": 1}
+      }
+    },
+    "intent": {"type": "object", "required": ["outcome_source", "medium", "family"]},
+    "cold_read": {"type": "object", "required": ["takeaway"]},
+    "applicability": {"type": "object", "required": ["weights", "na"]},
+    "measures": {"type": "object"},
+    "scores": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Z]+-\\d+$"},
+          "score": {"type": "number", "minimum": 1, "maximum": 5},
+          "scores": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 5}},
+          "spread": {"type": "integer", "minimum": 0},
+          "confidence": {"enum": ["high", "medium", "low"]},
+          "evidence": {
+            "type": "object",
+            "required": ["frame", "box", "seen"],
+            "properties": {"frame": {"type": "integer", "minimum": 1}, "box": {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 100}, "minItems": 4, "maxItems": 4},
+                           "seen": {"type": "string", "minLength": 8}}
+          },
+          "candidates": {"type": "array", "items": {"type": "object", "required": ["component", "text"]}},
+          "na": {"const": true},
+          "reason": {"type": "string"},
+          "unscored": {"type": "string"}
+        }
+      }
+    },
+    "areas": {"type": "object", "additionalProperties": {"type": "number", "minimum": 1, "maximum": 5}},
+    "headline": {
+      "type": "object",
+      "required": ["effectiveness", "craft", "works", "caps", "flags"],
+      "properties": {
+        "effectiveness": {"type": ["number", "null"], "minimum": 1, "maximum": 5},
+        "craft": {"type": ["number", "null"], "minimum": 1, "maximum": 5},
+        "works": {"enum": ["yes", "partly", "no"]},
+        "caps": {"type": "array", "items": {"type": "string"}},
+        "flags": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "passes": {"type": "integer", "minimum": 1},
+    "unstable": {"type": "array", "items": {"type": "string"}}
+  }
+}

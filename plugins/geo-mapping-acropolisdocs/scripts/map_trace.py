@@ -92,7 +92,15 @@ HOOK_ERROR = re.compile(r"^\w+:[\w-]+ hook error: \[.*?\]:\s*")
 
 # 1.18.1: the plugin's own session reports (map-trace, map-token-use). Their calls are counted and timed like any map call, but running one
 # again is not a retry or a loop, and the MAP-* ids they print are an earlier report's, not findings of this session's work.
-REPORT_SCRIPTS = {"map_trace", "session_report"}
+REPORT_SCRIPTS = {"map_trace", "session_report", "map_evaluate"}
+# 2.2.0: the map evaluator's own calls (map_evaluate.py, and the map-evaluate pipeline through pipelines.py) are not the session's map work:
+# they are counted on their own line (spec I-map-trace 4, as 1.18.1 keeps map-trace from counting itself)
+EVALUATION_CALL = re.compile(r"map_evaluate\.py|pipelines\.py[\"']?\s+(?:plan|run|show)\s+map-evaluate\b")
+# 2.2.0: the scripts that write finished maps; their results name the files a session made (map-evaluate is offered on them)
+OUTPUT_SCRIPTS = {"build_map", "map_export", "webmap", "pipelines", "animate", "events_anim", "heat_anim", "flythrough", "story", "sheet", "external_qa",
+                  "atlas", "timeline", "map_restyle", "telecom_maps", "webmap_story", "massing", "section", "profile_chart"}
+OUTPUT_PATH = re.compile(r"""(?:[A-Za-z]:[\\/]|/)[^"'\n\r*?<>|]*?\.(?:png|svg|pdf|html|mp4|gif|webm|jpe?g)(?=["'\s,\]}]|$)""", re.I)
+SPEC_ARG = re.compile(r"""--spec[=\s]+["']?([^"'\s]+\.ya?ml)""")
 # 1.19.0 (map-trace of Day 17): a build is usually one shell line, `env_probe --begin-build && mapspec_lint && build_map`, and 1.18 named the
 # call after its first script, so env_probe.py and mapspec_lint.py showed 30 s to 80 s calls that were the build's. The call is named after
 # its last script that is not one of these set-up steps; the others still appear in its scripts.
@@ -691,6 +699,8 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
              "_key": ev["key"], "_target": ev["target"], "_start": c["start"], "_end": c["end"], "_id": c["id"]}
         if ev.get("shared"):
             e["shared_with"] = ev["shared"]
+        if ev["lane"] and EVALUATION_CALL.search(_command(c)):
+            e.update(lane=None, evaluation=True)                          # 2.2.0: counted on its own line, never as map work
         if "installing them now" in (c["result"] or "") and "env_probe" in (ev["scripts"] or []):
             e["note"] = "includes the first-run package install"        # 2.1.0 (Day 19 trace): not env_probe's own time
         if ev["lane"]:
@@ -803,7 +813,9 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     except Exception:  # noqa: BLE001
         runs, rework_runs = [], {}
     fix = fix_spec(failed, events)
-    return {"plugin": pname, "version": _version(), "transcript": path.stem, "found_by": how, "files_read": files, "window": win,
+    evals = [e for e in events if e.get("evaluation")]
+    outputs = session_outputs(calls, events, records)
+    return {"evaluation_calls": {"calls": len(evals), "seconds": round(sum(e["seconds"] or 0.0 for e in evals), 1)}, "outputs": outputs,"plugin": pname, "version": _version(), "transcript": path.stem, "found_by": how, "files_read": files, "window": win,
             "first": first.isoformat() if first else None, "last": last.isoformat() if last else None,
             "calls": {"total": len(events), "map": len(mapev), "other": len(events) - len(mapev)},
             "status": {s: sum(1 for e in mapev if e["status"] == s) for s in ("ok", "failed", "blocked", "orphan", "self")},
@@ -821,6 +833,57 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             "slowest": [_public(e) for e in sorted((e for e in mapev if e["seconds"]), key=lambda e: -e["seconds"])[:5]],
             "runs": [{"pipeline": r.get("pipeline"), "status": r.get("status")} for r in runs][-10:], "run_rework": rework_runs,
             "fix_spec": fix, "events": [_public(e) for e in events]}
+
+
+def session_outputs(calls: list[dict], events: list[dict], records: list[dict]) -> list[dict]:
+    """2.2.0: the finished maps this session wrote through the plugin: files named in the results of its map-writing scripts that ran ok and
+    still exist (previews, mute and draft pictures, sidecars and working folders left out by map_evaluate.discover). Paths stay in the
+    outputs list file beside the report; the printed report names only how many."""
+    cwds = [str(d.get("cwd")) for d in records if d.get("cwd")]
+    base = Path(cwds[-1]) if cwds else Path.cwd()
+    found: dict[str, dict] = {}
+    for c, e in zip(calls, events, strict=False):
+        if e.get("status") != "ok" or e.get("evaluation") or not (set(e.get("scripts") or []) & OUTPUT_SCRIPTS):
+            continue
+        cmd = _command(c)
+        sm = SPEC_ARG.search(cmd)
+        spec = None
+        if sm:
+            sp = Path(sm.group(1))
+            sp = sp if sp.is_absolute() else base / sp
+            spec = str(sp) if sp.is_file() else None
+        for m in OUTPUT_PATH.finditer(c.get("result") or ""):
+            raw = m.group(0).replace("\\\\", "\\")
+            p = Path(raw)
+            if p.is_file() and str(p) not in found:
+                found[str(p)] = {"path": str(p), "spec": spec, "call": e["n"]}
+    try:
+        import map_evaluate as me
+        outs, _fs = me.discover(list(found), {k: v["spec"] for k, v in found.items() if v["spec"]})
+    except Exception:  # noqa: BLE001 - the trace stands without the outputs list
+        return []
+    return [{"path": f, "spec": o.get("spec"), "kind": o["kind"], "id": o["id"]} for o in outs for f in o["files"]]
+
+
+def offer_evaluation(o: dict, stem: Path) -> list[str]:
+    """2.2.0 (map evaluator O2): the outputs list beside the report and a map-evaluate plan for it; the lines to print. Nothing runs here:
+    the person sees the cost and says yes first."""
+    if not o.get("outputs"):
+        return ["MAP_TRACE_OUTPUTS: 0"]
+    lst = stem.with_suffix(".outputs.json")
+    lst.write_text(json.dumps({"session": o["transcript"], "outputs": o["outputs"]}, indent=1), encoding="utf-8")
+    n = len({x["id"] for x in o["outputs"]})
+    lines = [f"MAP_TRACE_OUTPUTS: {n} {lst}"]
+    try:
+        import pipelines
+        p = pipelines.plan("map-evaluate", {"outputs": str(lst)}, {"trace": str(stem.with_suffix(".json"))})
+    except Exception as ex:  # noqa: BLE001
+        return lines + [f"MAP_TRACE_EVALUATE: skipped - the evaluation could not be planned ({type(ex).__name__})"]
+    if not p.get("ok"):
+        return lines + ["MAP_TRACE_EVALUATE: skipped - " + "; ".join(f["message"] for f in p.get("findings") or [])[:200]]
+    lines.append(f"MAP_TRACE_EVALUATE: {p['cost_text']}")
+    lines.append(f'MAP_TRACE_EVALUATE_RUN: run map-evaluate --outputs "{lst}" --option trace="{stem.with_suffix(".json")}" --confirm {p["confirm_token"]}')
+    return lines
 
 
 def durations_note(h: dict) -> str:
@@ -957,6 +1020,17 @@ def text_report(o: dict) -> str:
         L.append("")
         rep = [f"{g['pipeline']} x{g['runs']}" + ("" if g["ended_ok"] else " (never ended ok)") for g in rr.get("groups", [])]
         L.append(f"Pipeline runs (working folder): {len(o['runs'])} recorded" + (f" · repeated or blocked: {', '.join(rep[:5])}" if rep else ""))
+    ec = o.get("evaluation_calls") or {}
+    if ec.get("calls"):
+        L.append(f"Evaluation {ec['calls']} call(s) of the map evaluator, {fmt_d(ec['seconds'])}, not counted as map work")
+    if o.get("outputs"):
+        L.append(f"Outputs   {len({x['id'] for x in o['outputs']})} finished map output(s) written this session (the map evaluator can grade them)")
+    mq = o.get("map_quality")
+    if mq:
+        L.append("")
+        L.append(f"Map quality (observed, rubric {mq.get('rubric_version')})")
+        for x in mq.get("outputs") or []:
+            L.append(f"  {x['output'][:34]:<34} effectiveness {x['effectiveness'] if x['effectiveness'] is not None else '-':<4} craft {x['craft'] if x['craft'] is not None else '-':<4} works {x['works']}")
     pend = sum(1 for f in o["fix_spec"] if f["diagnosis"])
     L.append("")
     L.append(f"Fix spec  {len(o['fix_spec'])} finding(s): " + ", ".join(f"{d} {sum(1 for f in o['fix_spec'] if f['disposition'] == d)}"
@@ -1027,6 +1101,8 @@ def main(argv=None) -> int:
     ap.add_argument("--no-pdf", action="store_true", help="the HTML page without its PDF (1.18.0)")
     ap.add_argument("--strict", action="store_true")
     ap.add_argument("--idle-seconds", type=int, default=IDLE_SECONDS)
+    ap.add_argument("--no-evaluate", action="store_true", help="2.2.0: do not list the session's outputs or offer the map evaluator")
+    ap.add_argument("--evaluate-only", action="store_true", help="2.2.0: offer the map evaluator on the outputs of the newest trace of this session, without tracing again")
     a = ap.parse_args(argv)
     if a.op == "find":
         for p in candidates()[:20]:
@@ -1038,6 +1114,16 @@ def main(argv=None) -> int:
     except TraceError as ex:
         print(f"map_trace: {ex}. Nothing to trace.", file=sys.stderr)
         return gc.EXIT_USAGE
+    if a.evaluate_only:
+        d = out_dir(a.out_dir)
+        prev = sorted(d.glob(f"map-trace_{o['transcript'][:8]}_*.json"), key=lambda q: q.stat().st_mtime)
+        prev = [q for q in prev if not q.name.endswith(".outputs.json")]
+        if not prev:
+            print("map_trace: no earlier trace of this session to evaluate; run map-trace first.", file=sys.stderr)
+            return gc.EXIT_USAGE
+        for ln in offer_evaluation(o, prev[-1].with_suffix("")):
+            print(ln)
+        return gc.EXIT_OK
     text = text_report(o)
     if a.format == "json":
         print(json.dumps({k: v for k, v in o.items() if k != "events"}, indent=1, default=str))
@@ -1055,6 +1141,9 @@ def main(argv=None) -> int:
             print(f"MAP_TRACE_HTML: {page_line}")
             print(f"MAP_TRACE_PDF: {pdf_line}")
         print(f"MAP_TRACE_FIXSPEC_PENDING: {sum(1 for f in o['fix_spec'] if f['diagnosis'])}")
+        if not a.no_evaluate:
+            for ln in offer_evaluation(o, d / stem):
+                print(ln)
     if a.strict and o["status"]["failed"]:
         return gc.EXIT_LINT
     return gc.EXIT_OK

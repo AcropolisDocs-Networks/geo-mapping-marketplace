@@ -65,6 +65,22 @@ def finding(fid: str, sev: str, message: str, detail=None) -> dict:
     return {"id": fid, "severity": sev, "message": message, "detail": detail}
 
 
+# ------------------------------------------------------------------------------------------------------------------ evaluations (2.2.0)
+def check_no_evaluation(folder) -> list[dict]:
+    """MAP-OUT-031: a deliverable folder never carries the map evaluator's records (scorecards, its evaluations folder, its reports). The
+    evaluator is observe only and keeps everything in the working folder (map evaluator spec, isolation I4)."""
+    from pathlib import Path as _P
+    root = _P(folder)
+    if not root.is_dir():
+        return []
+    hits = sorted(str(q.relative_to(root)) for q in root.rglob("*") if q.name.endswith(".eval.json") or (q.is_dir() and q.name == "evaluations")
+                  or q.name in ("evaluation.json", "history.jsonl"))
+    if not hits:
+        return []
+    return [{"id": "MAP-OUT-031", "severity": "BLOCK", "message": "the deliverable folder holds the map evaluator's records; they stay in the working folder and never "
+             "ship with a map: " + ", ".join(hits[:5]), "layer": None}]
+
+
 # ------------------------------------------------------------------------------------------------------------------ leaks
 def check_leaks(text: str, what: str) -> list[dict]:
     """MAP-LIC-005 (no API keys in outputs) and MAP-LIC-009 (no internal host names, paths or addresses). Embedded pictures (base64 data URIs)

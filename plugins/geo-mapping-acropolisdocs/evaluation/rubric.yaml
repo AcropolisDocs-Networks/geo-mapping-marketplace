@@ -1,0 +1,383 @@
+# The map evaluator's rubric (spec: docs/specs/map-evaluator-spec.md, sections 5, 7.4 and 8).
+#
+# Observe only: nothing that makes a map reads this file (release-gate test test_evaluator_isolation). It is read by scripts/map_evaluate.py
+# alone, and is meant to change (owner decision D3). Version rules (spec 9.1):
+#   major  an area or criterion added or removed, a weight or a limit changed, or a score description changed in meaning
+#   minor  wording made clearer with no change of meaning
+# Trends are compared only within one major version; re-score the anchor set when it changes (docs/evaluations/anchors/).
+#
+# A criterion marked `experimental: true` is scored and shown, but left out of the area medians and the headline numbers.
+
+rubric_version: "0.1"
+status: experimental
+
+scale:
+  5: "Publication grade. A top newspaper or magazine graphics desk, or a national mapping agency, would run it as it is. Nothing a professional editor would change."
+  4: "Professional. One noticeable flaw that an editor would fix before publishing."
+  3: "Competent. Does the job, with flaws a careful reader notices; would need a revision pass."
+  2: "Weak. The reader has to work around problems; the criterion is partly failed."
+  1: "Failed. The criterion's job is not done, or the map works against it."
+bar: "The bar is high: most good working maps land at 3 to 4, and a 5 is rare and earned. Score the job the criterion names for this map's outcome, never the number of elements on the map."
+
+outcomes:
+  explain: "make one point (a finding, a claim)"
+  compare: "show a pattern or difference across places"
+  locate: "help someone find or place things"
+  inventory: "record what is where, completely and exactly"
+  monitor: "show status at a glance"
+  explore: "invite the reader to dig in (web maps with layers and popups)"
+  sequence: "tell a story over beats or time"
+  evoke: "make an impression; the look is the point"
+
+# Two headline numbers, never blended (spec 7.4).
+headlines:
+  effectiveness: [STORY, INFO, HIER, READ, HON, ORIENT]
+  craft: [LAYOUT, STYLE, MEDIUM]
+
+# Area weights by outcome (spec 5.2): 3 core, 2 relevant, 1 minor, 0 not scored. Primary and secondary outcomes are blended 2:1; an area whose
+# weight for the primary outcome is 0 is not scored at all.
+weights:
+  STORY:  {explain: 3, compare: 2, locate: 1, inventory: 0, monitor: 2, explore: 1, sequence: 3, evoke: 2}
+  INFO:   {explain: 3, compare: 3, locate: 2, inventory: 3, monitor: 3, explore: 2, sequence: 2, evoke: 1}
+  HIER:   {explain: 3, compare: 3, locate: 3, inventory: 2, monitor: 3, explore: 2, sequence: 3, evoke: 2}
+  READ:   {explain: 3, compare: 3, locate: 3, inventory: 3, monitor: 3, explore: 2, sequence: 3, evoke: 1}
+  HON:    {explain: 3, compare: 3, locate: 1, inventory: 2, monitor: 2, explore: 2, sequence: 3, evoke: 1}
+  ORIENT: {explain: 2, compare: 2, locate: 3, inventory: 3, monitor: 2, explore: 2, sequence: 2, evoke: 1}
+  LAYOUT: {explain: 2, compare: 2, locate: 2, inventory: 2, monitor: 2, explore: 1, sequence: 2, evoke: 3}
+  STYLE:  {explain: 2, compare: 2, locate: 1, inventory: 1, monitor: 1, explore: 1, sequence: 2, evoke: 3}
+  MEDIUM: {explain: 2, compare: 2, locate: 2, inventory: 2, monitor: 2, explore: 3, sequence: 3, evoke: 2}
+
+# Limits (spec 7.4). Only failures to communicate limit the score; polish never does. Provisional, versioned with the rubric.
+caps:
+  - when: {criterion: READ-1, at_most: 1}
+    effectiveness_max: 2
+    reason: "text can't be read at output size"
+  - when: {area_any_criterion: HON, at_most: 1}
+    effectiveness_max: 2
+    flag: misleading
+    reason: "the picture misleads"
+
+# The works verdict (spec 7.4), shown beside the two numbers so a simple map that works is never hidden.
+# "works" when every value is at least its threshold; "does not work" when any value is at most its threshold; otherwise "partly".
+works:
+  with_story: {works_if: {STORY-1: 4, READ: 3}, fails_if: {STORY-1: 2, READ-1: 1}}
+  without_story: {works_if: {READ: 3, INFO: 3}, fails_if: {READ: 1.5, INFO: 1.5}}
+
+# Criteria that switch off by map family or medium (spec 5.3). The code applies these before any model sees the picture; the grader may
+# propose another n/a with a reason, which the report flags (MAP-EVAL-004).
+not_applicable:
+  ORIENT-2: "world or continental scale (scale and north are meaningless there)"
+  READ-2: "no legend on the map with a single self-labelled layer, or an evoke map"
+  HON-3: "city or metro scale, where distortion is negligible"
+  STYLE-5: "built with branding off"
+  MEDIUM-3: "a single still"
+  READ-5: "print sheets and web maps (applies to social, slides and a video's first frame)"
+  HIER-2: "an evoke map where the ground is the subject, or a terrain-only map"
+  INFO-1: "locate and inventory maps (geography is the point by definition)"
+
+areas:
+  STORY:
+    name: Story value
+    question: "Does the map make its point without the words?"
+    criteria:
+      STORY-1:
+        name: Cold-read match
+        5: "The cold read states the intended message, subject and point"
+        3: "Subject right, point vague or partly missed"
+        1: "The cold read misses the subject or reads a different message"
+        components: [map_emphasis, highlight, map_look]
+      STORY-2:
+        name: Five-second read
+        5: "The point is visible at a glance; the eye lands on it first"
+        3: "Visible after study of the legend or notes"
+        1: "Not found without the text"
+        measures: [M-01]
+        components: [map_emphasis, highlight, map_look]
+      STORY-3:
+        name: Self-sufficient display
+        5: "The data display carries the story even with title and captions covered"
+        3: "The display needs the subtitle to make sense"
+        1: "Only the text tells the story; the map is decoration"
+        components: [map_types, mapspec_drafting, map_focus]
+      STORY-4:
+        name: Emphasis serves the message
+        5: "What is emphasized is exactly what the message is about"
+        3: "Emphasis is roughly right but shared with things that don't matter"
+        1: "Emphasis falls on the wrong thing"
+        components: [map_emphasis, highlight, map_look]
+  INFO:
+    name: Information added
+    question: "Does the map add something beyond a table or a sentence?"
+    criteria:
+      INFO-1:
+        name: Geography is essential
+        5: "The pattern exists only because of where things are; a table would lose it"
+        3: "Geography helps but a ranked list would say most of it"
+        1: "A table or a sentence would say it better"
+        components: [map_types, mapspec_drafting, map_focus]
+      INFO-2:
+        name: Insight per glance
+        5: "Several true observations reward a second look, all serving the outcome"
+        3: "One observation, nothing more to find"
+        1: "Nothing to observe beyond what the title says"
+        components: [map_types, mapspec_drafting, map_focus]
+      INFO-3:
+        name: Nothing superfluous
+        5: "Every mark carries information or needed context"
+        3: "Some decoration or repetition that could go"
+        1: "Clutter or repetition hides the content"
+        measures: [M-03, M-08]
+        components: [context_pack, toponymy, map_look]
+      INFO-4:
+        name: Context adds meaning
+        5: "The reference shown (comparison, baseline, surroundings) sharpens the reading"
+        3: "Context is present but neutral"
+        1: "Context misleads or competes with the data"
+        components: [map_types, mapspec_drafting, map_focus]
+  HIER:
+    name: Hierarchy and figure-ground
+    question: "Does the eye go to the right place, in the right order?"
+    criteria:
+      HIER-1:
+        name: First look lands on the subject
+        5: "The attention map's top region is the subject"
+        3: "The subject ties with something else"
+        1: "Furniture, ground or a minor layer draws the eye first"
+        measures: [M-01]
+        components: [map_emphasis, highlight, map_look]
+      HIER-2:
+        name: Data stands off the ground
+        5: "Clear separation; context reads as context"
+        3: "Separation holds in most of the frame"
+        1: "Data and context merge"
+        measures: [M-02]
+        components: [map_look_tiers, tile_treatment, look_lint]
+      HIER-3:
+        name: Clear levels
+        5: "Three or four levels of emphasis that a reader sorts without effort"
+        3: "Two levels, or levels that blur in places"
+        1: "Everything at one strength, or random emphasis"
+        components: [map_emphasis, highlight, map_look]
+  READ:
+    name: Readability
+    question: "Can the reader read and decode it at its real size?"
+    criteria:
+      READ-1:
+        name: Text legible at output size
+        5: "Every item readable at the medium's reading distance, with good contrast"
+        3: "Minor items small or low in contrast"
+        1: "Key text can't be read"
+        measures: [M-05, M-06]
+        components: [label_faces, templates, map_text]
+      READ-2:
+        name: Legend decodes quickly
+        5: "Classes and symbols match the map at once; the legend is ordered as the reader thinks"
+        3: "Decodes with some back-and-forth"
+        1: "Can't match legend to map"
+        components: [legend_builder]
+      READ-3:
+        name: Label placement
+        5: "Labels sit unambiguously with their features, no collisions, place-name hierarchy right"
+        3: "A few awkward or ambiguous placements"
+        1: "Collisions or wrong associations"
+        measures: [M-03]
+        components: [label_placer, toponymy]
+      READ-4:
+        name: Colour accessibility
+        5: "Distinct for colour-vision deficiency and in greyscale where the outcome needs it"
+        3: "Distinct for most readers, weak for one deficiency"
+        1: "Classes merge for a common deficiency"
+        measures: [M-07]
+        components: [ramp_generator, categorical_picker, classification]
+      READ-5:
+        name: Thumbnail and distance test
+        5: "The point is still visible at feed or back-of-room size"
+        3: "Subject visible, details lost"
+        1: "Unreadable at that size"
+        measures: [M-11]
+        components: [templates, web_frame, video_renderer]
+  HON:
+    name: Encoding fit and honesty
+    question: "Does the picture imply only what is true of it? (Judged from what the picture shows; the data itself is not checked.)"
+    criteria:
+      HON-1:
+        name: Visual variable fits the data
+        5: "Colour for rates, size for counts, order shown as order, categories as categories"
+        3: "One mismatch that slows reading"
+        1: "The encoding implies something the data isn't"
+        measures: [M-07]
+        components: [ramp_generator, categorical_picker, classification]
+      HON-2:
+        name: Classes and scales don't mislead
+        5: "Breaks and ramps let the pattern read as it is; diverging only with a real midpoint"
+        3: "Breaks exaggerate or flatten somewhat"
+        1: "Breaks or ramp manufacture the pattern"
+        components: [ramp_generator, categorical_picker, classification]
+      HON-3:
+        name: Projection fits the use
+        5: "Area-true where area is compared, shape-true where shape matters"
+        3: "Acceptable distortion, noticeable at the edges"
+        1: "Distortion changes the reading"
+        components: [projection_choice]
+      HON-4:
+        name: Uncertainty shown where it matters
+        5: "Modelled, sampled or illustrative content is visibly marked"
+        3: "Marked only in small print"
+        1: "Presented as exact when it isn't"
+        components: [illustrative_note, relief_3d]
+      HON-5:
+        name: No visual exaggeration
+        5: "Vertical exaggeration, 3D and cropping are stated and serve the reading"
+        3: "Some unstated exaggeration"
+        1: "Exaggeration creates the effect"
+        components: [illustrative_note, relief_3d]
+  ORIENT:
+    name: Orientation and context
+    question: "Does a stranger know where this is and how big it is?"
+    criteria:
+      ORIENT-1:
+        name: Reader knows where this is
+        5: "A stranger places it in seconds"
+        3: "Needs the title to know where"
+        1: "Can't tell where it is"
+        components: [locator_inset, scalebar_north]
+      ORIENT-2:
+        name: Inset, scale, north when needed
+        5: "Present exactly when needed, consistent with the main map"
+        3: "Present but weak, or present when pointless"
+        1: "Missing when needed, or contradicts the main map"
+        components: [locator_inset, scalebar_north]
+      ORIENT-3:
+        name: Reference features right-sized
+        5: "Just enough roads, water and places to read the data"
+        3: "Slightly too much or too little"
+        1: "Too sparse to read or too dense to see the data"
+        measures: [M-03]
+        components: [context_pack, toponymy, map_look]
+  LAYOUT:
+    name: Layout and composition
+    question: "Is the frame composed with intent?"
+    criteria:
+      LAYOUT-1:
+        name: Balance
+        5: "The frame feels settled; the visual weight is deliberate"
+        3: "Slightly lopsided or crowded on one side"
+        1: "Clearly unbalanced"
+        measures: [M-04]
+        components: [extent_fitting]
+      LAYOUT-2:
+        name: Use of the frame
+        5: "The subject fills the frame well; white space is purposeful; no awkward cuts"
+        3: "Some dead space or tight edges"
+        1: "Subject small, lost or cut"
+        measures: [M-04, M-10]
+        components: [extent_fitting]
+      LAYOUT-3:
+        name: Furniture placement
+        5: "Title, legend, logo and inset sit in their places without competing with the focus"
+        3: "Some competition or crowding"
+        1: "Furniture covers or fights the focus"
+        measures: [M-09]
+        components: [element_placement, templates, web_frame]
+      LAYOUT-4:
+        name: Alignment and rhythm
+        5: "Elements share margins and a grid; spacing is consistent"
+        3: "Minor misalignments"
+        1: "Elements look scattered"
+        components: [element_placement, templates, web_frame]
+  STYLE:
+    name: Style and craft
+    question: "Is it well made, judged against the style it chose?"
+    criteria:
+      STYLE-1:
+        name: Coherent style
+        5: "Everything belongs to one visual voice"
+        3: "One or two elements off-style"
+        1: "Mixed styles"
+        components: [style_packs, casings, map_look]
+      STYLE-2:
+        name: Linework and symbols
+        5: "Weights, casings and joins look cared for at output size"
+        3: "Some heavy, fuzzy or crude marks"
+        1: "Marks look broken or default"
+        components: [style_packs, casings, map_look]
+      STYLE-3:
+        name: Colour harmony
+        5: "The palette is restrained and works together"
+        3: "Acceptable, one jarring colour"
+        1: "The palette fights itself"
+        measures: [M-08]
+        components: [ramp_generator, categorical_picker, classification]
+      STYLE-4:
+        name: Typography
+        5: "Type hierarchy, weights, spacing and case are refined"
+        3: "Serviceable"
+        1: "Type looks careless"
+        components: [label_faces, templates, map_text]
+      STYLE-5:
+        name: Brand integration
+        5: "Brand present and unobtrusive, matching the print rules"
+        3: "Brand slightly loud or off-rule"
+        1: "Brand dominates or is broken"
+        components: [brand_pack]
+  MEDIUM:
+    name: Medium fit
+    question: "Is it made for where it is going?"
+    criteria:
+      MEDIUM-1:
+        name: Fits the target size and shape
+        5: "Composed for this aspect and size, not squeezed from another"
+        3: "Works but looks adapted"
+        1: "Wrong shape or size for the medium"
+        components: [templates, web_frame, video_renderer]
+      MEDIUM-2:
+        name: Medium's reading conditions
+        5: "Slide readable from the back of the room, social at feed size, print at arm's length, web default view complete, video frame readable in its time on screen"
+        3: "Works under good conditions only"
+        1: "Fails the medium's normal conditions"
+        measures: [M-11]
+        components: [templates, web_frame, video_renderer]
+      MEDIUM-3:
+        name: Consistency across frames
+        5: "Furniture, scales and style hold steady across beats, pages or frames"
+        3: "Minor drift"
+        1: "Jumps that confuse the sequence"
+        measures: [M-12]
+        components: [story_beats, atlas_classes, video_timeline]
+
+# Where a low score most likely comes from (spec 10). Improvement candidates name one of these; the report groups them.
+components:
+  map_emphasis: "layer emphasis (scripts/map_emphasis.py)"
+  highlight: "the highlight writer (1.22.0, map_plan)"
+  map_look: "looks and context weights (scripts/map_look.py)"
+  map_types: "map-type entries in the reference library"
+  mapspec_drafting: "MapSpec drafting in map-create"
+  map_focus: "the focus mask and lift (scripts/map_focus.py)"
+  context_pack: "the context pack and detailed ground (ground_detail.py)"
+  toponymy: "place names (names:, the gazetteer and its placement order)"
+  map_look_tiers: "the look tiers (map_look.py)"
+  tile_treatment: "tile basemap treatment"
+  look_lint: "look lint thresholds"
+  label_faces: "label faces and sizes by scale"
+  templates: "sheet templates (16x9-slide, square-social, portrait-social, story, print sheets)"
+  map_text: "map text (titles, subtitles, notes)"
+  legend_builder: "the legend builder (ramp, graduated, nested, bivariate keys)"
+  label_placer: "the label placer (label_engine.py)"
+  ramp_generator: "the ramp generator (colorlib, classify)"
+  categorical_picker: "the categorical colour picker"
+  classification: "classification in map_plan.py"
+  projection_choice: "projection choice in map_plan.py"
+  illustrative_note: "the illustrative-note writer"
+  relief_3d: "3D and relief settings"
+  locator_inset: "the locator inset"
+  scalebar_north: "the scale bar and north arrow"
+  extent_fitting: "extent fitting (fit_layers, fit_message, move before shrink)"
+  element_placement: "element placement defaults"
+  web_frame: "the web map frame (webmap_frame.py)"
+  style_packs: "style packs"
+  casings: "line casings"
+  brand_pack: "brand pack application (print and web)"
+  video_renderer: "the video renderer"
+  story_beats: "map-story beats"
+  atlas_classes: "atlas shared classes"
+  video_timeline: "the video timeline"

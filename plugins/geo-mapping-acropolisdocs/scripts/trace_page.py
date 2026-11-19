@@ -493,6 +493,19 @@ def html(o: dict, generated: dt.datetime | None = None) -> str:
         parts.append(section("This plugin's run records", "Pipeline runs", table(["Pipeline", "Status", "Time", "Run"], rows, {2})))
 
     # how measured
+    # 2.2.0: the map evaluator's grades of this session's outputs, when it ran (observe only: nothing that makes a map reads them)
+    mq = o.get("map_quality")
+    if mq:
+        rows = [[esc(x["output"]), esc(x["effectiveness"] if x["effectiveness"] is not None else "-"), esc(x["craft"] if x["craft"] is not None else "-"),
+                 f'<span class="pill {dict(yes="ok", partly="warn", no="bad").get(x["works"], "info")}">{esc(x["works"])}</span>', esc(", ".join(x.get("flags") or []))]
+                for x in mq.get("outputs") or []]
+        comps = "".join(f"<li><b>{esc(c['component'])}</b> ({c['count']}): {esc(c['example'])}</li>" for c in mq.get("top_components") or [])
+        body = ("<p>The finished maps this session wrote, graded from the pictures alone against rubric " + esc(mq.get("rubric_version")) + ". Effectiveness and "
+                "Craft are kept apart; the works verdict sits beside them. These grades are a record for improving the plugin and never change a map.</p>"
+                + table(["Output", "Effectiveness", "Craft", "Works", "Flags"], rows, {1, 2})
+                + (f"<p class='chartlabel'>Where the plugin fell short most often</p><ul class='notes'>{comps}</ul>" if comps else "")
+                + f"<p class='muted'>The full evaluation: <code>{esc(Path(str(mq.get('report') or '')).name)}</code> in the run folder <code>{esc(mq.get('run'))}</code>.</p>")
+        parts.append(section("Map quality (observed)", "How good the finished maps are", body))
     notes = [f'Transcript <code>{esc(str(o.get("transcript", ""))[:8])}…</code>, found by {esc(o.get("found_by"))}.',
              f'Map call durations are {esc(t["durations"])}.',
              "A map call is this plugin's skill loaded, one of its scripts or lints run with Python (in the Bash or the PowerShell tool), or a tool "
