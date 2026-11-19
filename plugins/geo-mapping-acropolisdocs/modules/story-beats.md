@@ -50,7 +50,7 @@ story:
 | `show.highlight` | `{layer, column, in | min | max | top}` as on a layer, or `auto` / `{layer, auto: true}`: read from the beat's line ("the n41 sites", "top 5", "the cheapest") |
 | `show.layers` | The data layers shown. Context, relief and rasters stay |
 | `show.time` | A period of the layers' time field (a value or a label of the page's slider) |
-| `show.marks` | This beat's rings, arrows and brackets (`elements.marks` items, see `mapspec-reference`), in place of the map's. Drawn on the sheet, the carousel and the slides; the page and the video show the highlight only |
+| `show.marks` | This beat's rings, arrows and brackets (`elements.marks` items, see `mapspec-reference`), in place of the map's. Drawn on the beat's sheet panel, its carousel picture and its slide; the page and the video show the highlight only |
 | `hold` | Seconds the beat is held in a video |
 | `web` (on `story`) | The page's own story options when its chapters are the beats: `{cards: compact | full, navigation: buttons | scroll | both, print_pictures: on | off | first, print_dpi, follow_time}`. `print_pictures: off` saves one map build a beat on a heavy map |
 | `counters` (on `story`) | Up to three numbers that run with the video, read from the data at each beat and never typed: `{layer, text: "{v} sites", column, format, position}`. The value is the count of the layer's features the beat highlights (all of them when it highlights another layer or nothing), or the sum of `column`. A beat that hides the layer keeps the number where it was |

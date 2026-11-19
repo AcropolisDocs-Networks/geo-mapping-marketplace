@@ -551,6 +551,8 @@ def sheet_specs(spec_path: Path, spec: dict, resolved: list[dict]) -> list[dict]
             if r.get("highlight") is not None or r.get("layers") is not None:
                 over["message"] = r["say"] or r["heading"]
             over["elements"] = {"callouts": {"_replace": True, "on": False}}
+            if r["show"].get("marks"):                    # 2.0.1: the beat's own marks on its panel too, as on its carousel picture and its slide
+                over["elements"]["marks"] = {"_replace": True, "on": True, "items": copy.deepcopy(r["show"]["marks"])}
             cap = f"{r['n']}  {r['say'] or r['heading']}"
             panels.append({"base": str(spec_path), "override": over, "caption": cap})
         n = len(grp)
