@@ -149,6 +149,8 @@ def lookalike_keys(plan) -> list[dict]:
         cls = l.cls
         if cls is None or getattr(cls, "kind", None) != "categorical" or not l.legend_block or len(l.colors or []) < 2:
             continue
+        if isinstance(l.legend_block, dict) and len(l.legend_block.get("items") or []) < 2:
+            continue                                      # 2.0.0: keyed as one entry (legend.single): there are no keys to tell apart
         op = float(getattr(l, "group_opacity", 1.0) or 1.0) * (float(l.fill_opacity or 1.0) if l.kind == "polygon" else 1.0)
         try:
             drawn = [cl.mix(land, c, min(max(op, 0.0), 1.0)) if op < 1 else c for c in l.colors]
@@ -214,7 +216,9 @@ def lint(plan, report: dict) -> tuple[list[dict], dict]:
     # a subject with no size of its own (one site) cannot span a frame: once the frame is fitted to it (fit_message gives it a window with
     # its surroundings), the framing has done what it can
     framed_point = mode == "fit_message" and share is not None and share["span"] < POINT_SPAN
-    if share and singled and share["span"] < SUBJECT_SPAN_MIN and not framed_point:
+    closer = bool(report.get("detail"))                   # 2.0.0: a detail inset draws part of the map closer, so a small subject is still seen
+    measures["detail_inset"] = closer
+    if share and singled and share["span"] < SUBJECT_SPAN_MIN and not framed_point and not closer:
         fix = ("extent: {mode: fit_message} frames what the message names and keeps the rest as surroundings" if mode != "fit_message"
                else "give the extent a smaller padding_pct, or a bbox round the subject")
         fs.append(finding("MAP-STORY-001", "WARN", f"what the map is about ({names}) spans {share['span']:.0%} of the frame, so the reader sees the "

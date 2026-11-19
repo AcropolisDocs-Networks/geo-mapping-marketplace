@@ -40,10 +40,10 @@ python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --formats sv
 
 | Finding | What it saw | Change in the MapSpec |
 |---|---|---|
-| MAP-STORY-001 | What the map is about spans under a quarter of the frame | `extent: {mode: fit_message}`: the frame fits the layers the message names (their `highlight:` features when they have one); the rest are surroundings. `padding_pct` sets the room round it (default 14) |
+| MAP-STORY-001 | What the map is about spans under a quarter of the frame | `extent: {mode: fit_message}`: the frame fits the layers the message names (their `highlight:` features when they have one); the rest are surroundings. `padding_pct` sets the room round it (default 14) When the frame has to stay wide (a stadium in a district that must show its stations), keep it and add `elements.detail: {on: true, subject: true}`: the detail inset draws the subject closer and this finding is not raised (2.0.0) |
 | MAP-STORY-002 | A supporting layer carries more ink than the subject | `emphasis: background` on that layer, an outline (`symbol: {fill: none}`), a thinner line, or a stronger subject |
 | MAP-STORY-003 | The legend takes over 22% of the map's width or 12% of its area | `elements.legend: {direct: auto}`, `legend: {single: true}` on a classed layer, `legend: {include: false}` on a layer that needs no key |
-| MAP-STORY-004 | Two categories of one key look alike as drawn | Fewer categories, `emphasis: primary` on the layer (a layer at 55% loses the difference), or names on the map |
+| MAP-STORY-004 | Two categories of one key look alike as drawn | Fewer categories, `emphasis: primary` on the layer (a layer at 55% loses the difference), or names on the map; or one entry for the whole layer (`legend: {single: true}`) when the categories do not matter to the message |
 | MAP-STORY-005 | More than two callouts, or over 30 words in them | One callout with the key `figure`; `highlight:` for the rest |
 | MAP-STORY-006 | The message singles out part of a layer; the drawing does not | The `highlight:` block the finding gives, or `highlight: auto` |
 | MAP-STORY-007 | A layer named on the map found no room for a name | Nothing: the build already drew it again with the layer back in the legend. `legend: {direct: false}` settles it |

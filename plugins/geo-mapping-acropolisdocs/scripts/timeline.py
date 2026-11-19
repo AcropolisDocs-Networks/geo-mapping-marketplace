@@ -194,6 +194,7 @@ def _keyframes(items, out) -> list[dict]:
             raise TimelineError(f"keyframe {i + 1}: ease is one of {', '.join(EASES)}")
         row["ease"] = ease
         row["layers"] = None if k.get("layers") is None else [str(x) for x in k["layers"]]
+        row["chapter"] = None if k.get("chapter") is None else int(k["chapter"])     # 2.0.0: the story chapter whose highlight the page draws from here on
         row["opacity"] = {str(a): float(b) for a, b in (k.get("opacity") or {}).items()}
         rows.append(row)
     rows.sort(key=lambda r: r["t"])
@@ -304,6 +305,7 @@ def camera_at(tl: dict, t: float) -> dict | None:
     reached = [k for k in ks if k["t"] <= t] or [ks[0]]
     lay = next((k["layers"] for k in reversed(reached) if k["layers"] is not None), None)
     cam["layers"] = lay
+    cam["chapter"] = next((k["chapter"] for k in reversed(reached) if k.get("chapter") is not None), None)
     op: dict = {}
     for k in reached:
         op.update(k["opacity"])
@@ -412,6 +414,29 @@ def sequence(n: int, fps: float, tl: dict) -> list[tuple[int, int | None, float]
     seq += [(i, None, 0.0) for i in range(n)]
     seq += [(n - 1, None, 0.0)] * round((tl.get("end_hold") or 0.0) * fps)
     return seq
+
+
+def lead_in_s(tl: dict, fps: float) -> float:
+    """2.0.0: the seconds a poster frame adds before the first drawn frame, so a caption file's times stay on their pictures."""
+    p = tl.get("poster") or "none"
+    if p == "none":
+        return 0.0
+    k = max(1, round(tl.get("poster_hold", 1.2) * fps)) + (max(0, round(tl.get("poster_dissolve", 0.6) * fps)) if p == "last" else 0)
+    return k / fps
+
+
+def write_captions(tl: dict, out_dir: Path, stem: str, fps: float) -> list[str]:
+    """2.0.0: <stem>.srt and <stem>.vtt beside a video whose timeline has a story line: the captions as text a player can show, a reader
+    can search and a platform can translate. Nothing is written for a timeline with no lines."""
+    if not [r for r in (tl.get("story") or []) if str(r.get("line") or "").strip()]:
+        return []
+    import story
+    files = []
+    for kind in ("srt", "vtt"):
+        p = Path(out_dir) / f"{stem}.{kind}"
+        p.write_text(story.captions(tl, kind, lead_in=lead_in_s(tl, fps)), encoding="utf-8")
+        files.append(str(p))
+    return files
 
 
 def assemble(frames_dir: Path, n: int, fps: float, tl: dict) -> tuple[Path, int]:

@@ -39,6 +39,13 @@ description: >
   along the bottom, faded over 0.45 s; `counters:` run a number through key times ("AD {v}", "{v} fans"); `end_hold:` holds the last frame;
   `poster: last` opens the video on its final frame held `poster_hold` seconds and dissolving into the flight (X shows the first frame as the
   thumbnail and does not autoplay). Every flythrough frame carries the brand logo bottom left, above the credits.
+- **"Add my voice-over", "captions for the player"** (2.0.0): `--audio FILE` (mp3, m4a, aac, wav, ogg or flac: the person's own
+  recording; the plugin makes no voice) is laid under a flythrough and cut at the video's last frame. A timeline with `story:` lines also
+  writes `<video>.srt` and `<video>.vtt` beside the MP4 (two lines of at most 42 characters, shifted by the poster's lead-in), for players,
+  search and translation. A keyframe's `chapter: N` asks the page for that story chapter's highlight in the frames.
+- **"The video of the story"** (2.0.0): do not write its timeline. `story.py build map.yaml --outputs video` writes
+  `video/<id>_timeline.yaml` from the story's beats (camera at each beat's view, held for the line's reading time, counters from the data);
+  pass it as both `--keyframes` and `--timeline`. The `story-beats` module has the timing.
   Camera keyframes (`keyframes:`, or `--keyframes cam.yaml` alone) are either a free camera, `{t, camera: [lon, lat, height_m above the
   ground], target: [lon, lat, height_m], fov}` (pitch up to 115 degrees, looking up at a roof; the eye never goes under 6 m: MapLibre clips
   nearer ground, MAP-OUT-026), or the page's own `{t, center, zoom, pitch, bearing}`; each segment eases (`ease: smooth | linear | in | out |

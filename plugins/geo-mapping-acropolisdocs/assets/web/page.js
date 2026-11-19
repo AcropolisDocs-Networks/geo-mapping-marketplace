@@ -184,6 +184,8 @@
         setTime: function (i) { storyFollowing = true; try { setTime(i); } finally { storyFollowing = false; } },
         // 1.16.0 (Day 15 issue 4): the flythrough sets the frame's layers; the story's first chapter no longer decides them for every mode
         setLayers: function (ids) { setLayers(ids); },
+        // 2.0.0: a video frame's story chapter: the page draws that chapter's highlight (the camera is the flythrough's own)
+        storyHighlight: function (i) { storyHighlight(i); },
         setOpacity: function (id, k) { if (E.setLayerOpacity) E.setLayerOpacity(id, k); },
         credits: function () {
         var t = F && F.creditsText ? F.creditsText() : "";
@@ -530,6 +532,7 @@
       storyIdx = i;
       var ch = S.chapters[i];
       if (ch.layers) setLayers(ch.layers);
+      storyHighlight(i);
       if (T && how !== "time") {                                            // a chapter with no period shows everything up to the last one
         if (ch.time != null && ch.time >= 0) setTime(ch.time); else if (T.mode === "cumulative") setTime(T.labels.length - 1);
       }
@@ -541,6 +544,13 @@
       var live = document.getElementById("gm-story-live");
       if (live) live.textContent = "Chapter " + (i + 1) + " of " + S.chapters.length + ": " + ch.title;
       hashWrite();
+    }
+    // 2.0.0: what stands out in a chapter: the features its highlight picks at full strength, the rest of that layer faded; a chapter with
+    // no highlight gives every layer back the map's own. The engine does the drawing (MapLibre; a Leaflet page leaves its layers as they are).
+    function storyHighlight(i) {
+      if (!S || !E.storyHighlight || !(S.hl_layers || []).length) return;
+      var ch = S.chapters[Math.max(0, Math.min(S.chapters.length - 1, i | 0))];
+      E.storyHighlight(i | 0, ch && ch.hl ? ch.hl : null, S.hl_layers);
     }
     function storyFocus(i) { storyGo(i, "key"); }
 

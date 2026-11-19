@@ -18,7 +18,7 @@ if [ ! -f "$GMAP_ROOT/scripts/gmap_common.py" ]; then
 fi
 [ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found; nothing was run" >&2; false; }
 GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
-export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)   # the build token alone
+export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)
 python3 "$GMAP_ROOT/lints/mapspec_lint.py" map.yaml                       # spec check, before any data is read
 python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --draft      # two small pictures to look at first
 python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --formats svg,pdf,png [--strict]
@@ -98,7 +98,7 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
    reader should see sector footprints goes to the coverage-map pipeline (`/geo-mapping-acropolisdocs:map-run coverage-map`): it draws the wedges, applies
    coordinate privacy and words them as sectors, not coverage. A tracker with a status per location goes to `/geo-mapping-acropolisdocs:map-run program-map`; a client table to roll
    up by state or county goes to `/geo-mapping-acropolisdocs:map-run market-map`; one map per market goes to `map-atlas`. Say which door you are taking in one phrase.
-5. **Write the MapSpec** (read the `mapspec-reference` module first: it has every field and worked examples), lint it, then build with
+5. **Write the MapSpec** (read `mapspec-reference` first), lint it, then build with
    `--draft`. **Show it before you say it** (the `message-check` module): open the mute picture and say what it shows; if that is not the
    `message`, change the frame, the emphasis or the key, never by adding a callout, and draft again. Then build the finished set. Show the PNG with a one-line caption, then the findings. Write the title and subtitle
    yourself by the `map-text` module (read it first): a subject-led title in Title Case (*Link Light Rail Walksheds, Seattle*), a subtitle that
@@ -134,4 +134,4 @@ remain, a note when the legend or scale bar moved or was hidden and why). Then t
 result) and every line of `map_text.callout`, as written ("Map text: N findings (not blocking)" and one line per finding with its suggested fix);
 these never count against the three and never block. Then the message check the same way (every line of `story.callout`). Change supplied text only when the person says so. Offer one next step: `map-restyle` for a look change, `map-export` for another size.
 Files are named `<brand prefix><id>_<template>_v<YYYYMMDD>.<ext>`. A provenance sidecar (`.provenance.json`) is written beside the map; send it only if asked.
-When the person wants a map they can pan, zoom and click, use `webmap-create` (one HTML file) instead of, or beside, these three files. When the person wants to show how the map was made, turn on `methods_page` and send the one-page Data and Methods file with the map.
+When the person wants a map they can pan, zoom and click, use `webmap-create` (one HTML file) instead of, or beside, these three files. When the person wants to show how the map was made, turn on `methods_page` and send the one-page Data and Methods file with the map. For a map told in steps (a story, a carousel), finish it here, then use `map-story`.

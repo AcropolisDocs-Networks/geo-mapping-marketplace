@@ -1625,7 +1625,7 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
     if fit_mode not in ("shrink", "fixed"):
         if focus_name:
             fl = [l for l in plan.layers if l.id == focus_name and l.kind == "polygon"]
-            focus_geoms = np.asarray([g for l in fl for g in l.gdf.geometry.values if g is not None and not g.is_empty], dtype=object) if fl else None
+            focus_geoms = lo.layout_parts(np.asarray([g for l in fl for g in l.gdf.geometry.values if g is not None and not g.is_empty], dtype=object)) if fl else None
         if focus_geoms is None or not len(focus_geoms):
             focus_name, focus_geoms = None, data_geoms
     focus_tree = (data_tree if focus_geoms is data_geoms else (shapely.STRtree(focus_geoms) if focus_geoms is not None and len(focus_geoms) else None))
@@ -1961,9 +1961,28 @@ def _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rec
         obstacles += co_rects
         findings += co_fs
         rep["callouts"] = co_recs
+    mk_cfg = els.get("marks") or {}                        # 2.0.0: rings, arrows and brackets: drawn over the data, before the labels
+    if mk_cfg.get("on", bool(mk_cfg.get("items"))) and mk_cfg.get("items"):
+        mk_svg, mk_rects, mk_fs = mex.draw_marks(plan, frame, mk_cfg, obstacles, fonts, under={k: v["rect"] for k, v in placed.items()})
+        co_svg += mk_svg
+        obstacles += mk_rects
+        findings += mk_fs
+        rep["marks"] = len(mk_rects)
     fg_cfg = dict(els.get("figures") or {})                 # 1.19.0: figures take their room before the labels do, and are drawn over the data
     if not fg_cfg.get("on", bool(fg_cfg.get("items"))):
         fg_cfg["items"] = []
+    dv_cfg = els.get("detail") or {}                       # 2.0.0: a closer look at one part of the map, drawn again in a corner (detail_inset)
+    if dv_cfg.get("on"):
+        import detail_inset as dvi
+        try:
+            dv = dvi.for_map(plan, dv_cfg)
+            fg_cfg["items"] = list(fg_cfg.get("items") or []) + [dv["figure"]]
+            body.append(dvi.window_outline(frame, dv["window"], t))
+            findings += dv["findings"]
+            rep.setdefault("notes", []).extend(dv["notes"])
+            rep["detail"] = {"window": [round(v, 2) for v in dv["window"]], "size_mm": [dv["figure"]["w_mm"], dv["figure"]["h_mm"]]}
+        except Exception as ex:  # noqa: BLE001 - a detail inset never stops a map
+            findings.append(f("MAP-SPEC-005", "WARN", f"the detail inset could not be drawn ({str(ex)[:200]}); the map was built without it"))
     sc_cfg = els.get("section") or {}
     if sc_cfg.get("on", bool(sc_cfg.get("line"))) and sc_cfg.get("line"):
         import section as sec                                # 1.20.0 (Day 17 issue 8): a terrain cross-section, drawn as a figure
@@ -2135,6 +2154,10 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
                   if l.role not in ("context", "labels", "contour") and l.kind != "raster"     # a raster fills the frame: overlays may sit on it (M12)
                   and (l.spec.get("fit") is True or (l.spec.get("fit") is not False and not picture_led))]
     data_geoms = np.concatenate(data_parts) if data_parts else np.array([], dtype=object)
+    # 2.0.0: multi-part features go into the layout's tree part by part. A feature made of a thousand squares spread over the whole map
+    # (Day 16: every 500 m square with one count is one feature) has a box as wide as the map, so every cell of the occupancy and focus
+    # grids was tested against every part of every feature: one picture of that map took over 20 minutes in the fit alone
+    data_geoms = lo.layout_parts(data_geoms)
     data_tree = shapely.STRtree(data_geoms) if len(data_geoms) else None          # built once for every layout the overlays try (M16)
 
     banner_h, banner_on, blocks, conf, dt_cfg, dt_rows, dt_size, findings, inmap, inset, inset_cfg, inset_on, inset_try, legend_fit, logo_beside_scale, logo_box, na_cfg0, na_size, na_style, north_wanted, sb_style, sb_wanted, tbox = _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl)

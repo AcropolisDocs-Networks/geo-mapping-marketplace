@@ -136,7 +136,7 @@ def outside_raster_window(report: dict, tol: float = 0.002) -> tuple | None:
 
 def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, brand: str | None = None, template: str | None = None,
           strict: bool = False, mode: str | None = None, keep: bool = False, export_options: dict | None = None, draft: bool = False,
-          mute: bool = False) -> dict:
+          mute: bool = False, spec_edit=None) -> dict:
     """`export_options` (M16): transparent, bleed_mm, crop_marks, pdfa, inkscape, outline_text over the MapSpec's `export:` block
     (map_export.options_from); each variant is read back (MAP-OUT-014 to 018). 1.3.0 (R1-PANEL): a file with a top-level `sheet_version` is a
     SheetSpec, built by sheet.build (two to six panels with one shared frame)."""
@@ -157,13 +157,15 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
         raise mp.PlanError(f"formats {', '.join(unknown)} are not map outputs (data packages come with the map-build pipeline); this build writes svg, pdf, png, geopdf, geotiff and html", gc.EXIT_USAGE)
     web = webmap.build_page(spec_path, brand=brand, template=template) if web_fmts else None
     if static or web is None:
-        plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template)
+        # 2.0.0: `spec_edit(spec)` adjusts the loaded MapSpec in memory before it is planned (a story beat: its frame, emphasis and line);
+        # the file is never changed, and its folder still resolves the data paths
+        plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, spec_edit=spec_edit)
         rendered = mr.render(plan)
         wider = outside_raster_window(rendered.report)
         if wider is not None:
             # 1.21.0 (Day 18 issue 5): the fit moved or shrank the frame past the window the rasters, the relief and the ground were read
             # for (a third of the map had no relief). Read them again for the frame the fit chose, and draw once more.
-            plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, window=wider)
+            plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, window=wider, spec_edit=spec_edit)
             rendered = mr.render(plan)
             plan.notes.append("rasters, relief and ground read a second time: the fit moved the frame past the window they were first read for")
         # 1.22.0: a layer named on the map in place of its key (legend.direct) whose name found no room goes back into the legend, and the
@@ -171,6 +173,8 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
         crowded = sorted(k for k, v in ((rendered.report.get("labels") or {}).get("direct") or {}).items() if v.get("missing"))
         if crowded:
             def keyed(spec_):
+                if spec_edit:
+                    spec_edit(spec_)
                 for ly in spec_.get("layers") or []:
                     if ly.get("id") in crowded:
                         ly["legend"] = {**(ly.get("legend") if isinstance(ly.get("legend"), dict) else {}), "direct": False}
@@ -180,7 +184,7 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     else:
         plan, rendered = web.plan, web.rendered            # the page's own plan: static scale bar off, bundled basemap
     # write the resolved brand back so a later default change never restyles this map
-    if not plan.spec.get("brand"):
+    if not plan.spec.get("brand") and spec_edit is None:
         import map_brand
         map_brand.write_spec_brand(Path(spec_path), plan.brand)
     recs = provenance.records(plan) + (web.records if web else [])

@@ -34,6 +34,15 @@ style: {look: auto}                # auto (default) picks focus (areas), clean (
 # a library service layer's filter goes in its source: {type: ref, id: ..., where: "VOLT_CLASS IN ('345','500')"}; a file layer uses filter: {column, in}
 # elements.callouts: {on: true, items: [{text: "Large-load queue", figure: "692 MW", at: [lon, lat] | layer: id, where: {field: value}}]}: the figure set large
 # elements.title.halo: glow (default: a soft cloud of the page colour under the title block) | crisp | thin | none
+# 2.0.0: elements.marks: {on: true, items: [{type: ring, layer: id, where: {field: value} | at: [lon, lat], radius_mm: 5, label: "Quincy"},
+#   {type: arrow, to: [lon, lat] | {layer, where}, from: [lon, lat] | offset_mm: [dx, dy], label: "692 MW queued"},
+#   {type: bracket, from: [lon, lat], to: [lon, lat], label: "42 km with no site", side: left | right}]}: marks that point without explaining, in the
+#   label ink; labels keep clear of them; a place not found or outside the frame is MAP-CART-026 (WARN, not drawn). Three on one map is the most that reads
+# 2.0.0: elements.detail: {on: true, layer: id, where: {field: value} | bbox: [w, s, e, n] | subject: true, title, position: lower-left, w_mm: 70, pad: 0.25}:
+#   a detail inset: the same layers drawn closer in a corner, with its own scale bar and its window outlined on the map (for a subject that is
+#   small in a frame that has to stay wide). The locator (inset_map) says where the map is; the detail says what is at one spot on it
+# 2.0.0: story: {claim, beats: [{role, title, say, figure, show: {view, focus, highlight, layers, time, marks}, hold}], counters, outputs}: one story,
+#   many formats (the map-story skill and the story-beats module; scripts/story.py plan | build). A map without it is a single map, as before
 # 1.19.0: elements.figures: {on: true, items: [{svg: section.svg, position: lower-left | upper-left | ..., w_mm: 110} | {svg: ..., rect_mm: [x, y, w, h]}]}:
 #   an SVG drawn into the map frame on every build (a section box, a chart), stacked beside the corner's elements; labels keep clear of it
 # 1.20.0: elements.section: {on: true, line: [[lon, lat], [lon, lat]] | {layer: cut}, sun: auto, labels: [{text, at: [lon, lat]}], ends: [A, "A′"],

@@ -685,6 +685,27 @@
         });
       });
     };
+    // 2.0.0: a story chapter's highlight. Each layer a chapter can highlight is drawn in two passes (webmap_maplibre.highlight_passes): the
+    // rest, faded, and the features that stand out. A chapter that highlights the layer swaps both passes' test from the map's own (_hl) to
+    // "this chapter is in the feature's list" (_hc, a text such as ",0,2,"); any other chapter puts the map's own test back. The layer's
+    // other filters, and the time slider's, are kept.
+    E.storyHighlight = function (i, lid, all) {
+      var key = "," + i + ",", has = ["in", key, ["coalesce", ["to-string", ["get", "_hc"]], ""]];
+      style.layers.forEach(function (l) {
+        var md = l.metadata || {}, id = md["gm:layer"];
+        if ((all || []).indexOf(id) < 0 || md["gm:period"]) return;
+        if (l._gmOwn === undefined) l._gmOwn = l.filter || null;                    // the filter the page was built with
+        var own = l._gmOwn, f = own;
+        if (id === lid) {
+          var cond = /--rest$/.test(l.id) ? ["!", has] : has;
+          var keep = own && own[0] === "all" && own.length === 3 ? own[1] : null;   // ["all", the layer's own filter, the _hl test]
+          f = keep ? ["all", keep, cond] : cond;
+        }
+        l.filter = f;
+        var d = defs[id], g = d && d.time && timeFilter ? (f ? ["all", f, timeFilter] : timeFilter) : f;
+        maps.forEach(function (m) { if (m.getLayer(l.id)) m.setFilter(l.id, g); });
+      });
+    };
     E.setTime = function (i, mode) {
       var tf = mode === "cumulative" ? ["all", [">=", ["get", "_t"], 0], ["<=", ["get", "_t"], i]] : ["==", ["get", "_t"], i];
       timeFilter = tf;

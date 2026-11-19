@@ -533,3 +533,151 @@ def place_figures(plan, map_rect: Rect, placed: dict, cfg: dict, base: Path) -> 
         rects.append(r)
         notes.append(f"figure '{title}' at {r.x0:.1f}, {r.y0:.1f} mm, {r.w:.1f} x {r.h:.1f} mm")
     return "".join(out), rects, fs, notes
+
+
+# ---------------------------------------------------------------------------------------------------------------- marks (2.0.0)
+MARK_TYPES = ("ring", "arrow", "bracket")
+MARK_INK_MM = 0.45
+MARK_HALO_MM = 1.1
+RING_MIN_MM = 3.0
+ARROW_OFFSET_MM = (-16.0, -11.0)
+ARROW_HEAD_MM = 2.2
+BRACKET_DEPTH_MM = 2.4
+
+
+def _mark_point(plan, where, frame) -> tuple[float, float] | None:
+    """A mark's place in sheet mm: [lon, lat], or {layer, where: {field: value}} (callout_anchor's two forms)."""
+    if isinstance(where, (list, tuple)) and len(where) == 2:
+        return callout_anchor(plan, {"at": where}, frame)
+    if isinstance(where, dict):
+        return callout_anchor(plan, where, frame)
+    return None
+
+
+def _stroke(d: str, color: str, halo: str, *, w: float = MARK_INK_MM, fill: str = "none") -> str:
+    return (f'<path d="{d}" fill="none" stroke="{halo}" stroke-width="{sd.num(w + MARK_HALO_MM - MARK_INK_MM)}" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.85"/>'
+            f'<path d="{d}" fill="{fill}" stroke="{color}" stroke-width="{sd.num(w)}" stroke-linecap="round" stroke-linejoin="round"/>')
+
+
+def draw_marks(plan, frame, cfg: dict, taken: list[Rect], fonts: dict, under: dict | None = None) -> tuple[str, list[Rect], list[dict]]:
+    """elements.marks (2.0.0): {on, items: [...]}: the few drawn marks that point without explaining. Drawn over the data in the label ink
+    with a halo of the ground, before the labels (which keep clear of them).
+
+      {type: ring, at: [lon, lat] | layer: id, where: {field: value}, radius_mm: 5, label: "Quincy"}      a circle round a place
+      {type: arrow, to: [lon, lat] | {layer, where}, from: [lon, lat] | offset_mm: [dx, dy], label: "692 MW queued"}   a curved arrow; its label at the tail
+      {type: bracket, from: [lon, lat], to: [lon, lat], label: "42 km with no site", side: left | right}  a bracket along a stretch
+
+    A mark whose place is not found, is outside the frame, or lies under a map element (`under`: {element name: rect}, the legend, the
+    locator, the title) is left out with a MAP-CART-026 WARN: a ring round a place the legend covers points at nothing. -> (svg, rects, findings)."""
+    t = plan.tokens
+
+    def covered(*pts) -> str | None:
+        for name, r in (under or {}).items():
+            if any(q is not None and r.x0 <= q[0] <= r.x1 and r.y0 <= q[1] <= r.y1 for q in pts):
+                return str(name).replace("_", " ")
+        return None
+    ink, halo = t["label"], t["label_halo"]
+    pt = float(fonts["label"])
+    area = frame.rect
+    out, rects, fs = [], [], []
+    for i, it in enumerate(cfg.get("items") or []):
+        if not isinstance(it, dict) or it.get("type") not in MARK_TYPES:
+            fs.append(f("MAP-CART-026", "WARN", f"mark {i + 1}: type is one of {', '.join(MARK_TYPES)}; it is not drawn"))
+            continue
+        kind = it["type"]
+        label = str(it.get("label") or "").strip()
+        g = [f'<g class="gm-mark" data-type="{kind}" data-mark="{i + 1}">']
+        if kind == "ring":
+            p = _mark_point(plan, it.get("at") if it.get("at") is not None else {k: it[k] for k in ("layer", "where") if k in it}, frame)
+            if p is None or not (area.x0 <= p[0] <= area.x1 and area.y0 <= p[1] <= area.y1):
+                fs.append(f("MAP-CART-026", "WARN", f"mark {i + 1} (ring): its place was not found inside the map frame; it is not drawn"))
+                continue
+            if covered(p):
+                fs.append(f("MAP-CART-026", "WARN", f"mark {i + 1} (ring): its place lies under the map's {covered(p)}; it is not drawn. Mark a place the "
+                            "map shows, or give the map more room on that side (extent.padding_pct)"))
+                continue
+            r = max(RING_MIN_MM, float(it.get("radius_mm") or 4.5))
+            g.append(f'<circle cx="{sd.num(p[0])}" cy="{sd.num(p[1])}" r="{sd.num(r)}" fill="none" stroke="{halo}" stroke-width="{sd.num(MARK_HALO_MM)}" stroke-opacity="0.85"/>'
+                     f'<circle cx="{sd.num(p[0])}" cy="{sd.num(p[1])}" r="{sd.num(r)}" fill="none" stroke="{ink}" stroke-width="{sd.num(MARK_INK_MM)}"/>')
+            rects.append(Rect(p[0] - r, p[1] - r, p[0] + r, p[1] + r))
+            if label:
+                tw = tm.width_mm(label, pt, 600)
+                lx, ly = p[0], p[1] - r - 1.2
+                if ly - pt * PT < area.y0:
+                    ly = p[1] + r + pt * PT + 0.8
+                g.append(sd.text(lx, ly, label, pt, ink, weight=600, anchor="middle", halo=halo, halo_w=max(0.3, pt * PT * 0.22)))
+                rects.append(Rect(lx - tw / 2, ly - pt * PT, lx + tw / 2, ly + 0.6))
+        elif kind == "arrow":
+            to = _mark_point(plan, it.get("to"), frame)
+            if to is None or not (area.x0 <= to[0] <= area.x1 and area.y0 <= to[1] <= area.y1):
+                fs.append(f("MAP-CART-026", "WARN", f"mark {i + 1} (arrow): the place it points to was not found inside the map frame; it is not drawn"))
+                continue
+            if covered(to):
+                fs.append(f("MAP-CART-026", "WARN", f"mark {i + 1} (arrow): the place it points to lies under the map's {covered(to)}; it is not drawn. "
+                            "Point at a place the map shows, or give the map more room on that side (extent.padding_pct)"))
+                continue
+            a = _mark_point(plan, it.get("from"), frame) if it.get("from") is not None else None
+            if a is None:
+                dx, dy = (float(v) for v in (it.get("offset_mm") or ARROW_OFFSET_MM))
+                a = (min(max(to[0] + dx, area.x0 + 3), area.x1 - 3), min(max(to[1] + dy, area.y0 + 3), area.y1 - 3))
+            vx, vy = to[0] - a[0], to[1] - a[1]
+            ln = math.hypot(vx, vy)
+            if ln < 3.0:
+                fs.append(f("MAP-CART-026", "WARN", f"mark {i + 1} (arrow): its start and end are under 3 mm apart; it is not drawn"))
+                continue
+            ux, uy = vx / ln, vy / ln
+            gap = float(it.get("gap_mm", 1.8))                 # the head stops short of the place, so it points at it and does not cover it
+            tip = (to[0] - ux * gap, to[1] - uy * gap)
+            bend = min(ln * 0.18, 6.0)
+            cx, cy = (a[0] + tip[0]) / 2 - uy * bend, (a[1] + tip[1]) / 2 + ux * bend
+            hx, hy = tip[0] - cx, tip[1] - cy
+            hl = math.hypot(hx, hy) or 1.0
+            hx, hy = hx / hl, hy / hl
+            h = ARROW_HEAD_MM
+            left = (tip[0] - hx * h - hy * h * 0.45, tip[1] - hy * h + hx * h * 0.45)
+            right = (tip[0] - hx * h + hy * h * 0.45, tip[1] - hy * h - hx * h * 0.45)
+            g.append(_stroke(f"M{sd.num(a[0])} {sd.num(a[1])}Q{sd.num(cx)} {sd.num(cy)} {sd.num(tip[0])} {sd.num(tip[1])}", ink, halo))
+            g.append(_stroke(f"M{sd.num(left[0])} {sd.num(left[1])}L{sd.num(tip[0])} {sd.num(tip[1])}L{sd.num(right[0])} {sd.num(right[1])}Z", ink, halo, fill=ink))
+            rects.append(Rect(min(a[0], tip[0], cx) - 0.5, min(a[1], tip[1], cy) - 0.5, max(a[0], tip[0], cx) + 0.5, max(a[1], tip[1], cy) + 0.5))
+            if label:
+                tw = tm.width_mm(label, pt, 600)
+                anchor = "end" if ux > 0 else "start"
+                lx = a[0] - 1.0 if ux > 0 else a[0] + 1.0
+                ly = a[1] + pt * PT * 0.35
+                g.append(sd.text(lx, ly, label, pt, ink, weight=600, anchor=anchor, halo=halo, halo_w=max(0.3, pt * PT * 0.22)))
+                rects.append(Rect(lx - tw if anchor == "end" else lx, ly - pt * PT, lx if anchor == "end" else lx + tw, ly + 0.6))
+        else:                                                  # bracket
+            a, b = _mark_point(plan, it.get("from"), frame), _mark_point(plan, it.get("to"), frame)
+            if a is None or b is None:
+                fs.append(f("MAP-CART-026", "WARN", f"mark {i + 1} (bracket): it needs from: [lon, lat] and to: [lon, lat]; it is not drawn"))
+                continue
+            if covered(a, b):
+                fs.append(f("MAP-CART-026", "WARN", f"mark {i + 1} (bracket): an end lies under the map's {covered(a, b)}; it is not drawn"))
+                continue
+            vx, vy = b[0] - a[0], b[1] - a[1]
+            ln = math.hypot(vx, vy)
+            if ln < 4.0:
+                fs.append(f("MAP-CART-026", "WARN", f"mark {i + 1} (bracket): its ends are under 4 mm apart on the sheet; it is not drawn"))
+                continue
+            nx, ny = -vy / ln, vx / ln
+            if str(it.get("side") or "left") == "right":
+                nx, ny = -nx, -ny
+            off, d = float(it.get("offset_mm", 2.0)), float(it.get("depth_mm", BRACKET_DEPTH_MM))
+            p0 = (a[0] + nx * off, a[1] + ny * off)
+            p1 = (a[0] + nx * (off + d), a[1] + ny * (off + d))
+            p2 = (b[0] + nx * (off + d), b[1] + ny * (off + d))
+            p3 = (b[0] + nx * off, b[1] + ny * off)
+            g.append(_stroke("M" + "L".join(f"{sd.num(x)} {sd.num(y)}" for x, y in (p0, p1, p2, p3)), ink, halo))
+            xs, ys = [p[0] for p in (p0, p1, p2, p3)], [p[1] for p in (p0, p1, p2, p3)]
+            rects.append(Rect(min(xs) - 0.5, min(ys) - 0.5, max(xs) + 0.5, max(ys) + 0.5))
+            if label:
+                tw = tm.width_mm(label, pt, 600)
+                mx_, my_ = (p1[0] + p2[0]) / 2 + nx * (pt * PT * 0.9), (p1[1] + p2[1]) / 2 + ny * (pt * PT * 0.9)
+                anchor = "middle" if abs(nx) < 0.5 else ("start" if nx > 0 else "end")
+                ly = my_ + pt * PT * 0.35
+                g.append(sd.text(mx_, ly, label, pt, ink, weight=600, anchor=anchor, halo=halo, halo_w=max(0.3, pt * PT * 0.22)))
+                x0 = mx_ - tw / 2 if anchor == "middle" else (mx_ if anchor == "start" else mx_ - tw)
+                rects.append(Rect(x0, ly - pt * PT, x0 + tw, ly + 0.6))
+        g.append("</g>")
+        out.append("".join(g))
+    return ('<g class="gm-marks">' + "".join(out) + "</g>") if out else "", rects, fs

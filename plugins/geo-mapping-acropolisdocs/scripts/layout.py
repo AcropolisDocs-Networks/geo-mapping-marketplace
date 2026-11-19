@@ -274,6 +274,21 @@ class Frame:
         return x, y
 
 
+def layout_parts(geoms) -> np.ndarray:
+    """The geometries the layout's grids are tested against: every multi-part feature as its parts (2.0.0), missing and empty ones left out.
+    What lies under a cell is the same; the tree can then tell which few parts are near it."""
+    import shapely
+    arr = np.asarray(geoms, dtype=object)
+    if not len(arr):
+        return arr
+    keep = ~shapely.is_missing(arr)
+    keep[keep] &= ~shapely.is_empty(arr[keep])
+    arr = arr[keep]
+    if not len(arr) or int(shapely.get_num_geometries(arr).max()) <= 1:
+        return arr
+    return np.asarray(shapely.get_parts(arr), dtype=object)
+
+
 def occupancy(frame: Frame, geoms, tree=None) -> np.ndarray:
     """A coarse boolean grid over the frame: True where a data feature lies under the cell centre. `tree` is an STRtree of `geoms` the
     caller already has (the renderer builds one for every layout it tries, M16)."""

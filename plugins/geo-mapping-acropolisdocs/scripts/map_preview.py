@@ -39,6 +39,11 @@ def mute_svg(svg: str) -> tuple[str, dict]:
             el.getparent().remove(el)
             removed[hit] = removed.get(hit, 0) + 1
     n = 0
+    for mk in [e for e in root.iter() if isinstance(e.tag, str) and "gm-marks" in (e.get("class") or "").split()]:
+        for tx in [e for e in mk.iter() if isinstance(e.tag, str) and e.tag in (SVG_NS + "text", "text")]:      # a mark's drawing stays; its words go
+            if tx.getparent() is not None:
+                tx.getparent().remove(tx)
+                removed["gm-mark-label"] = removed.get("gm-mark-label", 0) + 1
     for lg in [e for e in root.iter() if isinstance(e.tag, str) and "gm-legend" in (e.get("class") or "").split()]:
         for tx in [e for e in lg.iter() if isinstance(e.tag, str) and e.tag in (SVG_NS + "text", "text")]:
             if tx.getparent() is not None:

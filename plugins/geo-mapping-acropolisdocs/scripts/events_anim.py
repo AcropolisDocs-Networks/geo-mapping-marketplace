@@ -448,6 +448,7 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
     try:
         rep["files"].append(fl.encode(seq_dir, mp4, fps, {"title": plan.spec.get("id") or stem, "comment": comment,
                                                            "copyright": props.get("Author", ""), "artist": props.get("Author", "")})["path"])
+        rep["files"] += tlm.write_captions(tl, mp4.parent, mp4.stem, fps)       # 2.0.0: the story line as <stem>.srt and <stem>.vtt
         import output_lint as ol
         rep["findings"] += ol.check_mp4(str(mp4), tuple(v - v % 2 for v in base.size), n_out / fps)
     except (fl.FlyError, animate.AnimateError) as ex:

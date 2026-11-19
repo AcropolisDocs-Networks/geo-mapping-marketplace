@@ -48,6 +48,7 @@ import layout as lo  # noqa: E402
 PANEL_MAX = 6
 CONTACT_MAX = 24
 CAPTION_MM = 6.0
+CAPTION_LINES = 2                   # 2.0.0: a caption wider than its panel wraps to this many lines (a story beat's line); the rest is cut with an ellipsis
 BAND_GAP_MM = 4.0
 LEGEND_MAX_SHARE = 0.3             # a panel's own legend (legend: each) is at most this share of the panel's width; its title wraps
 PANEL_MIN_MM = 40.0                 # MAP-PNL-006: below this a panel cannot hold its labels at the template's minimum type size
@@ -91,6 +92,10 @@ def load(path) -> dict:
 def merge(base, over):
     """`override` onto a base MapSpec, as atlas pages are made: dicts merge key by key, `layers` merge by id (a new id is appended), anything
     else is replaced."""
+    if isinstance(over, dict) and over.get("_replace"):
+        # 2.0.0: `_replace: true` in an override puts the mapping in place of the base's instead of merging into it (a story beat's own
+        # highlight in place of the map's); with `_drop: true` the key is taken out altogether (the caller drops a None)
+        return None if over.get("_drop") else {k: copy.deepcopy(v) for k, v in over.items() if k != "_replace"}
     if isinstance(base, dict) and isinstance(over, dict):
         out = dict(base)
         for k, v in over.items():
@@ -104,7 +109,9 @@ def merge(base, over):
                         layers[i] = merge(layers[i], ly)
                 out[k] = layers
             else:
-                out[k] = merge(base.get(k), v) if k in base else copy.deepcopy(v)
+                out[k] = merge(base.get(k), v) if k in base else merge(None, v)
+                if out[k] is None and isinstance(v, dict) and v.get("_drop"):
+                    del out[k]
         return out
     return copy.deepcopy(over)
 
@@ -150,10 +157,10 @@ class Grid:
     notes: list = field(default_factory=list)
 
 
-def panel_grid(area, cols: int, rows: int, n: int, *, gap: float, caption: bool, band_w: float = 0.0, band_h: float = 0.0) -> Grid:
+def panel_grid(area, cols: int, rows: int, n: int, *, gap: float, caption: bool, band_w: float = 0.0, band_h: float = 0.0, cap_mm: float | None = None) -> Grid:
     """layout.panel_grid (R1-PANEL): the map area cut into cols x rows equal panels (each with its caption band), with the shared band on the right
     or at the bottom, whichever leaves the larger panels. band_w / band_h: the band's width on the right or height at the bottom (0: no band)."""
-    cap = CAPTION_MM if caption else 0.0
+    cap = (CAPTION_MM if cap_mm is None else float(cap_mm)) if caption else 0.0     # cap_mm: a taller band for captions of two lines (2.0.0)
 
     def cut(a, side):
         if side == "right":
@@ -181,7 +188,7 @@ def panel_grid(area, cols: int, rows: int, n: int, *, gap: float, caption: bool,
         x0 = inner.x0 + c * (pw + gap)
         y0 = inner.y0 + r * (ph + cap + gap)
         rects.append(lo.Rect(x0, y0, x0 + pw, y0 + ph))
-        caps.append((x0, y0 + ph + cap * 0.72))
+        caps.append((x0, y0 + ph + CAPTION_MM * 0.72))
     return Grid(panels=rects, captions=caps, band=band, band_side=side, pw=pw, ph=ph)
 
 
@@ -289,6 +296,20 @@ def compose(sheet: dict, panels: list[dict], tpl: dict, *, contact: bool = False
     band_h = min(float(tpl["legend_max"]["h"]) * 0.45, H * 0.22) if band_items else 0.0
     grid = panel_grid(area, cols, rows, n, gap=float(arr.get("gap_mm", 6)), caption=arr.get("caption", "below") != "none" or contact,
                       band_w=band_w, band_h=band_h)
+    # 2.0.0: a caption is kept inside its own panel's width. 1.3 drew it on one line however long it was, so a story beat's line ran into the
+    # next panel's caption. It wraps to CAPTION_LINES lines (the band grows for all panels) and what is left over is cut with an ellipsis
+    cap_pt = float(fonts.get("legend_title", 9))
+    cap_lines = []
+    for pnl in panels:
+        ls_ = tm.wrap(str(pnl["caption"]), max(grid.pw, 10.0), cap_pt, 600) if pnl.get("caption") else []
+        if len(ls_) > CAPTION_LINES:
+            ls_ = ls_[:CAPTION_LINES - 1] + [ls_[CAPTION_LINES - 1].rstrip(" ,;:") + "…"]
+            fs.append(finding("MAP-PNL-006", "INFO", f"the caption '{str(pnl['caption'])[:40]}…' does not fit under its panel in {CAPTION_LINES} lines and is cut; "
+                              "shorten it, or use fewer columns"))
+        cap_lines.append(ls_)
+    if max((len(c) for c in cap_lines), default=0) > 1:
+        grid = panel_grid(area, cols, rows, n, gap=float(arr.get("gap_mm", 6)), caption=True, band_w=band_w, band_h=band_h,
+                          cap_mm=CAPTION_MM + (max(len(c) for c in cap_lines) - 1) * tm.line_height_mm(cap_pt))
     if min(grid.pw, grid.ph) < PANEL_MIN_MM and not contact:
         fs.append(finding("MAP-PNL-006", "BLOCK", f"each panel would be {grid.pw:.0f} x {grid.ph:.0f} mm, too small for the template's minimum type sizes "
                           f"(at least {PANEL_MIN_MM:g} mm a side); use a larger template or fewer panels"))
@@ -343,6 +364,8 @@ def compose(sheet: dict, panels: list[dict], tpl: dict, *, contact: bool = False
         for f_ in r.findings:
             if f_["id"] in ("MAP-CART-005", "MAP-LIC-011", "MAP-CART-020", "MAP-CART-021"):
                 continue                     # the legend, scale bar and north arrow are the sheet's; the sources are the sheet's line
+            if f_["id"] == "MAP-SPEC-005" and "footer notes need" in f_["message"]:
+                continue                     # 2.0.0: a panel has no footer of its own: the sources and the disclaimer are in the sheet's footer
             fs.append({**f_, "message": f"[panel {k + 1}] {f_['message']}"})
     # ---- the sheet
     out = [sd.rect(0, 0, W, H, t["background"], extra='class="gm-page"')]
@@ -360,8 +383,8 @@ def compose(sheet: dict, panels: list[dict], tpl: dict, *, contact: bool = False
         out.append(f'<svg x="{sd.num(rr.x0)}" y="{sd.num(rr.y0)}" width="{sd.num(rr.w)}" height="{sd.num(rr.h)}" viewBox="0 0 {sd.num(grid.pw)} {sd.num(grid.ph)}" '
                    f'class="gm-panel" data-panel="{k + 1}">{inner}</svg>')
         out.append(sd.rect(rr.x0, rr.y0, rr.w, rr.h, "none", t["frame"], 0.25))
-        if panels[k].get("caption"):
-            out.append(sd.text(cap[0], cap[1], str(panels[k]["caption"]), float(fonts.get("legend_title", 9)), t["label"], weight=600))
+        for li, ln in enumerate(cap_lines[k]):
+            out.append(sd.text(cap[0], cap[1] + li * tm.line_height_mm(cap_pt), ln, cap_pt, t["label"], weight=600))
         fr = r.report.get("frame") or {}
         rects_rep.append({"panel": k + 1, "rect_mm": [round(rr.x0 + v, 3) if i % 2 == 0 else round(rr.y0 + v, 3) for i, v in enumerate(fr.get("rect_mm", [0, 0, grid.pw, grid.ph]))],
                           "scale": fr.get("scale"), "cx": fr.get("cx"), "cy": fr.get("cy")})
@@ -396,6 +419,9 @@ def compose(sheet: dict, panels: list[dict], tpl: dict, *, contact: bool = False
         src = _sources_line(plans)
         lines += tm.wrap(src, ft["w"] - logo_w - 8.0, npt, 400) if src else []
     els0 = p0.spec.get("elements") or {}
+    dis = els0.get("disclaimer") or {}
+    if dis.get("on") and dis.get("text"):                 # 2.0.0: the maps' disclaimer once, under the sources (a panel's own footer is not drawn)
+        lines += tm.wrap(str(dis["text"]), ft["w"] - logo_w - 8.0, npt, 400)
     tml = p0.pack["pack"].get("trademark_line")
     if tml and (els0.get("trademark_line") or {}).get("on", "auto") in ("auto", True):
         lines += tm.wrap(tml, ft["w"] - logo_w - 8.0, npt, 400)

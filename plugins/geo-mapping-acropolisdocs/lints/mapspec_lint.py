@@ -34,7 +34,7 @@ def op_layer_refs(layer: dict) -> list[str]:
     return out
 
 ELEMENTS = {"title", "legend", "north_arrow", "scale_bar", "graticule", "neatline", "inset_map", "logo", "source_note", "attribution",
-            "date_stamp", "crs_note", "disclaimer", "confidentiality_banner", "trademark_line", "callouts", "figures", "section", "data_table", "methods_page",
+            "date_stamp", "crs_note", "disclaimer", "confidentiality_banner", "trademark_line", "callouts", "figures", "section", "marks", "detail", "data_table", "methods_page",
             "names", "context", "terrain", "frame"}   # names, context and terrain are top-level blocks too; elements.<name> carries the on/off toggle (1.4.0: frame)
 PALETTES = {"brand_sequential", "brand_diverging", "brand_categorical", "brand_neutral"}
 POSITIONS = {"upper-left", "upper-right", "lower-left", "lower-right", "auto"}      # auto: the layout may move it off the data
@@ -76,6 +76,12 @@ def lint_spec(spec: dict) -> list[dict]:
         return out
     if not isinstance(spec, dict):
         return out
+    if isinstance(spec.get("story"), dict):                 # 2.0.0: the story block against its own rules (MAP-STORY-020 to 023), before any data is read
+        try:
+            import story
+            out += story.lint(spec)
+        except Exception as ex:  # noqa: BLE001 - a check that cannot run is said, never silent
+            out.append(finding("MAP-STORY-020", "WARN", f"the story block could not be checked ({type(ex).__name__}: {str(ex)[:120]})"))
     # 002 message
     msg = str(spec.get("message") or "").strip()
     if msg and (msg.lower().rstrip(".") in PLACEHOLDER_MESSAGES or len(msg.split()) < 3):

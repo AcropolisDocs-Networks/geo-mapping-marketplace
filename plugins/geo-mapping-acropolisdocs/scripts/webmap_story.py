@@ -198,13 +198,46 @@ def plan(story: dict | None, defs: list[dict], collections: dict, time_cfg: dict
             else:
                 sel = {"layer": sel["layer"], "field": str(sel["field"]), "in": [str(v) for v in sel["in"]], "label": str(sel.get("label") or ", ".join(map(str, sel["in"])))}
         v = {k: view[k] for k in ("center", "zoom", "bbox", "pitch", "bearing") if view.get(k) is not None}
+        hlc = ch.get("highlight") if isinstance(ch.get("highlight"), dict) else None      # 2.0.0: what stands out in this chapter
+        if hlc and hlc.get("layer") not in ids:
+            fs.append(finding("MAP-WEB-026", "WARN", f"chapter {n} ('{title}'): its highlight names layer '{hlc.get('layer')}', which the page does not have; "
+                              "the chapter is drawn without it"))
+            hlc = None
         out.append({"title": title, "text": str(ch.get("text") or ""), "view": v, "bbox": [round(x, 6) for x in bb], "layers": shown, "layers_given": layers,
-                    "time": t,
+                    "time": t, "hl": alias.get(hlc["layer"], hlc["layer"]) if hlc else None, "highlight": hlc, "figure": ch.get("figure"),
                     "select": sel, "id": f"gm-ch-{i}"})
     if not out:
         return None, fs, notes
     notes.append(f"story: {len(out)} chapter(s); each flies the map to its view and shows its layers")
     return {"chapters": out}, fs, notes
+
+
+def chapter_highlights(plan, story: dict | None) -> list[dict]:
+    """2.0.0: each chapter's `highlight: {layer, column, in | min | max | top}` as a mask on its layer (`layer.chapter_hl = {chapter index:
+    mask}`), set before the page's features are made so every feature carries the chapters it stands out in. A highlight that matches
+    nothing, or cannot be read, is reported and left off. -> findings."""
+    import map_plan as mp
+    fs = []
+    by_id = {l.id: l for l in plan.layers}
+    for i, ch in enumerate((story or {}).get("chapters") or []):
+        hl = ch.get("highlight") if isinstance(ch, dict) else None
+        if not isinstance(hl, dict):
+            continue
+        l = by_id.get(str(hl.get("layer")))
+        if l is None or l.kind == "raster":
+            continue
+        try:
+            m, what = mp.highlight_mask(l, {k: v for k, v in hl.items() if k not in ("layer", "auto")})
+        except mp.PlanError as ex:
+            fs.append(finding("MAP-WEB-026", "WARN", f"chapter {i + 1}: its highlight cannot be read ({str(ex)[:160]}); the chapter is drawn without it"))
+            continue
+        if not m.any():
+            fs.append(finding("MAP-WEB-026", "WARN", f"chapter {i + 1}: its highlight ({what}) matches no feature of '{l.id}'; the chapter is drawn without it"))
+            continue
+        cur = dict(getattr(l, "chapter_hl", None) or {})
+        cur[i] = m
+        l.chapter_hl = cur
+    return fs
 
 
 def _touches(g: dict, bb) -> bool:
@@ -253,6 +286,13 @@ def picture_edit(base_edit, ch: dict, time_cfg: dict | None, time_values: dict, 
                         f = ly.get("filter")
                         fl = [f] if isinstance(f, dict) else list(f or [])
                         ly["filter"] = fl + [{"column": time_values[ly["id"]].field, "in": vals}]
+        hlc = ch.get("highlight")
+        if isinstance(hlc, dict):                          # 2.0.0: the chapter's print picture shows what the chapter makes stand out
+            for ly in spec.get("layers") or []:
+                if ly["id"] == hlc.get("layer"):
+                    ly["highlight"] = {k: v for k, v in hlc.items() if k not in ("layer", "auto")}
+                else:
+                    ly.pop("highlight", None)
         els = spec.setdefault("elements", {})
         els["title"] = dict(els.get("title") or {}, on=True, text=ch["title"], subtitle=title)
         els["scale_bar"] = {"on": True}

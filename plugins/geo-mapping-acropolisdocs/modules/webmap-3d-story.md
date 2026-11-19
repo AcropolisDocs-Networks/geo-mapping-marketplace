@@ -55,6 +55,13 @@ What to ask for, in the person's words:
   slider) and a selection for the KPI panel. Check that each chapter's view shows its layers (MAP-WEB-026 warns when it lands on an empty
   view). A pitched view shows more ground at the top than a flat one; give a centre and a zoom rather than a box for a close view. A chapter
   that names no layers shows all the page's data layers (1.16.0).
+- "Make this chapter about the n41 sites" (2.0.0): a chapter's `highlight: {layer, column, in | min | max | top}` is drawn by the page when
+  the chapter is reached: those features at full strength, the rest of that layer faded, the layer's own filter and the time slider kept. A
+  chapter with none shows the map's own emphasis again. MapLibre pages only (a Leaflet page moves the map and switches layers, MAP-WEB-025);
+  a highlight that matches no feature is said (MAP-WEB-026). `figure:` leads the chapter's text with its key number.
+- "Tell the story of ..." (2.0.0): write the chapters once as a `story:` block with the `map-story` skill. A page whose MapSpec has a
+  `story:` and no `webmap.story` takes its chapters from the beats, and the same beats make the video timeline, the sheet, the carousel
+  and the slides. `webmap.story.chapters` written by hand still wins on its own page.
 - "A panel with the numbers": `webmap.panel.fields` from the layer or its joined table (`join`); clicking a feature fills it, a chapter's
   `select` shows totals (sum, or `agg: mean | min | max`).
 

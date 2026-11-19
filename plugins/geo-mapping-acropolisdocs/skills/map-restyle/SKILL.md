@@ -103,6 +103,8 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the
 | shade the locator box, mark it in red | `--set elements.inset_map.highlight.style=fill` (`box`, `fill`, `corners`) / `--set elements.inset_map.highlight.color=danger` |
 | the wordmark logo instead of the mark | `--set elements.logo.variant=secondary` (when the brand pack has one) |
 | point out a site, add a note with an arrow | edit `elements.callouts.items` in the spec: `{text, at: [lon, lat]}` or `{text, layer, where: {field: value}}`, optional `direction: ne` |
+| ring a place, point an arrow at it, bracket a stretch (2.0.0) | edit `elements.marks.items` in the spec: `{type: ring, layer, where: {field: value}, label}`, `{type: arrow, to: [lon, lat] or {layer, where}, label}`, `{type: bracket, from: [lon, lat], to: [lon, lat], label}`; a mark points and a callout explains, so try the mark first |
+| show one part closer, keep the frame wide (2.0.0) | `elements.detail: {on: true, layer, where: {field: value}}` (or `bbox`, or `subject: true`), with `title`; the detail inset takes a free corner and its window is outlined on the map |
 | a top-5 table or bar chart on the map | `--set elements.data_table.on=true --set elements.data_table.layer=L --set elements.data_table.value_field=F --set elements.data_table.label_field=NAME` (`kind=bar`, `top=5`, `title=...`) |
 | label the roads / the routes along the line | a `labels` entry for the lines layer (`{layer, field}`): line labels follow the line |
 | labels that do not fit: use leader lines | `--set labels.N.leaders=true` on the point layer's labels entry |

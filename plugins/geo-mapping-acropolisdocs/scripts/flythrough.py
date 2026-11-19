@@ -577,6 +577,8 @@ class Capture:
             if (c.time != null && window.__gmCtx.setTime) window.__gmCtx.setTime(c.time);
             if (c.layers && window.__gmCtx.setLayers) {                                  // 1.16.0: the frame's layer set, set when it changes
               const key = c.layers.join('|'); if (window.__gmFlyLayers !== key) { window.__gmCtx.setLayers(c.layers); window.__gmFlyLayers = key; } }
+            if (c.chapter != null && window.__gmCtx.storyHighlight && window.__gmFlyChapter !== c.chapter) {     // 2.0.0: the beat's highlight
+              window.__gmCtx.storyHighlight(c.chapter); window.__gmFlyChapter = c.chapter; }
             if (c.opacity) Object.keys(c.opacity).forEach((id) => {                     // a factor of the layer's own opacity, as its slider
               if (window.__gmCtx.setOpacity) { window.__gmCtx.setOpacity(id, c.opacity[id]); return; }
               (m.getStyle().layers || []).forEach((l) => { if (l.type === 'fill-extrusion' && l.metadata && l.metadata['gm:layer'] === id)
@@ -626,13 +628,23 @@ WEB_MB = 15.0                     # 1.19.0 (Day 16 issue 12): an artifact or a p
 WEB_CRFS = (26, 28, 30, 32)
 
 
-def encode(frames_dir: Path, out: Path, fps: float, meta: dict, crf: int = 20) -> dict:
+AUDIO_TYPES = (".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac")
+
+
+def encode(frames_dir: Path, out: Path, fps: float, meta: dict, crf: int = 20, audio=None, seconds: float | None = None) -> dict:
+    """2.0.0: `audio` is the person's own narration or sound file, laid under the frames as AAC from the first frame; the video keeps its own
+    length (`seconds`): a longer recording is cut at the last frame, a shorter one ends in silence."""
     import animate
     exe = animate.ffmpeg_exe()
     if not exe:
         raise FlyError(animate.FFMPEG_MISSING.replace("; the GIF was written without it", ""), gc.EXIT_RUNTIME)
-    cmd = [exe, "-y", "-loglevel", "error", "-framerate", f"{fps:g}", "-i", str(frames_dir / "frame_%05d.png"), "-c:v", "libx264", "-preset", "veryfast",
-           "-crf", str(int(crf)), "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-r", f"{fps:g}", "-movflags", "+faststart"]
+    cmd = [exe, "-y", "-loglevel", "error", "-framerate", f"{fps:g}", "-i", str(frames_dir / "frame_%05d.png")]
+    if audio:
+        cmd += ["-i", str(audio)]
+    cmd += ["-c:v", "libx264", "-preset", "veryfast",
+            "-crf", str(int(crf)), "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-r", f"{fps:g}", "-movflags", "+faststart"]
+    if audio:
+        cmd += ["-map", "0:v:0", "-map", "1:a:0", "-c:a", "aac", "-b:a", "160k"] + (["-t", f"{seconds:.3f}"] if seconds else [])
     for k, v in meta.items():
         cmd += ["-metadata", f"{k}={v}"]
     cmd.append(str(out))
@@ -675,7 +687,7 @@ def plan(n_frames: int, sec_per_frame: float | None) -> dict:
 def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, duration: float = 32.0, fps: float = 25.0, size: str = "1280x720",
         marker: str | None = None, hud_on: bool = True, quality: str = "final", resume: bool = False, gl: str = "auto", frames: int | None = None,
         title: str | None = None, warmup_only: bool = False, capture_factory=None, steady_s: float = STEADY_S, max_turn: float = MAX_TURN,
-        timeline=None, poster: str | None = None, web_mb: float = WEB_MB, hooks: dict | None = None) -> dict:
+        timeline=None, poster: str | None = None, web_mb: float = WEB_MB, hooks: dict | None = None, audio=None) -> dict:
     """Capture, composite and encode. `frames` overrides duration x fps (tests). Returns the report: files, frames done and skipped, the seconds
     a frame took, the findings (MAP-OUT-013 from the read-back, MAP-OUT-020 when a credit could not be placed)."""
     import map_brand
@@ -824,8 +836,16 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
     seq_dir, n_out = tlm.assemble(fdir, n, fps, tl)        # 1.16.0: the poster frame and the end hold
     rep["video_frames"] = n_out
     rep["poster"] = tl["poster"]
+    if audio is not None:                                  # 2.0.0: the person's own recording under the video
+        ap_ = Path(str(audio))
+        if not ap_.is_file() or ap_.suffix.lower() not in AUDIO_TYPES:
+            raise FlyError(f"--audio needs a sound file of your own ({', '.join(AUDIO_TYPES)}); {ap_.name} is not one", gc.EXIT_USAGE)
+        rep["audio"] = ap_.name
+        rep["notes"].append(f"sound: {ap_.name} laid under the video from its first frame (cut at the last frame, {n_out / fps:.1f} s); the caption "
+                            "files carry the same words for a player without sound")
     try:
-        rep["files"].append(encode(seq_dir, mp4, fps, meta)["path"])
+        rep["files"].append(encode(seq_dir, mp4, fps, meta, audio=audio, seconds=n_out / fps)["path"])
+        rep["files"] += tlm.write_captions(tl, out, stem, fps)            # 2.0.0: <stem>.srt and <stem>.vtt when the timeline has a story line
         import output_lint as ol
         rep["findings"] += ol.check_mp4(str(mp4), tuple(w - w % 2 for w in wh), n_out / fps)
         if quality == "final":
@@ -868,12 +888,13 @@ def main(argv=None) -> int:
     ap.add_argument("--on-ready", metavar="READY.js", help="1.19.0: JavaScript run once the page has settled (map is the MapLibre map): add a layer that stays")
     ap.add_argument("--on-frame", metavar="FRAME.js", help="1.19.0: JavaScript run before each frame (map, cam: the frame's camera, its t in cam.t)")
     ap.add_argument("--web-mb", type=float, default=WEB_MB, help="1.19.0: a final MP4 over this many MB also gets a _web.mp4 copy under it (0: none)")
+    ap.add_argument("--audio", metavar="FILE", help="2.0.0: your own narration or sound file (mp3, m4a, wav ...), laid under the video from its first frame")
     a = ap.parse_args(argv)
     mode = "path" if a.path else "chapters" if a.chapters else "slider" if a.slider else "keyframes" if a.keyframes else "orbit"
     try:
         rep = run(a.page, a.out, mode=mode, layer=a.path, duration=a.duration, fps=a.fps, size=a.size, marker=a.marker, hud_on=a.hud == "on",
                   quality=a.quality, resume=a.resume, gl=a.gl, warmup_only=a.warmup, steady_s=a.steady, max_turn=a.max_turn,
-                  timeline=a.timeline or a.keyframes, poster=a.poster, web_mb=a.web_mb,
+                  timeline=a.timeline or a.keyframes, poster=a.poster, web_mb=a.web_mb, audio=a.audio,
                   hooks={k: Path(v).read_text(encoding="utf-8") for k, v in (("ready", a.on_ready), ("frame", a.on_frame)) if v} or None)
     except FlyError as ex:
         print(f"flythrough: {ex}", file=sys.stderr)

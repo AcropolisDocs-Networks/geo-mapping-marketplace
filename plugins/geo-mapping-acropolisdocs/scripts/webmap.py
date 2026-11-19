@@ -210,6 +210,8 @@ def layer_collection(plan, l, label_field: str | None, px: dict, time_field: str
     feats = []
     cols = {c: gdf[c].tolist() for c in keep if c in gdf.columns}
     hl = np.asarray(l.highlight, dtype=bool) if getattr(l, "highlight", None) is not None and len(l.highlight) == len(gdf) else None
+    # 2.0.0: the story chapters this feature stands out in, as ",0,2," (a text the page's filters can search, in a GeoJSON layer and a tiled one)
+    chl = {int(k): np.asarray(m, dtype=bool) for k, m in (getattr(l, "chapter_hl", None) or {}).items() if len(m) == len(gdf)}
     if hl is not None:                       # 0.23.0: the print's highlight on the page: the rest dimmed and faded, the subset larger
         import map_look
         base_c = l.stroke if l.kind == "line" else l.fill
@@ -252,6 +254,10 @@ def layer_collection(plan, l, label_field: str | None, px: dict, time_field: str
             props["_e"] = f"{c_elev[i]:,.0f}"
         for k, vs in (extra or {}).items():
             props[k] = vs[i]
+        if chl:
+            props["_hc"] = "," + ",".join(str(k) for k, m in sorted(chl.items()) if m[i]) + ","
+            if hl is None:
+                props["_hl"] = 1                 # no highlight of the map's own: every feature at full strength until a chapter says otherwise
         if hl is not None:
             props["_hl"] = int(hl[i])
             if not hl[i]:
@@ -667,6 +673,9 @@ def layer_style(plan, l) -> tuple[dict, dict]:
     if getattr(l, "highlight", None) is not None:              # 0.23.0: the print's highlight (map_look), carried to Leaflet and MapLibre
         import map_look
         s["highlight"] = {"rest": map_look.HIGHLIGHT_REST_OPACITY, "size": 1.0 if l.role == "proportional" else map_look.HIGHLIGHT_SIZE}
+    elif getattr(l, "chapter_hl", None):                       # 2.0.0: a story chapter's highlight: the two passes, the same size until a chapter picks its features
+        import map_look
+        s["highlight"] = {"rest": map_look.HIGHLIGHT_REST_OPACITY, "size": 1.0}
     return s, px
 
 
@@ -1436,6 +1445,9 @@ def _page_engine_view(base_defs, cfg, collections, compare_cfg, ctl, defs, findi
     if engine == "leaflet" and cfg["story"] and any(isinstance(c, dict) and ((c.get("view") or {}).get("pitch") or (c.get("view") or {}).get("bearing"))
                                                    for c in (cfg["story"].get("chapters") or [])):
         findings.append(finding("MAP-WEB-025", "INFO", "the story's chapters have a pitch or bearing, which the Leaflet page does not draw: its chapters fly flat and north up"))
+    if engine == "leaflet" and cfg["story"] and any(isinstance(c, dict) and c.get("highlight") for c in (cfg["story"].get("chapters") or [])):
+        findings.append(finding("MAP-WEB-025", "INFO", "the story's chapters have a highlight, which the Leaflet page does not draw: its chapters move the map "
+                                                       "and switch layers only (webmap.engine: maplibre draws them)"))
     if engine == "leaflet" and live_mvt:
         findings.append(finding("MAP-SVC-043", "BLOCK", f"live vector tile layer(s) {', '.join(live_mvt)} are drawn by the MapLibre engine only; this page is built with Leaflet "
                                 f"({engine_why}). Leave webmap.engine at auto or maplibre"))
@@ -1807,7 +1819,8 @@ def _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_
         page_cfg["view3d"] = p3["cfg"]
     story_in = cfg["story"] or {}
     if story_cfg:
-        page_cfg["story"] = {"chapters": [{k: c[k] for k in ("title", "view", "layers", "time", "select", "id")} for c in story_cfg["chapters"]],
+        page_cfg["story"] = {"chapters": [{k: c[k] for k in ("title", "view", "layers", "time", "select", "id", "hl")} for c in story_cfg["chapters"]],
+                             "hl_layers": sorted({c["hl"] for c in story_cfg["chapters"] if c.get("hl")}),
                              "navigation": story_in.get("navigation") or "buttons", "follow_time": bool(story_in.get("follow_time")),
                              "printPictures": print_pics}
     if panel_cfg:
@@ -1819,7 +1832,8 @@ def _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_
     float_inner = "".join(legend_block_html(b) for b in blocks) if fc["panel"]["show"] == "off" else ("" if not blocks else " ")   # with a panel, frame.js copies its Legend tab
     panes = {}
     if "story" in tabs:
-        panes["story"] = wf.story_tab(story_cfg, message=spec["message"], cards=story_in.get("cards") or "compact", time_display=tdisp, panel_cfg=panel_cfg)
+        panes["story"] = wf.story_tab(story_cfg, message=str(story_in.get("claim") or spec["message"]), cards=story_in.get("cards") or "compact", time_display=tdisp,
+                                      panel_cfg=panel_cfg)                     # 2.0.0: a story from beats leads with its claim
     if "legend" in tabs:
         panes["legend"] = legend_inner
     if "layers" in tabs:
@@ -1994,6 +2008,14 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
     spec = plan.spec
     t = plan.tokens
     findings: list[dict] = list(plan.findings) + pack_web_findings(plan)
+    # 2.0.0: a MapSpec with a story: block and no chapters of its own gets its chapters from the beats (story.py); a chapter's highlight
+    # (a beat's, or one written by hand) is worked out here, before the features are made, so each feature knows the chapters it stands out in
+    import story as story_mod
+    import webmap_story as ws
+    if not cfg["story"] and story_mod.block(spec_in) is not None:
+        cfg["story"], story_fs = story_mod.web_story(spec_in, plan)
+        findings += story_fs
+    findings += ws.chapter_highlights(plan, cfg["story"])
     notes = list(plan.notes)
     audience = spec.get("audience") or "external"
     ctl = cfg["controls"]
