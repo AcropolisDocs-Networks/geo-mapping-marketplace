@@ -311,9 +311,9 @@ def main(argv=None) -> int:
         if not prev.is_file():
             print("map_restyle: nothing to undo", file=sys.stderr)
             return gc.EXIT_USAGE
-        cur = path.read_text()
+        cur = path.read_text(encoding="utf-8")
         shutil.copyfile(prev, path)
-        prev.write_text(cur)
+        prev.write_text(cur, encoding="utf-8")
         print(json.dumps({"undone": True, "spec": str(path)}))
         return gc.EXIT_OK
     manifest = gc.build_manifest()
@@ -331,7 +331,7 @@ def main(argv=None) -> int:
         print(json.dumps({"written": False, "changes": done, "findings": findings}, indent=2))
         return gc.EXIT_LINT
     shutil.copyfile(path, prev)
-    path.write_text(gc.dump_mapspec(new))
+    path.write_text(gc.dump_mapspec(new), encoding="utf-8")
     out = {"written": True, "spec": str(path), "changes": done, "findings": findings, "undo": f"{Path(sys.argv[0]).name} --spec {path} --undo"}
     rc = gc.EXIT_OK
     if a.build:

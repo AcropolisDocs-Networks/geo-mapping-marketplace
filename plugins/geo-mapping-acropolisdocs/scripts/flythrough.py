@@ -709,7 +709,7 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
     fdir = out / f"{stem}_frames"
     fdir.mkdir(parents=True, exist_ok=True)
     man_p = fdir / "manifest.json"
-    man = json.loads(man_p.read_text()) if (resume and man_p.is_file()) else {}
+    man = json.loads(man_p.read_text(encoding="utf-8")) if (resume and man_p.is_file()) else {}
     cap = (capture_factory or Capture)(page_html, wh, gl=gl, **({"hooks": hooks} if hooks else {}))
     findings: list[dict] = []
     try:
@@ -801,8 +801,8 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
             done += 1
             times.append(time.monotonic() - t0)
             if done % 10 == 0:
-                man_p.write_text(json.dumps({"size": list(wh), "fps": fps, "mode": mode, "frames": frames_rec}, indent=1))
-        man_p.write_text(json.dumps({"size": list(wh), "fps": fps, "mode": mode, "frames": frames_rec}, indent=1))
+                man_p.write_text(json.dumps({"size": list(wh), "fps": fps, "mode": mode, "frames": frames_rec}, indent=1), encoding="utf-8")
+        man_p.write_text(json.dumps({"size": list(wh), "fps": fps, "mode": mode, "frames": frames_rec}, indent=1), encoding="utf-8")
         spf = round(sum(times) / len(times), 2) if times else None
         rep = {"ok": True, "frames": n, "done": done, "skipped": skipped, "sec_per_frame": spf, "gl": getattr(cap, "gl", gl), "renderer": renderer, "notes": notes, "size": list(wh), "fps": fps,
                "frames_dir": str(fdir), "files": [], "findings": findings, "credits": credits, "estimate": plan(n, spf)}

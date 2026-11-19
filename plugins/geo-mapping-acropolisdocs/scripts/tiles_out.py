@@ -218,7 +218,7 @@ def _gdal_candidates() -> list[str]:
     loaded: list[str] = []
     maps = Path("/proc/self/maps")
     if maps.is_file():
-        for line in maps.read_text(errors="ignore").splitlines():
+        for line in maps.read_text(errors="ignore", encoding="utf-8").splitlines():
             part = line.split()[-1] if line.split() else ""
             if "libgdal" in Path(part).name and part not in loaded:
                 loaded.append(part)

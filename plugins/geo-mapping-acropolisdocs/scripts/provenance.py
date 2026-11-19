@@ -165,7 +165,7 @@ def _f(fid, sev, msg, detail=None):
 def validate(plan, recs: list[dict] | None = None) -> list[dict]:
     import jsonschema
     recs = recs if recs is not None else records(plan)
-    schema = json.loads((gc.plugin_root() / "schemas" / "provenance.schema.json").read_text())
+    schema = json.loads((gc.plugin_root() / "schemas" / "provenance.schema.json").read_text(encoding="utf-8"))
     out: list[dict] = []
     for r in recs:
         try:
@@ -384,7 +384,7 @@ def methods(plan, rendered, recs: list[dict] | None = None) -> dict:
 
 def _library_version() -> str:
     p = gc.plugin_root() / "library" / "LIBRARY_VERSION"
-    return p.read_text().strip() if p.is_file() else ""
+    return p.read_text(encoding="utf-8").strip() if p.is_file() else ""
 
 
 def _para(out: list, x: float, y: float, text: str, w: float, size_pt: float, fill: str, weight: int = 400, gap: float = 0.0) -> float:

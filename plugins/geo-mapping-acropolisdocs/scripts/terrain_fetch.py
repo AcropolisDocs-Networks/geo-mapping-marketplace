@@ -440,7 +440,7 @@ def dem_for(bounds_wgs84, target_m_per_px: float = 30.0, source: str = "auto", c
     out = root / src / f"{key}.tif"
     recp = out.with_suffix(".json")
     if out.is_file() and recp.is_file():
-        rec = json.loads(recp.read_text())
+        rec = json.loads(recp.read_text(encoding="utf-8"))
         if hashlib.sha256(out.read_bytes()).hexdigest() == rec.get("sha256"):
             rec["cached"], rec["requests"] = True, []
             fs.append(finding("MAP-TER-002", "INFO", f"DEM read from the cache ({out.name}, fetched {rec.get('retrieved_at')}); nothing was requested"))
@@ -483,7 +483,7 @@ def dem_for(bounds_wgs84, target_m_per_px: float = 30.0, source: str = "auto", c
             fs.append(finding("MAP-TER-003", "WARN", f"{rec['missing_share']:.0%} of the window has no 3DEP elevation (water, or outside the coverage)"))
     rec.update({"terms_acknowledged": None, "retrieved_at": today(), "bounds_wgs84": list(b), "target_m_per_px": res,
                 "cache_key": key, "cached": False, "user_agent": getattr(http or getattr(fetcher, "http", None), "user_agent", None) or oh.default_user_agent()})
-    recp.write_text(json.dumps(rec, indent=2, default=str))
+    recp.write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
     return {"ok": True, "findings": fs, "path": str(out), "record": rec}
 
 
@@ -505,7 +505,7 @@ def cop_tile_list(glo: int, root: Path, http=None) -> set[str]:
     """The bucket's tileList.txt (the tiles that exist; the sea and the unreleased GLO-30 tiles are absent), read once and kept."""
     p = root / "copernicus" / f"tileList-{glo}.txt"
     if p.is_file():
-        return set(p.read_text().split())
+        return set(p.read_text(encoding="utf-8").split())
     h = http or safe_http(max_bytes=5_000_000)
     r = h.get(COP_BUCKETS[glo] + "tileList.txt", max_bytes=5_000_000)
     if r.status != 200:

@@ -133,7 +133,7 @@ def panel_specs(sheet: dict, sheet_path: Path, work: Path) -> list[dict]:
         if sheet.get("template"):
             spec["template"] = sheet["template"]
         dest = work / f"panel-{k + 1}.yaml"
-        dest.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True))
+        dest.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), encoding="utf-8")
         out.append({"spec": str(dest), "caption": p.get("caption"), "index": k, "data": spec})
     return out
 
@@ -468,7 +468,7 @@ def build(sheet_path: str, out_dir: str, formats: list[str] | None = None, *, br
         elif pack != "default" and not pp:                # 1.4.0: the sheet's pack is every panel's
             st_ = ps["data"].get("style") if isinstance(ps["data"].get("style"), dict) else {}
             ps["data"]["style"] = {**st_, "pack": pack}
-            Path(ps["spec"]).write_text(__import__("yaml").safe_dump(ps["data"], sort_keys=False, allow_unicode=True))
+            Path(ps["spec"]).write_text(__import__("yaml").safe_dump(ps["data"], sort_keys=False, allow_unicode=True), encoding="utf-8")
     if any(x["severity"] == "BLOCK" for x in fs):
         return done()
     tname = template or sheet.get("template") or "tabloid-landscape"
@@ -538,7 +538,7 @@ def build(sheet_path: str, out_dir: str, formats: list[str] | None = None, *, br
                     c.update({"edges": e["edges"], "decimals": e["decimals"], "integer_data": e["integer_data"]})
                     c.pop("breaks", None)
                     ly["classification"] = c
-        Path(ps["spec"]).write_text(yaml.safe_dump(d, sort_keys=False, allow_unicode=True))
+        Path(ps["spec"]).write_text(yaml.safe_dump(d, sort_keys=False, allow_unicode=True), encoding="utf-8")
         try:
             plans.append(mp.prepare(ps["spec"], brand=brand, template=ptpl))
         except mp.PlanError as ex:

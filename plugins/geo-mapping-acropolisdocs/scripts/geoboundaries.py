@@ -106,7 +106,7 @@ def fetch(iso3: str, level: str = "ADM1", *, entry_id: str = "ref.boundary.world
     out = cache_path(entry_id, iso3, lv)
     rec_p = out.with_suffix(".json")
     if out.is_file() and rec_p.is_file() and not refresh:
-        rec = json.loads(rec_p.read_text())
+        rec = json.loads(rec_p.read_text(encoding="utf-8"))
         return {"id": entry_id, "variant": iso3.lower(), "level": lv, "path": str(out), "record": str(rec_p), "cached": True,
                 "licence": rec.get("licence"), "features": rec.get("features")}
     h = _http(http)
@@ -131,7 +131,7 @@ def fetch(iso3: str, level: str = "ADM1", *, entry_id: str = "ref.boundary.world
            "year": meta.get("boundaryYearRepresented"), "units_stated": meta.get("admUnitCount"), "features": len(g), "bytes": len(data),
            "sha256": hashlib.sha256(data).hexdigest(), "retrieved_at": dt.date.today().isoformat(),
            "attribution_text": f"Boundaries: geoBoundaries (geoboundaries.org), {meta.get('boundarySource')}, {meta.get('boundaryLicense')}."}
-    rec_p.write_text(json.dumps(rec, indent=2))
+    rec_p.write_text(json.dumps(rec, indent=2), encoding="utf-8")
     return {"id": entry_id, "variant": iso3.lower(), "level": lv, "path": str(out), "record": str(rec_p), "cached": False,
             "licence": rec["licence"], "features": len(g)}
 

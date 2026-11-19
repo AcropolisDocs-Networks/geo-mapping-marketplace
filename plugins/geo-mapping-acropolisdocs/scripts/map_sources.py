@@ -297,7 +297,7 @@ def cached_record(folder: Path) -> Path | None:
     """The capture record of an earlier fetch of the same request, when its data file is still there."""
     for rp in sorted(folder.glob("*/capture.json")) if folder.is_dir() else []:
         try:
-            rec = json.loads(rp.read_text())
+            rec = json.loads(rp.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
         res = rec.get("result") or {}
@@ -318,7 +318,7 @@ def _mark_truncated(rp: Path, rec: dict, profile: dict, accept: str | None) -> d
     if accept:
         rec["accepted_incomplete"] = str(accept)[:300]
     rec["findings"] = [f for f in (rec.get("findings") or []) if f.get("id") != "MAP-SVC-005"] + [f for f in sl.lint_capture(rec, profile) if f.get("id") == "MAP-SVC-005"]
-    rp.write_text(json.dumps(rec, indent=2, default=str))
+    rp.write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
     return rec
 
 
@@ -338,7 +338,7 @@ def fetch(entry: dict, src: dict, bbox: tuple, *, refresh: bool = False, http=No
     if not refresh:
         hit = cached_record(folder)
         if hit is not None:
-            rec = json.loads(hit.read_text())
+            rec = json.loads(hit.read_text(encoding="utf-8"))
             accept = str(src["accept_incomplete"])[:300] if src.get("accept_incomplete") else None
             if rec.get("truncated") and rec.get("accepted_incomplete") != accept:     # the MapSpec's acceptance changed; the data did not
                 rec.pop("accepted_incomplete", None)
@@ -474,7 +474,7 @@ def load_geocode(layer: dict, base: Path):
     cached = out.is_file() and rec_p.is_file() and not src.get("refresh")
     if cached:
         try:
-            report = json.loads(rec_p.read_text())
+            report = json.loads(rec_p.read_text(encoding="utf-8"))
             gdf = geo_io.read(out).gdf
         except (OSError, ValueError, geo_io.GeoIOError):
             cached = False
@@ -489,7 +489,7 @@ def load_geocode(layer: dict, base: Path):
             raise mp.PlanError(f"layer '{lid}': the {provider} geocoder did not answer: {str(ex)[:200]}", gc.EXIT_SERVICE)
         report.update({"input": p.name, "input_sha256": sha, "result": out.name})
         gcd.write_points(gdf, out)
-        rec_p.write_text(json.dumps(report, indent=2, default=str))
+        rec_p.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     kept = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
     if not len(kept):
         raise mp.PlanError(f"layer '{lid}': the {provider} geocoder matched none of the {report.get('rows')} addresses in {p.name}; check the address columns ({', '.join(cols)})", gc.EXIT_USAGE)

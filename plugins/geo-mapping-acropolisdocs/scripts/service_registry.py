@@ -39,7 +39,7 @@ def finding(fid: str, sev: str, message: str, detail=None) -> dict:
 
 
 def schema() -> dict:
-    return json.loads((gc.plugin_root() / "schemas" / "service-profile.schema.json").read_text())
+    return json.loads((gc.plugin_root() / "schemas" / "service-profile.schema.json").read_text(encoding="utf-8"))
 
 
 def services_dir(create: bool = False) -> Path:
@@ -271,7 +271,7 @@ def save(profile: dict, confirm_host: str | None) -> tuple[Path | None, list[dic
     stored["host_confirmed_on"] = dt.date.today().isoformat()
     p = path_of(profile["profile"])
     services_dir(True)
-    p.write_text(yaml.safe_dump(stored, sort_keys=False))
+    p.write_text(yaml.safe_dump(stored, sort_keys=False), encoding="utf-8")
     try:                                                     # 0.23.0: a service you add is a customization; say so in plain words, never block on it
         import customizations as cz
         ack = cz.status()["acknowledged"]

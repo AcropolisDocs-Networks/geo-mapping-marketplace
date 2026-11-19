@@ -124,13 +124,13 @@ def kit_request(req: dict, profile: dict | None) -> tuple[dict | None, list[dict
 
 
 def _manifest_writer_source() -> str:
-    src = (KITS / "manifest_writer.py.txt").read_text()
+    src = (KITS / "manifest_writer.py.txt").read_text(encoding="utf-8")
     body = src.split('"""', 2)[2]                      # drop the module docstring
     return body.strip("\n")
 
 
 def _py_kit(kr: dict) -> str:
-    text = (KITS / "kit_template.py.txt").read_text()
+    text = (KITS / "kit_template.py.txt").read_text(encoding="utf-8")
     blob = json.dumps(kr, indent=1, sort_keys=True).replace("'''", "\\u0027\\u0027\\u0027")
     return text.replace("@@KIT_ID@@", kr["kit_id"]).replace("@@REQUEST_JSON@@", blob).replace("@@MANIFEST_WRITER@@", _manifest_writer_source())
 
@@ -159,7 +159,7 @@ def _sh_kit(kr: dict) -> str:
              f"BBOXP={q(fin['bbox'])}", f"BBOXJSON={q(json.dumps(kr['bbox']) if kr.get('bbox') else '')}", f"PROPS={q(','.join(kr['properties']) if kr.get('properties') else '')}",
              f"PROPSJSON={q(json.dumps(kr['properties']) if kr.get('properties') else '')}", f"SORT={q(kr.get('sort_by') or '')}", f"PAGE={int(kr['page_size'])}",
              f"MAXF={q(str(kr['max_features']) if kr.get('max_features') else '')}", f"FORMAT={q(kr.get('output_format') or '')}", f"HOSTCLASS={kr.get('host_class', 'unknown')}"]
-    return (KITS / "kit_template.sh").read_text().replace("@@KIT_ID@@", kr["kit_id"]).replace("@@VARS@@", "\n".join(vars_))
+    return (KITS / "kit_template.sh").read_text(encoding="utf-8").replace("@@KIT_ID@@", kr["kit_id"]).replace("@@VARS@@", "\n".join(vars_))
 
 
 def _ps1_kit(kr: dict) -> str:
@@ -173,7 +173,7 @@ def _ps1_kit(kr: dict) -> str:
              f"$BboxParam = {s(fin['bbox'])}", f"$BboxJson = {s(json.dumps(kr['bbox']) if kr.get('bbox') else '')}", f"$Props = {s(','.join(kr['properties']) if kr.get('properties') else '')}",
              f"$PropsJson = {s(json.dumps(kr['properties']) if kr.get('properties') else '')}", f"$Sort = {s(kr.get('sort_by') or '')}", f"$Page = {int(kr['page_size'])}",
              f"$MaxF = {int(kr['max_features']) if kr.get('max_features') else '$null'}", f"$Format = {s(kr.get('output_format') or '')}", f"$HostClass = {s(kr.get('host_class', 'unknown'))}"]
-    return (KITS / "kit_template.ps1").read_text().replace("@@KIT_ID@@", kr["kit_id"]).replace("@@VARS@@", "\n".join(vars_))
+    return (KITS / "kit_template.ps1").read_text(encoding="utf-8").replace("@@KIT_ID@@", kr["kit_id"]).replace("@@VARS@@", "\n".join(vars_))
 
 
 def ogr2ogr_command(kr: dict, endpoint_text: str) -> str | None:
@@ -226,18 +226,18 @@ def build(req: dict, *, profile: dict | None = None, formats=("py",), outroot: P
         if leak:                                              # belt and braces: nothing secret ever reaches a kit file
             return {"ok": False, "findings": fs + [finding("MAP-SVC-022", "BLOCK", "the kit would contain " + ", ".join(leak))]}
         name = {"py": "kit.py", "sh": "kit.sh", "ps1": "kit.ps1"}[f]
-        (d / name).write_text(text, newline="\n") if f != "ps1" else (d / name).write_text(text.replace("\n", "\r\n"), newline="")
+        (d / name).write_text(text, newline="\n", encoding="utf-8") if f != "ps1" else (d / name).write_text(text.replace("\n", "\r\n"), newline="", encoding="utf-8")
         if f == "sh":
             (d / name).chmod(0o755)
         files.append(name)
-    (d / "kit-request.json").write_text(json.dumps(kr, indent=2))
+    (d / "kit-request.json").write_text(json.dumps(kr, indent=2), encoding="utf-8")
     files.append("kit-request.json")
     og = ogr2ogr_command(kr, kr["endpoint"])
     if og:
-        (d / "ogr2ogr.txt").write_text(og + "\n")
+        (d / "ogr2ogr.txt").write_text(og + "\n", encoding="utf-8")
         files.append("ogr2ogr.txt")
     card = run_card(kr, formats, files, show_host=show_host)
-    (d / "README.txt").write_text(card)
+    (d / "README.txt").write_text(card, encoding="utf-8")
     files.append("README.txt")
     return {"ok": not blocked(fs), "kit_dir": str(d), "kit_id": kr["kit_id"], "files": files, "card": card, "findings": fs,
             "ogr2ogr": ogr2ogr_command(kr, "<SERVICE-ADDRESS>") if og else None, "host": (urllib.parse.urlsplit(kr["endpoint"]).hostname if show_host else "withheld"),
@@ -561,7 +561,7 @@ def verify(folder, *, kit_request_path: str | None = None, explain: str | None =
             return {"ok": False, "verification": "none", "findings": fs + [finding("MAP-SVC-021", "BLOCK", f"manifest.yaml cannot be read: {oh.untrusted(e, 120)}")], "page_paths": []}
         if not isinstance(manifest, dict):
             return {"ok": False, "verification": "none", "findings": fs + [finding("MAP-SVC-021", "BLOCK", "manifest.yaml is not a manifest")], "page_paths": []}
-        schema = json.loads(MANIFEST_SCHEMA.read_text())
+        schema = json.loads(MANIFEST_SCHEMA.read_text(encoding="utf-8"))
         errs = sorted(jsonschema.Draft202012Validator(schema).iter_errors(manifest), key=lambda e: list(e.path))
         for e in errs[:8]:
             fs.append(finding("MAP-SVC-021", "BLOCK", f"manifest: {'.'.join(str(p) for p in e.path) or '(root)'}: {oh.untrusted(e.message, 140)}"))
@@ -633,11 +633,11 @@ def verify(folder, *, kit_request_path: str | None = None, explain: str | None =
     kreq = None
     if kit_request_path:
         try:
-            kreq = json.loads(Path(kit_request_path).read_text())
+            kreq = json.loads(Path(kit_request_path).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             fs.append(finding("MAP-SVC-021", "WARN", "the kit request file could not be read, so the data is not compared with what was asked for"))
     elif (folder / "kit-request.json").is_file():
-        kreq = json.loads((folder / "kit-request.json").read_text())
+        kreq = json.loads((folder / "kit-request.json").read_text(encoding="utf-8"))
     declared = None
     if manifest:
         mreq = manifest["request"]
@@ -741,7 +741,7 @@ def ingest(folder, *, name: str, profile: dict | None = None, kit_request_path: 
     fs += [x for x in sl.lint_capture(record, profile, audience) if x not in fs and not (x["id"] == "MAP-SVC-021" and (x["id"], x["severity"]) in have)]
     record["findings"] = fs
     rp = outdir / "capture.json"
-    rp.write_text(json.dumps(record, indent=2, default=str))
+    rp.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
     ok = not blocked(fs)
     return {"ok": ok, "record_path": str(rp), "result_path": str(result_path) if result_path else None, "record": record, "findings": fs, "stats": v["stats"]}
 
@@ -755,7 +755,7 @@ def refresh(capture, *, formats=("py",), outroot: Path | None = None, kits_root:
     rp = cdir / "capture.json"
     if not rp.is_file():
         return {"ok": False, "findings": [finding("MAP-SVC-001", "BLOCK", f"there is no capture '{oh.untrusted(str(capture), 80)}' here")]}
-    rec = json.loads(rp.read_text())
+    rec = json.loads(rp.read_text(encoding="utf-8"))
     if rec.get("route") != "user-run":
         return {"ok": False, "findings": [finding("MAP-SVC-003", "BLOCK", f"capture {rec.get('id')} was fetched by the plugin ({rec.get('route')}); refresh it with service-refresh")]}
     kid = rec.get("kit_id")
@@ -763,7 +763,7 @@ def refresh(capture, *, formats=("py",), outroot: Path | None = None, kits_root:
     if not kreq_p or not kreq_p.is_file():
         return {"ok": False, "findings": [finding("MAP-SVC-003", "BLOCK", "the request of the kit that made this capture is not in the working folder's kits/ any more "
                                                   "(or the capture is older than 1.12.0); build the kit again from the profile and layer")]}
-    kr = json.loads(kreq_p.read_text())
+    kr = json.loads(kreq_p.read_text(encoding="utf-8"))
     r = build(kr, formats=list(formats), outroot=outroot or kreq_p.parent.parent)
     if not r["ok"]:
         return r
@@ -836,7 +836,7 @@ def main(argv=None) -> int:
         if a.op == "build" and a.cds:                       # 1.3.0 (R1-CDS): the CDS request kit holds no key; the client reads the person's own
             import yaml
             import cds_retrieve as cdr
-            doc = yaml.safe_load(Path(a.cds).read_text()) or {}
+            doc = yaml.safe_load(Path(a.cds).read_text(encoding="utf-8")) or {}
             ds = doc.pop("dataset", None)
             if not ds:
                 print(json.dumps({"ok": False, "findings": [finding("MAP-CDS-001", "BLOCK", "the CDS request file needs `dataset:` (the CDS dataset id)")]}, indent=2))
@@ -845,13 +845,13 @@ def main(argv=None) -> int:
             outd = Path(a.out or ".")
             outd.mkdir(parents=True, exist_ok=True)
             kp = outd / f"cds-kit-{slug(ds)}.py"
-            kp.write_text(cdr.kit_script(ds, doc.get("request") or doc))
+            kp.write_text(cdr.kit_script(ds, doc.get("request") or doc), encoding="utf-8")
             print(json.dumps({"ok": True, "kit": str(kp), "dataset": ds, "next": "accept the dataset's licence on its CDS page, run the script with your own key, "
                               "then: climate_read.py THE_FILE --out DIR (or request_kit.py ingest for vector results)"}, indent=2))
             return 0
         if a.op == "build":
             if a.from_adopted:
-                req = json.loads(Path(a.from_adopted).read_text())
+                req = json.loads(Path(a.from_adopted).read_text(encoding="utf-8"))
                 prof = None
             else:
                 req = {"profile": a.profile, "protocol": a.protocol or "wfs", "layer": a.layer, "version": a.version, "cql_filter": a.cql, "bbox": [float(x) for x in a.bbox.split(",")] if a.bbox else None,
@@ -861,11 +861,11 @@ def main(argv=None) -> int:
             print(json.dumps(r, indent=2))
             return 0 if r["ok"] else 3
         if a.op == "adopt":
-            text = Path(a.text_file).read_text() if a.text_file else (a.text if a.text is not None else sys.stdin.read())
+            text = Path(a.text_file).read_text(encoding="utf-8") if a.text_file else (a.text if a.text is not None else sys.stdin.read())
             r = adopt(text, show_host=a.show_host, build_kit=a.build, formats=[x.strip() for x in a.format.split(",") if x.strip()] if a.format else None,
                       outroot=Path(a.kit_out) if a.kit_out else None)
             if a.out and r.get("request"):
-                Path(a.out).write_text(json.dumps(r["request"], indent=2))
+                Path(a.out).write_text(json.dumps(r["request"], indent=2), encoding="utf-8")
                 r["request_file"] = a.out
             r.pop("request", None)
             print(json.dumps(r, indent=2))

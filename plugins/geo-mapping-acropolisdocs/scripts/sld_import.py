@@ -502,7 +502,7 @@ def main(argv=None, http=None) -> int:
             toks = bl.load_pack(a.brand)["tokens"]["modes"]["print"]
         res = read_file(a.file, style=a.style, role=a.role, layer_id=a.layer_id, tokens=toks)
         if res.get("ok") and a.out:
-            Path(a.out).write_text(snippet(res))
+            Path(a.out).write_text(snippet(res), encoding="utf-8")
             res["snippet"] = a.out
         elif res.get("ok"):
             res["snippet_text"] = snippet(res)

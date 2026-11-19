@@ -621,7 +621,7 @@ def write_composite(pl: dict, fs: list, img, tier: str, outroot, got: dict) -> d
            "bbox_3857": got["bbox_3857"], **({"getmap": got["getmap"]} if got.get("getmap") else {}), "bbox_wgs84": pl["bbox_wgs84"], "display_crs": pl.get("display_crs") or "EPSG:3857", "pixels": [img.width, img.height], "attribution": attribution, "license": (entry.get("license") or {}).get("class"),
            "retrieved_at": dt.date.today().isoformat() if not __import__("os").environ.get("GMAP_FIXED_DATE") else __import__("os").environ["GMAP_FIXED_DATE"],
            "sha256": hashlib.sha256(png.read_bytes()).hexdigest(), "tier": tier, "terms_acknowledged": bool(pl.get("terms_acknowledged")), "customization": pl.get("customization") or "", "title": entry.get("title") or (pl["source"].get("meta") or {}).get("name")}
-    (d / "composite.json").write_text(json.dumps(rec, indent=2))
+    (d / "composite.json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
     return {"ok": True, "findings": fs, "composite": str(png), "record": rec, "plan": {k: v for k, v in pl.items() if k not in ("entry", "source", "tiles")}}
 
 
@@ -630,7 +630,7 @@ def load_prepared(map_id: str, root: Path | None = None) -> dict | None:
     j, p = d / "composite.json", d / "composite.png"
     if not (j.is_file() and p.is_file()):
         return None
-    rec = json.loads(j.read_text())
+    rec = json.loads(j.read_text(encoding="utf-8"))
     if hashlib.sha256(p.read_bytes()).hexdigest() != rec.get("sha256"):
         return {"error": "the composite image changed after it was written; render it again"}
     rec["path"] = str(p)
@@ -663,7 +663,7 @@ def main(argv=None) -> int:
     tier = a.tier
     if tier is None:
         try:
-            tier = json.loads((gc.workdir() / "env.json").read_text()).get("tier") or "T1"
+            tier = json.loads((gc.workdir() / "env.json").read_text(encoding="utf-8")).get("tier") or "T1"
         except (OSError, ValueError):
             tier = "T1"
         tier = tier if tier in CAPS else "T1"

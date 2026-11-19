@@ -316,7 +316,7 @@ def make_specs(spec_path, disc: dict, out_dir: Path) -> list[dict]:
             own_extent = o.get("by") != "time" and o.get("mode") == "focus"
             s["basemap"] = {**(s.get("basemap") or {}), "prepared_as": s["id"] if own_extent else f"{disc['base_id']}-atlas"}
         p = out_dir / f"{sl}.yaml"
-        p.write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True))
+        p.write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True), encoding="utf-8")
         maps.append({"value": v, "slug": sl, "id": s["id"], "spec": str(p), "title": title["text"], "features": disc["counts"][v]})
     return maps
 
@@ -424,7 +424,7 @@ def _time_specs(base_spec: dict, spec_path: Path, disc: dict, out_dir: Path) -> 
             own_extent = o.get("by") != "time" and o.get("mode") == "focus"
             s["basemap"] = {**(s.get("basemap") or {}), "prepared_as": s["id"] if own_extent else f"{disc['base_id']}-atlas"}
         p = out_dir / f"{sl}.yaml"
-        p.write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True))
+        p.write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True), encoding="utf-8")
         feats = tm_["cumulative_counts"][v] if o["cumulative"] else disc["counts"][v]
         maps.append({"value": lab, "period": v, "slug": sl, "id": s["id"], "spec": str(p), "title": f"{title['text']}, {lab}", "features": feats,
                      "new": disc["counts"][v]})
@@ -722,9 +722,9 @@ def stage_animate(c) -> dict:
     for f in r["files"]:
         c.add_file(Path(f["path"]), "animation")
     meta_p = dest / "atlas.json"
-    meta = json.loads(meta_p.read_text())
+    meta = json.loads(meta_p.read_text(encoding="utf-8"))
     meta["animation"] = [{"file": f"animation/{Path(f['path']).name}", **{k: v for k, v in f.items() if k != "path"}} for f in r["files"]]
-    meta_p.write_text(json.dumps(meta, indent=2))
+    meta_p.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     kinds = ", ".join(Path(f["path"]).name for f in r["files"])
     return {"ok": not r["blocked"], "summary": f"{len(r['files'])} animation file(s): {kinds}" + (f"; {r['notes'][0]}" if r["notes"] else ""), "findings": r["findings"]}
 
@@ -757,7 +757,7 @@ def prepare_tiles(maps: list[dict], *, tier: str = "T1", http=None, env=None, sl
             s = gc.load_mapspec(Path(m["spec"]))
             if (s.get("basemap") or {}).get("prepared_as"):
                 s["basemap"] = {"provider": "bundled"}
-                Path(m["spec"]).write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True))
+                Path(m["spec"]).write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True), encoding="utf-8")
         fs.append(finding("MAP-ATL-004", sev, f"the atlas draws the bundled basemap: {why}"))
 
     plans = {}
@@ -838,7 +838,7 @@ def share_fit(results: list[dict], work: Path, fmts: list[str], *, brand=None, t
             continue
         spec = gc.load_mapspec(Path(r["spec"]))
         spec.setdefault("extent", {})["fit_pan_mm"] = pan
-        Path(r["spec"]).write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True))
+        Path(r["spec"]).write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), encoding="utf-8")
         d = work / "maps" / r["slug"]
         try:
             res = bm.build(r["spec"], str(d), fmts, brand=brand, template=template, strict=False, keep=True)

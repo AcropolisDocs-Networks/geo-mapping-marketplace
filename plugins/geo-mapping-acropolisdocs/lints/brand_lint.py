@@ -260,7 +260,7 @@ def check_pack_drift(slug: str, roots: list | None = None) -> list[dict]:
     PACK.json recorded). Run-time drift report; re-import with tools/import_brand.py. Nothing is reported when the source is not installed here."""
     d = gc.brand_dir(slug)
     try:
-        pack = json.loads((d / "PACK.json").read_text())
+        pack = json.loads((d / "PACK.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
     if pack.get("origin") == "user":                    # 1.7.0: a pack the person added has no source plugin to drift from
@@ -279,7 +279,7 @@ def check_pack_drift(slug: str, roots: list | None = None) -> list[dict]:
         pj = up / ".claude-plugin" / "plugin.json"
         if pj.is_file():
             try:
-                ver = json.loads(pj.read_text()).get("version")
+                ver = json.loads(pj.read_text(encoding="utf-8")).get("version")
             except (OSError, ValueError):
                 pass
             break
@@ -293,15 +293,15 @@ def check_pack_integrity(slug: str) -> list[dict]:
     """MAP-BRAND-007: copied files match PACK.json hashes; brand.json validates against the pinned schema."""
     out = []
     d = gc.brand_dir(slug)
-    pack = json.loads((d / "PACK.json").read_text())
+    pack = json.loads((d / "PACK.json").read_text(encoding="utf-8"))
     for name, want in pack["files"].items():
         got = bl.sha256_file(d / name) if (d / name).is_file() else None
         if got != want:
             out.append(finding("MAP-BRAND-007", "BLOCK", f"{slug}/{name} does not match PACK.json", {"want": want[:12], "got": (got or 'missing')[:12]}))
     try:
         import jsonschema
-        schema = json.loads((gc.plugin_root() / "schemas" / "brand.schema.json").read_text())
-        errs = list(jsonschema.validators.validator_for(schema)(schema).iter_errors(json.loads((d / "brand.json").read_text())))
+        schema = json.loads((gc.plugin_root() / "schemas" / "brand.schema.json").read_text(encoding="utf-8"))
+        errs = list(jsonschema.validators.validator_for(schema)(schema).iter_errors(json.loads((d / "brand.json").read_text(encoding="utf-8"))))
         if errs:
             out.append(finding("MAP-BRAND-007", "BLOCK", f"{slug}/brand.json fails the pinned brand schema", errs[0].message))
     except ImportError:

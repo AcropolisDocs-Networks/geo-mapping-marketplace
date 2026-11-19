@@ -66,7 +66,7 @@ def lint_spec(spec: dict) -> list[dict]:
     # 001 schema
     try:
         import jsonschema
-        schema = json.loads((gc.plugin_root() / "schemas" / "mapspec.schema.json").read_text())
+        schema = json.loads((gc.plugin_root() / "schemas" / "mapspec.schema.json").read_text(encoding="utf-8"))
         for e in sorted(jsonschema.Draft202012Validator(schema).iter_errors(spec), key=lambda e: list(e.path)):
             where = "/".join(str(p) for p in e.path) or "(root)"
             out.append(finding("MAP-SPEC-001", "BLOCK", f"{where}: {e.message[:160]}", where))

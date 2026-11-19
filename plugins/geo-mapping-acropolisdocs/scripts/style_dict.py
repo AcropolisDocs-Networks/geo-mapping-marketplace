@@ -515,7 +515,7 @@ def plugin_ident() -> dict:
     except (FileNotFoundError, ValueError):
         v = gc.plugin_root().parent / "VERSION"
         if v.is_file():
-            out["version"] = v.read_text().strip() + "+source"
+            out["version"] = v.read_text(encoding="utf-8").strip() + "+source"
     return out
 
 

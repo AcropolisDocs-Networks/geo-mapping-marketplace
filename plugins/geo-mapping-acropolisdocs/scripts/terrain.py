@@ -401,7 +401,7 @@ def main(argv=None) -> int:
             import shutil
             Path(a.out).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(r["path"], a.out)
-            Path(a.out).with_suffix(".json").write_text(json.dumps(tf.public_record(r["record"]), indent=2, default=str))
+            Path(a.out).with_suffix(".json").write_text(json.dumps(tf.public_record(r["record"]), indent=2, default=str), encoding="utf-8")
             print(json.dumps({"ok": True, "findings": r["findings"], "out": a.out, "record": tf.public_record(r["record"])}, indent=2, default=str))
             return gc.EXIT_OK
         if not a.dem:
@@ -411,9 +411,9 @@ def main(argv=None) -> int:
                 raise TerrainError("profile needs --a lon,lat and --b lon,lat")
             r = profile(a.dem, a.a, a.b, a.samples or 200)
             if a.csv:
-                Path(a.csv).write_text("distance_m,elevation_m\n" + "".join(f"{d:.1f},{'' if z is None else format(z, '.2f')}\n" for d, z in r["points"]))
+                Path(a.csv).write_text("distance_m,elevation_m\n" + "".join(f"{d:.1f},{'' if z is None else format(z, '.2f')}\n" for d, z in r["points"]), encoding="utf-8")
             if a.out:
-                Path(a.out).write_text(json.dumps(r, indent=2))
+                Path(a.out).write_text(json.dumps(r, indent=2), encoding="utf-8")
             print(json.dumps({k: v for k, v in r.items() if k != "points"} | {"points": len(r["points"])}, indent=2))
             return gc.EXIT_OK
         if a.op == "los":
@@ -422,7 +422,7 @@ def main(argv=None) -> int:
             r = line_of_sight(a.dem, a.a, a.b, a.ha, a.hb, a.k, a.freq, a.samples)
             print(verdict_line(r))
             if a.out:
-                Path(a.out).write_text(json.dumps(r, indent=2))
+                Path(a.out).write_text(json.dumps(r, indent=2), encoding="utf-8")
             print(json.dumps({k: v for k, v in r.items() if k != "profile"}, indent=2))
             return gc.EXIT_OK
         if a.op == "viewshed":

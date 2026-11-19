@@ -150,7 +150,7 @@ def pack_of(spec: dict) -> str:
 
 @functools.lru_cache(maxsize=1)
 def _schema() -> dict:
-    return json.loads((gc.plugin_root() / "schemas" / "style-pack.schema.json").read_text())
+    return json.loads((gc.plugin_root() / "schemas" / "style-pack.schema.json").read_text(encoding="utf-8"))
 
 
 def sha256_file(p: Path) -> str:

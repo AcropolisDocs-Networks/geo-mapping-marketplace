@@ -404,14 +404,14 @@ def apply_patch(patch: dict, entries_by_id: dict[str, dict], lib: Path, today: d
     if cur.get("rev") != patch.get("base_rev") or canon_sha(clean(cur)) != patch.get("base_sha256"):
         raise MaintError(f"{eid} changed since the patch was made (now rev {cur.get('rev')}); verify again", gc.EXIT_REFUSED, "MAP-LIB-102")
     path = Path(cur["_path"])
-    before = path.read_text()
+    before = path.read_text(encoding="utf-8")
     after = patch["entry_after"]
-    path.write_text(yaml.safe_dump(after, sort_keys=False, allow_unicode=True, width=160))
+    path.write_text(yaml.safe_dump(after, sort_keys=False, allow_unicode=True, width=160), encoding="utf-8")
     scope = cur.get("_scope", "shipped")
     es = ll.load_entries(lib / "entries", scope)
     fs = [x for x in ll.lint_entries(es, lib if scope == "shipped" else _shipped_lib(), plugin_root=plugin_root, today=today) if x["severity"] == "BLOCK"]
     if fs:
-        path.write_text(before)
+        path.write_text(before, encoding="utf-8")
         raise MaintError("the patched entry fails the library lint, so nothing was changed: " + "; ".join(f"{x['id']} {x['entry']}: {x['message']}" for x in fs[:4]), gc.EXIT_LINT, "MAP-LIB-102")
     return {"applied": eid, "rev": after.get("rev"), "path": str(path), "next": "regenerate index.yaml and CHANGELOG.md (tools/ref_release.py regen) before a release" if scope == "shipped" else "run ref_library.py index --scope local"}
 
@@ -524,7 +524,7 @@ def facts_from_file(path: Path) -> dict:
 def facts_from_capture(ref: str) -> dict:
     import map_plan as mp
     try:
-        rec = json.loads(mp.find_capture(ref, Path.cwd()).read_text())
+        rec = json.loads(mp.find_capture(ref, Path.cwd()).read_text(encoding="utf-8"))
     except mp.PlanError as ex:
         raise MaintError(str(ex), gc.EXIT_USAGE, "MAP-LIB-103")
     res = rec.get("result") or {}
@@ -613,5 +613,5 @@ def write_local(entry: dict, family: str, lib: Path, shipped_lib: Path, shipped:
     if fs:
         raise MaintError("the draft fails the library lint: " + "; ".join(f"{x['id']}: {x['message']}" for x in fs[:4]), gc.EXIT_LINT, "MAP-LIB-108")
     d.mkdir(parents=True, exist_ok=True)
-    p.write_text(yaml.safe_dump(clean(e), sort_keys=False, allow_unicode=True, width=160))
+    p.write_text(yaml.safe_dump(clean(e), sort_keys=False, allow_unicode=True, width=160), encoding="utf-8")
     return {"path": str(p), "id": e["id"]}

@@ -95,7 +95,7 @@ def normalize(ly: dict) -> None:
         ly["source"] = {"type": "file", "path": tif}
         if band:
             ly["raster"] = {**(ly.get("raster") or {}), "band": band}
-        rec = next((json.loads(p_.read_text()) for p_ in Path(tif).parent.glob(f"cds-{c.get('job')}.json")), None)
+        rec = next((json.loads(p_.read_text(encoding="utf-8")) for p_ in Path(tif).parent.glob(f"cds-{c.get('job')}.json")), None)
         if rec and not ly.get("provenance"):
             pv = rec.get("provenance") or {}
             ly["provenance"] = {"source": pv.get("source"), "license": "attribution", "attribution": pv.get("attribution"), "retrieved_at": rec.get("retrieved_at"),
@@ -876,7 +876,7 @@ def _dem_cached(wgs, res, src):
     for s in ([src] if src != "auto" else (["3dep"] if tf.in_us(wgs) else ["copernicus", "terrarium"])):
         out = tf.cache_root(gc.workdir()) / s / f"{tf.cache_key(s, wgs, res)}.tif"
         if out.is_file() and out.with_suffix(".json").is_file():
-            rec = json.loads(out.with_suffix(".json").read_text())
+            rec = json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))
             rec["cached"], rec["requests"] = True, []
             return {"ok": True, "findings": [], "path": str(out), "record": rec}
     return None
@@ -1314,7 +1314,7 @@ def service_layer(plan, l, win, shape) -> None:
     pp, rp = cdir / f"{key}.png", cdir / f"{key}.json"
     cached = False
     if pp.is_file() and rp.is_file():
-        rec = json.loads(rp.read_text())
+        rec = json.loads(rp.read_text(encoding="utf-8"))
         if rec.get("sha256") == hashlib.sha256(pp.read_bytes()).hexdigest():
             rgba = png_rgba(pp.read_bytes())
             cached = True
@@ -1327,7 +1327,7 @@ def service_layer(plan, l, win, shape) -> None:
         pp.write_bytes(png)
         rec["sha256"] = hashlib.sha256(png).hexdigest()
         rec["retrieved_at"] = _today()
-        rp.write_text(json.dumps(rec, indent=2, default=str))
+        rp.write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
     rec["cached"] = cached
     if int(rgba[3].max()) == 0:
         plan.findings.append(finding("MAP-SVC-013", "WARN", f"layer '{l.id}': the service drew nothing in the map window (every pixel is transparent); check the layer names and the extent", layer=l.id))
@@ -1462,7 +1462,7 @@ def service_legend(plan, l, src, proto, url, layers, key, cached: bool) -> dict 
     data = None
     if lp.is_file():
         try:
-            raw = json.loads(lp.read_text())
+            raw = json.loads(lp.read_text(encoding="utf-8"))
             data = {"kind": raw["kind"], "png": base64.b64decode(raw["png"]) if raw.get("png") else None,
                     "entries": [(base64.b64decode(p), lab) for p, lab in raw.get("entries", [])]}
         except (ValueError, KeyError):
@@ -1478,7 +1478,7 @@ def service_legend(plan, l, src, proto, url, layers, key, cached: bool) -> dict 
             return label_only_block(plan, l)
         cdir.mkdir(parents=True, exist_ok=True)
         lp.write_text(json.dumps({"kind": data["kind"], "png": base64.b64encode(data["png"]).decode() if data.get("png") else None,
-                                  "entries": [(base64.b64encode(p).decode(), lab) for p, lab in data.get("entries", [])]}))
+                                  "entries": [(base64.b64encode(p).decode(), lab) for p, lab in data.get("entries", [])]}), encoding="utf-8")
     title = (l.spec.get("legend") or {}).get("title") or l.title
     if data["kind"] == "swatches" and data.get("entries"):
         return lg.swatches_block(l.spec | {"title": title}, [(data_uri(p), lab) for p, lab in data["entries"]], plan.tokens, opacity=l.raster["image"]["opacity"],

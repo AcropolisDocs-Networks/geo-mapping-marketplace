@@ -366,7 +366,7 @@ def fetch_tile(qk: str, release: str, *, http=None, refresh: bool = False, cap_b
            "land": int((g["kind"] == "land").sum()) if len(g) else 0, "water": int((g["kind"] == "water").sum()) if len(g) else 0,
            "read": {k: v[1] for k, v in reads.items()}, "read_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
     tmp.replace(out)
-    out.with_suffix(".json").write_text(json.dumps(rec, indent=2))
+    out.with_suffix(".json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
     return {"quadkey": qk, "path": str(out), "cached": False, "bytes": used, "features": len(g)}
 
 

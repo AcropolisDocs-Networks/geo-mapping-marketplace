@@ -49,7 +49,7 @@ def build_manifest() -> dict:
     p = plugin_root() / "BUILD-MANIFEST.json"
     if not p.is_file():
         raise FileNotFoundError("BUILD-MANIFEST.json is missing: this is not a built edition")
-    return json.loads(p.read_text())
+    return json.loads(p.read_text(encoding="utf-8"))
 
 
 _POSIX_SYSTEM = ("/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/lib", "/etc", "/proc", "/sys", "/dev", "/boot", "/System")
@@ -265,13 +265,13 @@ def normalize_roles(spec):
 
 
 def load_mapspec(path: Path):
-    return load_mapspec_text(Path(path).read_text())
+    return load_mapspec_text(Path(path).read_text(encoding="utf-8"))
 
 
 def load_yaml(path: Path):
     """Plain YAML for plugin data files (tags, tokens, dependencies). MapSpecs use load_mapspec()."""
     import yaml
-    return yaml.safe_load(Path(path).read_text())
+    return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
 
 
 def bundled_brands(manifest: dict | None = None) -> list[str]:

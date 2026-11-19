@@ -179,7 +179,7 @@ def _cached(dest: Path) -> dict | None:
     rp = dest.with_suffix(".json")
     if dest.is_file() and rp.is_file():
         try:
-            rec = json.loads(rp.read_text())
+            rec = json.loads(rp.read_text(encoding="utf-8"))
         except ValueError:
             return None
         if rec.get("sha256") == _sha(dest):
@@ -193,7 +193,7 @@ def _one(url: str, dest: Path, http, zipped: bool) -> tuple[dict, bool]:
         return rec, True
     rec = _download(url, dest, http, zipped=zipped)
     rec["retrieved_at"] = today()
-    dest.with_suffix(".json").write_text(json.dumps(rec, indent=2))
+    dest.with_suffix(".json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
     return rec, False
 
 
@@ -311,7 +311,7 @@ def remote_size(url: str, http) -> int | None:
 def _window_cached(root: Path, stem: str, bounds) -> tuple[Path, dict] | None:
     for rp in sorted(root.glob(f"{stem}_window_*.json")):
         try:
-            rec = json.loads(rp.read_text())
+            rec = json.loads(rp.read_text(encoding="utf-8"))
         except ValueError:
             continue
         w = rec.get("window_wgs84") or []
@@ -362,7 +362,7 @@ def window_download(url: str, size: int, bounds_wgs84, root: Path, http) -> tupl
         dst.write(data)
     rec = {"url": oh.redact_url(rf_.final_url), "bytes": rf_.fetched, "file_bytes": int(size), "requests": rf_.requests, "ranged": True, "layout": layout,
            "window_wgs84": [float(v) for v in wb], "pixels": [int(data.shape[2]), int(data.shape[1])], "sha256": _sha(dest), "retrieved_at": today()}
-    dest.with_suffix(".json").write_text(json.dumps(rec, indent=2))
+    dest.with_suffix(".json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
     return dest, rec
 
 

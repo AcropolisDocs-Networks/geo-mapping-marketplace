@@ -190,14 +190,14 @@ def load_runs() -> list[dict]:
     out = []
     for p in sorted(root.glob("*/run.json")) if root.is_dir() else []:
         try:
-            r = json.loads(p.read_text())
+            r = json.loads(p.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue
         plan = {}
         pp = p.parent / "plan.json"
         if pp.is_file():
             try:
-                plan = json.loads(pp.read_text())
+                plan = json.loads(pp.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 pass
         inp = plan.get("inputs") or {}

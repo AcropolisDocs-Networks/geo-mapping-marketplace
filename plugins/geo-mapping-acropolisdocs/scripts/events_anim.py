@@ -338,7 +338,7 @@ def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand:
     spec["export"] = {**(spec.get("export") or {}), "dpi": cfg["dpi"] * scale}
     work.mkdir(parents=True, exist_ok=True)
     tmp = spec_path.parent / f".{spec_path.stem}.events-base.yaml"          # beside the MapSpec, so its relative data paths still resolve
-    tmp.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True))
+    tmp.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), encoding="utf-8")
     try:
         res = bm.build(str(tmp), str(work / "base"), ["png"], brand=brand or spec.get("brand"), keep=True)
     except mp.PlanError as ex:

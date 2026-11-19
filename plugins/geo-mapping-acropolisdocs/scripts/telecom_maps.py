@@ -142,7 +142,7 @@ DATUM_NOTE = "Positions are WGS84 (GPS) coordinates drawn on a NAD83 projection;
 def write_spec(spec: dict, out: Path) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     p = out / "map.yaml"
-    p.write_text(yaml.dump(spec, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=140))
+    p.write_text(yaml.dump(spec, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=140), encoding="utf-8")
     return p
 
 

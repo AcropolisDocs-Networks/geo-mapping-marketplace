@@ -53,7 +53,7 @@ def brand() -> dict:
     except Exception:                                   # noqa: BLE001 - outside a built edition: the shipped pack, else neutral
         try:
             import json
-            b = json.loads((gc.plugin_root() / gc.BRANDS_DIRNAME / "acropolisdocs" / "brand.json").read_text())
+            b = json.loads((gc.plugin_root() / gc.BRANDS_DIRNAME / "acropolisdocs" / "brand.json").read_text(encoding="utf-8"))
         except Exception:                               # noqa: BLE001
             return out
     pal = b.get("palette") or {}

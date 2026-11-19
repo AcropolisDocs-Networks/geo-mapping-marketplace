@@ -108,7 +108,7 @@ def check(rec: dict, classes: list[str] | None = None) -> list[dict]:
 
 
 def load(path: Path) -> dict:
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     if path.suffix.lower() in (".yaml", ".yml"):
         import yaml
         return yaml.safe_load(text)

@@ -137,7 +137,7 @@ def _render_frames(specs: list[Path], size: str, work: Path, brand: str | None, 
         spec.pop("brand", None) if brand else None
         tmp = work / f"{size}-{k:03d}.yaml"
         import yaml
-        tmp.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True))
+        tmp.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), encoding="utf-8")
         try:
             res = bm.build(str(tmp), str(work / f"{size}-{k:03d}"), ["png"], brand=brand or spec.get("brand"), keep=True)
         except mp.PlanError as ex:
@@ -176,7 +176,7 @@ def write_mp4(frames, path: Path, hold: float, last_hold: float, meta: dict, bar
             f.save(p)
             lst += [f"file '{p.name}'", f"duration {last_hold if k == len(frames) - 1 else hold:g}"]
         lst.append(f"file 'f{len(frames) - 1:04d}.png'")                 # the concat demuxer drops the last duration without a closing entry
-        (Path(td) / "frames.txt").write_text("\n".join(lst) + "\n")
+        (Path(td) / "frames.txt").write_text("\n".join(lst) + "\n", encoding="utf-8")
         total = hold * (len(frames) - 1) + last_hold
         # -t: the closing entry's length differs by ffmpeg version (6.1 gives it none, 9.0 the last hold again: 8 s for 5), so the
         # output is cut at the holds' sum; the closing entry keeps older versions from dropping the last hold
@@ -197,7 +197,7 @@ def specs_of(atlas_dir: Path) -> tuple[list[Path], dict]:
     meta_p = atlas_dir / "atlas.json"
     if not meta_p.is_file():
         raise AnimateError(f"{atlas_dir} has no atlas.json; give the folder the map-atlas-run pipeline wrote (by: time)")
-    meta = json.loads(meta_p.read_text())
+    meta = json.loads(meta_p.read_text(encoding="utf-8"))
     if meta.get("by") != "time":
         raise AnimateError("this atlas is one map per value, not per period; an animation needs an atlas made with by: time")
     specs = sorted((atlas_dir / "specs").glob("*.yaml"))

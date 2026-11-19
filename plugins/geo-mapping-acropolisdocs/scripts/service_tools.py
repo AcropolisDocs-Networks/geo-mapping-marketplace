@@ -259,7 +259,7 @@ def oneshot_profile(url: str, confirm_host: str = "") -> dict:
     if not confirmed and confirm_host and confirm_host.strip().lower() == host:
         session_dir(True)
         _cache_path(host).write_text(yaml.safe_dump({"host": host, "confirmed_host": True, "session": session_token(), "confirmed_on": dt.date.today().isoformat(),
-                                                     "derived_from": oh.redact_url(url), "profile": derived}, sort_keys=False))
+                                                     "derived_from": oh.redact_url(url), "profile": derived}, sort_keys=False), encoding="utf-8")
         confirmed = True
     fs = sl.lint_oneshot(host, confirmed)
     if fs:
@@ -419,7 +419,7 @@ def fetch_coverage(profile: str = "", coverage: str = "", bbox: str = "", max_si
            "captured_at": sq.now(), "raster": d["raster"], "attribution": prof.get("attribution"),
            "license": prof.get("license")}
     cap = outdir("coverages") / f"{name}.capture.json"
-    cap.write_text(json.dumps(rec, indent=2))
+    cap.write_text(json.dumps(rec, indent=2), encoding="utf-8")
     return {"ok": True, **d, "capture": str(cap), "notice": NOTICE, **_oneshot_note(prof)}
 
 
@@ -590,9 +590,9 @@ def verify_saved(name: str, confirm_verify: str = "", http=None) -> dict:
                                                             "documentation and save the profile again"}]}
     import yaml
     p = sr.path_of(name)
-    stored = yaml.safe_load(p.read_text())
+    stored = yaml.safe_load(p.read_text(encoding="utf-8"))
     stored["verified_on"] = dt.date.today().isoformat()
-    p.write_text(yaml.safe_dump(stored, sort_keys=False))
+    p.write_text(yaml.safe_dump(stored, sort_keys=False), encoding="utf-8")
     return {"verified": True, "verified_on": stored["verified_on"], "service": c.get("service"), "version": c.get("version"),
             "layers": len(c.get("layers") or []), "response": c.get("_response")}
 
@@ -830,7 +830,7 @@ def basemap_tiles_tool(op: str, spec: str, provider: str = "", style: str = "", 
     if op not in ("plan", "render"):
         return fail("usage", "MAP-SVC-001", "op is plan or render")
     try:
-        tier = json.loads((gc.workdir() / "env.json").read_text()).get("tier") or "T1"
+        tier = json.loads((gc.workdir() / "env.json").read_text(encoding="utf-8")).get("tier") or "T1"
     except (OSError, ValueError):
         tier = "T1"
     kw = {"tier": tier if tier in br.CAPS else "T1", "provider": provider or None, "style": style or None, "zoom": int(zoom) if zoom else None,

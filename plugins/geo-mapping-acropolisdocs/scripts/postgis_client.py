@@ -285,7 +285,7 @@ def fetch(conn, cred, name: str, out: Path, *, default_schema: str = "public", c
         fs.append(finding("MAP-SVC-005", "BLOCK", f"{len(gdf)} rows were read and {n} were counted (the table changed during the read?)"))
     rec["findings"] = fs
     rp = out.with_suffix(".capture.json")
-    rp.write_text(json.dumps(rec, indent=2, default=str))
+    rp.write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
     return {"ok": not fs, "record": str(rp), "result": str(out), "features": len(gdf), "expected": n, "bbox": bb, "fields": sel, "crs": rec["result"]["crs"], "findings": fs}
 
 

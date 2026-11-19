@@ -35,7 +35,7 @@ def load_pack(slug: str) -> dict:
     except OSError:
         key = None
     if key is None or key not in _PACKS:
-        got = {"slug": slug, "dir": d, "brand": json.loads(files[0].read_text()), "pack": json.loads(files[1].read_text()), "tokens": gc.load_yaml(files[2])}
+        got = {"slug": slug, "dir": d, "brand": json.loads(files[0].read_text(encoding="utf-8")), "pack": json.loads(files[1].read_text(encoding="utf-8")), "tokens": gc.load_yaml(files[2])}
         if key is None:
             return got
         for k in [k for k in _PACKS if k[0] == str(d)]:
@@ -124,7 +124,7 @@ def resolve(manifest: dict, spec_brand: str | None = None, request_brand: str | 
 def house_accreditation(manifest: dict | None = None) -> dict:
     """The plugin's own hidden credit (file metadata only, never drawn): read from the shipped house pack."""
     m = manifest or gc.build_manifest()
-    return json.loads((gc.plugin_root() / gc.BRANDS_DIRNAME / m["house_brand"] / "PACK.json").read_text())["accreditation"]
+    return json.loads((gc.plugin_root() / gc.BRANDS_DIRNAME / m["house_brand"] / "PACK.json").read_text(encoding="utf-8"))["accreditation"]
 
 
 def logo_colors(brand: dict) -> set[str]:

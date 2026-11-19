@@ -651,7 +651,7 @@ def load_capture(layer: dict, base: Path):
         raise PlanError(f"layer '{lid}': a {t} layer is drawn from a capture, and the build never fetches. Capture the data first ({how}) and give source: {{type: {t}, capture: <capture id or path>}}", gc.EXIT_REFUSED)
     cp = find_capture(str(ref), base)
     try:
-        rec = json.loads(cp.read_text())
+        rec = json.loads(cp.read_text(encoding="utf-8"))
     except (OSError, ValueError) as ex:
         raise PlanError(f"layer '{lid}': the capture record {cp} cannot be read: {ex}", gc.EXIT_RUNTIME)
     want = "mcp" if t == "service" else "user-run"

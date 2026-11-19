@@ -55,7 +55,7 @@ def glyph_dir() -> Path:
 
 
 def glyph_manifest() -> dict:
-    return json.loads((glyph_dir() / "MANIFEST.json").read_text())
+    return json.loads((glyph_dir() / "MANIFEST.json").read_text(encoding="utf-8"))
 
 
 def range_of(cp: int) -> str:

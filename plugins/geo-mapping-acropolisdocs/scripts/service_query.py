@@ -377,7 +377,7 @@ def capture(http, profile: dict, req: dict, *, outroot: Path | None = None, fmt:
     fs += sl.lint_capture(record, profile)
     record["findings"] = fs
     rp = outdir / "capture.json"
-    rp.write_text(json.dumps(record, indent=2, default=str))
+    rp.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
     return {"ok": not any(f["severity"] == "BLOCK" for f in fs), "record_path": str(rp), "result_path": str(result_path) if result_path else None, "record": record, "findings": fs, "human": mp["human"]}
 
 

@@ -245,9 +245,9 @@ def _hashed_extra(priv: dict) -> dict | None:
 def _save(run_id: str, plan: dict, private: dict) -> Path:
     d = run_dir(run_id)
     d.mkdir(parents=True, exist_ok=True)
-    (d / "plan.json").write_text(json.dumps(plan, indent=2, default=str))
+    (d / "plan.json").write_text(json.dumps(plan, indent=2, default=str), encoding="utf-8")
     pp = d / "command.private.json"
-    pp.write_text(json.dumps(private, indent=2))
+    pp.write_text(json.dumps(private, indent=2), encoding="utf-8")
     try:
         os.chmod(pp, 0o600)
     except OSError:
@@ -259,7 +259,7 @@ def load(run_id: str) -> tuple[dict, dict]:
     d = run_dir(run_id)
     if not (d / "plan.json").is_file():
         raise ValueError(f"no run {run_id}; plan one first")
-    return json.loads((d / "plan.json").read_text()), json.loads((d / "command.private.json").read_text())
+    return json.loads((d / "plan.json").read_text(encoding="utf-8")), json.loads((d / "command.private.json").read_text(encoding="utf-8"))
 
 
 def parse_options(text: str) -> tuple[dict, list[dict]]:
@@ -500,7 +500,7 @@ def plan_kit(kit_dir, device_kit_dir: str, device_dir: str, *, show_host: bool =
     kp, rp = kd / "kit.py", kd / "kit-request.json"
     if not kp.is_file() or not rp.is_file():
         return {"ok": False, "findings": [finding("MAP-SVC-031", "BLOCK", "the folder holds no kit.py and kit-request.json; build a Python kit with request_kit.py build --format py")]}
-    req = json.loads(rp.read_text())
+    req = json.loads(rp.read_text(encoding="utf-8"))
     ep = req.get("endpoint") or ""
     try:
         sp = urllib.parse.urlsplit(ep)
@@ -650,7 +650,7 @@ def probe_check(run_id: str, output: str) -> dict:
     ok = not blocked(fs)
     plan["probe"] = {"ok": ok, "at": iso(now()), "dns": bool(r.get("dns")), "tcp": bool(r.get("tcp")), "tls": r.get("tls"), "classes": r.get("classes")}
     d = run_dir(run_id)
-    (d / "plan.json").write_text(json.dumps(plan, indent=2, default=str))
+    (d / "plan.json").write_text(json.dumps(plan, indent=2, default=str), encoding="utf-8")
     return {"ok": ok, "findings": fs, "probe": plan["probe"]}
 
 
@@ -661,12 +661,12 @@ def _approvals_path() -> Path:
 
 def _approvals() -> list[dict]:
     p = _approvals_path()
-    return json.loads(p.read_text()) if p.is_file() else []
+    return json.loads(p.read_text(encoding="utf-8")) if p.is_file() else []
 
 
 def _save_approvals(rows: list[dict]) -> None:
     p = _approvals_path()
-    p.write_text(json.dumps(rows, indent=2))
+    p.write_text(json.dumps(rows, indent=2), encoding="utf-8")
     try:
         os.chmod(p, 0o600)
     except OSError:
@@ -695,7 +695,7 @@ def approve(run_id: str, confirm_hash: str, *, standing_days: int | None = None)
     _save_approvals(rows)
     plan["approval"] = rec["approval_id"]
     plan["status"] = "approved"
-    (run_dir(run_id) / "plan.json").write_text(json.dumps(plan, indent=2, default=str))
+    (run_dir(run_id) / "plan.json").write_text(json.dumps(plan, indent=2, default=str), encoding="utf-8")
     return {"ok": True, "approval": rec, "findings": fs}
 
 
@@ -774,7 +774,7 @@ def command(run_id: str) -> dict:
     plan["status"] = "issued"
     plan["approval"] = ap["approval_id"]
     plan["issued_at"] = iso(now())
-    (run_dir(run_id) / "plan.json").write_text(json.dumps(plan, indent=2, default=str))
+    (run_dir(run_id) / "plan.json").write_text(json.dumps(plan, indent=2, default=str), encoding="utf-8")
     return {"ok": True, "command": priv["command"], "timeout_ms": (CHUNK_S + 20) * 1000, "approval_id": ap["approval_id"], "findings": fs,
             "note": "run exactly this with the device shell; it reads once and writes only into its own output folder"}
 
@@ -795,7 +795,7 @@ def cred_check(run_id: str, output: str) -> dict:
     sc = scrub_output(output, 2000)
     res = cb.check_result(priv["credential"], sc["text"])
     plan["credentials"]["checked"] = {"ok": res["ok"], "at": iso(now()), "answers": res["answers"]}
-    (run_dir(run_id) / "plan.json").write_text(json.dumps(plan, indent=2, default=str))
+    (run_dir(run_id) / "plan.json").write_text(json.dumps(plan, indent=2, default=str), encoding="utf-8")
     return res
 
 
@@ -918,13 +918,13 @@ def finish(run_id: str, stdout: str, folder, *, name: str, profile: dict | None 
                           "files": [{"name": "pages/page_0001.json", "bytes": len(body), "sha256": hashlib.sha256(body).hexdigest(), "feature_count": len(feats), "crs": "EPSG:4326"}]},
                "attestation": {"by": "plugin", "note": f"fetched by the plugin on the person's computer under approval {plan.get('approval')}"}}
         import yaml
-        (fol / "manifest.yaml").write_text(yaml.safe_dump(man, sort_keys=False))
+        (fol / "manifest.yaml").write_text(yaml.safe_dump(man, sort_keys=False), encoding="utf-8")
     ing = rk.ingest(fol, name=name, profile=profile, accept_incomplete=accept_incomplete, outroot=outroot, route="device-run",
                     run_info={"approval_id": plan.get("approval"), "approved_at": _approved_at(plan.get("approval")), "command_hash": plan["command_hash"], "host_id": plan["host_id"], "run_id": run_id, "kind": plan["kind"], "auth": plan.get("auth", "none")})
     fs += ing.get("findings", [])
     plan["status"] = "finished" if ing.get("ok") else "failed"
     plan["finished_at"] = iso(now())
-    (run_dir(run_id) / "plan.json").write_text(json.dumps(plan, indent=2, default=str))
+    (run_dir(run_id) / "plan.json").write_text(json.dumps(plan, indent=2, default=str), encoding="utf-8")
     return {"ok": bool(ing.get("ok")), "findings": fs, "capture": rk.summary(ing) if ing.get("record") else None, "output": sc["text"], "record_path": ing.get("record_path")}
 
 
@@ -994,12 +994,12 @@ def main(argv=None) -> int:
         if a.op == "probe-command":
             _emit(probe_command(a.host, a.port, a.tls == "yes"))
         elif a.op == "probe-check":
-            out = sys.stdin.read() if a.output == "-" else Path(a.output).read_text()
+            out = sys.stdin.read() if a.output == "-" else Path(a.output).read_text(encoding="utf-8")
             r = probe_check(a.run, out)
             _emit(r)
             return gc.EXIT_OK if r["ok"] else gc.EXIT_LINT
         elif a.op == "plan-curl":
-            text = Path(a.curl_file).read_text() if a.curl_file else (a.curl or "")
+            text = Path(a.curl_file).read_text(encoding="utf-8") if a.curl_file else (a.curl or "")
             r = plan_curl(text, a.device_dir, show_host=a.show_host, credentials=a.credentials, profile_name=a.profile)
             if r.get("card"):
                 print(r["card"] + "\n")
@@ -1016,7 +1016,7 @@ def main(argv=None) -> int:
             _emit(r)
             return gc.EXIT_OK if r["ok"] else gc.EXIT_LINT
         elif a.op == "cred-check":
-            r = cred_check(a.run, sys.stdin.read() if a.output == "-" else Path(a.output).read_text())
+            r = cred_check(a.run, sys.stdin.read() if a.output == "-" else Path(a.output).read_text(encoding="utf-8"))
             _emit(r)
             return gc.EXIT_OK if r["ok"] else gc.EXIT_LINT
         elif a.op == "approve":
@@ -1028,11 +1028,11 @@ def main(argv=None) -> int:
             _emit(r)
             return gc.EXIT_OK if r["ok"] else gc.EXIT_REFUSED
         elif a.op == "finish":
-            r = finish(a.run, Path(a.stdout).read_text() if a.stdout != "-" else sys.stdin.read(), a.folder, name=a.name, accept_incomplete=a.accept_incomplete)
+            r = finish(a.run, Path(a.stdout).read_text(encoding="utf-8") if a.stdout != "-" else sys.stdin.read(), a.folder, name=a.name, accept_incomplete=a.accept_incomplete)
             _emit(r)
             return gc.EXIT_OK if r["ok"] else gc.EXIT_LINT
         elif a.op == "scrub":
-            r = scrub_output(Path(a.file).read_text() if a.file else sys.stdin.read())
+            r = scrub_output(Path(a.file).read_text(encoding="utf-8") if a.file else sys.stdin.read())
             print(r["text"])
             for f in r["findings"]:
                 print(f"[{f['id']}] {f['message']}", file=sys.stderr)

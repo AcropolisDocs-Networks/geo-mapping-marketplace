@@ -420,7 +420,7 @@ def run_file(in_path: Path, address, out_path: Path | None, provider: str, purpo
     rec = out.with_suffix(".geocode.json")
     report["input"] = str(in_path)
     report["result"] = str(out)
-    rec.write_text(json.dumps(report, indent=2, default=str))
+    rec.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     bb = gdf[gdf.geometry.notna()].total_bounds.tolist() if report["matched"] else None
     return {"ok": True, "result": str(out), "record": str(rec), "rows": report["rows"], "matched": report["matched"], "match_rate": report["match_rate"], "unmatched_total": report["unmatched_total"],
             "unmatched": report["unmatched"][:10], "quality_counts": report["quality_counts"], "provider": provider, "attribution": report["attribution"], "bbox": [round(v, 6) for v in bb] if bb else None,

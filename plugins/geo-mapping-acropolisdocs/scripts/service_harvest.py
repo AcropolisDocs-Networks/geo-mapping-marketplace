@@ -144,7 +144,7 @@ def harvest(http, profile_name: str, layers: list[str], shared: dict | None = No
     hid = f"{sq.slug(prof['profile'])}-harvest-{hashlib.sha256(json.dumps([layers, shared], sort_keys=True, default=str).encode()).hexdigest()[:8]}"
     index = {"harvest_id": hid, "finished_at": sq.now(), "profile": prof["profile"], "layers": layers, "estimate_total": total, "results": results}
     (root / "_harvests").mkdir(parents=True, exist_ok=True)
-    (root / "_harvests" / f"{hid}.json").write_text(json.dumps(index, indent=2, default=str))
+    (root / "_harvests" / f"{hid}.json").write_text(json.dumps(index, indent=2, default=str), encoding="utf-8")
     return {"ok": not stopped and bool(done or all(x["status"] == "kept" for x in results)) and not (failed and not done), "confirmed": True, "estimate": public_rows, "total": total, "results": results,
             "index": str(root / "_harvests" / f"{hid}.json"), "findings": fs}
 

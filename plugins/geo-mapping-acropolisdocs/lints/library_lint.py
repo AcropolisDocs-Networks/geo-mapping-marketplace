@@ -34,8 +34,8 @@ def _d(v):
 
 
 def load_vocab(lib: Path) -> tuple[dict, dict]:
-    tags = yaml.safe_load((lib / "tags.yaml").read_text())
-    types = yaml.safe_load((lib / "types.yaml").read_text())
+    tags = yaml.safe_load((lib / "tags.yaml").read_text(encoding="utf-8"))
+    types = yaml.safe_load((lib / "types.yaml").read_text(encoding="utf-8"))
     return tags, types
 
 
@@ -67,7 +67,7 @@ def _load_entry(p: Path) -> dict:
     hit = _ENTRY_CACHE.get(str(p))
     if hit is None or hit[0] != sig:
         try:
-            d = yaml.load(p.read_text(), Loader=_LOADER) or {}
+            d = yaml.load(p.read_text(encoding="utf-8"), Loader=_LOADER) or {}
         except yaml.YAMLError as e:
             d = {"_parse_error": str(e)}
         hit = (sig, d)
@@ -373,7 +373,7 @@ def lint_entries(entries: list[dict], lib: Path, plugin_root: Path | None = None
             gp = lib / name
             if not gp.is_file():
                 findings.append(f("MAP-LIB-011", "BLOCK", "-", f"{name} is missing; run tools/ref_release.py regen"))
-            elif gp.read_text() != render():
+            elif gp.read_text(encoding="utf-8") != render():
                 findings.append(f("MAP-LIB-011", "BLOCK", "-", f"{name} does not match the entries; run tools/ref_release.py regen"))
     findings.sort(key=lambda x: (SEV_ORDER[x["severity"]], x["id"], x["entry"]))
     return findings

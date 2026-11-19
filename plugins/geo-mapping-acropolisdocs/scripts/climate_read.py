@@ -130,7 +130,7 @@ def read(path, out_dir, *, variable: str | None = None, transform: str | None = 
                     dst.update_tags(b + 1, date=str(d))
         side = tif.with_suffix(".json")
         side.write_text(json.dumps({"variable": name, "source": path.name, "bands": int(arr.shape[0]), "dates": dates, "units": units,
-                                    "transform": transform, "nodata": nod, "notes": notes}, indent=2))
+                                    "transform": transform, "nodata": nod, "notes": notes}, indent=2), encoding="utf-8")
         files.append({"variable": name, "tif": str(tif), "sidecar": str(side), "bands": int(arr.shape[0]), "dates": dates, "units": units})
     return {"files": files, "notes": notes, "kind": kind}
 

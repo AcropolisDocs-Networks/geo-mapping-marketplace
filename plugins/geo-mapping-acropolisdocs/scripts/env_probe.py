@@ -284,7 +284,7 @@ def begin_build(spec: str) -> str:
     now = utcnow()
     for old in wd.glob("*.json"):  # prune expired
         try:
-            if json.loads(old.read_text())["expires"] < iso(now):
+            if json.loads(old.read_text(encoding="utf-8"))["expires"] < iso(now):
                 old.unlink()
         except Exception:  # noqa: BLE001
             old.unlink(missing_ok=True)
@@ -292,7 +292,7 @@ def begin_build(spec: str) -> str:
     (wd / f"{token}.json").write_text(json.dumps({
         "token": token, "spec": str(Path(spec).resolve()), "created": iso(now),
         "expires": iso(now + dt.timedelta(hours=TOKEN_TTL_HOURS)), "plugin": gc.build_manifest()["plugin_name"],
-    }, indent=2))
+    }, indent=2), encoding="utf-8")
     return token
 
 
@@ -324,7 +324,7 @@ def main(argv=None) -> int:
             try:
                 wd = gc.workdir(create=True)
                 guard = {"id": "MAP-BRAND-012", "severity": "BLOCK", "message": f"two geo-mapping editions are installed ({', '.join(editions)}); uninstall one"}
-                (wd / "env.json").write_text(json.dumps({"single_edition_ok": False, "editions_installed": editions, "findings": [guard]}, indent=2))
+                (wd / "env.json").write_text(json.dumps({"single_edition_ok": False, "editions_installed": editions, "findings": [guard]}, indent=2), encoding="utf-8")
             except OSError:
                 pass
         return gc.EXIT_USAGE
@@ -364,7 +364,7 @@ def main(argv=None) -> int:
     env["status_line"] = status_line(env) + (" " + newer_line(own, manifest.get("version")) if env["newer_copies"] else "")
     if not a.no_write:
         wd = gc.workdir(create=True)
-        (wd / "env.json").write_text(json.dumps(env, indent=2))
+        (wd / "env.json").write_text(json.dumps(env, indent=2), encoding="utf-8")
     print(json.dumps(env, indent=2) if a.json else env["status_line"])
     return gc.EXIT_OK
 

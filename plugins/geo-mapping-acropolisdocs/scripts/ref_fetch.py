@@ -273,7 +273,7 @@ def fetch_service(entry: dict, variant: str | None = None, level: str | None = N
               "rows": int(len(df)), "columns": list(df.columns), "sha256": hashlib.sha256(out.read_bytes()).hexdigest(), "calls": http.audit.calls, "notes": notes}
     import redact
     record, _ = redact.scrub_obj(record)
-    rec_path.write_text(json.dumps(record, indent=2, default=str))
+    rec_path.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
     return {"id": entry["id"], "rev": entry.get("rev"), "variant": variant, "level": level, "path": str(out), "record": str(rec_path), "cached": False,
             "rows": int(len(df)), "columns": list(df.columns), "run_card": card, "notes": notes, "geometry": False,
             "join": "a table without geometry: join it to a boundary layer on GEOID (table_join)"}

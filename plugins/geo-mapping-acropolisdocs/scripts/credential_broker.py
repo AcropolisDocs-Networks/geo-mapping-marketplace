@@ -246,7 +246,7 @@ def main(argv=None) -> int:
             print(f"credential_broker: {ex}", file=sys.stderr)
             return gc.EXIT_USAGE
         return gc.EXIT_OK
-    out = sys.stdin.read() if a.output == "-" else Path(a.output).read_text()
+    out = sys.stdin.read() if a.output == "-" else Path(a.output).read_text(encoding="utf-8")
     res = check_result(r, out)
     print(json.dumps(res, indent=2))
     return gc.EXIT_OK if res["ok"] else gc.EXIT_LINT

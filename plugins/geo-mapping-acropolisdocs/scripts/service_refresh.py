@@ -61,7 +61,7 @@ def load(ref: str, captures_root: Path | None = None):
     """(record, GeoDataFrame or None, record path)."""
     import geo_io
     cp = locate(ref, captures_root)
-    rec = json.loads(cp.read_text())
+    rec = json.loads(cp.read_text(encoding="utf-8"))
     res = rec.get("result") or {}
     g = None
     if res.get("path"):
@@ -225,7 +225,7 @@ def list_captures(*, older_than_days: int | None = None, captures_root: Path | N
     root = root_of(captures_root)
     for d in sorted(root.glob("*/capture.json")) if root.is_dir() else []:
         try:
-            r = json.loads(d.read_text())
+            r = json.loads(d.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
         fin = str(r.get("finished_at") or "")[:10]
@@ -283,7 +283,7 @@ def refresh(http, ref: str, *, apply: bool = False, key: str | None = None, thre
     report = drift(old, new, og, new_g, key=key, threshold_pct=threshold_pct)
     report["applied"] = False
     fs = list(res["findings"]) + [f for f in report["findings"]]
-    (staged / "drift.json").write_text(json.dumps(report, indent=2, default=str))
+    (staged / "drift.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     out = {"ok": res["ok"], "report": report, "staged": str(staged), "findings": fs, "new_capture": new["id"]}
     if res["ok"] and apply:
         p = promote(old["id"], captures_root=captures_root, drift_report=report)
@@ -304,10 +304,10 @@ def promote(cid: str, *, captures_root: Path | None = None, drift_report: dict |
     staged, live = root / "_refresh" / cid, root / cid
     if not (staged / "capture.json").is_file():
         return {"ok": False, "findings": [finding("MAP-SVC-003", "BLOCK", f"there is no staged refresh for '{cid}'; run refresh first")]}
-    new = json.loads((staged / "capture.json").read_text())
+    new = json.loads((staged / "capture.json").read_text(encoding="utf-8"))
     if any(f["severity"] == "BLOCK" for f in new.get("findings") or []):
         return {"ok": False, "findings": [finding("MAP-SVC-011", "BLOCK", "the staged capture has blocking findings and is not applied")]}
-    old = json.loads((live / "capture.json").read_text()) if (live / "capture.json").is_file() else {}
+    old = json.loads((live / "capture.json").read_text(encoding="utf-8")) if (live / "capture.json").is_file() else {}
     stamp = str(old.get("finished_at") or "earlier")[:19].replace(":", "").replace("-", "")
     hist = root / "_history" / cid / stamp
     n = 1
@@ -323,10 +323,10 @@ def promote(cid: str, *, captures_root: Path | None = None, drift_report: dict |
         res["path"] = str(live / Path(res["path"]).name)
     rpt = drift_report
     if rpt is None and (live / "drift.json").is_file():
-        rpt = json.loads((live / "drift.json").read_text())
+        rpt = json.loads((live / "drift.json").read_text(encoding="utf-8"))
     new["refreshed"] = {"from": {"finished_at": old.get("finished_at"), "received": old.get("received"), "history": str(hist) if old else None},
                         "summary": (rpt or {}).get("summary"), "identical": (rpt or {}).get("identical")}
-    (live / "capture.json").write_text(json.dumps(new, indent=2, default=str))
+    (live / "capture.json").write_text(json.dumps(new, indent=2, default=str), encoding="utf-8")
     return {"ok": True, "history": str(hist) if old else None, "findings": [finding("MAP-SVC-011", "INFO", f"applied: '{cid}' now holds the new capture; the earlier one is kept in _history")]}
 
 
@@ -364,7 +364,7 @@ def main(argv=None, http=None) -> int:
         import service_query as sq
         if http is None:
             try:
-                old = json.loads(locate(a.capture).read_text())
+                old = json.loads(locate(a.capture).read_text(encoding="utf-8"))
                 http = sq.make_http(sq.need_mcp_profile(old["profile"]))
             except (FileNotFoundError, oh.ServiceError) as ex:
                 print(json.dumps({"ok": False, "findings": [finding("MAP-SVC-003", "BLOCK", oh.untrusted(ex, 300))]}))

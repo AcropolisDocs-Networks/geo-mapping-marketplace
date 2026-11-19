@@ -653,7 +653,7 @@ def fetch_pages(http, profile: dict, plan: FetchPlan, outdir: Path, *, hits: int
     pdir = Path(outdir) / "pages"
     pdir.mkdir(parents=True, exist_ok=True)
     state_p = Path(outdir) / "state.json"
-    state = json.loads(state_p.read_text()) if resume and state_p.is_file() else {}
+    state = json.loads(state_p.read_text(encoding="utf-8")) if resume and state_p.is_file() else {}
     cap = plan.max_features if plan.max_features else (hits if hits is not None else None)
     page = max(1, min(int(plan.page_size), PAGE_CEILING))
     fmt, kind = plan.output_format, "json"
@@ -712,7 +712,7 @@ def fetch_pages(http, profile: dict, plan: FetchPlan, outdir: Path, *, hits: int
                 ids.add(fid)
         res.pages.append({"n": n, "path": str(ppath), "count": len(feats), "sha256": hashlib.sha256(content).hexdigest(), "url": url, "start": start, "asked": want})
         state.setdefault("pages", {})[key] = res.pages[-1]
-        state_p.write_text(json.dumps(state))
+        state_p.write_text(json.dumps(state), encoding="utf-8")
         res.received += len(feats)
         if page_fn:
             page_fn(res)

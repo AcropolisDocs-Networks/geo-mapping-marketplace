@@ -408,7 +408,7 @@ def fetch(job: str, out_dir, *, transform: str | None = None, client: Client | N
     rec = {"job": job, "dataset": j.get("dataset"), "request": j.get("inputs"), "retrieved_at": _now().date().isoformat(), "downloads": recs,
            "transform": transform, "provenance": {"source": f"Copernicus Climate Data Store, {j.get('dataset')}", "license": "attribution",
                                                    "attribution": credit, "library_ref": ENTRY, "job": job}}
-    (out_dir / f"cds-{job}.json").write_text(json.dumps(rec, indent=2, default=str))
+    (out_dir / f"cds-{job}.json").write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
     log({"job": job, "fetched": _now().isoformat(), "files": [f["tif"] for f in files]})
     return {"job": job, "files": files, "record": str(out_dir / f"cds-{job}.json"), "credit": credit}
 
@@ -430,7 +430,7 @@ def source_path(job: str, variable: str, time_: str | None = None) -> tuple[str,
         raise CDSError(f"job {job} holds no variable {variable}", "MAP-CDS-002", gc.EXIT_USAGE)
     if not time_:
         return tif, None
-    side = json.loads(Path(tif).with_suffix(".json").read_text())
+    side = json.loads(Path(tif).with_suffix(".json").read_text(encoding="utf-8"))
     for k, d in enumerate(side.get("dates") or []):
         if d and str(d).startswith(str(time_)):
             return tif, k + 1
@@ -461,7 +461,7 @@ def main(argv=None) -> int:
     ap.add_argument("--transform")
     ap.add_argument("--confirm", action="store_true")
     a = ap.parse_args(argv)
-    req = yaml.safe_load(Path(a.request).read_text()) if a.request else {}
+    req = yaml.safe_load(Path(a.request).read_text(encoding="utf-8")) if a.request else {}
     area = [float(v) for v in a.area.split(",")] if a.area else None
     c = None
     try:

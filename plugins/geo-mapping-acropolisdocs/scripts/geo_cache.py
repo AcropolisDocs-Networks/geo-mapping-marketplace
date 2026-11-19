@@ -157,7 +157,7 @@ def _recorded_hashes(root: Path) -> dict[Path, str]:
         if not rec.name.endswith(RECORD_SUFFIXES):
             continue
         try:
-            d = json.loads(rec.read_text())
+            d = json.loads(rec.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
         if not isinstance(d, dict):

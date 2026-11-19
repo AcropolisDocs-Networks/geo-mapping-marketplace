@@ -282,7 +282,7 @@ def safe_build(spec_path, out, formats, **kw):
 def stage_probe(c: Ctx) -> dict:
     tier = "T0"
     try:
-        tier = json.loads((gc.workdir() / "env.json").read_text()).get("tier") or "T0"
+        tier = json.loads((gc.workdir() / "env.json").read_text(encoding="utf-8")).get("tier") or "T0"
     except (OSError, ValueError):
         pass
     c.results["tier"] = tier
@@ -333,11 +333,11 @@ def stage_package(c: Ctx) -> dict:
         shutil.copy2(tf, dest / Path(tf).name)
         c.add_file(dest / Path(tf).name, "terms")
     allf = list(c.results.get("pre_findings") or []) + list(c.results["all_findings"] if "all_findings" in c.results else res["findings"])
-    (dest / "lint_report.md").write_text(_fs_md(allf))
+    (dest / "lint_report.md").write_text(_fs_md(allf), encoding="utf-8")
     c.add_file(dest / "lint_report.md", "lint")
     obj = c.results.get("objects") or {}
     if obj.get("methods"):
-        (dest / "methods.md").write_text(methods_md(obj["methods"]))
+        (dest / "methods.md").write_text(methods_md(obj["methods"]), encoding="utf-8")
         c.add_file(dest / "methods.md", "methods")
     for extra in (c.results.get("gen") or {}).get("extras", []):
         shutil.copy2(extra, dest / Path(extra).name)
@@ -558,14 +558,14 @@ def stage_verdict(c: Ctx) -> dict:
               "reasons": [{"id": f["id"], "message": f["message"]} for f in why][:20], "visual_review": "pending: open preview.png and answer the needs-eyes items" if c.inputs.get("spec") else "not applicable (files only)"}
     c.results["verdict"] = report
     out = c.run_dir / "qa_report.json"
-    out.write_text(json.dumps(report, indent=2))
+    out.write_text(json.dumps(report, indent=2), encoding="utf-8")
     c.add_file(out, "qa")
     md = [f"# QA verdict: {verdict}", "", f"{report['counts']['BLOCK']} BLOCK, {report['counts']['WARN']} WARN, {report['counts']['INFO']} INFO.", "", "## Checklist", ""]
     md += [f"- [{'x' if x['status'] == 'pass' else ' '}] {x['item']} ({x['status']}{': ' + ', '.join(x['evidence']) if x['evidence'] else ''})" for x in checklist]
     if report["reasons"]:
         md += ["", "## Why", ""] + [f"- {r['id']}: {r['message']}" for r in report["reasons"]]
     md += ["", "## All findings", "", _fs_md(allf)]
-    (c.run_dir / "qa_report.md").write_text("\n".join(md))
+    (c.run_dir / "qa_report.md").write_text("\n".join(md), encoding="utf-8")
     c.add_file(c.run_dir / "qa_report.md", "qa")
     return {"ok": True, "summary": verdict, "findings": []}
 
@@ -684,12 +684,12 @@ def stage_fb_verify(c: Ctx) -> dict:
 def stage_fb_report(c: Ctx) -> dict:
     rows = c.results["fb_rows"]
     out = Path(c.outdir)
-    (out / "format_batch_report.json").write_text(json.dumps({"to": c.options.get("to", "gpkg"), "files": rows}, indent=2))
+    (out / "format_batch_report.json").write_text(json.dumps({"to": c.options.get("to", "gpkg"), "files": rows}, indent=2), encoding="utf-8")
     md = ["# Format batch report", "", f"Target format: {c.options.get('to', 'gpkg')}.", "", "| Source | Layer | Result | Features | Status |", "|---|---|---|---|---|"]
     for r in rows:
         md.append(f"| {r['source']} | {r.get('layer') or ''} | {r.get('target') or ''} | {r.get('features', '')} | {r['status']}{' (verified)' if r.get('verified') else ''} |")
     md += ["", "## Equivalent ogr2ogr commands", ""] + [f"- `{r['ogr2ogr']['command']}`" if isinstance(r.get("ogr2ogr"), dict) and r["ogr2ogr"].get("command") else f"- {r['source']}: {r.get('ogr2ogr')}" for r in rows if r.get("ogr2ogr")]
-    (out / "format_batch_report.md").write_text("\n".join(md) + "\n")
+    (out / "format_batch_report.md").write_text("\n".join(md) + "\n", encoding="utf-8")
     c.add_file(out / "format_batch_report.json", "report")
     c.add_file(out / "format_batch_report.md", "report")
     return {"ok": True, "summary": "report written", "findings": []}
@@ -704,7 +704,7 @@ def plan_data_refresh(inp: dict, opt: dict) -> dict:
     import map_plan as mp
     for l in svc:
         try:
-            rec = json.loads(mp.find_capture(str(l["source"].get("capture")), base).read_text())
+            rec = json.loads(mp.find_capture(str(l["source"].get("capture")), base).read_text(encoding="utf-8"))
             reqs += 3 + len(rec.get("pages") or [1])
         except Exception:  # noqa: BLE001
             reqs += 4
@@ -723,7 +723,7 @@ def stage_dr_read(c: Ctx) -> dict:
         if t == "service":
             try:
                 cp = mp.find_capture(str(s.get("capture")), spec_path.parent)
-                rec = json.loads(cp.read_text())
+                rec = json.loads(cp.read_text(encoding="utf-8"))
                 row.update(capture=rec["id"], route=rec.get("route"), captured=str(rec.get("finished_at"))[:10], refreshable=rec.get("route") == "mcp")
             except mp.PlanError as ex:
                 row.update(problem=str(ex)[:200])
@@ -731,7 +731,7 @@ def stage_dr_read(c: Ctx) -> dict:
         elif t == "user-run":
             route = None
             try:
-                route = json.loads(mp.find_capture(str(s.get("capture")), spec_path.parent).read_text()).get("route")
+                route = json.loads(mp.find_capture(str(s.get("capture")), spec_path.parent).read_text(encoding="utf-8")).get("route")
             except Exception:  # noqa: BLE001
                 pass
             if route == "device-run":
@@ -783,7 +783,7 @@ def stage_dr_fetch(c: Ctx) -> dict:
             http = c.http
             if http is None:
                 import service_query as sq
-                rec = json.loads(srf.locate(row["capture"]).read_text())
+                rec = json.loads(srf.locate(row["capture"]).read_text(encoding="utf-8"))
                 http = sq.make_http(sq.need_mcp_profile(rec["profile"]))
             r = srf.refresh(http, row["capture"], apply=bool(c.params.get("apply")))
         except Exception as ex:  # noqa: BLE001
@@ -836,7 +836,7 @@ def stage_dr_summary(c: Ctx) -> dict:
         L.append(bit)
     L += ["", "Rebuilt." if c.results.get("dr_rebuilt") else "The map was not rebuilt."]
     p = c.run_dir / "change_summary.md"
-    p.write_text("\n".join(L) + "\n")
+    p.write_text("\n".join(L) + "\n", encoding="utf-8")
     c.add_file(p, "report")
     return {"ok": True, "summary": "summary written", "findings": []}
 
@@ -874,7 +874,7 @@ def stage_refresh(c: Ctx) -> dict:
     http = c.http
     if http is None:
         import service_query as sq
-        rec = json.loads(srf.locate(c.inputs["capture"]).read_text())
+        rec = json.loads(srf.locate(c.inputs["capture"]).read_text(encoding="utf-8"))
         http = sq.make_http(sq.need_mcp_profile(rec["profile"]))
     r = srf.refresh(http, c.inputs["capture"], apply=bool(c.params.get("apply")), key=c.options.get("key"))
     c.results["refresh"] = r
@@ -886,7 +886,7 @@ def plan_climate(inp: dict, opt: dict) -> dict:
     """The cost card of a CDS job, before anything is sent: the size estimated here (the constraints check, cost and licences come in the run)."""
     import yaml
     import cds_retrieve as cdr
-    req = yaml.safe_load(Path(inp["request"]).read_text()) or {} if inp.get("request") and Path(inp["request"]).is_file() else {}
+    req = yaml.safe_load(Path(inp["request"]).read_text(encoding="utf-8")) or {} if inp.get("request") and Path(inp["request"]).is_file() else {}
     area = [float(v) for v in str(opt["area"]).split(",")] if opt.get("area") else None
     try:
         ent = cdr.dataset_entry(inp["dataset"])
@@ -901,7 +901,7 @@ def plan_climate(inp: dict, opt: dict) -> dict:
 def stage_climate(c: Ctx) -> dict:
     import yaml
     import cds_retrieve as cdr
-    req = yaml.safe_load(Path(c.inputs["request"]).read_text()) or {}
+    req = yaml.safe_load(Path(c.inputs["request"]).read_text(encoding="utf-8")) or {}
     area = [float(v) for v in str(c.options["area"]).split(",")] if c.options.get("area") else None
     cl = None
     try:
@@ -1013,7 +1013,7 @@ def _gen_stage(kind: str):
         c.results["pre_findings"] = list(res["findings"])
         c.results["gen_report"] = res["report"]
         rp = c.run_dir / "ingest_report.json"
-        rp.write_text(json.dumps({"report": res["report"], "findings": res["findings"]}, indent=2, default=str))
+        rp.write_text(json.dumps({"report": res["report"], "findings": res["findings"]}, indent=2, default=str), encoding="utf-8")
         c.add_file(rp, "ingest")
         return {"ok": not blocked(res["findings"]), "summary": f"MapSpec written; {len(res['findings'])} finding(s)", "findings": res["findings"]}
     return stage
@@ -1066,7 +1066,7 @@ def stage_na_analyze(c: Ctx) -> dict:
     c.results["pre_findings"] = list(res["findings"])
     c.results["gen_report"] = res["report"]
     rp = c.run_dir / "ingest_report.json"
-    rp.write_text(json.dumps({"report": res["report"], "findings": res["findings"]}, indent=2, default=str))
+    rp.write_text(json.dumps({"report": res["report"], "findings": res["findings"]}, indent=2, default=str), encoding="utf-8")
     c.add_file(rp, "ingest")
     return {"ok": not blocked(res["findings"]), "summary": f"{len(res['specs'])} analysis MapSpec(s) written; {len(res['findings'])} finding(s)", "findings": res["findings"]}
 
@@ -1206,7 +1206,7 @@ def stage_na_package(c: Ctx) -> dict:
         c.add_file(adir / "provenance.json", "provenance")
         obj = b.get("objects") or {}
         if obj.get("methods"):
-            (adir / "methods.md").write_text(methods_md(obj["methods"]) + "\n## Analysis\n\n" + "\n".join(f"- {n}" for n in res["notes"].get(a, [])) + "\n")
+            (adir / "methods.md").write_text(methods_md(obj["methods"]) + "\n## Analysis\n\n" + "\n".join(f"- {n}" for n in res["notes"].get(a, [])) + "\n", encoding="utf-8")
             c.add_file(adir / "methods.md", "methods")
     tdir = dest / "tables"
     tdir.mkdir()
@@ -1231,14 +1231,14 @@ def stage_na_package(c: Ctx) -> dict:
                         geo_io.write(g, q, fmt, layer=name if fmt == "gpkg" else None, overwrite=True)
                         c.add_file(q, "data")
     allf = list(c.results.get("pre_findings") or []) + list(c.results.get("all_findings") or []) + fs
-    (dest / "lint_report.md").write_text(_fs_md(allf))
+    (dest / "lint_report.md").write_text(_fs_md(allf), encoding="utf-8")
     c.add_file(dest / "lint_report.md", "lint")
     report = {"network_analysis_version": 1, "sites": rep["sites"], "sectors": rep["sectors"], "band": rep.get("band"), "analyses": rep["analyses"], "summary": rep["summary"],
               "notes": res["notes"], "maps": {a: [Path(f).name for f in b["res"]["files"]] for a, b in builds.items()}, "tables": [Path(t).name for t in res["tables"]],
               "findings": [{k: f.get(k) for k in ("id", "severity", "message", "analysis", "layer")} for f in allf], "caveat": "Geometric measures of the site layout and the drawn footprints; no propagation model."}
-    (dest / "report.json").write_text(json.dumps(report, indent=2, default=str))
+    (dest / "report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     c.add_file(dest / "report.json", "report")
-    (dest / "analysis.md").write_text(_na_analysis_md(res, builds))
+    (dest / "analysis.md").write_text(_na_analysis_md(res, builds), encoding="utf-8")
     c.add_file(dest / "analysis.md", "report")
     c.results["dest"] = str(dest)
     return {"ok": not blocked(fs), "summary": f"packaged in {dest.name}/ ({len(builds)} map(s))", "findings": fs}
@@ -1396,16 +1396,16 @@ def stage_atlas_package(c: Ctx) -> dict:
     meta = {"atlas_version": 1, "layer": d["layer"], "field": d["field"], "mode": d["options"]["mode"], "values": d["values"], "shared_classes": bool(sh),
             "class_edges": sh["edges"] if sh else None, "maps": len(a["results"]), "note": atlas.shared_note(d)}
     atlas.package_time(d, a["results"], dest, meta, c.add_file)          # by: time keeps the period specs and the periods (M15)
-    (dest / "atlas.json").write_text(json.dumps(meta, indent=2))
+    (dest / "atlas.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     c.add_file(dest / "atlas.json", "atlas")
     (dest / "mapspec.yaml").write_bytes(Path(c.inputs["spec"]).read_bytes())
     c.add_file(dest / "mapspec.yaml", "spec")
     allf = list(c.results.get("pre_findings") or []) + list(c.results.get("all_findings") or [])
-    (dest / "lint_report.md").write_text(_fs_md(allf))
+    (dest / "lint_report.md").write_text(_fs_md(allf), encoding="utf-8")
     c.add_file(dest / "lint_report.md", "lint")
     meth = next((r["objects"]["methods"] for r in a["results"] if r.get("objects") and r["objects"].get("methods")), None)
     if meth:
-        (dest / "methods.md").write_text(methods_md(meth) + "\n## Atlas\n\n" + atlas.shared_note(d) + "\n")
+        (dest / "methods.md").write_text(methods_md(meth) + "\n## Atlas\n\n" + atlas.shared_note(d) + "\n", encoding="utf-8")
         c.add_file(dest / "methods.md", "methods")
     c.results["dest"] = str(dest)
     return {"ok": True, "summary": f"packaged in {dest.name}/", "findings": []}
@@ -1519,12 +1519,12 @@ def stage_rr_propose(c: Ctx) -> dict:
             v["proposal_rejected"] = [x["message"] for x in bad]
             continue
         pp = dest / "patches" / f"{v['id']}.rev{after['rev']}.patch.yaml"
-        pp.write_text(yaml.safe_dump(pr, sort_keys=False, allow_unicode=True, width=160))
+        pp.write_text(yaml.safe_dump(pr, sort_keys=False, allow_unicode=True, width=160), encoding="utf-8")
         written.append(pp)
         c.add_file(pp, "patch")
         lines.append(f"- `{v['id']}` rev {after['rev']} ({pr['kind']}): {pr['changelog']['note']}")
     cl = dest / "CHANGELOG.proposed.md"
-    cl.write_text("# Proposed library changelog lines\n\nThese become part of the generated CHANGELOG.md when the patches are applied and the library is regenerated.\n\n" + ("\n".join(lines) or "(none)") + "\n")
+    cl.write_text("# Proposed library changelog lines\n\nThese become part of the generated CHANGELOG.md when the patches are applied and the library is regenerated.\n\n" + ("\n".join(lines) or "(none)") + "\n", encoding="utf-8")
     c.add_file(cl, "changelog")
     c.results["dest"] = str(dest)
     c.results["rr"]["patches"] = [str(p) for p in written]
@@ -1565,10 +1565,10 @@ def stage_rr_package(c: Ctx) -> dict:
     L += ["", "## Review checklist", "", "- Tags come from the vocabulary; `use_when` and `avoid_when` are still true.", "- A changed source: set `vintage.current` and the title if the year is in it; check the join key and columns.",
           "- The license has not changed (read the publisher's terms, not the patch).", "- A gone address: decide whether to deprecate, supersede or retire the entry.",
           "", "## Apply", "", "```", "python tools/ref_release.py check          # before", "python src/scripts/ref_library.py apply patches/<file> --approve --library src/library", "python tools/ref_release.py release        # regenerate, gate, bump", "```", ""]
-    (dest / "refresh_report.md").write_text("\n".join(L))
+    (dest / "refresh_report.md").write_text("\n".join(L), encoding="utf-8")
     c.add_file(dest / "refresh_report.md", "report")
     (dest / "refresh.json").write_text(json.dumps({"date": r["today"].isoformat(), "results": [{k: v[k] for k in ("id", "rev", "kind", "outcome", "checks", "notes")} for v in r["results"]],
-                                                   "patches": [Path(p).name for p in r["patches"]], "requests": len(r["net_calls"]), "golden": r["golden"]}, indent=2, default=str))
+                                                   "patches": [Path(p).name for p in r["patches"]], "requests": len(r["net_calls"]), "golden": r["golden"]}, indent=2, default=str), encoding="utf-8")
     c.add_file(dest / "refresh.json", "record")
     return {"ok": True, "summary": "report written; waiting for owner review", "findings": []}
 
@@ -1639,7 +1639,7 @@ def stage_webmap_package(c: Ctx) -> dict:
     r = stage_package(c)
     if r["ok"]:
         dest = Path(c.results["dest"])
-        (dest / "page-report.json").write_text(json.dumps(c.results.get("page_report") or {}, indent=2, default=str))
+        (dest / "page-report.json").write_text(json.dumps(c.results.get("page_report") or {}, indent=2, default=str), encoding="utf-8")
         c.add_file(dest / "page-report.json", "report")
         ld = Path(c.results["layout_dir"]) if c.results.get("layout_dir") else None
         if ld and ld.is_dir():                       # the layout check's report and screenshots, for a person to review (1.1.0)
@@ -1860,7 +1860,7 @@ def plan(pipeline: str, inputs: dict, options: dict | None = None) -> dict:
                     import map_plan as mp
                     try:
                         cp = mp.find_capture(str(s["capture"]), Path(inp["spec"]).parent)
-                        hashes.setdefault("captures", {})[l["id"]] = (json.loads(cp.read_text()).get("result") or {}).get("sha256")
+                        hashes.setdefault("captures", {})[l["id"]] = (json.loads(cp.read_text(encoding="utf-8")).get("result") or {}).get("sha256")
                     except mp.PlanError:
                         pass
         except Exception as ex:  # noqa: BLE001
@@ -1957,15 +1957,15 @@ def run(pipeline: str, inputs: dict, options: dict | None = None, *, confirm: st
     rec = {"run_version": 1, "run_id": run_dir.name, "pipeline": pipeline, "manifest_id": mid, "status": status, "started_at": started, "finished_at": now(), "seconds": round(time.monotonic() - t_all, 2),
            "stages": stages, "outputs": outputs, "reproducibility": {"digest": digest, "deterministic_files": len(det), "note": "same inputs and edition give the same manifest id; files marked deterministic repeat byte for byte"},
            "findings": sorted(c.findings, key=lambda f: (SEV.get(f["severity"], 3), f["id"])), **extra}
-    (run_dir / "run.json").write_text(json.dumps(rec, indent=2, default=str))
-    (run_dir / "plan.json").write_text(json.dumps(p["manifest"], indent=2, default=str))
+    (run_dir / "run.json").write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
+    (run_dir / "plan.json").write_text(json.dumps(p["manifest"], indent=2, default=str), encoding="utf-8")
     if base_dir is not None:
         deliver = {"deliverable_manifest_version": 1, "pipeline": pipeline, "manifest_id": mid, "files": [{"path": str(Path(o["path"]).relative_to(base_dir)) if str(o["path"]).startswith(str(base_dir)) else o["path"], "role": o["role"],
                                                                                                      "sha256": o["sha256"]} for o in outputs if str(o["path"]).startswith(str(base_dir))]}
         deliver["files"].sort(key=lambda x: x["path"])
-        (base_dir / "manifest.json").write_text(json.dumps(deliver, indent=2))
+        (base_dir / "manifest.json").write_text(json.dumps(deliver, indent=2), encoding="utf-8")
         rec["deliverable"] = str(base_dir)
-        (run_dir / "run.json").write_text(json.dumps(rec, indent=2, default=str))
+        (run_dir / "run.json").write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
     return {"ok": status in ("ok", "needs-size-confirmation"), "run": rec, "run_dir": str(run_dir), "findings": rec["findings"]}
 
 
@@ -1973,7 +1973,7 @@ def show(run_id: str) -> dict:
     p = run_root() / run_id / "run.json"
     if not p.is_file():
         return {"ok": False, "findings": [finding("MAP-RUN-002", "BLOCK", f"run '{run_id}' was not found")]}
-    return {"ok": True, "run": json.loads(p.read_text())}
+    return {"ok": True, "run": json.loads(p.read_text(encoding="utf-8"))}
 
 
 def listing() -> list[dict]:

@@ -187,7 +187,7 @@ def fetch_pages(http, profile: dict, plan: FetchPlan, outdir: Path, *, hits: int
     pdir = Path(outdir) / "pages"
     pdir.mkdir(parents=True, exist_ok=True)
     state_p = Path(outdir) / "state.json"
-    state = json.loads(state_p.read_text()) if resume and state_p.is_file() else {}
+    state = json.loads(state_p.read_text(encoding="utf-8")) if resume and state_p.is_file() else {}
     mrc = min((layer or {}).get("max_record_count") or 1000, MAX_RECORD_CEILING)
     page = max(1, min(plan.page_size, mrc))
     if plan.page_size > mrc:
@@ -249,7 +249,7 @@ def fetch_pages(http, profile: dict, plan: FetchPlan, outdir: Path, *, hits: int
                 ids.add(fid)
         res.pages.append({"n": n, "path": str(ppath), "count": len(feats), "sha256": hashlib.sha256(content).hexdigest(), "url": purl, "start": start, "asked": want, "exceeded": exceeded})
         state.setdefault("pages", {})[key] = res.pages[-1]
-        state_p.write_text(json.dumps(state))
+        state_p.write_text(json.dumps(state), encoding="utf-8")
         res.received += len(feats)
         if page_fn:
             page_fn(res)
@@ -332,5 +332,5 @@ def legend(http, profile: dict, service_path: str, out: Path | None = None) -> d
         for lg in lay.get("legend", []):
             entries.append({"layer": untrusted(lay.get("layerName"), 80), "label": untrusted(lg.get("label"), 80)})
     if out:
-        Path(out).write_text(json.dumps(entries))
+        Path(out).write_text(json.dumps(entries), encoding="utf-8")
     return {"entries": entries[:100], "url": oh.redact_url(r.url)}

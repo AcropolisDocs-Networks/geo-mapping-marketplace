@@ -225,7 +225,7 @@ def check(page: Path, out_dir: Path | None = None, *, screenshots: bool = True, 
         return {"findings": [finding("MAP-WEB-039", "INFO", f"the layout check could not run ({str(ex).splitlines()[0][:160]})")], "report": rep, "skipped": str(ex)[:200]}
     rep["findings"] = fs
     if out_dir:
-        (out_dir / "layout_report.json").write_text(json.dumps(rep, indent=2))
+        (out_dir / "layout_report.json").write_text(json.dumps(rep, indent=2), encoding="utf-8")
     return {"findings": fs, "report": rep, "skipped": None}
 
 

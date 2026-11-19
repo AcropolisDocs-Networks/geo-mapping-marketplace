@@ -247,7 +247,7 @@ def main(argv=None) -> int:
     c = sub.add_parser("capture"); c.add_argument("file"); c.add_argument("--audience")
     u = sub.add_parser("url"); u.add_argument("url")
     a = ap.parse_args(argv)
-    fs = lint_capture(json.loads(Path(a.file).read_text()), audience=a.audience) if a.op == "capture" else lint_url(a.url)
+    fs = lint_capture(json.loads(Path(a.file).read_text(encoding="utf-8")), audience=a.audience) if a.op == "capture" else lint_url(a.url)
     print(json.dumps(fs, indent=2))
     return 3 if any(x["severity"] == "BLOCK" for x in fs) else 0
 

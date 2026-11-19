@@ -50,7 +50,7 @@ def valid_context(spec: str | None, token: str | None) -> str | None:
     if not f.is_file():
         return "unknown build token"
     try:
-        rec = json.loads(f.read_text())
+        rec = json.loads(f.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         return "unreadable build token"
     if rec["expires"] < dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"):
@@ -68,7 +68,7 @@ def read_spec_brand(spec: Path) -> str | None:
 
 def write_spec_brand(spec: Path, slug: str) -> bool:
     """Write the resolved slug into the MapSpec's top-level `brand:` line (comments and layout preserved)."""
-    text = spec.read_text()
+    text = spec.read_text(encoding="utf-8")
     if re.search(r"^brand:\s*" + re.escape(slug) + r"\b", text, re.M):
         return False
     if re.search(r"^brand:", text, re.M):
@@ -76,7 +76,7 @@ def write_spec_brand(spec: Path, slug: str) -> bool:
     else:
         m = re.search(r"^id:[^\n]*\n", text, re.M)
         text = (text[:m.end()] + f"brand: {slug}\n" + text[m.end():]) if m else f"brand: {slug}\n" + text
-    spec.write_text(text)
+    spec.write_text(text, encoding="utf-8")
     return True
 
 
@@ -134,7 +134,7 @@ def cmd_logo(a, manifest) -> int:
         print(f"brand '{slug}' has no {a.variant} logo for a {key} ground", file=sys.stderr)
         return gc.EXIT_USAGE
     if a.out:
-        Path(a.out).write_text(svg)
+        Path(a.out).write_text(svg, encoding="utf-8")
         print(json.dumps({"brand": slug, "variant": a.variant, "ground": key, "written": a.out}))
     else:
         print(svg)
@@ -161,7 +161,7 @@ def cmd_guard(a, manifest) -> int:
     ext = f.suffix.lower()
     findings = lint.check_bundled(slug, manifest) + lint.check_pack_integrity(slug)
     if ext in (".svg", ".html", ".htm", ".css"):
-        text = f.read_text(errors="replace")
+        text = f.read_text(errors="replace", encoding="utf-8")
         findings += lint.check_palette(text, slug) + lint.check_fonts(text)
         if ext != ".css":
             findings += lint.check_hidden_accreditation(text, slug, manifest) + lint.check_stamps(text, slug, manifest)
@@ -211,7 +211,7 @@ def slug_house(manifest: dict) -> str:
 def cmd_voice(a, manifest) -> int:
     import brand_lint as lint
     slug = settled(a, manifest)
-    text = a.text if a.text is not None else Path(a.file).read_text(errors="replace")
+    text = a.text if a.text is not None else Path(a.file).read_text(errors="replace", encoding="utf-8")
     findings = lint.check_voice(text, slug)
     print(json.dumps({"brand": slug, "findings": findings}, indent=2))
     return lint.worst(findings)

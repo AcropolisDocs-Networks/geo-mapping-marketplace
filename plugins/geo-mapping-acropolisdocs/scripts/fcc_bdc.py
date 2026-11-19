@@ -254,7 +254,7 @@ def summary(client: Client, *, as_of: str, geography: str, state: str | None, te
            "provenance": {"library_ref": SUMMARY_ENTRY, "license": "public-domain", "attribution_text": "Source: FCC National Broadband Map (Broadband Data Collection)."}}
     import redact
     rec, _ = redact.scrub_obj(rec)
-    pq.with_suffix(".json").write_text(json.dumps(rec, indent=2, default=str))
+    pq.with_suffix(".json").write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
     return {"ok": True, "path": str(pq), "record": str(pq.with_suffix(".json")), "rows": int(len(out)), "columns": list(out.columns),
             "join": "join on geography_id to the library's Census boundaries (GEOID)", "findings": client.findings}
 

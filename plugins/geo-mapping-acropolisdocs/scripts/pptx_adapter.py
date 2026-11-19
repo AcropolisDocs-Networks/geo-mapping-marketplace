@@ -152,11 +152,11 @@ def write_parts(spec_path, out_dir, template: str = DEFAULT_TEMPLATE, brand: str
     pub = {k: v for k, v in text.items() if k not in ("template", "legend")}
     pub["legend"] = text["legend"]
     pub["map_frame_mm"] = {k: round(float(v), 2) for k, v in plan.tpl["map"].items()}
-    (out / "text.json").write_text(json.dumps(pub, indent=2, default=str))
+    (out / "text.json").write_text(json.dumps(pub, indent=2, default=str), encoding="utf-8")
     notes = [f"# {text['title']}", "", text["message"], ""]
     if text["footer"]:
         notes += ["## Source and notes", ""] + [f"- {x}" for x in text["footer"]]
-    (out / "notes.md").write_text("\n".join(notes) + "\n")
+    (out / "notes.md").write_text("\n".join(notes) + "\n", encoding="utf-8")
     return {"dir": str(out), "files": ["map.png", "map.svg", "text.json", "notes.md"], "plan": plan, "rendered": rendered, "text": text, "findings": fs, "png": str(out / "map.png")}
 
 

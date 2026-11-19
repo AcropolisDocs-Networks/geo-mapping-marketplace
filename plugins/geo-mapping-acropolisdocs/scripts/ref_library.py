@@ -60,7 +60,7 @@ def summary() -> dict:
     tags, types = ll.load_vocab(shipped_lib())
     entries = ll.load_entries(shipped_lib() / "entries", "shipped")
     return {"entries": len(entries), "tags": sum(len(f["values"]) for f in tags["facets"].values()),
-            "types": len(types["types"]), "version": (shipped_lib() / "LIBRARY_VERSION").read_text().strip()}
+            "types": len(types["types"]), "version": (shipped_lib() / "LIBRARY_VERSION").read_text(encoding="utf-8").strip()}
 
 
 def matches(e: dict, a) -> bool:
@@ -122,7 +122,7 @@ def maint_op(a) -> int:
                 for r in results:
                     if r.get("proposal"):
                         pp = out / f"{r['id']}.rev{r['proposal']['entry_after']['rev']}.patch.yaml"
-                        pp.write_text(yaml.safe_dump(r["proposal"], sort_keys=False, allow_unicode=True, width=160))
+                        pp.write_text(yaml.safe_dump(r["proposal"], sort_keys=False, allow_unicode=True, width=160), encoding="utf-8")
                         written.append(str(pp))
             for r in results:
                 if r.get("proposal") and a.out:
@@ -136,7 +136,7 @@ def maint_op(a) -> int:
             if not a.id or not Path(a.id).is_file():
                 print("apply needs the path of a patch file", file=sys.stderr)
                 return gc.EXIT_USAGE
-            patch = yaml.safe_load(Path(a.id).read_text())
+            patch = yaml.safe_load(Path(a.id).read_text(encoding="utf-8"))
             scope = patch.get("scope", "shipped")
             if scope == "shipped" and not LIB_OVERRIDE:
                 print("Shipped entries change only in the source tree: run this from tools/ or pass --library.", file=sys.stderr)
@@ -149,7 +149,7 @@ def maint_op(a) -> int:
         if bool(a.file) == bool(a.capture):
             print("add needs one of --file or --capture", file=sys.stderr)
             return gc.EXIT_USAGE
-        answers = json.loads(Path(a.request).read_text()) if a.request else {}
+        answers = json.loads(Path(a.request).read_text(encoding="utf-8")) if a.request else {}
         for k in ("type", "title"):
             if getattr(a, k, None):
                 answers[k] = getattr(a, k)
@@ -266,7 +266,7 @@ def main(argv=None) -> int:
         out = local_lib()
         out.mkdir(parents=True, exist_ok=True)
         idx = [{"id": e.get("id"), "type": e.get("type"), "status": e.get("status"), "rev": e.get("rev"), "tags": e.get("tags")} for e in entries]
-        (out / "index.yaml").write_text(yaml.safe_dump(idx, sort_keys=False))
+        (out / "index.yaml").write_text(yaml.safe_dump(idx, sort_keys=False), encoding="utf-8")
         print(json.dumps({"indexed": len(idx), "path": str(out / "index.yaml")}))
         return gc.EXIT_OK
     if a.op == "select":

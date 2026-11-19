@@ -423,7 +423,7 @@ def machine_thresholds() -> dict:
     """What `bench-pairs` measured on this machine ({kind: rows or None}), when it was measured with the cores the machine has now."""
     p = _machine_path()
     try:
-        d = json.loads(p.read_text())
+        d = json.loads(p.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001 - no record, or an unreadable one: the shipped thresholds
         return {}
     if not isinstance(d, dict) or int(d.get("cores") or 0) != (os.cpu_count() or 0):
@@ -478,10 +478,10 @@ def bench_pairs(sizes=BENCH_SIZES, *, polygons=None, seed: int = 1, write: bool 
         p.parent.mkdir(parents=True, exist_ok=True)
         old = {}
         try:
-            old = json.loads(p.read_text())
+            old = json.loads(p.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
             pass
-        p.write_text(json.dumps({**(old if isinstance(old, dict) else {}), **rec}, indent=2))
+        p.write_text(json.dumps({**(old if isinstance(old, dict) else {}), **rec}, indent=2), encoding="utf-8")
         rec["stored_in"] = str(p)
     rec["pairs"] = win
     return rec

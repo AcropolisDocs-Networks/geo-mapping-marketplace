@@ -43,7 +43,7 @@ def installed() -> str | None:
         return gc.build_manifest().get("version")
     except FileNotFoundError:
         p = gc.plugin_root().parent / "VERSION"
-        return p.read_text().strip() if p.is_file() else None
+        return p.read_text(encoding="utf-8").strip() if p.is_file() else None
 
 
 def _name() -> str:
@@ -108,7 +108,7 @@ def check(*, refresh: bool = False, http=None, now=None, git=True, cache_only: b
     rec = None
     if not refresh and cp.is_file():
         try:
-            rec = json.loads(cp.read_text())
+            rec = json.loads(cp.read_text(encoding="utf-8"))
             if rec.get("repo") != ch["repo"] or now - float(rec.get("at", 0)) > float(ch.get("cache_hours", 24)) * 3600:
                 rec = None
         except (OSError, ValueError):
@@ -121,7 +121,7 @@ def check(*, refresh: bool = False, http=None, now=None, git=True, cache_only: b
         rec = {"repo": ch["repo"], "latest": v, "route": route, "at": now}
         try:
             cp.parent.mkdir(parents=True, exist_ok=True)
-            cp.write_text(json.dumps(rec))
+            cp.write_text(json.dumps(rec), encoding="utf-8")
         except OSError:
             pass
     else:

@@ -290,7 +290,7 @@ def mojibake_columns(gdf) -> dict:
 def _cpg_encoding(shp: Path) -> str | None:
     cpg = shp.with_suffix(".cpg")
     if cpg.is_file():
-        raw = cpg.read_text(errors="ignore").strip().upper()
+        raw = cpg.read_text(errors="ignore", encoding="utf-8").strip().upper()
         if raw:
             return {"UTF8": "utf-8", "UTF-8": "utf-8", "65001": "utf-8", "1252": "cp1252", "ISO-8859-1": "latin-1",
                     "LATIN1": "latin-1", "ASCII": "ascii"}.get(raw, raw.lower())
@@ -633,7 +633,7 @@ def _read_csv(p: Path, layer, crs_assume, lat_col, lon_col, wkt_col, encoding, m
         # x/y or easting/northing columns whose values cannot be degrees hold projected coordinates: they need a CRS, never a guess
         if ok.any() and (lon[ok].abs().max() > 180.0001 or lat[ok].abs().max() > 90.0001):
             projected = True
-            crs_text = crs_assume or (prj.read_text(errors="ignore").strip() if prj.is_file() else None)
+            crs_text = crs_assume or (prj.read_text(errors="ignore", encoding="utf-8").strip() if prj.is_file() else None)
             if not crs_text:
                 raise GeoIOError(f"columns '{cols['lon']}' and '{cols['lat']}' hold projected coordinates (values beyond 180/90 degrees), and the file states no CRS. "
                                  f"Say which CRS they are in with --crs-assume (or put a .prj file beside {p.name})")
@@ -658,7 +658,7 @@ def _read_csv(p: Path, layer, crs_assume, lat_col, lon_col, wkt_col, encoding, m
         assumed = True
         notes.append(Note("MAP-DATA-001", "INFO", f"a CSV has no CRS; {crs_assume} was assumed as you instructed" + (f" for the projected columns '{cols['lon']}' and '{cols['lat']}'" if projected else "")))
     elif (cols["mode"] == "wkt" or projected) and prj.is_file():
-        gdf = gdf.set_crs(prj.read_text(errors="ignore").strip())
+        gdf = gdf.set_crs(prj.read_text(errors="ignore", encoding="utf-8").strip())
         assumed = False
         notes.append(Note("MAP-DATA-001", "INFO", f"CRS taken from {prj.name}" + (f" for the projected columns '{cols['lon']}' and '{cols['lat']}'" if projected else "")))
     elif cols["mode"] == "latlon":
