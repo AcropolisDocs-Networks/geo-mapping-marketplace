@@ -352,6 +352,8 @@ class LayerPlan:
     class_opacity: list | None = None           # 0.20.0: one opacity per class (value by alpha on a hexbin): low classes let the ground show
     emphasis: str = "primary"                   # 1.13.0: primary | supporting | background (map_emphasis): how strongly the layer is drawn
     nodata_opacity: float = 1.0                 # 1.13.0: the No data class drawn see-through (map_emphasis.NODATA_OPACITY) so it recedes
+    direct_texts: object = None                 # 1.22.0: one text per feature (or None): the layer or category named on the map in place of its key
+    direct_block: dict | None = None            # 1.22.0: the legend block a directly labelled layer gave up (a build puts it back when a name finds no room)
 
 
 @dataclass
@@ -384,6 +386,8 @@ class Plan:
     window_override: tuple | None = None             # 1.21.0 (Day 18 issue 5): the build's second pass reads rasters and ground for the frame the fit chose
     raster_window: tuple | None = None               # 1.21.0: the display-CRS window the rasters were read for (map_raster.prepare)
     raster_limits: tuple | None = None               # 1.21.0: where frame-filling rasters' data ends: (x0, y0, x1, y1), None on an open side
+    direct_labels: list = field(default_factory=list)  # 1.22.0: the label entries of directly labelled layers ({layer, field, direct: True}); drawn before the spec's own labels
+    subject: list = field(default_factory=list)      # 1.22.0: [(layer id, mask or None)]: what `extent: {mode: fit_message}` framed (the layers the message names, or their highlighted features)
 
 
 THEME_MODES = {"light": "print", "dark": "screen"}     # the MapSpec says light or dark; the brand pack calls them print and screen
@@ -722,6 +726,44 @@ def _bounds_of(layers: list) -> tuple:
         raise PlanError("there is no data to put on the map", gc.EXIT_USAGE)
     a = np.array(bs)
     return (float(a[:, 0].min()), float(a[:, 1].min()), float(a[:, 2].max()), float(a[:, 3].max()))
+
+
+FIT_MESSAGE_PADDING_PCT = 14.0       # 1.22.0: the room left round the subject under extent fit_message when the spec names no padding_pct
+SUBJECT_MIN_SHARE = 0.12             # a subject smaller than this share of the data's span (one site, one block) is given a window this wide
+
+
+def message_subject(spec: dict, data_layers: list) -> list:
+    """1.22.0, extent fit_message: [(layer, mask or None)]: the layers the message names (map_emphasis.subject_layers), each cut to its
+    `highlight:` features when it has one that picks some but not all of them. Empty when the message singles nothing out."""
+    import map_emphasis
+    out = []
+    for l in map_emphasis.subject_layers(spec, data_layers):
+        mask = None
+        hl = (l.spec or {}).get("highlight")
+        if hl == "auto":                          # the part of `highlight: auto` that can be read before the classes exist: named values
+            sg = map_emphasis.suggest_highlight(spec.get("message"), l)
+            hl = sg["highlight"] if sg else None
+        if isinstance(hl, dict):
+            try:
+                m, _what = highlight_mask(l, hl)
+                mask = m if m.any() and not m.all() else None
+            except PlanError:
+                mask = None                       # style_layer says what is wrong with the highlight
+        if len(l.gdf if mask is None else l.gdf[mask]):
+            out.append((l, mask))
+    return out
+
+
+def subject_extent(subject: list, all_bounds: tuple) -> tuple:
+    """The box round the subject in display coordinates, never narrower than SUBJECT_MIN_SHARE of the data's longer side: one site or one
+    block still gets a window with its surroundings in it, not a frame with nothing else on it."""
+    bs = np.array([(l.gdf if m is None else l.gdf[m]).total_bounds for l, m in subject])
+    x0, y0, x1, y1 = float(bs[:, 0].min()), float(bs[:, 1].min()), float(bs[:, 2].max()), float(bs[:, 3].max())
+    least = SUBJECT_MIN_SHARE * max(all_bounds[2] - all_bounds[0], all_bounds[3] - all_bounds[1])
+    if least > 0 and max(x1 - x0, y1 - y0) < least:
+        cx, cy, h = (x0 + x1) / 2, (y0 + y1) / 2, least / 2
+        x0, y0, x1, y1 = min(x0, cx - h), min(y0, cy - h), max(x1, cx + h), max(y1, cy + h)
+    return (x0, y0, x1, y1)
 
 
 def place_bbox(name: str):
@@ -1130,9 +1172,74 @@ def _agg_spec(ly: dict, info: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------------------------------------------- main
+DIRECT_FIELD = "_gm_direct"
+DIRECT_MAX_CATEGORIES = 8
+
+
+def apply_direct_labels(plan: Plan) -> None:
+    """1.22.0: a line or a category the map can name in place is named on the map and leaves the legend, so the key holds only what cannot
+    be read off the drawing. Asked for with `elements.legend: {direct: auto}` (every layer that qualifies) or a layer's own
+    `legend: {direct: true}`; `legend: {direct: false}` keeps a layer in the key.
+
+    What qualifies: a line layer with one symbol or up to DIRECT_MAX_CATEGORIES categories (each named once, along its longest line that has
+    room); an area layer with one symbol or categories (each named in its largest area); a point layer only when every name belongs to one
+    point. A layer with numeric classes always keeps its key, and so does a layer the spec already labels. The label engine places these
+    names first; a name that finds no room is reported (MAP-STORY-007) and build_map draws the map again with that layer back in the key."""
+    els_lg = (plan.spec.get("elements") or {}).get("legend") or {}
+    default = els_lg.get("direct") in ("auto", True)
+    labelled = {str(lb.get("layer")) for lb in (plan.spec.get("labels") or []) if isinstance(lb, dict)}
+    for l in plan.layers:
+        lgd = (l.spec or {}).get("legend") if isinstance((l.spec or {}).get("legend"), dict) else {}
+        own = lgd.get("direct")
+        blk = l.legend_block
+        if own is False or not (own is True or default) or not isinstance(blk, dict) or l.role in ("context", "contour", "hillshade", "raster"):
+            continue
+        why = None
+        cat = l.cls is not None and getattr(l.cls, "kind", None) == "categorical"
+        items = blk.get("items") or []
+        if l.id in labelled:
+            why = "the spec already labels it"
+        elif l.kind not in ("line", "polygon", "point") or not len(l.gdf):
+            why = "it has nothing to name"
+        elif l.cls is not None and not cat:
+            why = "numeric classes need their key"
+        elif blk.get("kind") not in ("lines", "points", "polygons", "categories", "classes", "status") or not items:
+            why = "its key is not a list of names"
+        elif cat and (l.cls.k > DIRECT_MAX_CATEGORIES or len(l.cls.assigned) != len(l.gdf)):
+            why = f"more than {DIRECT_MAX_CATEGORIES} categories"
+        elif not cat and len(items) != 1:
+            why = "its key has more than one entry"
+        if why is None:
+            if cat:
+                asg = np.asarray(l.cls.assigned)
+                texts = np.array([l.cls.labels[int(a)] if int(a) >= 0 else None for a in asg], dtype=object)
+            else:
+                texts = np.array([str(items[0].get("label") or blk.get("title") or l.title)] * len(l.gdf), dtype=object)
+            if l.kind == "polygon":                       # one name per category, in its largest area
+                area = l.gdf.geometry.area.to_numpy()
+                keep = np.zeros(len(texts), dtype=bool)
+                for tx in {t for t in texts if t is not None}:
+                    idx = np.where(texts == tx)[0]
+                    keep[idx[int(np.argmax(area[idx]))]] = True
+                texts = np.where(keep, texts, None)
+            elif l.kind == "point":
+                names_ = [t for t in texts if t is not None]
+                if len(names_) != len(set(names_)):
+                    why = "a name would belong to more than one point"
+        if why is not None:
+            if own is True:
+                plan.notes.append(f"layer '{l.id}': legend.direct was asked for, but {why}; it stays in the legend")
+            continue
+        l.direct_texts, l.direct_block, l.legend_block = texts, blk, None
+        plan.direct_labels.append({"layer": l.id, "field": DIRECT_FIELD, "direct": True})
+        plan.notes.append(f"layer '{l.id}': named on the map ({', '.join(sorted({str(t) for t in texts if t is not None})[:6])}) and left out of the legend "
+                          "(legend.direct)")
+
+
 def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, template: str | None = None, spec_edit=None, use_tiles: bool = True, classic_layout: bool = False,
-            window: tuple | None = None) -> Plan:
-    """`spec_edit(spec)` may adjust the loaded spec in memory (the web page turns the static scale bar off); the file is never changed.
+            window: tuple | None = None, direct_labels: bool = True) -> Plan:
+    """1.22.0: `direct_labels=False` keeps every layer in the legend (a web page and a slide draw their own keys from the blocks).
+    `spec_edit(spec)` may adjust the loaded spec in memory (the web page turns the static scale bar off); the file is never changed.
     1.21.0 (Day 18 issue 5): `window` (display CRS) widens the window rasters and the ground are read for: build_map passes the frame the fit
     chose when it left the first window."""
     spec_path = Path(spec_path)
@@ -1300,7 +1407,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     placed = [l for l in layers if len(l.gdf) and not getattr(l, "legend_only", False)]   # a fetched or service raster has no footprint yet
     # a library service layer is fetched for the window, not fitted to (M13)
     data_layers = [l for l in placed if l.role in DATA_ROLES and l.role not in ("hillshade", "contour") and not (l.entry and l.capture)] or placed
-    if not data_layers and mode_e == "fit_layers":
+    if not data_layers and mode_e in ("fit_layers", "fit_message"):
         raise PlanError("the map's layers have no extent of their own (a service picture or a fetched raster is read for the map's window); "
                         "give extent: {mode: bbox, bbox: [...]} or {mode: place, place: ...}", gc.EXIT_USAGE)
     wgs = None
@@ -1313,11 +1420,15 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
             raise PlanError(f"extent.preset '{ext.get('preset')}' is unknown; use one of {', '.join(PRESET_BBOX)}", gc.EXIT_USAGE)
         wgs = PRESET_BBOX[ext["preset"]]
     else:
+        subject = message_subject(spec, data_layers) if mode_e == "fit_message" else []
+        if mode_e == "fit_message" and not subject:
+            pre_notes.append("extent fit_message: the message names no layer, none is marked emphasis: primary and none carries a highlight, "
+                             "so the frame is fitted to all the data (as fit_layers)")
         parts = []
-        for l in data_layers:
+        for l, mask in (subject or [(l, None) for l in data_layers]):
             if l.gdf.crs is None:
                 raise PlanError(f"layer '{l.id}' has no coordinate reference system; say which one in the layer source (crs:)", gc.EXIT_LINT)
-            parts.append(l.gdf.to_crs("EPSG:4326").total_bounds)
+            parts.append((l.gdf if mask is None else l.gdf[mask]).to_crs("EPSG:4326").total_bounds)
         a = np.array(parts)
         wgs = (float(a[:, 0].min()), float(a[:, 1].min()), float(a[:, 2].max()), float(a[:, 3].max()))
     area_stat = any(l.role in AREA_ROLES for l in layers)
@@ -1367,7 +1478,14 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
                                       skip_outlines={l.id for l in vec if dl.not_an_outline(l.id, l.role, l.title, l.spec)},
                                       skip_checked={l.id for l in vec if (l.spec or {}).get("alignment_check") is False},
                                       bbox_extent=mode_e == "bbox")
-    if mode_e == "fit_layers":
+    if mode_e == "fit_message" and subject:
+        # 1.22.0: the frame follows what the map is about; the other layers are its surroundings, drawn where the frame reaches them
+        extent = subject_extent(subject, _bounds_of(data_layers))
+        if ext.get("padding_pct") is None:
+            spec.setdefault("extent", {})["padding_pct"] = FIT_MESSAGE_PADDING_PCT
+        pre_notes.append("extent fit_message: framed on " + ", ".join(f"'{l.id}'" + (f" ({int(m.sum())} highlighted of {len(m)})" if m is not None else "") for l, m in subject)
+                         + f", {float(spec['extent']['padding_pct']):g}% of the frame left round it for the surroundings")
+    elif mode_e in ("fit_layers", "fit_message"):
         extent = _bounds_of(data_layers)
     else:
         extent = project_bbox(wgs, display)
@@ -1375,6 +1493,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
                 tpl=tpl, tpl_name=tpl_name, crs=display, crs_info=crs_info, extent=extent, layers=layers, basemap=[], findings=findings, helpers=helpers,
                 look=look, style=style)
     plan.look_asked = map_look.look_of(spec)
+    plan.subject = [(l.id, m) for l, m in (subject if mode_e == "fit_message" else [])]
     plan.window_override = tuple(float(v) for v in window) if window is not None else None
     if (spec.get("extent") or {}).get("crop"):
         crop_extent(plan)
@@ -1398,6 +1517,8 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         style_layer(plan, l)
     import map_emphasis
     map_emphasis.assign(plan)                 # 1.13.0: the layers the message names at full strength, the others quieter
+    if direct_labels:
+        apply_direct_labels(plan)             # 1.22.0: lines and categories named on the map leave the legend (legend.direct)
     plan.notes += tiles_notes
     load_basemap(plan, tiles_rec, explained=bool(tiles_notes), vector_file=vector_source(spec, base) if use_tiles else None)
     add_context(plan)
@@ -2074,6 +2195,14 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
     import symbology
     symbology.after_classes(plan, l)          # class patterns, graduated line widths, line swatches for classed lines, nested circles (M15)
     hl = ly.get("highlight")
+    if hl == "auto":
+        # 1.22.0: the message says which part of the layer the map is about (named values, the top N, one end of the classes); the builder
+        # writes the highlight it implies. With nothing singled out the layer is drawn as usual, and a note says so.
+        import map_emphasis
+        sg = map_emphasis.suggest_highlight(plan.spec.get("message"), l)
+        hl = sg["highlight"] if sg else None
+        plan.notes.append(f"layer '{l.id}': highlight auto: " + (f"{sg['why']}, so highlight: {sg['highlight']}" if sg else
+                          "the message names no value, top N or end of this layer's values, so it is drawn at one strength"))
     if hl and l.kind in ("polygon", "line", "point") and l.role != "context":
         m, what = highlight_mask(l, hl)
         if not m.any():
@@ -2086,6 +2215,7 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
             l.highlight_rest = highlight_rest(hl)
             plan.notes.append(f"layer '{l.id}': {int(m.sum())} of {len(m)} feature(s) highlighted ({what}); the rest "
                               + ("desaturated" if l.highlight_rest["dim"] else "faded") + f" at {l.highlight_rest['opacity']:.0%}")
+            dim_legend_keys(l, m)
     if l.role == "context":
         l.legend_block = None
     if (ly.get("legend") or {}).get("include") is False:
@@ -2164,6 +2294,21 @@ def highlight_mask(l: LayerPlan, hl: dict):
         m &= v <= float(hl["max"])
         parts.append(f"{col} <= {hl['max']:g}" if isinstance(hl["max"], (int, float)) else f"{col} <= {hl['max']}")
     return m, " and ".join(parts)
+
+
+def dim_legend_keys(l: LayerPlan, m) -> None:
+    """1.22.0: the key agrees with the map. A class or category with no highlighted feature is drawn in the legend at the strength the
+    rest of the layer is drawn on the map (1.21 kept every key at full colour beside a map that had greyed two of the three)."""
+    blk = l.legend_block
+    if l.cls is None or not isinstance(blk, dict) or blk.get("kind") not in ("classes", "categories") or len(l.cls.assigned) != len(m):
+        return
+    asg = np.asarray(l.cls.assigned)
+    k = float((l.highlight_rest or {}).get("opacity", 0.3))
+    items = []
+    for i, it in enumerate(blk.get("items") or []):
+        ci = -1 if it.get("nodata") else i
+        items.append(it if (m & (asg == ci)).any() else {**it, "opacity": round(float(it.get("opacity", 1.0)) * k, 3), "rest": True})
+    l.legend_block = {**blk, "items": items}
 
 
 def highlight_rest(hl: dict) -> dict:

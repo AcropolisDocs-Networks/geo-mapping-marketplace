@@ -143,7 +143,11 @@ def main() -> int:
         event = json.loads(sys.stdin.read() or "{}")
     except ValueError:
         return 0
-    event = event if isinstance(event, dict) else {}
+    return handle(event if isinstance(event, dict) else {})
+
+
+def handle(event: dict) -> int:
+    """The verdict on one event: prints the findings and logs a stop (1.22.0: hooks/dispatch.py calls this after the timer)."""
     code, msg = decide(event)
     if msg:
         print(msg, file=sys.stderr)

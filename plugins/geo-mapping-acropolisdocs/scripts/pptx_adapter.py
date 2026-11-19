@@ -95,7 +95,7 @@ def render_parts(spec_path, template: str = DEFAULT_TEMPLATE, brand: str | None 
         raise AdapterError("the map has blocking findings: " + "; ".join(f"{f['id']} {f['message'][:120]}" for f in fs if f["severity"] == "BLOCK")[:600])
     fplan = obj["plan"]
     blocks = [l.legend_block for l in fplan.layers if l.legend_block]
-    plan = mp.prepare(spec_path, brand=brand, template=template, spec_edit=_map_only, classic_layout=True)
+    plan = mp.prepare(spec_path, brand=brand, template=template, spec_edit=_map_only, classic_layout=True, direct_labels=False)
     tpl = plan.tpl
     tpl["footer_fit"] = False             # the slide's source lines go in a text box in the template's footer band, so it keeps its height (M16)
     m = tpl["map"]

@@ -20,6 +20,7 @@ fi
 GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)   # the build token alone
 python3 "$GMAP_ROOT/lints/mapspec_lint.py" map.yaml                       # spec check, before any data is read
+python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --draft      # two small pictures to look at first
 python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --formats svg,pdf,png [--strict]
 ```
 
@@ -42,6 +43,7 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the
 | Module                   | Read it |
 |--------------------------|---|
 | `map-text`               | before writing the title, subtitle, tagline or a legend title |
+| `message-check`          | **before looking at a draft**, and when a build lists Message check findings |
 | `cartography-principles` | when choosing the map type, the classes or what to leave out |
 | `classify-and-color`     | for classification methods, class labels, and a count that needs dividing first |
 | `color-accessibility`    | when choosing colours, or a colour or contrast finding needs a fix |
@@ -96,7 +98,9 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
    reader should see sector footprints goes to the coverage-map pipeline (`/geo-mapping-acropolisdocs:map-run coverage-map`): it draws the wedges, applies
    coordinate privacy and words them as sectors, not coverage. A tracker with a status per location goes to `/geo-mapping-acropolisdocs:map-run program-map`; a client table to roll
    up by state or county goes to `/geo-mapping-acropolisdocs:map-run market-map`; one map per market goes to `map-atlas`. Say which door you are taking in one phrase.
-5. **Write the MapSpec** (read the `mapspec-reference` module first: it has every field and worked examples), lint it, then build. Show the PNG with a one-line caption, then the findings. Write the title and subtitle
+5. **Write the MapSpec** (read the `mapspec-reference` module first: it has every field and worked examples), lint it, then build with
+   `--draft`. **Show it before you say it** (the `message-check` module): open the mute picture and say what it shows; if that is not the
+   `message`, change the frame, the emphasis or the key, never by adding a callout, and draft again. Then build the finished set. Show the PNG with a one-line caption, then the findings. Write the title and subtitle
    yourself by the `map-text` module (read it first): a subject-led title in Title Case (*Link Light Rail Walksheds, Seattle*), a subtitle that
    adds one thing (the key number, the scope or the measure); a finding-led title only when the person asks. Text the person supplies is drawn
    as written.
@@ -110,11 +114,7 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
 - **Data uses the whole brand palette, never the page or text colors.** Give each data layer its own palette color: `@brand.accent`,
   `@brand.categorical.0` to `.7`, or `@brand.status.success|warning|danger` for a status meaning. Or leave the color out: each line or point
   layer that names none gets the next palette color no other layer shows (named colors, class colors and the proportional accent are skipped),
-  so no two layers share one. A `role: polygons` layer with no fill (or `symbol: {fill: none}`) is an outline: no fill, its edge in the next
-  palette color at 0.4 mm, so relief and context show through (1.2.0). Color it with `symbol: {fill: "@brand.categorical.2", opacity: 0.4}` (inside `symbol`,
-  not at the layer's top level); `symbol.stroke` names the edge (drawn at full strength even in the fill's color), `symbol.stroke_opacity` its strength,
-  `symbol.dash: dashed | dotted | [1.2, 0.8]` dashes it (a tribal or planning boundary), and the legend swatch shows the same. A point layer with
-  `symbol: {shape: none}` draws only its labels (names at chosen spots; no legend entry). `@brand.label`, `.background`, `.land`, `.water`, `.frame`,
+  so no two layers share one. Outline polygons, edges, dashes and label-only points are in `mapspec-reference` ("Symbols"). `@brand.label`, `.background`, `.land`, `.water`, `.frame`,
   `.legend_bg`, `.legend_frame` and `.no_data` are for the page and text, not data (MAP-CART-015); in the dark theme `label` is white. Two layers
   whose colors cannot be told apart get MAP-CART-016, and a line or point layer weaker than 3:1 on the land gets MAP-A11Y-007: pick another palette color.
 - **Inter is the only font.** Text is live and embedded.
@@ -132,6 +132,6 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
 Lead with the result: the PNG and one sentence on what the map shows. Then at most three findings that change what they would do (BLOCKs fixed, WARNs that
 remain, a note when the legend or scale bar moved or was hidden and why). Then the map text: the title and subtitle drawn (`map_text` in the build
 result) and every line of `map_text.callout`, as written ("Map text: N findings (not blocking)" and one line per finding with its suggested fix);
-these never count against the three and never block. Change supplied text only when the person says so. Offer one next step: `map-restyle` for a look change, `map-export` for another size.
+these never count against the three and never block. Then the message check the same way (every line of `story.callout`). Change supplied text only when the person says so. Offer one next step: `map-restyle` for a look change, `map-export` for another size.
 Files are named `<brand prefix><id>_<template>_v<YYYYMMDD>.<ext>`. A provenance sidecar (`.provenance.json`) is written beside the map; send it only if asked.
 When the person wants a map they can pan, zoom and click, use `webmap-create` (one HTML file) instead of, or beside, these three files. When the person wants to show how the map was made, turn on `methods_page` and send the one-page Data and Methods file with the map.

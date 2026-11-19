@@ -252,7 +252,7 @@ def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | N
     import scalebar as sbm
     from label_engine import Rect
 
-    plan = mp.prepare(spec_path, mode="print", brand=brand, template=template, use_tiles=True, classic_layout=True)
+    plan = mp.prepare(spec_path, mode="print", brand=brand, template=template, use_tiles=True, classic_layout=True, direct_labels=False)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     spec, tpl, t = plan.spec, plan.tpl, plan.tokens

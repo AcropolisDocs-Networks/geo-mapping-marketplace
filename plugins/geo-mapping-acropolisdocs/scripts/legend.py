@@ -354,6 +354,45 @@ def item_height(it: dict, label_pt: float = LABEL_PT, wrap: bool = False) -> flo
     return max(SWATCH_H_MM, tm.line_height_mm(label_pt) * n, it.get("size_mm", 0) + 0.8)
 
 
+COUNT_BAR_W_MM = 12.0         # 1.22.0, legend counts: the longest bar (the class with the most features)
+COUNT_BAR_H_MM = 1.8
+COUNT_GAP_MM = 2.5
+COUNT_MODES = ("bars", "numbers")
+
+
+def counts_mode(block: dict) -> str | None:
+    """1.22.0: `legend: {counts: bars | numbers}` on a classed layer (or elements.legend.counts for every classed key): how many features
+    fall in each class, drawn beside the class, so the key shows how the data is spread and not only what the colours mean."""
+    m = block.get("counts")
+    if m is True:
+        m = "bars"
+    if m not in COUNT_MODES or block.get("kind") not in ("classes", "categories"):
+        return None
+    return m if any(it.get("count") is not None for it in block.get("items") or []) else None
+
+
+def count_text(it: dict) -> str:
+    c = it.get("count")
+    return f"{int(c):,}" if c is not None else ""
+
+
+def label_column_width(block: dict, label_pt: float = LABEL_PT, wrap: bool = False) -> float:
+    """The width of a block's swatches and labels: where its counts column starts."""
+    w = 0.0
+    for it in block.get("items") or []:
+        lw = max(tm.width_mm(x, label_pt, 400, tnum=True) for x in item_lines(it["label"], label_pt, wrap))
+        w = max(w, max(SWATCH_W_MM, it.get("size_mm", 0) + 1.5) + 2.0 + lw)
+    return w
+
+
+def counts_width(block: dict, label_pt: float = LABEL_PT) -> float:
+    mode = counts_mode(block)
+    if not mode:
+        return 0.0
+    numw = max((tm.width_mm(count_text(it), label_pt - 1, 400, tnum=True) for it in block["items"]), default=0.0)
+    return COUNT_GAP_MM + ((COUNT_BAR_W_MM + 1.2) if mode == "bars" else 0.0) + numw
+
+
 def _content_size(block: dict, label_pt: float = LABEL_PT, wrap: bool = False) -> tuple[float, float]:
     """(width, height) of a block below its title."""
     w, h = 0.0, 0.0
@@ -381,6 +420,7 @@ def _content_size(block: dict, label_pt: float = LABEL_PT, wrap: bool = False) -
         icon = max(SWATCH_W_MM, it.get("size_mm", 0) + 1.5) if block["kind"] != "proportional" else max(SWATCH_W_MM, it.get("size_mm", 0))
         w = max(w, icon + 2.0 + lw)
         h += item_height(it, label_pt, wrap) + ROW_GAP_MM
+    w += counts_width(block, label_pt)                      # 1.22.0: the counts column, when the block asks for one
     nw, nh = note_size(block, label_pt)
     w, h = max(w, nw), h + nh
     return w, h - ROW_GAP_MM if block["items"] else h
@@ -474,6 +514,8 @@ def check_blocks(blocks: list[dict], layers: list[dict], classified: dict) -> li
             continue
         if str((ly.get("symbol") or {}).get("shape", "")).lower() == "none":
             continue                                     # 1.2.0: a label-only point layer draws no symbol, so it needs no key
+        if ly.get("_named_on_map"):
+            continue                                     # 1.22.0: named on the map in place of its key (legend.direct); MAP-STORY-007 if a name found no room
         if meaningful and ly["id"] not in have:
             f("MAP-CART-005", "BLOCK", f"layer '{ly['id']}' is symbolized but has no legend entry", ly["id"])
     for b in blocks:

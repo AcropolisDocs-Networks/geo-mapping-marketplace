@@ -80,6 +80,21 @@ def candidates(plan) -> list:
     return [l for l in plan.layers if l.role not in SKIP_ROLES and l.kind != "raster" and getattr(l, "context_kind", None) is None]
 
 
+def subject_layers(spec: dict, layers) -> list:
+    """1.22.0: the layers a map is about, known before anything is styled: the ones marked `emphasis: primary`, and the ones the `message`
+    names (the same word test as `assign`); when neither picks one, the layers that carry a `highlight:`. An empty list means the message
+    singles nothing out, and the whole of the data is the subject. `extent: {mode: fit_message}` frames these (map_plan), and the message
+    check measures them (lints/story_lint.py)."""
+    cands = [l for l in layers if l.role not in SKIP_ROLES and l.kind != "raster" and getattr(l, "context_kind", None) is None]
+    msg = words((spec or {}).get("message"))
+    asked = {l.id: str((l.spec or {}).get("emphasis") or "auto") for l in cands}
+    hit = [l for l in cands if asked[l.id] == "primary" or (asked[l.id] == "auto" and layer_words(l) & msg)]
+    if hit and len(hit) < len(cands):
+        return hit
+    marked = [l for l in cands if (l.spec or {}).get("highlight") is not None]
+    return marked
+
+
 def assign(plan) -> dict:
     """Give each data layer its emphasis and draw strength. -> {layer id: emphasis}; also plan.emphasis, notes and MAP-CART-038."""
     mode = config(plan.spec, getattr(plan, "look", "classic"))
@@ -128,3 +143,89 @@ def assign(plan) -> dict:
                                          f"({why or 'every layer is marked primary'}); give the layers that only support the point "
                                          "emphasis: supporting (drawn at 55 percent) or background (30 percent), or name the main layers in the message"})
     return plan.emphasis
+
+
+# ---------------------------------------------------------------------------------------------------------------- emphasis inside a layer (1.22.0)
+# The message often singles out part of a layer, not a layer: one end of the values ("the cheapest power"), a few of them ("the top 5 dams")
+# or named ones ("the n41 sites", "Quincy"). 1.13.0 could draw that (`highlight:`), but only when the spec spelled it out. `suggest_highlight`
+# reads the message against the layer's own values and classes and returns the `highlight:` block that says the same thing; the message check
+# offers it (MAP-STORY-006) and `highlight: auto` on the layer applies it.
+LOW_WORDS = {"lowest", "fewest", "cheapest", "smallest", "weakest", "slowest", "shortest", "poorest", "thinnest", "sparsest", "minimum"}
+HIGH_WORDS = {"highest", "greatest", "largest", "biggest", "busiest", "strongest", "fastest", "tallest", "richest", "densest", "priciest",
+              "costliest", "maximum", "peak"}
+TOP_N = re.compile(r"\b(?:top|largest|biggest|busiest|highest)\s+(\d{1,3}|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty)\b", re.I)
+NUMBER_WORDS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12, "twenty": 20}
+NAMED_MAX_UNIQUE = 5000          # a text column with more distinct values than this is not searched for names
+NAMED_MAX_COLUMNS = 16
+
+
+def named_in(message, texts) -> set[str]:
+    """The texts the message names: whole words, case ignored, three characters or more (two when one is a digit: n41, I5)."""
+    msg = str(message or "")
+    out: set[str] = set()
+    if not msg.strip():
+        return out
+    for v in {str(t) for t in texts}:
+        v_ = v.strip()
+        if len(v_) < 3 and not (len(v_) == 2 and any(ch.isdigit() for ch in v_)):
+            continue
+        if v_.lower() in STOP:
+            continue
+        if re.search(r"(?<!\w)" + re.escape(v_) + r"(?!\w)", msg, re.I):
+            out.add(v)
+    return out
+
+
+def _named_values(message: str, l) -> tuple[str, list] | None:
+    """(column, values) when the message names some, but not all, of the distinct values of one of the layer's text columns: whole words,
+    case ignored, three characters or more (two when one is a digit: n41, I5). The column with the most named values wins."""
+    import pandas as pd
+    msg = str(message or "")
+    if not msg.strip():
+        return None
+    best = None
+    gdf = l.gdf
+    cols = [c for c in gdf.columns if c != gdf.geometry.name and not str(c).startswith("_")][:NAMED_MAX_COLUMNS]
+    for c in cols:
+        s = gdf[c]
+        if not (pd.api.types.is_object_dtype(s) or pd.api.types.is_string_dtype(s)):
+            continue
+        uniq = [str(v) for v in pd.unique(s.dropna())]
+        if not (1 < len(uniq) <= NAMED_MAX_UNIQUE):
+            continue
+        named = named_in(msg, uniq)
+        hit = [v for v in uniq if v in named]
+        if hit and len(hit) < len(uniq) and (best is None or len(hit) > len(best[1])):
+            best = (str(c), hit)
+    return best
+
+
+def suggest_highlight(message: str, l) -> dict | None:
+    """The `highlight:` block the message asks of this layer, with the reason in words: {"highlight": {...}, "why": "..."}; None when the
+    message singles nothing out in it. Order: named values, then "top N", then one end of a classed number."""
+    if l.kind not in ("polygon", "line", "point") or l.role in SKIP_ROLES:
+        return None
+    msg = str(message or "")
+    named = _named_values(msg, l)
+    if named:
+        col, vals = named
+        return {"highlight": {"column": col, "in": vals}, "why": f"the message names {', '.join(vals[:4])}{' and more' if len(vals) > 4 else ''}"}
+    vf = l.value_field
+    cls = l.cls
+    if not vf or vf not in l.gdf.columns or cls is None or getattr(cls, "kind", None) != "numeric":
+        return None
+    m = TOP_N.search(msg)
+    if m:
+        n = int(m.group(1)) if m.group(1).isdigit() else NUMBER_WORDS[m.group(1).lower()]
+        if 1 <= n < len(l.gdf):
+            return {"highlight": {"column": vf, "top": n}, "why": f"the message speaks of the top {n}"}
+    raw = {w.lower().strip("'’.,;:") for w in re.split(r"\s+", msg)}
+    edges = [float(e) for e in (cls.edges or [])]
+    if len(edges) < 3:
+        return None
+    low, high = raw & LOW_WORDS, raw & HIGH_WORDS
+    if low and not high:
+        return {"highlight": {"column": vf, "max": edges[1], "rest": "fade"}, "why": f"the message speaks of the {sorted(low)[0]} values"}
+    if high and not low:
+        return {"highlight": {"column": vf, "min": edges[-2], "rest": "fade"}, "why": f"the message speaks of the {sorted(high)[0]} values"}
+    return None

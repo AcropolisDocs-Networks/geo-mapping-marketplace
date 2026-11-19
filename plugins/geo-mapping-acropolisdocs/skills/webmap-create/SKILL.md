@@ -44,6 +44,7 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the
 | Module                   | Read it |
 |--------------------------|---|
 | `map-text`               | before writing the title, subtitle or About text |
+| `message-check`          | when the build lists Message check findings (`highlight: auto`, emphasis, look-alike keys; a page keeps every key in its Legend tab) |
 | `webmap-build`           | for the engine limits and what the build embeds |
 | `webmap-controls`        | when choosing the page's controls |
 | `webmap-render`          | for how layers, legends, popups and labels are drawn |

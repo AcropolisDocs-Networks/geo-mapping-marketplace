@@ -17,6 +17,15 @@ the lints are what the build enforces.
 Every MapSpec carries a `message`: the one sentence the map must show. The title states it, the data layer carries it, everything else
 supports it. MAP-CART-013 compares the title with the message. A map with two messages is two maps (`map-atlas` makes the series).
 
+## Show it before you say it (1.22.0)
+
+The drawing carries the claim; words carry what the drawing cannot. In order: **the frame** (what the message names fills it, `extent:
+{mode: fit_message}`), **strength** (the layers, and the part of a layer, the message names stand at full strength: `emphasis:`,
+`highlight: auto`), **names in place** (a line or category named on the map needs no key: `elements.legend: {direct: auto}`), **the key
+that is left** (short, and showing how the data is spread: `legend: {counts: bars}`), and only then a callout, one, with its `figure`.
+The test is the mute picture every build writes: with the title, legend words and callouts off, the map still says its message. The
+MAP-STORY findings measure each step (`message-check` module); none blocks, and none moves an element from its corner.
+
 ## Visual hierarchy, figure and ground
 
 | Level | What sits there | How it is held there |

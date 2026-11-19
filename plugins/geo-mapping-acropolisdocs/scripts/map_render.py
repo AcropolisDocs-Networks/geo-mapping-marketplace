@@ -1281,6 +1281,11 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                     out.append("</g>")
                 cy += lg.BLOCK_GAP_MM
                 continue
+            cmode = lg.counts_mode(b)                        # 1.22.0: the key shows how the data is spread: features per class
+            if cmode:
+                c_x0 = cx + lg.label_column_width(b, lpt, wrap) + lg.COUNT_GAP_MM
+                c_x1 = cx + lg.label_column_width(b, lpt, wrap) + lg.counts_width(b, lpt)
+                c_max = max((int(i_.get("count") or 0) for i_ in b["items"]), default=0) or 1
             for it in b["items"]:
                 ih = lg.item_height(it, lpt, wrap)            # 1.21.0 (Day 18 issue 10): a wrapped label's lines set the row
                 mid = cy + ih / 2
@@ -1331,6 +1336,12 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                 lh = tm.line_height_mm(lpt)
                 for li, line in enumerate(il):
                     out.append(sd.text(cx + icon_w + 2.0, mid - (len(il) - 1) * lh / 2 + li * lh + lpt * PT * 0.35, line, lpt, t["label"], num_cls=True))
+                if cmode and it.get("count") is not None:
+                    if cmode == "bars":
+                        bw = max(lg.COUNT_BAR_W_MM * int(it["count"]) / c_max, 0.25 if int(it["count"]) else 0.0)
+                        out.append(f'<rect class="gm-legend-count" x="{sd.num(c_x0)}" y="{sd.num(mid - lg.COUNT_BAR_H_MM / 2)}" width="{sd.num(bw)}" '
+                                   f'height="{sd.num(lg.COUNT_BAR_H_MM)}" fill="{t["label"]}" fill-opacity="0.35"/>')
+                    out.append(sd.text(c_x1, mid + (lpt - 1) * PT * 0.35, lg.count_text(it), lpt - 1, t["label"], anchor="end", num_cls=True))
                 cy += ih + lg.ROW_GAP_MM
             for line in lg.note_lines(b, lpt):               # the block's note (a hexbin's resolution and edge length), in the room block_size reserves
                 npt = lpt - 1
@@ -1511,7 +1522,14 @@ def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
                 if map_emphasis.OPACITY.get(getattr(l, "emphasis", "primary"), 1.0) < 1:
                     l.legend_block["key_opacity"] = map_emphasis.OPACITY[l.emphasis]
                 blocks.append(l.legend_block)
-    findings += lg.check_blocks(blocks, [l.spec | {"role": l.role} for l in plan.layers], classified)
+    counts_default = (els.get("legend") or {}).get("counts")       # 1.22.0: elements.legend.counts for every classed key; a layer's own legend.counts wins
+    for b in blocks:
+        own = ((next((l.spec for l in plan.layers if l.id == b.get("layer")), None) or {}).get("legend") or {}).get("counts")
+        if own is not None:
+            b["counts"] = own
+        elif counts_default and "counts" not in b:
+            b["counts"] = counts_default
+    findings += lg.check_blocks(blocks, [l.spec | {"role": l.role, "_named_on_map": getattr(l, "direct_block", None) is not None} for l in plan.layers], classified)
     legend_on = on("legend")
     legend_fit = None
     if blocks and legend_on:
@@ -2214,10 +2232,42 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
     sparse_ids = {id(r) for r in getattr(plan, "_sparse_point_obstacles", obstacles)}
     point_ids = {id(r) for r in getattr(plan, "_point_obstacles", [])}
     dense_ids = point_ids - sparse_ids
-    for lb in plan.spec.get("labels") or []:
+    import map_emphasis as me
+    message = plan.spec.get("message")
+    # 1.22.0: the names of directly labelled layers (legend.direct) are placed first, so a line or category that left the key has first call on the room
+    for lb in list(getattr(plan, "direct_labels", None) or []) + list(plan.spec.get("labels") or []):
         l = next((x for x in plan.layers if x.id == lb["layer"]), None)
         if l is None:
             continue
+        direct = bool(lb.get("direct")) and getattr(l, "direct_texts", None) is not None
+        if direct:                                        # the names live on the plan, not in the data: a copy of the layer carries them here only
+            import copy as _copy
+            l = _copy.copy(l)
+            l.gdf = l.gdf.assign(**{mp.DIRECT_FIELD: np.asarray(l.direct_texts, dtype=object)})
+        hl_rows = getattr(l, "highlight", None)
+        hl_rows = np.asarray(hl_rows, dtype=bool) if hl_rows is not None and len(hl_rows) == len(l.gdf) else None
+
+        def lifted(prio, rows, vals):
+            """1.22.0, labels by the message: a feature the message names is labelled first and bold; a highlighted feature next and
+            semibold; a direct label semibold. -> (priorities, weights; 0 keeps the layer's own weight). Nothing changes on a map whose
+            message names no label and whose layer has no highlight."""
+            prio = np.array(prio, dtype="float64", copy=True).reshape(-1) if np.ndim(prio) else np.full(len(rows), float(prio))
+            w = np.zeros(len(prio), dtype=int)
+            if not len(prio):
+                return prio, w
+            span = float(np.nanmax(np.abs(prio))) + 1.0
+            if hl_rows is not None:
+                m = hl_rows[np.asarray(rows, dtype=int)]
+                prio[m] += 2 * span
+                w[m] = 600
+            named = me.named_in(message, [str(v) for v in vals]) if message else set()
+            if named:
+                m2 = np.fromiter((str(v) in named for v in vals), dtype=bool, count=len(vals))
+                prio[m2] += 4 * span
+                w[m2] = 700
+            if direct:
+                w = np.maximum(w, 600)
+            return prio, w
         field_ = lb.get("field")
         if field_ not in l.gdf.columns:
             raise mp.PlanError(f"labels: layer '{l.id}' has no field '{field_}'", gc.EXIT_USAGE)
@@ -2249,9 +2299,9 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
             idx = np.where(keep)[0]
             idx = idx[areas[idx] >= min_km2]
             idx, vals = labelled(gdf, idx)
-            prio = priorities(gdf, idx, areas[idx].astype("float64"))
+            prio, wts = lifted(priorities(gdf, idx, areas[idx].astype("float64")), idx, vals)
             pick = top(prio)
-            idx, vals, prio = idx[pick], vals[pick], prio[pick]
+            idx, vals, prio, wts = idx[pick], vals[pick], prio[pick], wts[pick]
             pts = shapely.point_on_surface(geoms[idx]) if len(idx) else np.array([], dtype=object)
             px_, py_ = (shapely.get_x(pts), shapely.get_y(pts)) if len(idx) else (np.array([]), np.array([]))
             bnds = shapely.bounds(geoms[idx]) if len(idx) else np.zeros((0, 4))
@@ -2263,7 +2313,8 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
                     fill = t["no_data"] if ci < 0 else l.colors[ci]
                 elif l.fill:
                     fill = l.fill
-                cands.append(le.Candidate(str(vals[j]), "area", float(px_[j]), float(py_[j]), float(prio[j]), avail_w=float(bnds[j, 2] - bnds[j, 0]), fill=fill))
+                cands.append(le.Candidate(str(vals[j]), "area", float(px_[j]), float(py_[j]), float(prio[j]), avail_w=float(bnds[j, 2] - bnds[j, 0]), fill=fill,
+                                          weight=int(wts[j]) or None))
         elif l.kind == "point":
             gp, _src = explode_points(gdf)
             mx, my, vis = sheet_points(gp, frame)
@@ -2284,12 +2335,12 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
                 _, first = np.unique(np.asarray(_src)[idx], return_index=True)
                 keep = np.sort(first)
                 idx, vals = idx[keep], np.asarray(vals, dtype=object)[keep]
-            prio = priorities(gp, idx, -idx.astype("float64"))
+            prio, wts = lifted(priorities(gp, idx, -idx.astype("float64")), (np.asarray(_src)[idx] if _src is not None else idx), vals)
             pick = top(prio)
-            idx, vals, prio = idx[pick], vals[pick], prio[pick]
+            idx, vals, prio, wts = idx[pick], vals[pick], prio[pick], wts[pick]
             for j, i in enumerate(idx.tolist()):
                 r_ = float(sizes[i]) / 2 if sizes is not None and sizes[i] > 0 else d
-                cands.append(le.Candidate(str(vals[j]), "point", float(mx[i]), float(my[i]), float(prio[j]), radius=r_))
+                cands.append(le.Candidate(str(vals[j]), "point", float(mx[i]), float(my[i]), float(prio[j]), radius=r_, weight=int(wts[j]) or None))
         else:                                              # 0.15.0: labels that follow their line
             if size < floor:
                 stats["layers"][l.id] = {"placed": 0, "dropped_size": len(gdf)}
@@ -2300,6 +2351,9 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
             taken += rects_l
             stats["layers"][l.id] = {"placed": st_l["placed"], "dropped_collision": st_l["collision"], "dropped_size": st_l["too_short"] + st_l["too_bent"],
                                      "dropped_outside": 0, "along_line": st_l}
+            if direct:
+                asked = sorted({str(v) for v in l.direct_texts if v is not None})
+                stats.setdefault("direct", {})[l.id] = {"asked": asked, "missing": sorted(set(asked) - set(st_l.get("texts") or []))}
             continue
         # 1.14.0 (Day 13 issue 7): a label may sit over the symbols of another, dense layer (thousands of cell sites left 2 of 6 fire
         # labels on the map); it keeps off its own layer's symbols, sparse layers' symbols and every other label and element
@@ -2307,6 +2361,9 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
         skip = dense_ids - own
         res = le.place(cands, lo.rect_of(tpl["map"]), [r for r in taken if id(r) not in skip] if skip else taken, size, 400, floor)
         stats["layers"][l.id] = res.as_dict()
+        if direct:
+            asked = sorted({str(v) for v in l.direct_texts if v is not None})
+            stats.setdefault("direct", {})[l.id] = {"asked": asked, "missing": sorted(set(asked) - {p.text for p in res.placed})}
         if lb.get("leaders") and l.kind == "point" and res.dropped_collision:      # 0.15.0: a leader line for a label with no room beside its symbol
             got = [(p.text, p.rect) for p in res.placed]
             left = [c for c in cands if not any(tx == c.text and abs((r.x0 + r.x1) / 2 - c.x) < 30 and abs((r.y0 + r.y1) / 2 - c.y) < 15 for tx, r in got)]
@@ -2324,7 +2381,7 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
                 if getattr(plan, "look", "classic") != "classic":
                     halo = p.fill                         # 0.18.0: a halo in the fill's own colour breaks the lines under the text, no sticker
             out.append(sd.text(p.x, p.y, p.text, size, fg, anchor=p.anchor, halo=halo,
-                               halo_w=max(0.3, size * PT * 0.22)))
+                               halo_w=max(0.3, size * PT * 0.22), weight=p.weight or 400))
             taken.append(p.rect.grown(le.PAD_MM))
             said.append((name_key(p.text), (p.rect.x0 + p.rect.x1) / 2, (p.rect.y0 + p.rect.y1) / 2))
     plan._data_label_texts = said                         # 1.14.0: the place names leave out a name a data label already says

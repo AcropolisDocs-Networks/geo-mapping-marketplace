@@ -20,6 +20,16 @@ style: {look: auto}                # auto (default) picks focus (areas), clean (
 # a layer's highlight: {column: band, in: [n41]} draws those features full colour and a fifth larger, the rest of the layer greyed at 30%;
 #   1.13.0: {column: MW, min: 1000} | {max: 5} | {top: 8}, rest: fade (keep the colours), rest_opacity: 0.4
 # a layer's emphasis: primary | supporting (55%) | background (30%) | auto (default: the layers the message names are primary, the rest supporting)
+# 1.22.0: a layer's highlight: auto writes the highlight the message implies (values it names, "top 5", "cheapest" or "highest" of a classed number);
+#   extent: {mode: fit_message} frames what the message names (its highlighted features when it has them), the rest as surroundings (padding_pct default 14);
+#   elements.legend: {direct: auto} names lines and categories on the map and takes them out of the key (a layer's legend: {direct: true | false} decides for it);
+#   legend: {counts: bars | numbers} on a classed layer (or elements.legend.counts for all) draws the features per class beside each class;
+#   build_map.py --draft writes <stem>_draft.png and <stem>_mute.png only; the message-check module has the loop and the MAP-STORY findings
+# Symbols: a role: polygons layer with no fill (or symbol: {fill: none}) is an outline: no fill, its edge in the next palette color at 0.4 mm, so relief
+#   and context show through (1.2.0). Color it with symbol: {fill: "@brand.categorical.2", opacity: 0.4} (inside symbol, not at the layer's top level);
+#   symbol.stroke names the edge (drawn at full strength even in the fill's color), symbol.stroke_opacity its strength, symbol.dash: dashed | dotted |
+#   [1.2, 0.8] dashes it (a tribal or planning boundary), and the legend swatch shows the same. A point layer with symbol: {shape: none} draws only
+#   its labels (names at chosen spots; no legend entry)
 # style.hierarchy: off draws every layer at full strength; a proportional layer's symbol.scale_with: <layer id> shares that layer's size scale
 # a library service layer's filter goes in its source: {type: ref, id: ..., where: "VOLT_CLASS IN ('345','500')"}; a file layer uses filter: {column, in}
 # elements.callouts: {on: true, items: [{text: "Large-load queue", figure: "692 MW", at: [lon, lat] | layer: id, where: {field: value}}]}: the figure set large

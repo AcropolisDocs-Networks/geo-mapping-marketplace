@@ -43,6 +43,7 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the
 | Module                   | Read it |
 |--------------------------|---|
 | `map-text`               | when the title, subtitle or a legend title changes |
+| `message-check`          | when the person says the map does not make its point, or a rebuild lists Message check findings |
 | `cartography-principles` | when a change alters the map type or its classes |
 | `classify-and-color`     | for a new classification method, class count or rounding |
 | `color-accessibility`    | for a palette change, bivariate keys and hatch patterns |

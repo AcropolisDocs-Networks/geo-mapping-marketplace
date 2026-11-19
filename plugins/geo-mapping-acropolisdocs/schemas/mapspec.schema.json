@@ -89,10 +89,12 @@
         "mode": {
           "enum": [
             "fit_layers",
+            "fit_message",
             "bbox",
             "place",
             "preset"
-          ]
+          ],
+          "description": "fit_layers (default): the frame fits every data layer. 1.22.0, fit_message: the frame fits what the map is about (the layers the message names or that say emphasis: primary, cut to their highlight: features when they have one), and the other layers are its surroundings; with nothing singled out it is fit_layers"
         },
         "bbox": {
           "type": [
@@ -689,13 +691,21 @@
             }
           },
           "highlight": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["column"],
-            "anyOf": [{"required": ["in"]}, {"required": ["min"]}, {"required": ["max"]}, {"required": ["top"]}],
-            "description": "0.22.0: emphasis by contrast: the features chosen are drawn at full colour and a fifth larger; the rest of the layer is desaturated and drawn at 30 percent. Choose them with in: [values], or (1.13.0) min / max (numbers at or above / at or below; both for a range) or top: N (the N largest). rest: fade keeps the rest's own colours; rest_opacity sets its strength.",
-            "properties": {"column": {"type": "string"}, "in": {"type": "array", "minItems": 1}, "min": {"type": "number"}, "max": {"type": "number"},
-                           "top": {"type": "integer", "minimum": 1}, "rest": {"enum": ["dim", "fade"]}, "rest_opacity": {"type": "number", "minimum": 0.05, "maximum": 0.95}}
+            "oneOf": [
+              {
+                "const": "auto",
+                "description": "1.22.0: the builder writes the highlight the message implies: the values it names (the n41 sites), the top N, or one end of a classed number (the cheapest); with nothing singled out the layer is drawn at one strength and a note says so"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["column"],
+                "anyOf": [{"required": ["in"]}, {"required": ["min"]}, {"required": ["max"]}, {"required": ["top"]}],
+                "description": "0.22.0: emphasis by contrast: the features chosen are drawn at full colour and a fifth larger; the rest of the layer is desaturated and drawn at 30 percent. Choose them with in: [values], or (1.13.0) min / max (numbers at or above / at or below; both for a range) or top: N (the N largest). rest: fade keeps the rest's own colours; rest_opacity sets its strength.",
+                "properties": {"column": {"type": "string"}, "in": {"type": "array", "minItems": 1}, "min": {"type": "number"}, "max": {"type": "number"},
+                               "top": {"type": "integer", "minimum": 1}, "rest": {"enum": ["dim", "fade"]}, "rest_opacity": {"type": "number", "minimum": 0.05, "maximum": 0.95}}
+              }
+            ]
           },
           "emphasis": {
             "enum": ["auto", "primary", "supporting", "background"],

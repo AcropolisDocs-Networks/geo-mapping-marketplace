@@ -71,15 +71,21 @@ def record(event: dict) -> dict | None:
     return rec
 
 
+def handle(event: dict) -> None:
+    """Record one event (1.22.0: hooks/dispatch.py calls this for PreToolUse, so the start costs no process of its own)."""
+    rec = record(event)
+    if rec:
+        if str(HERE) not in sys.path:
+            sys.path.insert(0, str(HERE))
+        import hook_log
+        hook_log.append(event, rec)
+
+
 def main() -> int:
     try:
         event = json.loads(sys.stdin.read() or "{}")
         if isinstance(event, dict):
-            rec = record(event)
-            if rec:
-                sys.path.insert(0, str(HERE))
-                import hook_log
-                hook_log.append(event, rec)
+            handle(event)
     except Exception:                                   # noqa: BLE001 - the timer never affects the session it observes
         pass
     return 0

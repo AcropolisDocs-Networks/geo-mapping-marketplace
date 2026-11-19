@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """build_map: MapSpec in, finished map files out (spec 7.1 map-create, 12 run order).
 
-    build_map.py --spec map.yaml --out DIR [--formats svg,pdf,png,html] [--brand SLUG] [--template NAME] [--strict]
+    build_map.py --spec map.yaml --out DIR [--formats svg,pdf,png,html] [--brand SLUG] [--template NAME] [--strict] [--draft] [--no-mute]
+
+1.22.0: `--draft` writes one small picture (<stem>_draft.png, 96 dpi) and the mute picture in place of the full set, for the look-and-fix
+loop; every build that makes a picture also writes <stem>_mute.png (the sheet without its words; `--no-mute` leaves it out) and carries the
+message check's measures and findings in `story` (lints/story_lint.py, never blocking).
 
 Steps: spec lint -> load and data/CRS lint -> classify and color -> render the SVG master -> guard (palette, Inter, stamps) ->
 export the other formats. A BLOCK finding stops the build (exit 3) and, with --strict, leaves no files behind. The brand
@@ -30,13 +34,14 @@ import provenance  # noqa: E402
 import webmap  # noqa: E402
 import ref_lint  # noqa: E402
 import service_lint  # noqa: E402
+import story_lint  # noqa: E402
 import telecom_lint  # noqa: E402
 import text_lint  # noqa: E402
 import ref_library as rl  # noqa: E402
 import library_lint as ll  # noqa: E402
 
 SEV = {"BLOCK": 0, "WARN": 1, "INFO": 2}
-STATIC_ONLY = {"MAP-CART-009", "MAP-CRS-003", "MAP-CART-020"}
+STATIC_ONLY = {"MAP-CART-009", "MAP-CRS-003", "MAP-CART-020", "MAP-STORY-001", "MAP-STORY-003"}     # 1.22.0: a page has no fixed frame and its legend is a tab
 
 
 def guard_findings(svg: str, plan: mp.Plan) -> list[dict]:
@@ -130,7 +135,8 @@ def outside_raster_window(report: dict, tol: float = 0.002) -> tuple | None:
 
 
 def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, brand: str | None = None, template: str | None = None,
-          strict: bool = False, mode: str | None = None, keep: bool = False, export_options: dict | None = None) -> dict:
+          strict: bool = False, mode: str | None = None, keep: bool = False, export_options: dict | None = None, draft: bool = False,
+          mute: bool = False) -> dict:
     """`export_options` (M16): transparent, bleed_mm, crop_marks, pdfa, inkscape, outline_text over the MapSpec's `export:` block
     (map_export.options_from); each variant is read back (MAP-OUT-014 to 018). 1.3.0 (R1-PANEL): a file with a top-level `sheet_version` is a
     SheetSpec, built by sheet.build (two to six panels with one shared frame)."""
@@ -160,6 +166,17 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
             plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, window=wider)
             rendered = mr.render(plan)
             plan.notes.append("rasters, relief and ground read a second time: the fit moved the frame past the window they were first read for")
+        # 1.22.0: a layer named on the map in place of its key (legend.direct) whose name found no room goes back into the legend, and the
+        # map is drawn once more: a map never shows a layer it neither names nor keys.
+        crowded = sorted(k for k, v in ((rendered.report.get("labels") or {}).get("direct") or {}).items() if v.get("missing"))
+        if crowded:
+            def keyed(spec_):
+                for ly in spec_.get("layers") or []:
+                    if ly.get("id") in crowded:
+                        ly["legend"] = {**(ly.get("legend") if isinstance(ly.get("legend"), dict) else {}), "direct": False}
+            plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, window=wider, spec_edit=keyed)
+            rendered = mr.render(plan)
+            plan.notes.append("legend.direct: " + ", ".join(f"'{c}'" for c in crowded) + " found no room for a name on the map and stayed in the legend")
     else:
         plan, rendered = web.plan, web.rendered            # the page's own plan: static scale bar off, bundled basemap
     # write the resolved brand back so a later default change never restyles this map
@@ -171,6 +188,12 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
                 + provenance.validate(plan, recs) + reference_findings(plan) + service_lint.lint_plan(plan) + telecom_lint.lint_plan(plan) + cartographic_lint.lint_plan(plan, rendered.report, rendered.svg) + a11y_lint.lint(plan, rendered) + output_lint.check_svg(rendered.svg)
                 + output_lint.check_layer_load(rendered.svg) + text_findings(plan, rendered))
     findings += style_findings(plan, out_dir)
+    # 1.22.0: the message check, on every build: does the drawing carry the message by itself? Measures and findings, never a BLOCK.
+    try:
+        story_fs, story_measures = story_lint.lint(plan, rendered.report)
+    except Exception as ex:  # noqa: BLE001 - a check that cannot run never stops a build
+        story_fs, story_measures = [], {"error": f"{type(ex).__name__}: {str(ex)[:160]}"}
+    findings += story_fs
     if web and not static:        # a page has its own scale bar and fills its own frame: the print-sheet checks for those do not apply
         findings = [f for f in findings if f["id"] not in STATIC_ONLY]
     if web:
@@ -192,17 +215,46 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     except Exception:  # noqa: BLE001 - never stops a build
         pass
 
+    story = {"message": plan.spec.get("message"), "measures": story_measures}
+    result["story"] = story
+
     def finish():
         findings.sort(key=lambda f: (SEV.get(f["severity"], 3), f["id"]))
         result["findings"] = findings
         result["blocked"] = any(f["severity"] == "BLOCK" for f in findings)
         result["map_text"] = map_text_summary(plan, findings)
+        story["callout"] = story_lint.summary_lines(findings)
         return result
 
     if any(f["severity"] == "BLOCK" for f in findings) and strict:
         return finish()
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+
+    def mute_picture():
+        """The sheet without its words, beside the map (1.22.0). A working file: never in the provenance, the terms register or a package."""
+        import map_preview as pv
+        try:
+            p, info = pv.write_mute(rendered.svg, out, rendered.filename_stem)
+            story["mute_preview"] = str(p)
+            story["mute_removed"] = info
+            story["ask"] = pv.MUTE_QUESTION
+        except Exception as ex:  # noqa: BLE001 - a preview that cannot be drawn never stops a build
+            story["mute_error"] = f"{type(ex).__name__}: {str(ex)[:160]}"
+
+    if draft:
+        # 1.22.0: the look-and-fix loop. One small picture of the whole sheet and the mute picture; the SVG, the PDF, the full-size PNG,
+        # the provenance sidecar and the terms register are written by the build without --draft, so a finished set is never half replaced.
+        import map_preview as pv
+        if not static and web is not None:
+            raise mp.PlanError("--draft draws the print sheet; a page (--formats html) has its own layout check", gc.EXIT_USAGE)
+        dp = pv.write_draft(rendered.svg, out, rendered.filename_stem)
+        mute_picture()
+        result["draft"] = True
+        result["dpi"] = pv.DRAFT_DPI
+        result["files"] = [str(dp)] + ([story["mute_preview"]] if story.get("mute_preview") else [])
+        result["notes"] = list(result["notes"]) + ["draft: one picture at 96 dpi; run again without --draft for the SVG, PDF and full-size PNG"]
+        return finish()
     svg_path = out / f"{rendered.filename_stem}.svg"
     svg_path.write_text(mx.inkscape_svg(rendered.svg) if opts["inkscape"] else rendered.svg, encoding="utf-8")
     written = [svg_path]
@@ -294,6 +346,8 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
             w.unlink()
         written = [w for w in written if w.suffix != ".svg"]
     result["files"] = [str(w) for w in written if not w.name.endswith(".provenance.json") and w not in tfiles]
+    if mute and static and any(x in formats for x in ("png", "pdf")):
+        mute_picture()
     result["svg_bytes"] = len(rendered.svg.encode("utf-8"))
     if keep:        # the objects a pipeline packages from (M5); never serialised
         if meth is None:
@@ -321,17 +375,19 @@ def main(argv=None) -> int:
     ap.add_argument("--strict", action="store_true")
     ap.add_argument("--theme", choices=["light", "dark"], help="overrides the MapSpec's theme (default light); dark only when asked for")
     ap.add_argument("--mode", choices=["print", "screen"], help=argparse.SUPPRESS)      # old name: print = light, screen = dark
+    ap.add_argument("--draft", action="store_true", help="1.22.0: one small picture (<stem>_draft.png, 96 dpi) and the mute picture, in place of the full set: for looking and fixing")
+    ap.add_argument("--no-mute", action="store_true", help="1.22.0: leave out <stem>_mute.png (the sheet without its words)")
     mx.add_option_flags(ap)                                                               # M16: --transparent, --bleed, --crop-marks, --pdfa, --inkscape, --outline-text
     a = ap.parse_args(argv)
     try:
         res = build(a.spec, a.out, a.formats.split(",") if a.formats else None, brand=a.brand, template=a.template, strict=a.strict, mode=(mp.THEME_MODES[a.theme] if a.theme else a.mode),
-                    export_options=mx.option_flags(a))
+                    export_options=mx.option_flags(a), draft=a.draft, mute=not a.no_mute)
     except mp.PlanError as ex:
         print(f"build_map: {ex}", file=sys.stderr)
         return ex.code
     print(json.dumps(res, indent=2, default=str))
-    for ln in (res.get("map_text") or {}).get("callout") or []:     # map text §11.1: the findings the chat summary lists, never blocking
-        print(ln, file=sys.stderr)
+    for ln in ((res.get("map_text") or {}).get("callout") or []) + ((res.get("story") or {}).get("callout") or []):
+        print(ln, file=sys.stderr)                                  # map text §11.1 and the message check (1.22.0): listed in chat, never blocking
     return gc.EXIT_LINT if res["blocked"] else gc.EXIT_OK
 
 

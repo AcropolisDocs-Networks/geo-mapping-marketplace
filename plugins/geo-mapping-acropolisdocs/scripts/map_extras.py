@@ -344,6 +344,7 @@ def line_label_markup(plan, l, lb: dict, frame, taken: list[Rect], size_pt: floa
         rects += grs
         seen.add(txt)
         stats["placed"] += 1
+    stats["texts"] = sorted(seen)                         # 1.22.0: which names found room (a direct label that did not goes back to the key)
     return "".join(out), rects, stats
 
 

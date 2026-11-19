@@ -6,6 +6,8 @@ Day 17 map trace (2026-11-17, a Cowork session) shows the timing hook measuring 
 14 builds, so they fire in Cowork. On a linked computer the pre-export check judges a MapSpec only where it can read the file; one
 it cannot reach passes, and the build's own spec lint reports the same findings.
 
+**One process before a tool call (1.22.0).** Until 1.21.2 `PreToolUse` carried two entries, so every shell call in every session started two Python processes before it ran, the timer and the pre-export check, in sessions that never made a map as well. `hooks/dispatch.py` is now the one `PreToolUse` entry: it reads the event once, lets `map_timing.py` record the start of one of this plugin's own calls, then asks `pre_export_lint.py` for its verdict. The exit code is the check's alone. After a call the timer still runs by itself, and the reminder runs on a submitted prompt: four processes' worth of entries instead of five, one before each call instead of two.
+
 `hooks.json` turns on the three hooks below. The first two were written in v0.14 and kept off until the hooks spike (Appendix H, P7) had
 been run; on 2026-11-15, in a Claude Code 2.1.325 session with the built plugin, the pre-export hook stopped this plugin's build of a
 MapSpec with blocking findings, let an unrelated command through untouched, and the reminder hook's note reached the model. The timing hook
@@ -14,7 +16,7 @@ came in 1.17.2, so that `map-trace` reports measured times instead of bounds. 1.
 
 | Hook | Event | What it does |
 |---|---|---|
-| `pre_export_lint.py` | `PreToolUse`, matcher `Bash\|PowerShell\|mcp__.*device_bash` | Before this plugin's own `build_map.py`, `webmap.py` or `map_restyle.py --build` runs with a `--spec`, runs the spec lint on that MapSpec. A BLOCK stops the command (exit 2) and the findings go to the model; the stop is also written to the hook log. Any other command passes at once, untouched. |
+| `pre_export_lint.py` | `PreToolUse` (through `dispatch.py`), on the shell tools | Before this plugin's own `build_map.py`, `webmap.py` or `map_restyle.py --build` runs with a `--spec`, runs the spec lint on that MapSpec. A BLOCK stops the command (exit 2) and the findings go to the model; the stop is also written to the hook log. Any other command passes at once, untouched. |
 | `credentials_reminder.py` | `UserPromptSubmit` | Looks for a key, token or password in the person's message with the credentials scanner (`credentials.pasted_finding`, MAP-CRED-007: the `redact` patterns, known key shapes, a Census key in context) and a few bare key shapes. When one is there, adds a reminder to the model: do not repeat, store or use it; keys go in the person's own credential folder (`map-credentials add NAME`), and a key typed into the chat should be revoked and rotated. It never prints the secret and never blocks the message; the hook log gets the time and how many kinds of secret, never the message. |
 | `map_timing.py` | `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, matcher `Bash\|PowerShell\|mcp__.*device_bash\|mcp__.*geo-mapping.*` | Records the start, end or failure of a call only when it runs one of this plugin's scripts or lints with Python, or is a tool of this plugin's map server: the call's id, the time, the runtime's own duration, the exit code at the head of a failure, and the script or tool name. Never the command, an argument, a result or an error text. Prints nothing and always exits 0. |
 

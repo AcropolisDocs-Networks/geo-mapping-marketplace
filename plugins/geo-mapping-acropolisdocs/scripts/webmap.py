@@ -1990,7 +1990,7 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
     def edit(sp):                                  # 0.15.0: live service layers go to the page only; the plan and the static picture never see them
         web_edit(sp)
         live_specs.extend(wlv.split(sp))
-    plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, spec_edit=edit, use_tiles=False)
+    plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, spec_edit=edit, use_tiles=False, direct_labels=False)
     spec = plan.spec
     t = plan.tokens
     findings: list[dict] = list(plan.findings) + pack_web_findings(plan)

@@ -164,9 +164,29 @@ def is_plugin_copy(d: Path) -> bool:
         return False
 
 
+def manifest_name(d: Path) -> str | None:
+    """1.22.0: the name a plugin folder gives itself in .claude-plugin/plugin.json (in the folder, or one level down in a cache's
+    <name>/<version>/ layout). A folder's own name says where a host put the copy, not which plugin it is: a synced, copied or renamed folder
+    (~g2 on Day 17, -synced on Day 18) is the same edition when its manifest says so, whatever marker the next host adds."""
+    try:
+        places = [d] + sorted(c for c in d.iterdir() if c.is_dir())[:8]
+    except OSError:
+        places = [d]
+    for c in places:
+        f = c / ".claude-plugin" / "plugin.json"
+        try:
+            if f.is_file() and f.stat().st_size < 65536:
+                name = json.loads(f.read_text(encoding="utf-8")).get("name")
+                if isinstance(name, str) and fnmatch.fnmatch(name, gc.EDITION_GLOB):
+                    return name
+        except (OSError, ValueError, AttributeError):
+            continue
+    return None
+
+
 def installed_editions(own: str) -> list[str]:
-    """Editions of geo-mapping-* directories next to this plugin, by name without a version. Directory names and the presence of
-    scripts/gmap_common.py only; no file is read. 1.21.0 (Day 18 issue 1): the plugins' data folders and folders without the plugin's code are
+    """Editions of geo-mapping-* directories next to this plugin: the name in each copy's own manifest (1.22.0), or the folder's name without
+    a version where a copy has no manifest. Only that one small file is read. 1.21.0 (Day 18 issue 1): the plugins' data folders and folders without the plugin's code are
     skipped (the synced data folder geo-mapping-acropolisdocs-synced stopped every map skill in a cloud session)."""
     names = {own}
     for d in scan_dirs():
@@ -175,7 +195,7 @@ def installed_editions(own: str) -> list[str]:
         try:
             for child in d.iterdir():
                 if fnmatch.fnmatch(child.name, gc.EDITION_GLOB) and child.is_dir() and is_plugin_copy(child):
-                    names.add(edition_of(child.name))
+                    names.add(manifest_name(child) or edition_of(child.name))      # 1.22.0: the manifest's name first, the folder's as the fallback
         except OSError:
             continue
     return sorted(names)

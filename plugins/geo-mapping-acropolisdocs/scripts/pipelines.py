@@ -495,6 +495,17 @@ def stage_qa_spec(c: Ctx) -> dict:
         dst = c.run_dir / "preview.png"
         shutil.copy2(png, dst)
         c.add_file(dst, "preview")
+    svg = next((f for f in res["files"] if f.endswith(".svg")), None)
+    if svg:                                   # 1.22.0: the sheet without its words, for the five-second test (map_preview)
+        try:
+            import map_preview as pv
+            mp_, _info = pv.write_mute(Path(svg).read_text(encoding="utf-8"), c.run_dir, "preview")
+            mdst = c.run_dir / "mute.png"
+            mp_.replace(mdst)
+            c.add_file(mdst, "preview")
+            c.results["qa_mute"] = True
+        except Exception:  # noqa: BLE001 - a preview that cannot be drawn never fails a QA run
+            pass
     return {"ok": True, "summary": f"{len(allf)} finding(s)", "findings": allf}
 
 
@@ -547,6 +558,9 @@ def stage_verdict(c: Ctx) -> dict:
         ok = 3 <= len(msg.split()) <= 30
         checklist.append({"item": "one-sentence test (message is a single, short sentence)", "status": "pass" if ok else "fail", "evidence": [] if ok else ["MAP-SPEC-002"]})
     checklist.append({"item": "a stranger can state the message in five seconds", "status": "needs-eyes", "evidence": ["preview.png"] if c.inputs.get("spec") else []})
+    if c.results.get("qa_mute"):              # 1.22.0: the same test with the words taken off: does the drawing carry the message by itself?
+        story = sorted(f["id"] for f in allf if f["id"].startswith("MAP-STORY") and f["severity"] == "WARN")
+        checklist.append({"item": "with no words, the map still says its message (the mute picture)", "status": "needs-eyes", "evidence": ["mute.png"] + story})
     if any(f["severity"] == "BLOCK" for f in allf):
         verdict = "BLOCK"
     elif any(f["severity"] == "WARN" and f["id"].startswith(FIX_FAMILIES) for f in allf) or any(x["status"] == "fail" for x in checklist):
