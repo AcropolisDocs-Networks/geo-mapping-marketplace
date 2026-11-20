@@ -1,0 +1,47 @@
+# 2.5.0 (T-08): the elevation sources the build may read, with where each has data. terrain_fetch chooses by intersecting the map's window with
+# each source's coverage (coverage_share), and a window that one source covers only in part is mosaicked from the next (T-03).
+# coverage: "world", or a bundled shape: us+border (Natural Earth's United States grown by `buffer_deg`, plus the Virgin Islands; 3DEP's
+# 1/3 arc-second coverage reaches over the borders). status: active (fetched) or candidate (to verify for licence, keyless access and COG
+# before it ships; never fetched).
+- id: 3dep
+  title: USGS 3D Elevation Program (3DEP)
+  entry: ref.terrain.us.dem.3dep
+  status: active
+  coverage: us+border
+  buffer_deg: 0.3
+  native_m: 10
+  surface: bare earth (DTM)
+  licence: public domain
+  credit: USGS 3DEP
+  fetch: ArcGIS ImageServer exportImage, in tiles at the target cell size
+  byte_budget_mb: 40
+- id: copernicus
+  title: Copernicus DEM GLO-30 and GLO-90
+  entry: ref.terrain.world.dem.copernicus-glo30
+  status: active
+  coverage: world
+  native_m: 30
+  surface: surface model (DSM)
+  licence: Copernicus DEM licence (attribution)
+  credit: Copernicus DEM (DLR, Airbus)
+  fetch: Cloud-Optimized GeoTIFF tiles on AWS; whole tiles for small windows, overview range reads within the byte budget for large ones
+  byte_budget_mb: 40
+- id: terrarium
+  title: Terrain Tiles on AWS (Mapzen Terrarium)
+  entry: ref.terrain.world.dem.terrarium
+  status: active
+  coverage: world
+  native_m: 30
+  surface: mixed (SRTM, GMTED2010, national DEMs; ETOPO1 bathymetry at sea)
+  licence: attribution (sources by region)
+  credit: the regional sources the window uses
+  fetch: 256 px PNG tiles, at most 64 a map
+  byte_budget_mb: 40
+- {id: canada-mrdem, title: Canada MRDEM / CDEM (NRCan), status: candidate, coverage: canada, surface: bare earth and surface, licence: Open Government Licence - Canada (to verify)}
+- {id: gsi-japan, title: GSI Japan elevation tiles, status: candidate, coverage: japan, surface: bare earth, licence: GSI terms (to verify)}
+- {id: ga-elvis, title: Geoscience Australia ELVIS, status: candidate, coverage: australia, surface: bare earth, licence: CC BY 4.0 (to verify keyless access)}
+- {id: ign-rge-alti, title: IGN RGE ALTI, status: candidate, coverage: france, surface: bare earth, licence: Licence Ouverte 2.0 (to verify)}
+- {id: eu-dem, title: Copernicus EU-DEM successors, status: candidate, coverage: europe, surface: surface, licence: to verify}
+- {id: arcticdem, title: ArcticDEM, status: candidate, coverage: arctic, surface: surface, licence: public domain (to verify COG access)}
+- {id: rema, title: REMA (Antarctica), status: candidate, coverage: antarctica, surface: surface, licence: public domain (to verify COG access)}
+- {id: fabdem, title: FABDEM, status: excluded, coverage: world, surface: bare earth, licence: CC BY-NC-SA 4.0 (non-commercial; out by owner decision O6)}

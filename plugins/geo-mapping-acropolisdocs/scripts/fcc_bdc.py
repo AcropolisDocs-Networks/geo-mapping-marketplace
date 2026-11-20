@@ -165,10 +165,30 @@ def declared_columns() -> list[str]:
     return [c for c in ((e.get("delivery") or {}).get("columns") or []) if c and not c.endswith("_as_published")]
 
 
-def fetch_file(client: Client, file_id: str, *, kind: str = "availability", fmt: str = "csv", confirm_large: bool = False, check_layout: bool = False) -> dict:
-    """One file into the library cache (zip, capped: 100 MB without a confirmed run, MAP-FCC-005) and its CSV read back; -> {path, csv, rows, columns}."""
+# 2.4.0 (H-10, Day 20 issue 1): the BDC publishes these file kinds as zipped GeoPackages only; a CSV request for one is changed, not refused
+GPKG_ONLY = ("hexagon coverage", "raw coverage")
+
+
+def format_for(subcategory: str | None, asked: str | None) -> str:
+    """The download format: `auto` (or none) reads the file's subcategory: Hexagon Coverage and Raw Coverage are GeoPackages, the rest CSV."""
+    a = (asked or "auto").lower()
+    if a in ("csv", "shapefile", "gpkg") and not (a == "csv" and str(subcategory or "").strip().lower() in GPKG_ONLY):
+        return a
+    return "gpkg" if str(subcategory or "").strip().lower() in GPKG_ONLY else "csv"
+
+
+def fetch_file(client: Client, file_id: str, *, kind: str = "availability", fmt: str = "auto", confirm_large: bool = False, check_layout: bool = False,
+               subcategory: str | None = None) -> dict:
+    """One file into the library cache (zip, capped: 100 MB without a confirmed run, MAP-FCC-005) and its CSV read back; -> {path, csv, rows, columns}.
+    2.4.0: `fmt` auto (the default) picks the format from `subcategory`; a CSV request for a GeoPackage-only file is changed with an INFO
+    (MAP-FCC-007), and a download that turns out to hold a GeoPackage and no CSV is kept and returned as one. The file goes into the work
+    folder's data/fcc-bdc/ when a tool call named one (gmap_common.data_dir), else the library cache."""
     if not re.fullmatch(r"[0-9A-Za-z_-]{1,40}", str(file_id)):
         raise BDCError(f"file id '{file_id}' is not one the list returned", "MAP-FCC-003", gc.EXIT_USAGE)
+    want = format_for(subcategory, fmt)
+    if (fmt or "auto").lower() == "csv" and want == "gpkg":
+        client.findings.append(finding("MAP-FCC-007", "INFO", f"file {file_id} ({subcategory}) is published as a GeoPackage only; fetched as gpkg, not csv"))
+    fmt = want
     suffix = {"csv": "", "shapefile": "/1", "gpkg": "/2"}[fmt]
     cap = HARD_CAP if confirm_large else CAP_BYTES
     try:
@@ -177,11 +197,15 @@ def fetch_file(client: Client, file_id: str, *, kind: str = "availability", fmt:
         if "larger than" in str(ex):
             raise BDCError(f"file {file_id} is larger than {cap // 1_048_576} MB: it is fetched only in a confirmed run (map-run shows the cost first)", "MAP-FCC-005") from None
         raise
-    cdir = gc.outputs_dir() / "cache" / "library" / "fcc-bdc"
+    cdir = gc.data_dir("fcc-bdc")
     cdir.mkdir(parents=True, exist_ok=True)
     zp = cdir / f"{kind}-{file_id}.zip"
     zp.write_bytes(r.content)
-    out = {"path": str(zp), "bytes": len(r.content), "sha256": hashlib.sha256(r.content).hexdigest()}
+    out = {"path": str(zp), "bytes": len(r.content), "sha256": hashlib.sha256(r.content).hexdigest(), "format": fmt}
+    inner = _zip_members(r.content)
+    if fmt == "csv" and not any(n.lower().endswith(".csv") for n in inner) and any(n.lower().endswith(".gpkg") for n in inner):
+        client.findings.append(finding("MAP-FCC-007", "INFO", f"file {file_id} holds a GeoPackage and no CSV; kept as a GeoPackage"))
+        fmt = out["format"] = "gpkg"
     if fmt == "csv":
         df = read_csv_zip(r.content)
         if check_layout:
@@ -189,7 +213,24 @@ def fetch_file(client: Client, file_id: str, *, kind: str = "availability", fmt:
         pq = zp.with_suffix(".parquet")
         df.to_parquet(pq, index=False)
         out.update(csv=str(pq), rows=int(len(df)), columns=list(df.columns))
+    elif fmt == "gpkg" and inner:
+        g = [n for n in inner if n.lower().endswith(".gpkg")]
+        if g:                                          # the GeoPackage itself beside the zip, so a layer (or an h3 source) reads it directly
+            with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+                gp = cdir / Path(g[0]).name
+                gp.write_bytes(z.read(g[0]))
+            out["gpkg"] = str(gp)
     return out
+
+
+def _zip_members(raw: bytes) -> list[str]:
+    if raw[:2] != b"PK":
+        return []
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            return z.namelist()
+    except zipfile.BadZipFile:
+        return []
 
 
 def read_csv_zip(raw: bytes):
@@ -281,7 +322,7 @@ def main(argv=None) -> int:
     ap.add_argument("--subcategory")
     ap.add_argument("--technology")
     ap.add_argument("--state")
-    ap.add_argument("--format", default="csv", choices=["csv", "shapefile", "gpkg"])
+    ap.add_argument("--format", default="auto", choices=["auto", "csv", "shapefile", "gpkg"])
     ap.add_argument("--geography", default="county")
     ap.add_argument("--speed", default="100/20")
     ap.add_argument("--biz-res", default="R")
@@ -296,7 +337,7 @@ def main(argv=None) -> int:
             fl = list_files(c, a.as_of, category=a.category, subcategory=a.subcategory, technology=a.technology, state=a.state, kind=a.type)
             res = {"ok": True, "files": fl, "total_bytes": sum(int(f["bytes"] or 0) for f in fl), "findings": c.findings}
         elif a.op == "fetch":
-            res = {"ok": True, **fetch_file(c, a.file_id, kind=a.type, fmt=a.format, confirm_large=a.confirm_large), "findings": c.findings}
+            res = {"ok": True, **fetch_file(c, a.file_id, kind=a.type, fmt=a.format, confirm_large=a.confirm_large, subcategory=a.subcategory), "findings": c.findings}
         else:
             res = summary(c, as_of=a.as_of, geography=a.geography, state=a.state, technology=a.technology or "wired-lfw", speed=a.speed, biz_res=a.biz_res,
                           confirm_large=a.confirm_large)

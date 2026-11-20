@@ -1,0 +1,29 @@
+# Recipe (2.6.0, H-13): how many carriers report coverage across a region, on the H3 grid the coverage is published on. The Day 20 map as a
+# reusable MapSpec: recipe.py make carrier-choice-h3 --region "Idaho Panhandle" [--technology 5GNR] [--speed 35/3] --out map.yaml
+# Any H3 coverage source works: change source.adapter (fcc-bdc-mobile, or a national regulator's adapter, G-12) or give path and id_field.
+# {region_block}, {region_name}, {technology}, {speed}, {template}, {id} are filled in by recipe.py.
+recipe:
+  id: carrier-choice-h3
+  title: Carrier choice on the H3 grid
+  asks: [region, technology, speed]
+  defaults: {technology: 5GNR, speed: 35/3, environment: outdoor, template: auto-slide}
+  second_panel: "the share map of one carrier (h3.agg: share, h3.group: <carrier>), so a carrier at 49 percent of a cell is not read as absent (R5)"
+mapspec:
+  mapspec_version: 1
+  id: "{id}"
+  message: "How many carriers report {technology_label} at {speed} Mbps outdoors across {region_name}"
+  template: "{template}"
+  region: "{region_block}"
+  terrain: {on: true}
+  layers:
+  - id: carriers
+    title: "Carriers with {technology_label} at {speed} Mbps"
+    source: {type: h3, adapter: fcc-bdc-mobile, technology: "{technology}", speed: "{speed}", environment: outdoor}
+    h3: {resolution: auto, by: provider, share_min: 0.5, agg: count_groups, complete: region, mode: centre}
+    role: choropleth
+    value_field: carriers
+    classification: {method: discrete}
+    empty: outline
+    legend:
+      note: "A carrier counts in a hexagon when it covers at least half of it (outdoor stationary)"
+  names: {on: true, ink: uniform}

@@ -43,6 +43,8 @@ MIN_SYMBOL_MM = 0.8               # the smallest proportional symbol still has t
 OVERLAY_COVER_OK = 0.015          # overlays may sit over up to this share of the data cells; beyond it the map is reduced to make room (fit: shrink)
 SHRINK_STEPS = (0.2, 0.4, 0.6, 0.8, 1.0)   # 1.13.0: the shares of an element's strip the fit's shrink step tries, smallest first
 FIT_COVER_PCT = 5.0              # 1.3.0 (R1-FIT, owner's decision D2): fit auto and overlay let the elements together cover this much of the focus area
+UNIFORM_HALO_WIDEN = 1.8         # 2.6.0 (V-06): names.ink uniform: the halo this much wider over a class the dark ink does not read on
+AREA_FILL_COVER_PCT = 2.0        # 2.6.0 (V-05): with a region and an area-filling layer (choropleth, cells, raster): 2 percent of the region
 # M16 (scale). A layer with more features than LARGE_LAYER is drawn in the compact forms: round point symbols as dots (one path for the
 # outlines, one for the fills, per class), and the cells of a choropleth, hexbin or grid, or opaque lines, as one path per class. Smaller
 # layers are drawn exactly as before. Above PAGE_SIMPLIFY_ABOVE features, polygons and lines are simplified to one pixel of the output dpi.
@@ -50,6 +52,9 @@ LARGE_LAYER = 5_000
 PAGE_SIMPLIFY_ABOVE = 20_000
 CELL_OUTLINE_FULL_MM = 1.0          # 0.23.0: hexbin and grid cells at least this wide on the sheet keep their full outline...
 CELL_OUTLINE_NONE_MM = 0.6          # ...and below this they are drawn without one
+CELL_EDGE_MAX_MM = 0.25 * 0.3528    # 2.6.0 (H-08): an H3 cells layer's edge: at most a quarter point...
+CELL_EDGE_SHARE = 0.06              # ...and at most 6 percent of a cell's printed width
+DENSE_FEATURE_MM = 2.0              # 2.6.0 (V-08): a polygon layer whose median feature is under this on the page gets cell-sized edges
 MERGE_ROLES = ("choropleth", "hexbin", "grid")       # cells that tile the map: features of one class never overlap, so one path draws the same
 
 
@@ -526,6 +531,26 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
                 sw_mm = 0.0 if cw < CELL_OUTLINE_NONE_MM else l.stroke_w_mm * cw / CELL_OUTLINE_FULL_MM
                 rep.setdefault("notes", []).append(f"layer '{l.id}': cells about {cw:.2f} mm across on the sheet, so their outlines are "
                                                    + ("left off" if sw_mm == 0 else f"thinned to {sw_mm:.2f} mm"))
+        empty_ci, empty_mode = getattr(l, "empty_class", None), getattr(l, "empty_mode", "fill")
+        if not getattr(l, "cells_layer", False) and l.role not in ("hexbin", "grid") and keep.any() and sw_mm > 0 and "stroke_width" not in (l.symbol or {}):
+            # 2.6.0 (V-08): any polygon layer whose median feature is under 2 mm on the page gets the cell-sized edge, so a dense outline layer
+            # (11,000 small areas) never draws as a solid mass of edges
+            import shapely
+            sm = geoms[np.flatnonzero(keep)[:4000]]
+            mw = float(np.sqrt(np.median(shapely.area(sm)))) if len(sm) else 10.0
+            if mw < DENSE_FEATURE_MM:
+                sw_mm = min(sw_mm, max(0.03, CELL_EDGE_SHARE * mw))
+                rep.setdefault("notes", []).append(f"layer '{l.id}': features about {mw:.2f} mm across on the sheet; edges thinned to {sw_mm:.3f} mm")
+        if getattr(l, "cells_layer", False) and keep.any():
+            # 2.6.0 (H-08): an H3 grid's edge is sized to its cells (at most a quarter point, at most 6 percent of a cell's width), and the
+            # empty cells' outline is see-through by density, so 11,000 cells 0.9 mm across never draw as a solid mass over the relief
+            import shapely
+            cells = geoms[np.flatnonzero(keep)[:4000]]
+            cw = float(np.sqrt(np.median(shapely.area(cells)) / 0.866)) if len(cells) else 1.0
+            sw_mm = min(CELL_EDGE_MAX_MM, CELL_EDGE_SHARE * cw)
+            l._empty_opacity = float(np.clip(0.12 + 0.18 * (cw - 0.8) / 1.6, 0.12, 0.30))     # dense grids lighter, so the relief reads through
+            rep.setdefault("notes", []).append(f"layer '{l.id}': H3 cells about {cw:.2f} mm across; edges {sw_mm:.3f} mm"
+                                               + (f", the empty class as an outline at {l._empty_opacity:.0%}" if empty_ci is not None and empty_mode == "outline" else ""))
         if getattr(l, "smooth", None) is not None and len(l.smooth["fine"]) == len(keep):
             # 2.3.0: a smooth density surface: each fine band (the area at or above its level) in its own step of the ramp, low to high, no edge
             fine = np.asarray(l.smooth["fine"])
@@ -545,6 +570,13 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
                 if not len(sel):
                     continue
                 fill = t["no_data"] if ci == -1 else l.colors[ci]
+                if empty_ci is not None and ci == empty_ci and empty_mode in ("outline", "none"):
+                    if empty_mode == "outline":           # 2.6.0 (H-08): the zero class of a complete grid is an outline only
+                        g.append(f'<g fill="none" stroke="{t["frame"]}" stroke-opacity="{sd.num(getattr(l, "_empty_opacity", 0.3))}" '
+                                 f'stroke-width="{sd.num(max(sw_mm, 0.05))}" stroke-linejoin="round">')
+                        emit(sel)
+                        g.append("</g>")
+                    continue
                 fo = l.fill_opacity * (l.class_opacity[ci] if getattr(l, "class_opacity", None) and ci >= 0 else 1.0)   # 0.20.0: value by alpha
                 if ci == -1:
                     fo *= float(getattr(l, "nodata_opacity", 1.0) or 1.0)       # 1.13.0: no data recedes: it is not what the map is about
@@ -1310,7 +1342,10 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                     sw = b.get("swatch")
                     if sw in ("hexagon", "square"):          # a hexbin or grid key is drawn in the cell's own shape (M11)
                         d = swatch_path(sw, cx + icon_w / 2, mid, lg.SWATCH_H_MM)
-                        out.append(f'<path d="{d}" fill="{it["fill"]}" stroke="{it["stroke"]}" stroke-width="0.15" stroke-linejoin="round"{" " + opa if opa else ""}/>')
+                        if it.get("outline"):                # 2.6.0 (H-09): the empty class of an H3 grid is keyed as the outline it is drawn as
+                            out.append(f'<path d="{d}" fill="none" stroke="{it["stroke"]}" stroke-width="{sd.num(float(it.get("width_mm") or 0.25))}" stroke-linejoin="round"/>')
+                        else:
+                            out.append(f'<path d="{d}" fill="{it["fill"]}" stroke="{it["stroke"]}" stroke-width="0.15" stroke-linejoin="round"{" " + opa if opa else ""}/>')
                     elif it.get("outline") or it.get("dash") or it.get("stroke_opacity") is not None:
                         # 1.2.0 (Day 9 issues 7, 9): an outline layer's swatch is its edge, as drawn: no land box, its width, dash and strength
                         sw_w = min(max(float(it.get("width_mm") or 0.3), 0.15), 0.8)
@@ -1632,6 +1667,9 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
     if frame is not None:
         fit_mode = "fixed"                                     # a sheet's shared frame: no move, no shrink
     fit_limit = float(ext_cfg.get("fit_cover_pct", FIT_COVER_PCT)) / 100.0
+    area_filling = any(l.role in ("choropleth", "hexbin", "grid", "raster") or getattr(l, "cells_layer", False) for l in plan.layers)
+    if getattr(plan, "region", None) is not None and area_filling and "fit_cover_pct" not in ext_cfg:
+        fit_limit = min(fit_limit, AREA_FILL_COVER_PCT / 100.0)    # 2.6.0 (V-05): furniture never covers the subject region of an area-filling map
     forced_pan = ext_cfg.get("fit_pan_mm")                     # an atlas or a sheet gives every page one shared move
     focus_name = (spec.get("focus") or {}).get("area") if isinstance(spec.get("focus"), dict) else None
     focus_geoms = None
@@ -1639,6 +1677,11 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
         if focus_name:
             fl = [l for l in plan.layers if l.id == focus_name and l.kind == "polygon"]
             focus_geoms = lo.layout_parts(np.asarray([g for l in fl for g in l.gdf.geometry.values if g is not None and not g.is_empty], dtype=object)) if fl else None
+        if (focus_geoms is None or not len(focus_geoms)) and getattr(plan, "region", None) is not None:
+            import geopandas as _gpd                           # 2.6.0 (V-05): the cover is measured against the region the map is about
+            rg = _gpd.GeoSeries([plan.region.geometry], crs="EPSG:4326").to_crs(plan.crs)
+            focus_geoms = lo.layout_parts(np.asarray([g for g in rg.values if g is not None and not g.is_empty], dtype=object))
+            focus_name = "region"
         if focus_geoms is None or not len(focus_geoms):
             focus_name, focus_geoms = None, data_geoms
     focus_tree = (data_tree if focus_geoms is data_geoms else (shapely.STRtree(focus_geoms) if focus_geoms is not None and len(focus_geoms) else None))
@@ -2127,6 +2170,7 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
             els_[name] = {**(els_.get(name) or {}), "on": False}
     spec, tpl, t = plan.spec, plan.tpl, plan.tokens
     plan.__dict__["_hatch"] = {}
+    sb.REGION_COUNTRIES.set(list(plan.region.countries) if getattr(plan, "region", None) is not None else None)   # 3.0.0 (G-10)
     if getattr(plan, "style", None) is not None:          # 1.4.0: the plan's pack faces (another plan may have been prepared since)
         tm.use_type({r: f_ for r, f_ in plan.style.type.items() if not f_.get("brand")} or None)
     W, H = tpl["size_mm"]
@@ -2511,12 +2555,16 @@ def select_places(gdf, cfg: dict, tier: dict):
     if cfg["places"] == "none" or not len(gdf):
         return gdf.iloc[0:0].copy()
     g = gdf.copy()
+    named = message_places(g, cfg.get("_message")) if cfg.get("message_places", True) else set()
     rank = tier["places"]
     if rank is not None and "scalerank" in g.columns:
-        g = g[g["scalerank"].astype(float) <= rank]
+        keep = g["scalerank"].astype(float) <= rank
     else:
-        g = g[pd.to_numeric(g["pop_max"], errors="coerce").fillna(0) >= cfg["min_pop"]]
-    g = g.copy()
+        keep = pd.to_numeric(g["pop_max"], errors="coerce").fillna(0) >= cfg["min_pop"]
+    if named:                                         # 3.0.0 (G-08, V-07): a place the message names is labelled at any scale tier
+        keep = keep | g["name"].isin(named)
+    g = g[keep].copy()
+    g["_named"] = g["name"].isin(named)
     g["_tier"] = [place_tier(a, f, p) for a, f, p in zip(g.get("adm0cap", [0] * len(g)), g.get("featurecla", [""] * len(g)), g["pop_max"], strict=True)]
     if cfg["places"] == "capitals":
         g = g[g["_tier"] == "capital"]
@@ -2526,11 +2574,47 @@ def select_places(gdf, cfg: dict, tier: dict):
         keys = [c for c in ("name", "nameascii") if c in g.columns]
         g = g[[not any(mp.name_excluded(v, cfg["exclude"]) for v in row) for row in zip(*(g[c] for c in keys), strict=True)]]
     pop = pd.to_numeric(g["pop_max"], errors="coerce").fillna(0)
-    g["_prio"] = [NAME_TIER_PRIORITY[t] * 1e9 + p for t, p in zip(g["_tier"], pop, strict=True)]
+    g["_prio"] = [NAME_TIER_PRIORITY[t] * 1e9 + p + (1e12 if n else 0) for t, p, n in zip(g["_tier"], pop, g["_named"], strict=True)]
     g = g.sort_values("_prio", ascending=False)
     if cfg["max"] is not None:
         g = g.head(int(cfg["max"]))
     return g
+
+
+def admin_names_layer(load):
+    """The admin-1 areas names come from, worldwide (3.0.0, G-07): the Census states (1:20,000,000) for the United States and Natural Earth's
+    1:10m admin-1 for every other country, in one table with a `name` column. A Washington and a British Columbia map name their admin areas
+    from this same path."""
+    import geopandas as _gpd
+    import pandas as _pd
+    us = load("states")
+    world = load("admin1_world")
+    parts = []
+    if us is not None and len(us):
+        u = us.rename(columns={"NAME": "name"}) if "NAME" in us.columns else us
+        u = u.assign(iso_a2="US")
+        parts.append(u[["name", "iso_a2", u.geometry.name]].rename_geometry("geometry") if u.geometry.name != "geometry" else u[["name", "iso_a2", "geometry"]])
+    if world is not None and len(world):
+        w = world[world["iso_a2"] != "US"] if "iso_a2" in world.columns else world
+        if "name" in w.columns:
+            parts.append(w)                                 # the language columns stay: admin_unit_name chooses the name by names.language
+    if not parts:
+        return None
+    crs = parts[0].crs
+    return _gpd.GeoDataFrame(_pd.concat([p.to_crs(crs) for p in parts], ignore_index=True), geometry="geometry", crs=crs)
+
+
+def message_places(gdf, message) -> set:
+    """The gazetteer's place names the message names: whole words, capitalised as written (Sandpoint, Moscow), three letters or more."""
+    import re as _re
+    msg = str(message or "")
+    if not msg.strip() or "name" not in gdf.columns:
+        return set()
+    out = set()
+    for n in set(gdf["name"].dropna().astype(str)):
+        if len(n) >= 3 and n[:1].isupper() and _re.search(r"(?<!\w)" + _re.escape(n) + r"(?!\w)", msg):
+            out.add(n)
+    return out
 
 
 WATER_WORDS = {"river", "lake", "creek", "reservoir", "bay", "sound", "sea", "gulf", "rio", "the", "of"}
@@ -2567,7 +2651,7 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
     import shapely
     from shapely.geometry import box as sbox
     t = plan.tokens
-    cfg = mp.names_config(plan.spec)
+    cfg = {**mp.names_config(plan.spec), "_message": plan.spec.get("message")}
     stats: dict = {"on": cfg["on"]}
     import treatments as trm
     glyphs = "place_glyphs" in (getattr(plan, "treatments", None) or {})     # 1.4.0 (R2-TREAT): town glyphs in place of the dots
@@ -2592,13 +2676,22 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
     out_col = map_focus.outside_color(t)
     fill_at = map_focus.fill_lookup(plan, frame, to_sheet) if getattr(plan, "look", "classic") != "classic" else (lambda x, y: None)
 
+    _halo_k = [1.0]
+
     def paint(col: str, x: float, y: float) -> tuple[str, str]:
         """(text colour, halo colour) for a name at (x, y). On a class fill (0.18.0): the brand's dark or light label colour, whichever reads
         better on that fill, with a halo in the fill's own colour, so the halo still breaks the boundaries under the letters but no white
         sticker sits on a dark class. Elsewhere: the colour asked for (or the outside-the-study-area neutral) on the usual ground halo."""
         f_ = fill_at(x, y)
+        _halo_k[0] = 1.0
         if f_ is None:
             return fc(col, x, y), ground
+        if cfg.get("ink", "uniform") == "uniform":
+            # 2.6.0 (V-06, Day 20 issue 12): one ink over every class, dark on a page-colour halo; over a class the dark ink would not
+            # read on, the halo widens instead of the ink switching to white
+            if cf.cl.contrast(t["label"], f_) < 4.5:
+                _halo_k[0] = UNIFORM_HALO_WIDEN
+            return fc(col, x, y), t["background"]
         return cf.text_on(f_, t["label"], t["background"]), f_
 
     def fc(col: str, x: float, y: float) -> str:
@@ -2714,7 +2807,7 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                 else:
                     out.append(f'<circle cx="{sd.num(cx)}" cy="{sd.num(cy)}" r="{sd.num(CITY_DOT_MM / 2)}" fill="{paint(t["label"], cx, cy)[0]}"/>')
                 tc_, hc_ = paint(t["label"], p.x, p.y)
-                out.append(sd.text(p.x, p.y, p.text, size, tc_, weight=p.weight or 400, anchor=p.anchor, halo=hc_, halo_w=max(0.3, size * PT * 0.2),
+                out.append(sd.text(p.x, p.y, p.text, size, tc_, weight=p.weight or 400, anchor=p.anchor, halo=hc_, halo_w=max(0.3, size * PT * 0.2) * _halo_k[0],
                                    tracking=(pt * PT * 0.06 if tr == "capital" else 0.0), extra=f' data-name="place" data-tier="{tr}"'))
                 taken.append(p.rect.grown(le.PAD_MM))
                 alt_ = (p.style or {}).get("alt")
@@ -2810,7 +2903,7 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
             wstats.update(res.as_dict() | {"candidates": len(cands)})
             for p in res.placed:
                 tc_, hc_ = paint(wcol, p.x, p.y)
-                out.append(sd.text(p.x, p.y, p.text, wsize, tc_, anchor=p.anchor, halo=hc_, halo_w=0.3, slant=WATER_SLANT_DEG,
+                out.append(sd.text(p.x, p.y, p.text, wsize, tc_, anchor=p.anchor, halo=hc_, halo_w=0.3 * _halo_k[0], slant=WATER_SLANT_DEG,
                                    extra=' data-name="water" data-tier="water"'))
                 taken.append(p.rect.grown(le.PAD_MM))
             counts["water"] = len(res.placed)
@@ -2819,10 +2912,15 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
     # ---- admin (state and province names)
     astats = {"candidates": 0, "placed": 0, "dropped_collision": 0, "dropped_size": 0, "dropped_outside": 0}
     if cfg["admin"] and tier["tier"] != "world":
-        wgs = mp._wgs84_extent(plan)
-        in_us = -180 <= wgs[0] and wgs[2] <= -60 and 15 <= wgs[1] and wgs[3] <= 72
-        adm = load("states" if in_us else "admin1")
-        name_col = "NAME" if in_us else "name"
+        if getattr(plan, "look", "classic") == "classic":   # the 0.16 look keeps its North America box: US states inside it, admin-1 outside
+            wgs = mp._wgs84_extent(plan)
+            in_us = -180 <= wgs[0] and wgs[2] <= -60 and 15 <= wgs[1] and wgs[3] <= 72
+            adm = load("states" if in_us else "admin1")
+            if adm is not None and in_us and "NAME" in adm.columns:
+                adm = adm.rename(columns={"NAME": "name"}).assign(iso_a2="US")
+        else:
+            adm = admin_names_layer(load)               # 3.0.0 (G-07): one global admin-1 table, the US states as its US rows; no North America box
+        name_col = "name"
         if adm is not None and len(adm) and name_col in adm.columns:
             acol, aop = admin_label_color(t)
             asize = max(floor, pt)
@@ -2846,7 +2944,7 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                         inside = free
                 p = shapely.point_on_surface(inside)
                 minx, _, maxx, _ = inside.bounds
-                cands.append(le.Candidate(mp.upper_name(str(adm[name_col].iloc[i]) if in_us else mp.admin_unit_name(adm.iloc[i], cfg, name_col)), "area", float(p.x), float(p.y), share, avail_w=maxx - minx,
+                cands.append(le.Candidate(mp.upper_name(str(adm[name_col].iloc[i]) if str(adm["iso_a2"].iloc[i] if "iso_a2" in adm.columns else "") == "US" else mp.admin_unit_name(adm.iloc[i], cfg, name_col)), "area", float(p.x), float(p.y), share, avail_w=maxx - minx,
                                           weight=500, tracking=track, style={"tier": "admin"}))
             if len(cands) < 2 and tier["tier"] in ("local", "metro"):
                 cands = []                                    # a city map inside one state does not say which state it is in; the title and the locator do
@@ -2858,7 +2956,7 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                 astats.update(res.as_dict() | {"candidates": len(cands)})
                 for p in res.placed:
                     tc_, hc_ = paint(acol, p.x, p.y)
-                    out.append(sd.text(p.x, p.y, p.text, asize, tc_, weight=500, anchor=p.anchor, halo=hc_, halo_w=0.35, tracking=track,
+                    out.append(sd.text(p.x, p.y, p.text, asize, tc_, weight=500, anchor=p.anchor, halo=hc_, halo_w=0.35 * _halo_k[0], tracking=track,
                                        extra=' data-name="admin" data-tier="admin"' + (f' fill-opacity="{sd.num(aop)}"' if aop < 1 else "")))
                     taken.append(p.rect.grown(le.PAD_MM))
                 counts["admin"] = len(res.placed)

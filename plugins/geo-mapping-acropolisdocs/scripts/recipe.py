@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""recipe: a whole MapSpec from a recipe in data/recipes/ (2.6.0, spec global-regions H-13), so a map the plugin has made before needs no spec
+written by hand.
+
+    recipe.py list
+    recipe.py make carrier-choice-h3 --region "Idaho Panhandle" [--technology 5GNR] [--speed 35/3] [--template auto-slide] --out map.yaml
+
+--region takes a named region (the gazetteer) or ISO admin codes (US-WA or US-WA,CA-BC). The MapSpec is written with the region block, the
+message and the layer the recipe describes; lint and build it as any other.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gmap_common as gc  # noqa: E402
+
+TECH_LABEL = {"5GNR": "5G", "4GLTE": "4G LTE", "3G": "3G"}
+
+
+def recipes() -> dict:
+    out = {}
+    for p in sorted((gc.plugin_root() / "data" / "recipes").glob("*.yaml")):
+        d = gc.load_mapspec_text(p.read_text(encoding="utf-8")) or {}       # YAML 1.2: the key `on` stays a key
+        if d.get("recipe"):
+            out[d["recipe"]["id"]] = {**d, "_path": str(p)}
+    return out
+
+
+def region_block(text: str) -> dict:
+    import region as region_mod
+    codes = [c.strip() for c in str(text).split(",") if c.strip()]
+    if codes and all(region_mod.CODE.match(c.upper()) for c in codes):
+        return {"admin": codes[0] if len(codes) == 1 else codes}
+    return {"place": str(text).strip()}
+
+
+def _fill(obj, vals: dict):
+    if isinstance(obj, str):
+        m = re.fullmatch(r"\{(\w+)\}", obj)
+        if m and m.group(1) in vals and not isinstance(vals[m.group(1)], str):
+            return vals[m.group(1)]
+        return re.sub(r"\{(\w+)\}", lambda m: str(vals.get(m.group(1), m.group(0))), obj)
+    if isinstance(obj, dict):
+        return {k: _fill(v, vals) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_fill(v, vals) for v in obj]
+    return obj
+
+
+def make(name: str, region_text: str, **opts) -> dict:
+    rs = recipes()
+    if name not in rs:
+        raise SystemExit(f"recipe: no recipe '{name}' (recipes: {', '.join(rs)})")
+    r = rs[name]
+    d = dict(r["recipe"].get("defaults") or {})
+    d.update({k: v for k, v in opts.items() if v})
+    import region as region_mod
+    blk = region_block(region_text)
+    reg = region_mod.resolve(blk)
+    slug = re.sub(r"[^a-z0-9]+", "-", reg.name.lower()).strip("-")[:40]
+    vals = {**d, "region_block": blk, "region_name": reg.name, "technology_label": TECH_LABEL.get(str(d.get("technology")), str(d.get("technology"))),
+            "id": f"{name}-{slug}"}
+    spec = _fill(r["mapspec"], vals)
+    return {"spec": spec, "region": reg.record(), "notes": reg.notes, "second_panel": r["recipe"].get("second_panel")}
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="op", required=True)
+    sub.add_parser("list")
+    m = sub.add_parser("make")
+    m.add_argument("name")
+    m.add_argument("--region", required=True)
+    m.add_argument("--technology")
+    m.add_argument("--speed")
+    m.add_argument("--template")
+    m.add_argument("--out", required=True)
+    a = ap.parse_args(argv)
+    if a.op == "list":
+        print(json.dumps({k: {"title": v["recipe"].get("title"), "asks": v["recipe"].get("asks")} for k, v in recipes().items()}, indent=2))
+        return gc.EXIT_OK
+    import region as region_mod
+    try:
+        got = make(a.name, a.region, technology=a.technology, speed=a.speed, template=a.template)
+    except region_mod.RegionError as ex:
+        print(json.dumps({"ok": False, "findings": [{"id": ex.rule, "severity": "BLOCK", "message": str(ex)}]}, indent=2))
+        return ex.code
+    Path(a.out).write_text(gc.dump_mapspec(got["spec"]), encoding="utf-8")
+    gc.ledger_note(outputs=[a.out])
+    print(json.dumps({"ok": True, "out": a.out, "region": got["region"]["name"], "definition": got["region"]["definition"], "notes": got["notes"],
+                      "second_panel": got["second_panel"]}, indent=2))
+    return gc.EXIT_OK
+
+
+if __name__ == "__main__":
+    sys.exit(main())

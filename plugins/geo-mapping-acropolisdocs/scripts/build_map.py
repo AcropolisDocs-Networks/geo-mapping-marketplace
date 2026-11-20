@@ -134,6 +134,13 @@ def outside_raster_window(report: dict, tol: float = 0.002) -> tuple | None:
     return (x0 - pad, y0 - pad, x1 + pad, y1 + pad)
 
 
+def summary_line(res: dict) -> str:
+    """2.4.0 (T-06): one line that says what was built and, loudly, what the spec asked for that is not on the map."""
+    n = len(res.get("files") or [])
+    head = f"build_map: {res.get('id')}: {'blocked' if res.get('blocked') else ('draft' if res.get('draft') else f'{n} file(s)')}"
+    return head + "".join(f"; {d}" for d in res.get("degraded") or [])
+
+
 def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, brand: str | None = None, template: str | None = None,
           strict: bool = False, mode: str | None = None, keep: bool = False, export_options: dict | None = None, draft: bool = False,
           mute: bool = False, spec_edit=None) -> dict:
@@ -223,8 +230,15 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     result["story"] = story
 
     def finish():
-        findings.sort(key=lambda f: (SEV.get(f["severity"], 3), f["id"]))
+        findings.sort(key=lambda f: (SEV.get(f["severity"], 3), not f.get("degraded"), f["id"]))   # 2.4.0 (T-06): a missing relief leads the warnings
         result["findings"] = findings
+        result["degraded"] = list(getattr(plan, "degraded", []) or [])
+        # 2.5.0 (I-22): a fetched DEM is never part of the hand-back; its request is, so the person's computer fetches it again if it needs it
+        result["refetch"] = [{"layer": b.get("layer_id"), **((b.get("record") or {}).get("terrain") or {}).get("request", {})}
+                             for b in getattr(plan, "basemap", []) or [] if b.get("kind") == "hillshade"
+                             and ((b.get("record") or {}).get("terrain") or {}).get("request")]
+        result["summary"] = summary_line(result)
+        gc.ledger_note(outputs=[f for f in result.get("files") or [] if Path(f).is_file()], findings=findings, degraded=result["degraded"])
         result["blocked"] = any(f["severity"] == "BLOCK" for f in findings)
         result["map_text"] = map_text_summary(plan, findings)
         story["callout"] = story_lint.summary_lines(findings)
@@ -395,6 +409,8 @@ def main(argv=None) -> int:
         print(f"build_map: {ex}", file=sys.stderr)
         return ex.code
     print(json.dumps(res, indent=2, default=str))
+    if res.get("summary"):
+        print(res["summary"], file=sys.stderr)                       # 2.4.0 (T-06): "relief missing: <reason>" is never only a finding in a list
     for ln in ((res.get("map_text") or {}).get("callout") or []) + ((res.get("story") or {}).get("callout") or []):
         print(ln, file=sys.stderr)                                  # map text §11.1 and the message check (1.22.0): listed in chat, never blocking
     return gc.EXIT_LINT if res["blocked"] else gc.EXIT_OK

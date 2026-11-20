@@ -161,6 +161,26 @@ NAMED_MAX_UNIQUE = 5000          # a text column with more distinct values than 
 NAMED_MAX_COLUMNS = 16
 
 
+# 2.4.0 (V-03, Day 20 issue 9): class values that are everyday words ("almost none" is not a name). They match the message only when it quotes
+# them or capitalises them mid-sentence ("the 'None' class", "where None is drawn").
+VALUE_STOP = {"none", "other", "others", "unknown", "yes", "no", "all", "n/a", "na", "null", "nil", "zero", "some", "many", "few", "high", "low",
+              "medium", "mid", "partial", "full", "mixed", "missing", "not", "nothing", "everything", "any"}
+QUOTES = "\"'\u2018\u2019\u201c\u201d"
+
+
+def _quoted_or_capitalised(v: str, msg: str) -> bool:
+    w = re.escape(v)
+    if re.search("[" + QUOTES + "]" + w + "[" + QUOTES + "]", msg, re.I):
+        return True
+    for m in re.finditer(r"(?<!\w)" + w + r"(?!\w)", msg):
+        word = m.group(0)
+        before = msg[:m.start()].rstrip()
+        if word[:1].isupper() and before and before[-1] not in ".!?:":     # capitalised, and not because it starts a sentence
+            return True
+    return False
+
+
+
 def named_in(message, texts) -> set[str]:
     """The texts the message names: whole words, case ignored, three characters or more (two when one is a digit: n41, I5)."""
     msg = str(message or "")
@@ -172,6 +192,10 @@ def named_in(message, texts) -> set[str]:
         if len(v_) < 3 and not (len(v_) == 2 and any(ch.isdigit() for ch in v_)):
             continue
         if v_.lower() in STOP:
+            continue
+        if v_.lower() in VALUE_STOP:
+            if _quoted_or_capitalised(v_, msg):
+                out.add(v)
             continue
         if re.search(r"(?<!\w)" + re.escape(v_) + r"(?!\w)", msg, re.I):
             out.add(v)

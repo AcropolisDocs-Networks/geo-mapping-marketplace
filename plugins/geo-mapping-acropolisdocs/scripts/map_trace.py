@@ -312,7 +312,7 @@ def calls_of(records: list[dict]) -> tuple[list[dict], list[dt.datetime], int]:
             for c in msg.get("content") or []:
                 if isinstance(c, dict) and c.get("type") == "tool_use" and c.get("id") not in calls:
                     calls[c["id"]] = {"id": c["id"], "tool": c.get("name") or "?", "input": c.get("input") if isinstance(c.get("input"), dict) else {},
-                                      "start": ts, "end": None, "result": None, "is_error": False}
+                                      "start": ts, "end": None, "result": None, "is_error": False, "cwd": d.get("cwd")}
                     order.append(c["id"])
         elif d.get("type") == "user":
             content = msg.get("content")
@@ -405,10 +405,30 @@ def classify(call: dict, inv: dict, pname: str, window: str | None) -> dict:
     return ev
 
 
+def json_result(t: str | None) -> dict | None:
+    """2.4.0 (X-01): an MCP tool's result is a JSON object; {"ok": false, ...} is a failed call even though the tool call itself returned."""
+    s = (t or "").strip()
+    if not s.startswith("{"):
+        return None
+    try:
+        d = json.loads(s)
+    except ValueError:
+        m = re.match(r'\{\s*"ok"\s*:\s*(true|false)', s)
+        return {"ok": m.group(1) == "true", "_partial": True} if m else None
+    return d if isinstance(d, dict) else None
+
+
+JSON_KIND = {"lint": "lint-block", "usage": "usage", "input": "usage", "refused": "refused", "service": "service", "network": "network",
+             "timeout": "timeout", "credential": "service", "environment": "environment", "brand": "brand"}
+
+
 def status_of(call: dict, is_last_map_trace: bool) -> str:
     if call["result"] is None:
         return "self" if is_last_map_trace else "orphan"
     t = call["result"]
+    jr = json_result(t)
+    if jr is not None and jr.get("ok") is False:
+        return "failed"
     if (t.lstrip().startswith("<tool_use_error>") or "Permission for this action was denied" in t or "permission rule" in t.lower() and "denied" in t.lower()
             or t.strip().startswith("This command requires approval")):              # 1.17.2: a headless session's unapproved call
         return "blocked"
@@ -478,6 +498,9 @@ def error_class(text: str) -> tuple[str, str | None, str | None]:
             exc = m.group(1)
             break
     low = t.lower()
+    jr = json_result(t)
+    if jr is not None and jr.get("ok") is False:          # 2.4.0 (X-01): the class comes from the result's own error_kind
+        return JSON_KIND.get(str(jr.get("error_kind") or "lint"), "lint-block"), site, exc
     if HOOK_STOP in t:                                     # 1.17.2: the plugin's own pre-export hook stopped the build before it ran
         return "lint-block", None, None
     if ("no such file or directory" in low or "can't open file" in low) and plugin_moved(t):
@@ -541,11 +564,11 @@ def findings_in(text: str) -> dict[str, str]:
     out: dict[str, str] = {}
     rank = {"INFO": 0, "WARN": 1, "BLOCK": 2, "?": -1}
     for fid, sev in FINDING_JSON.findall(text or ""):
-        if rank[sev] > rank.get(out.get(fid, "?"), -1):
-            out[fid] = sev
+        out[fid] = sev                 # 2.4.0 (X-05): the finding object the build printed last wins (after its own downgrades), not the highest
+    from_json = set(out)
     for a, b, c, d in FINDING_NEAR.findall(text or ""):
         fid, sev = (b, a) if b else (c, d)
-        if rank[sev] > rank.get(out.get(fid, "?"), -1):
+        if fid not in from_json and rank[sev] > rank.get(out.get(fid, "?"), -1):
             out[fid] = sev
     for fid in FINDING.findall(text or ""):
         # 1.17.2: the pre-export check lists blocking findings only; 1.19.0: else the severity the plugin's code raises the id with
@@ -640,6 +663,134 @@ def apply_hook_log(events: list[dict], log: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------------------------------------------- the trace
+# ---------------------------------------------------------------------------------------------------------------- 2.4.0: the run ledger
+LEDGER_SLACK_S = 5.0
+DEGRADED_TEXT = re.compile(r"\brelief missing\b|\"degraded\":\s*\[\s*\"", re.I)
+
+
+def ledger_dirs(records: list[dict]) -> list[Path]:
+    """Where the plugin's run ledger (gmap_common.ledger_note, X-02) may be: this process's own, and .geo-mapping/traces/runs under every
+    folder the session's calls ran from."""
+    out: list[Path] = []
+    try:
+        out.append(gc.ledger_dir())
+    except Exception:  # noqa: BLE001
+        pass
+    for c in dict.fromkeys(str(d.get("cwd")) for d in records if d.get("cwd")):
+        out.append(Path(c) / gc.WORKDIR_NAME / "traces" / "runs")
+    seen, keep = set(), []
+    for d in out:
+        try:
+            k = str(d.resolve())
+        except OSError:
+            continue
+        if k not in seen and d.is_dir():
+            seen.add(k)
+            keep.append(d)
+    return keep
+
+
+def read_ledger(records: list[dict], lo: dt.datetime | None = None, hi: dt.datetime | None = None) -> tuple[list[dict], list[str]]:
+    rows, files = [], []
+    for d in ledger_dirs(records):
+        for f in sorted(d.glob("*.ndjson")):
+            files.append(str(f))
+            try:
+                lines = f.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            for ln in lines:
+                try:
+                    r = json.loads(ln)
+                except ValueError:
+                    continue
+                st = parse_ts(r.get("start"))
+                if not st or (lo and st < lo - dt.timedelta(minutes=1)) or (hi and st > hi + dt.timedelta(minutes=1)):
+                    continue
+                r["_start"], r["_end"] = st, parse_ts(r.get("end")) or st
+                rows.append(r)
+    return rows, files
+
+
+def apply_ledger(events: list[dict], rows: list[dict]) -> int:
+    """Join each map call to the ledger lines its scripts wrote (same script, started inside the call's window). A line with a non-zero exit
+    marks the call failed whatever the shell printed (`| tail`, `> file`, `2>&1`); a line with dropped items marks it degraded (X-04).
+    -> how many calls the ledger matched."""
+    used: set = set()
+    n = 0
+    slack = dt.timedelta(seconds=LEDGER_SLACK_S)
+    for e in events:
+        if not e.get("lane") or not e.get("scripts") or not e.get("_start"):
+            continue
+        hi = (e.get("_end") or e["_start"]) + slack
+        mine = [i for i, r in enumerate(rows) if i not in used and r.get("script") in e["scripts"] and e["_start"] - slack <= r["_start"] <= hi]
+        if not mine:
+            continue
+        n += 1
+        used |= set(mine)
+        mrows = [rows[i] for i in mine]
+        e["ledger"] = [{k: r.get(k) for k in ("script", "exit", "seconds", "degraded") if r.get(k) is not None} for r in mrows]
+        e["_ledger_outputs"] = [o for r in mrows for o in (r.get("outputs") or [])]
+        e["_ledger_specs"] = [r.get("spec") for r in mrows if r.get("spec")]
+        e["_ledger_outs"] = [r.get("out") for r in mrows if r.get("out")]
+        bad = [r for r in mrows if r.get("exit") not in (0, None)]
+        if bad and e["status"] in ("ok", "degraded"):
+            r = bad[-1]
+            code = int(r["exit"]) if isinstance(r["exit"], int) else 1
+            cls = "crash" if r.get("exception") else EXIT_CLASS.get(code, "failed")
+            e.update(status="failed", error_class=cls, exit_code=code, exception=r.get("exception"), crash_site=None, via="ledger",
+                     evidence=f"{r['script']}.py exited {code}" + (f" ({r['exception']})" if r.get("exception") else "")
+                     + "; the shell line hid it, the plugin's run ledger recorded it")
+            for fid, sev in (r.get("findings") or {}).items():
+                e.setdefault("findings", {})[fid] = sev or "?"
+        drop = [d for r in mrows for d in (r.get("degraded") or [])]
+        if drop and e["status"] == "ok":
+            e.update(status="degraded", degraded=list(dict.fromkeys(drop)))
+    return n
+
+
+# 2.4.0 (X-06): hand-written glue between plugin calls is a signal (spec principle 6): a feature the plugin lacked
+GLUE_LIBS = ("geopandas", "h3", "shapely", "rasterio", "pyogrio", "fiona", "duckdb", "pyproj", "osgeo")
+HAND_FETCH = re.compile(r"(?:curl|wget|Invoke-WebRequest|requests\.get|httpx\.get|urlopen)[^\n]{0,200}?(ImageServer|exportImage|/WCS|GetCoverage|\.tif\b|/downloadFile/)", re.I)
+
+
+def outside_work(calls: list[dict], events: list[dict], inv: dict) -> list[dict]:
+    """The session's own Python that used geodata libraries or the plugin's modules, and hand fetches of data the plugin fetches, between
+    plugin calls: prep.py, an inline heredoc, a curl to an ImageServer. -> [{n, what, libraries}] (names only, never the code)."""
+    written: dict[str, set] = {}
+    plugin_mods = set(inv.get("scripts") or [])
+    out = []
+    for c, e in zip(calls, events, strict=False):
+        inp = c.get("input") or {}
+        if c["tool"] in ("Write", "Edit") and str(inp.get("file_path", "")).endswith(".py"):
+            body = str(inp.get("content") or inp.get("new_string") or "")
+            libs = {m for m in IMPORT.findall(body) if m in GLUE_LIBS or m in plugin_mods}
+            name = Path(str(inp["file_path"])).name
+            written.setdefault(name, set()).update(libs)
+            continue
+        cmd = _command(c)
+        if not cmd or (e.get("lane") and e.get("scripts")):
+            continue
+        libs: set = set()
+        what = None
+        for m in OTHER_RUN.finditer(shell_calls.normalized(cmd)):
+            f = m.group(1)
+            if f and Path(f).name in written and Path(f).name not in {f"{s}.py" for s in plugin_mods}:
+                libs |= written[Path(f).name]
+                what = Path(f).name
+        if re.search(r"python3?[^\n]*(?:\s-\s*<<|\s-c\s)", cmd):
+            inl = {m for m in IMPORT.findall(cmd.replace(";", "\n")) if m in GLUE_LIBS or m in plugin_mods}
+            if inl:
+                libs |= inl
+                what = what or "inline Python"
+        hm = HAND_FETCH.search(cmd)
+        if hm:
+            out.append({"n": e["n"], "what": f"hand fetch ({hm.group(1)})", "libraries": []})
+        if what and libs:
+            out.append({"n": e["n"], "what": what, "libraries": sorted(libs)})
+    return out
+
+
 def window_filter(calls: list[dict], times: list[dt.datetime], since: str | None, until: str | None):
     if not times:
         return calls, times, None
@@ -724,6 +875,11 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     # 1.17.2: the plugin's own hook log (hooks/map_timing.py and friends): measured times, stops and reminders
     log, log_files = read_hook_log(path.stem, records)
     hk = apply_hook_log(events, log)
+    for e, c in zip(events, calls, strict=False):           # 2.4.0 (X-04): a build that exited 0 but dropped what the spec asked for
+        if e["status"] == "ok" and e["lane"] and not is_report(e) and DEGRADED_TEXT.search(c["result"] or ""):
+            e.update(status="degraded", degraded=degraded_items(c["result"] or ""))
+    led_rows, led_files = read_ledger(records, *((min(times), max(times)) if times else (None, None)))
+    led_matched = apply_ledger(events, led_rows)
     mapev = [e for e in events if e["lane"]]
     lo_t, hi_t = (min(times), max(times)) if times else (None, None)
     reminders = sum(1 for r in log if r.get("e") == "reminder" and (not win or lo_t is None or lo_t <= _ms_time(r["t"]) <= hi_t + dt.timedelta(minutes=5)))
@@ -801,7 +957,7 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             row["in_failed"] += e["status"] == "failed"
             if {"BLOCK": 2, "WARN": 1, "INFO": 0}.get(sev, -1) > {"BLOCK": 2, "WARN": 1, "INFO": 0}.get(row["severity"], -1):
                 row["severity"] = sev
-    counted = [e for e in mapev if e["status"] in ("ok", "failed")]
+    counted = [e for e in mapev if e["status"] in ("ok", "failed", "degraded")]
     failed = [e for e in mapev if e["status"] == "failed"]
     # 1.21.0 (Day 18 trace): the error rate is the plugin's: a failure set by the session's own command (shell-tail, inline-script) is listed
     # with its evidence but not counted against the plugin
@@ -812,13 +968,15 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
         rework_runs = sr.rework(runs)
     except Exception:  # noqa: BLE001
         runs, rework_runs = [], {}
-    fix = fix_spec(failed, events)
+    fix = fix_spec(failed, events) + degraded_spec(mapev, start=len(groups_of(failed)) + 1)
     evals = [e for e in events if e.get("evaluation")]
-    outputs = session_outputs(calls, events, records)
-    return {"evaluation_calls": {"calls": len(evals), "seconds": round(sum(e["seconds"] or 0.0 for e in evals), 1)}, "outputs": outputs,"plugin": pname, "version": _version(), "transcript": path.stem, "found_by": how, "files_read": files, "window": win,
+    outputs, miss = session_outputs(calls, events, records, why=True)
+    glue = outside_work(calls, events, inv)
+    return {"outside_plugin": glue, "outputs_missed": miss, "run_ledger": {"files": [Path(f).name for f in led_files], "rows": len(led_rows), "calls_matched": led_matched},
+            "evaluation_calls": {"calls": len(evals), "seconds": round(sum(e["seconds"] or 0.0 for e in evals), 1)}, "outputs": outputs,"plugin": pname, "version": _version(), "transcript": path.stem, "found_by": how, "files_read": files, "window": win,
             "first": first.isoformat() if first else None, "last": last.isoformat() if last else None,
             "calls": {"total": len(events), "map": len(mapev), "other": len(events) - len(mapev)},
-            "status": {s: sum(1 for e in mapev if e["status"] == s) for s in ("ok", "failed", "blocked", "orphan", "self")},
+            "status": {s: sum(1 for e in mapev if e["status"] == s) for s in ("ok", "failed", "degraded", "blocked", "orphan", "self")},
             "error_rate": round((len(failed) - len(session_side)) / len(counted), 3) if counted else 0.0, "session_side_failures": len(session_side),
             "user_turns": turns, "run": run,
             "time": {"wall": round(wall), "tools": round(tool_s), "map_tools": round(map_s), "idle": round(idle), "idle_gaps": len(gaps),
@@ -835,55 +993,163 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             "fix_spec": fix, "events": [_public(e) for e in events]}
 
 
-def session_outputs(calls: list[dict], events: list[dict], records: list[dict]) -> list[dict]:
-    """2.2.0: the finished maps this session wrote through the plugin: files named in the results of its map-writing scripts that ran ok and
-    still exist (previews, mute and draft pictures, sidecars and working folders left out by map_evaluate.discover). Paths stay in the
-    outputs list file beside the report; the printed report names only how many."""
-    cwds = [str(d.get("cwd")) for d in records if d.get("cwd")]
-    base = Path(cwds[-1]) if cwds else Path.cwd()
-    found: dict[str, dict] = {}
-    for c, e in zip(calls, events, strict=False):
-        if e.get("status") != "ok" or e.get("evaluation") or not (set(e.get("scripts") or []) & OUTPUT_SCRIPTS):
+# 2.4.0 (MT-01): a relative path ending in an output extension, as build_map prints them under a relative --out ("out/<stem>.png")
+OUTPUT_REL = re.compile(r"""(?<![\w./\\:-])(?:\.{1,2}/)?[\w.-]+(?:[\\/][\w .-]+)*\.(?:png|svg|pdf|html|mp4|gif|webm|jpe?g)(?=["'\s,\]}]|$)""", re.I)
+OUT_ARG = re.compile(r"""--out[=\s]+(?:"([^"]+)"|'([^']+)'|([^\s;&|>]+))""")
+SIDECAR = ".provenance.json"
+
+
+def _resolve(raw: str, base: Path) -> Path:
+    p = Path(raw.replace("\\\\", "\\"))
+    return p if p.is_absolute() else base / p
+
+
+def _in_window(f: Path, lo: dt.datetime | None, hi: dt.datetime | None, slack_s: float = 5.0) -> bool:
+    try:
+        m = dt.datetime.fromtimestamp(f.stat().st_mtime, dt.timezone.utc)
+    except OSError:
+        return False
+    if lo is None:
+        return True
+    return lo - dt.timedelta(seconds=slack_s) <= m <= (hi or lo) + dt.timedelta(seconds=slack_s)
+
+
+def _from_out_folder(folder: Path, lo, hi, spec_id: str | None) -> list[Path]:
+    """MT-02: the maps in a build's --out folder whose provenance sidecar was written during the call (or whose stem carries the spec's id)."""
+    found = []
+    try:
+        side = sorted(folder.glob("*" + SIDECAR))
+    except OSError:
+        return []
+    for s in side:
+        stem = s.name[: -len(SIDECAR)]
+        if not (_in_window(s, lo, hi) or (spec_id and spec_id in stem)):
             continue
+        for ext in ("png", "svg", "pdf", "html", "mp4", "gif", "webm", "jpg", "jpeg"):
+            f = folder / f"{stem}.{ext}"
+            if f.is_file():
+                found.append(f)
+    return found
+
+
+def _spec_id(spec: str | None) -> str | None:
+    if not spec:
+        return None
+    try:
+        return str((gc.load_mapspec(Path(spec)) or {}).get("id") or "") or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def session_outputs(calls: list[dict], events: list[dict], records: list[dict], why: bool = False):
+    """The finished maps this session wrote through the plugin (2.2.0, widened in 2.4.0). Routes, in order, for every map-writing call that ran
+    ok: (1) the outputs the plugin's run ledger recorded for it (X-02, X-03); (2) the paths its printed result names, absolute or relative to
+    the call's working folder (MT-01); (3) the files in its `--out` folder with a provenance sidecar written during the call, or carrying the
+    spec's id, so redirection no longer matters (MT-02). Previews, mute and draft pictures, sidecars and working folders are left out by
+    map_evaluate.discover. With why=True -> (outputs, miss) where miss explains an empty list after finished builds (MT-03)."""
+    cwds = [str(d.get("cwd")) for d in records if d.get("cwd")]
+    default_base = Path(cwds[-1]) if cwds else Path.cwd()
+    found: dict[str, dict] = {}
+    builds, reasons, folders = 0, [], []
+    for c, e in zip(calls, events, strict=False):
+        if e.get("status") not in ("ok", "degraded") or e.get("evaluation") or not (set(e.get("scripts") or []) & OUTPUT_SCRIPTS):
+            continue
+        builds += 1
+        base = Path(c.get("cwd")) if c.get("cwd") else default_base
         cmd = _command(c)
         sm = SPEC_ARG.search(cmd)
         spec = None
+        specs = list(e.get("_ledger_specs") or [])
         if sm:
-            sp = Path(sm.group(1))
-            sp = sp if sp.is_absolute() else base / sp
-            spec = str(sp) if sp.is_file() else None
-        for m in OUTPUT_PATH.finditer(c.get("result") or ""):
-            raw = m.group(0).replace("\\\\", "\\")
-            p = Path(raw)
+            sp = _resolve(sm.group(1), base)
+            specs.insert(0, str(sp))
+        spec = next((s for s in specs if Path(s).is_file()), None)
+        before = len(found)
+
+        def add(p: Path, how: str):
             if p.is_file() and str(p) not in found:
-                found[str(p)] = {"path": str(p), "spec": spec, "call": e["n"]}
+                found[str(p)] = {"path": str(p), "spec": spec, "call": e["n"], "how": how}
+        for o in e.get("_ledger_outputs") or []:
+            add(Path(o), "ledger")
+        text = c.get("result") or ""
+        for m in OUTPUT_PATH.finditer(text):
+            add(Path(m.group(0).replace("\\\\", "\\")), "result")
+        for m in OUTPUT_REL.finditer(text):
+            add(_resolve(m.group(0), base), "result")
+        om = OUT_ARG.search(cmd)
+        outs = list(e.get("_ledger_outs") or [])
+        if om:
+            outs.insert(0, str(_resolve(next(g for g in om.groups() if g), base)))
+        for od in dict.fromkeys(outs):
+            folder = Path(od)
+            folders.append({"out": str(folder), "spec": spec, "call": e["n"]})
+            if folder.is_dir():
+                for f in _from_out_folder(folder, c.get("start"), c.get("end"), _spec_id(spec)):
+                    add(f, "out-folder")
+        if len(found) == before:
+            if not outs:
+                reasons.append("the command names no output folder")
+            elif not any(Path(o).is_dir() for o in outs):
+                reasons.append("the output folder is gone")
+            else:
+                reasons.append("no map with a provenance sidecar was written in the call's window")
     try:
         import map_evaluate as me
-        outs, _fs = me.discover(list(found), {k: v["spec"] for k, v in found.items() if v["spec"]})
+        outs_, _fs = me.discover(list(found), {k: v["spec"] for k, v in found.items() if v["spec"]})
+        res = [{"path": f, "spec": o.get("spec"), "kind": o["kind"], "id": o["id"]} for o in outs_ for f in o["files"]]
     except Exception:  # noqa: BLE001 - the trace stands without the outputs list
-        return []
-    return [{"path": f, "spec": o.get("spec"), "kind": o["kind"], "id": o["id"]} for o in outs for f in o["files"]]
+        res = []
+    if not why:
+        return res
+    miss = None
+    if builds and not res:
+        top = max(set(reasons), key=reasons.count) if reasons else "the files are not where the builds wrote them"
+        live = [f for f in folders if Path(f["out"]).is_dir()][:12]
+        files = []
+        for f in live:
+            d = Path(f["out"])
+            files += [str(p) for p in sorted(d.glob("*.png")) + sorted(d.glob("*.svg")) + sorted(d.glob("*.pdf"))]
+        try:                                                # MT-03: the offer is still made on those builds' --out folders
+            import map_evaluate as me
+            outs_, _fs = me.discover(files, {}) if files else ([], [])
+            fo = [{"path": f, "spec": o.get("spec"), "kind": o["kind"], "id": o["id"]} for o in outs_ for f in o["files"]]
+        except Exception:  # noqa: BLE001
+            fo = []
+        miss = {"builds": builds, "reason": top, "folders": live, "folder_outputs": fo}
+    return res, miss
 
 
 def offer_evaluation(o: dict, stem: Path) -> list[str]:
     """2.2.0 (map evaluator O2): the outputs list beside the report and a map-evaluate plan for it; the lines to print. Nothing runs here:
-    the person sees the cost and says yes first."""
+    the person sees the cost and says yes first. 2.4.0 (MT-03): finished builds with no output found are never a bare 0: the line says how many
+    and why, and the offer is made on those builds' --out folders and specs when they still exist."""
     if not o.get("outputs"):
-        return ["MAP_TRACE_OUTPUTS: 0"]
+        miss = o.get("outputs_missed")
+        if not miss:
+            return ["MAP_TRACE_OUTPUTS: 0"]
+        lines = [f"MAP_TRACE_OUTPUTS: 0 ({miss['builds']} finished build(s), no output found: {miss['reason']})"]
+        outs = miss.get("folder_outputs") or []
+        if not outs:
+            return lines
+        lst = stem.with_suffix(".outputs.json")
+        lst.write_text(json.dumps({"session": o["transcript"], "outputs": outs, "from_out_folders": True}, indent=1), encoding="utf-8")
+        return lines + _plan_lines({**o, "outputs": outs}, stem, lst)
     lst = stem.with_suffix(".outputs.json")
     lst.write_text(json.dumps({"session": o["transcript"], "outputs": o["outputs"]}, indent=1), encoding="utf-8")
     n = len({x["id"] for x in o["outputs"]})
-    lines = [f"MAP_TRACE_OUTPUTS: {n} {lst}"]
+    return [f"MAP_TRACE_OUTPUTS: {n} {lst}"] + _plan_lines(o, stem, lst)
+
+
+def _plan_lines(o: dict, stem: Path, lst: Path) -> list[str]:
     try:
         import pipelines
         p = pipelines.plan("map-evaluate", {"outputs": str(lst)}, {"trace": str(stem.with_suffix(".json"))})
     except Exception as ex:  # noqa: BLE001
-        return lines + [f"MAP_TRACE_EVALUATE: skipped - the evaluation could not be planned ({type(ex).__name__})"]
+        return [f"MAP_TRACE_EVALUATE: skipped - the evaluation could not be planned ({type(ex).__name__})"]
     if not p.get("ok"):
-        return lines + ["MAP_TRACE_EVALUATE: skipped - " + "; ".join(f["message"] for f in p.get("findings") or [])[:200]]
-    lines.append(f"MAP_TRACE_EVALUATE: {p['cost_text']}")
-    lines.append(f'MAP_TRACE_EVALUATE_RUN: run map-evaluate --outputs "{lst}" --option trace="{stem.with_suffix(".json")}" --confirm {p["confirm_token"]}')
-    return lines
+        return ["MAP_TRACE_EVALUATE: skipped - " + "; ".join(f["message"] for f in p.get("findings") or [])[:200]]
+    return [f"MAP_TRACE_EVALUATE: {p['cost_text']}",
+            f'MAP_TRACE_EVALUATE_RUN: run map-evaluate --outputs "{lst}" --option trace="{stem.with_suffix(".json")}" --confirm {p["confirm_token"]}']
 
 
 def durations_note(h: dict) -> str:
@@ -903,6 +1169,39 @@ def _version() -> str | None:
         return gc.build_manifest().get("version")
     except Exception:  # noqa: BLE001
         return None
+
+
+def groups_of(failed: list[dict]) -> set:
+    return {(e["error_class"], e["scripts"][0] if e["scripts"] else (e["mcp_tool"] or e["lane"]), e.get("crash_site") or e.get("evidence", "")[:60]) for e in failed}
+
+
+def degraded_items(text: str) -> list[str]:
+    """What a build dropped, from its result: the `degraded` list of its JSON, or its 'relief missing: <reason>' summary."""
+    out = []
+    m = re.search(r'"degraded":\s*(\[[^\]]*\])', text or "")
+    if m:
+        try:
+            out += [str(x) for x in json.loads(m.group(1))]
+        except ValueError:
+            pass
+    out += [f"relief missing: {r.strip()}" for r in re.findall(r"relief missing:\s*([^\n\"]{0,120})", text or "")]
+    return list(dict.fromkeys(out))[:6] or ["something the spec asked for"]
+
+
+def degraded_spec(mapev: list[dict], start: int = 1) -> list[dict]:
+    """2.4.0 (X-04): a call that exited 0 but dropped something the spec asked for is a finding of its own: disposition product when the
+    plugin could have drawn it (relief from another source, a layer it could not read), input when the spec named something absent."""
+    out = []
+    for i, e in enumerate((e for e in mapev if e["status"] == "degraded"), start):
+        items = e.get("degraded") or []
+        disp = "input" if any("not found" in x or "no such" in x for x in items) else "product"
+        script = e["scripts"][0] if e["scripts"] else (e["mcp_tool"] or e["lane"])
+        out.append({"id": f"F-{i}", "class": "degraded", "disposition": disp, "owner": f"scripts/{script}.py" if script else None,
+                    "crash_site": None, "exception": None, "exit_code": 0, "calls": [e["n"]], "lane": e["lane"],
+                    "evidence": "; ".join(items)[:240], "recovered": False, "severity": "medium",
+                    "diagnosis": "DIAGNOSIS PENDING (F-%d)" % i if disp == "product" else None,
+                    "reading": None if disp == "product" else READING.get(disp, "")})
+    return out
 
 
 def fix_spec(failed: list[dict], events: list[dict]) -> list[dict]:
@@ -967,7 +1266,7 @@ def text_report(o: dict) -> str:
     if not c["map"]:
         L.append("No call in this window used the map plugin.")
         return "\n".join(L)
-    L.append(f"Status    {s['ok']} ok · {s['failed']} failed · {s['blocked']} blocked · {s['orphan']} unfinished" + (" · 1 self" if s["self"] else "")
+    L.append(f"Status    {s['ok']} ok · {s['failed']} failed" + (f" · {s['degraded']} degraded" if s.get("degraded") else "") + f" · {s['blocked']} blocked · {s['orphan']} unfinished" + (" · 1 self" if s["self"] else "")
              + f"   error rate {100 * o['error_rate']:.1f}% (blocked" + (f" and {o['session_side_failures']} session-side" if o.get("session_side_failures") else "")
              + " excluded)")
     t = o["time"]
@@ -1025,6 +1324,17 @@ def text_report(o: dict) -> str:
         L.append(f"Evaluation {ec['calls']} call(s) of the map evaluator, {fmt_d(ec['seconds'])}, not counted as map work")
     if o.get("outputs"):
         L.append(f"Outputs   {len({x['id'] for x in o['outputs']})} finished map output(s) written this session (the map evaluator can grade them)")
+    elif o.get("outputs_missed"):                       # 2.4.0 (MT-03): never a silent 0 after finished builds
+        m = o["outputs_missed"]
+        L.append(f"Outputs   0 ({m['builds']} finished build(s), no output found: {m['reason']})")
+    if o.get("outside_plugin"):                        # 2.4.0 (X-06): each one is a feature the plugin lacked, or a recipe for the library
+        L.append("")
+        L.append("Work done outside the plugin (each is a candidate plugin feature)")
+        for g in o["outside_plugin"][:10]:
+            L.append(f"  #{g['n']:<5} {g['what'][:40]:<40} {', '.join(g['libraries'])}")
+    if (o.get("run_ledger") or {}).get("rows"):
+        rl = o["run_ledger"]
+        L.append(f"Ledger    {rl['rows']} plugin run(s) recorded, {rl['calls_matched']} call(s) matched (exit codes and outputs from the plugin itself)")
     mq = o.get("map_quality")
     if mq:
         L.append("")

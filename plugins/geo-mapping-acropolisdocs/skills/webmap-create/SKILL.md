@@ -62,7 +62,7 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
 1. **Same first steps as `map-create`**: find the message, inspect uploaded files, use the library first, pick the map type from the data, write the MapSpec.
 2. **Decide the page's audience.** `audience:` says who opens the page (`internal`, `external`, `regulatory`, `any`). An unstated audience is treated as public.
    The audience decides which tile providers may be used and whether a confidential layer may go on the page at all.
-3. **Pick the background** (read `tile-provider-registry`). The default is `basemap: {provider: bundled}`: country, state and lake outlines that ship with the plugin.
+3. **Pick the background** (read `tile-provider-registry`). The default is `basemap: {provider: bundled}`: country, admin-1 (state or province) and lake outlines that ship with the plugin.
    A tile provider (`carto-positron`, `maptiler`) is used only with the person's own **browser-class** key, restricted to their domain and registered with
    `/geo-mapping-acropolisdocs:map-credentials add <provider> --class browser --confirm-restricted`; otherwise the page falls back to the bundled background
    (MAP-WEB-015 says how to add one). A `secret`-class key is never written into a page (MAP-CRED-011). Never ask for a key in the chat and never write one into the spec.
@@ -71,7 +71,7 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
    time, the brand's small logo in the map's bottom-left corner (as on the print map; `brand: {show: chip}` adds the name on a pill) and the required credits in its bottom-right corner. Change it only when the person asks:
    a preset (`minimal` for a single-message map, `presentation`, `embed` inside an article), the panel's side or start state, the playback label
    (`frame.playback.label: "km {end}"`), or a co-brand. Give layers a `name:` when two would share one in the Layers tab (MAP-WEB-037).
-   The page carries the same place names and context as a print map: the `names:` block (city, water-body and state names from the bundled Natural
+   The page carries the same place names and context as a print map: the `names:` block (city, water-body and admin-1 names from the bundled Natural
    Earth 10m data, tiered by zoom; `names: {on: false}` turns them off) and the `context:` block (roads, urban areas, lakes and rivers from the same
    data; presets `auto`, `none`, `roads`, `urban`, `water`, `full`). On the bundled background `auto` draws the context; over a tile basemap it draws
    none, because the tiles already carry roads and names.

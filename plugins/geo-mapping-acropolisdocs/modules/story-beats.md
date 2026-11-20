@@ -18,10 +18,10 @@ story:
   outputs: [web, sheet, carousel, slides, video]        # default: web and sheet
   beats:
     - role: establish
-      title: "Power Rates Across the State"             # a short heading; default: the line cut at its first clause
+      title: "Power Rates Across the Region"             # a short heading; default: the line cut at its first clause
       show: {view: fit}                                 # the whole of the data; the default view
     - role: evidence
-      say: "Five dams, the cheapest power in the state."            # the caption: 84 characters or fewer; may be left out
+      say: "Five dams, the cheapest power in the region."            # the caption: 84 characters or fewer; may be left out
       figure: "3.8 c/kWh"                               # the key number
       show:
         highlight: {layer: rates, column: cents_kwh, max: 5}        # the frame follows the highlighted features

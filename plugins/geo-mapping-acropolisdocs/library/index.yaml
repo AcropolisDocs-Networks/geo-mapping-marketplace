@@ -616,6 +616,13 @@ entries:
   rev: 2
   tags_digest: f523d79301c9
   entry_digest: 1fd10c186c6b
+- id: ref.map-type.carrier-choice-h3
+  file: entries/method/ref.map-type.carrier-choice-h3.yaml
+  type: map-type
+  status: active
+  rev: 1
+  tags_digest: f93610ed5ad2
+  entry_digest: 15170838ea1d
 - id: ref.map-type.choropleth
   file: entries/method/ref.map-type.choropleth.yaml
   type: map-type
@@ -1022,6 +1029,13 @@ entries:
   rev: 3
   tags_digest: af118c654ce2
   entry_digest: 36723ea9063d
+- id: ref.statistic.us.coverage.fcc-bdc-mobile-h3
+  file: entries/data/ref.statistic.us.coverage.fcc-bdc-mobile-h3.yaml
+  type: statistic
+  status: active
+  rev: 1
+  tags_digest: b38639d7f780
+  entry_digest: 54b179690ef0
 - id: ref.statistic.us.coverage.fcc-nbm
   file: entries/data/ref.statistic.us.coverage.fcc-nbm.yaml
   type: statistic

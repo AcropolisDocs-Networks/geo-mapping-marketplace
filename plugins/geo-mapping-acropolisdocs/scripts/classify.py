@@ -29,7 +29,9 @@ sys.path.insert(0, str(HERE))
 import colorlib as cl  # noqa: E402
 import gmap_common as gc  # noqa: E402
 
-METHODS = ("quantile", "equal_interval", "pretty", "geometric", "jenks", "std_dev", "log", "head_tail", "manual", "categorical")
+METHODS = ("quantile", "equal_interval", "pretty", "geometric", "jenks", "std_dev", "log", "head_tail", "manual", "categorical", "discrete")
+DISCRETE_MAX = 12          # 2.4.0 (V-01): one class per distinct value, up to this many
+DISCRETE_AUTO = 7          # a numeric field of at most this many distinct whole numbers classes as discrete when no method is given
 ALIASES = {"equal": "equal_interval", "natural_breaks": "jenks", "natural": "jenks", "stddev": "std_dev", "sd": "std_dev",
            "quantiles": "quantile", "fisher_jenks": "jenks", "unique": "categorical", "categories": "categorical",
            "equal_count": "quantile", "equal_counts": "quantile", "equal_frequency": "quantile", "count": "quantile",
@@ -346,16 +348,28 @@ def classify_numeric(values, method: str = "quantile", classes: int = 5, manual_
     if nuniq == 1:
         res.notes.append("every value is the same; one class")
         edges = [float(x[0]), float(x[0])]
+    elif method == "discrete":
+        u = np.unique(x)
+        if u.size > DISCRETE_MAX:
+            raise ClassifyError(f"discrete classes are for at most {DISCRETE_MAX} distinct values; this field has {u.size} (use quantile, pretty or manual)")
+        edges = [float(v) for v in u]
+        top_single = True                                     # each value its own class, the highest included: [v1, v2, ..., vn, vn]
     elif method == "manual":
         if not manual_breaks:
             raise ClassifyError("manual classification needs breaks")
         mb = sorted(float(b) for b in manual_breaks)
         if len(set(mb)) != len(mb):
             raise ClassifyError("manual breaks must be unique")
-        edges = [min(float(x.min()), mb[0])] + [b for b in mb if x.min() < b < x.max()] + [max(float(x.max()), mb[-1])]
+        lo_x, hi_x = float(x.min()), float(x.max())
+        edges = [min(lo_x, mb[0])] + [b for b in mb if lo_x < b < hi_x] + [max(hi_x, mb[-1])]
         edges = _dedupe(edges)
-        if len(edges) < len(mb) + 2:
-            res.notes.append("some manual breaks fall outside the data range and were dropped")
+        # 2.4.0 (V-02, Day 20 issue 6): a break is where a class starts. One at the data's maximum starts a class of its own (the top values),
+        # one at the minimum is the first class's own start: neither is dropped. The note is only for breaks truly outside the data.
+        if hi_x in mb and lo_x < hi_x and len(edges) >= 2:
+            top_single = True
+        outside = [b for b in mb if b < lo_x or b > hi_x]
+        if outside:
+            res.notes.append("some manual breaks fall outside the data range and were dropped: " + ", ".join(f"{b:g}" for b in outside))
     else:
         if nuniq < k:
             res.notes.append(f"only {nuniq} distinct values; using {nuniq} classes")
@@ -402,7 +416,9 @@ def classify_numeric(values, method: str = "quantile", classes: int = 5, manual_
         d = max(_decimals_needed(edges), min(4, max(0, math.ceil(-math.log10(span / (max(len(edges) - 1, 1) * 100))))))
     # Snap the interior edges to the shown precision so a label states exactly which values it holds.
     # Whole-number data: ceil keeps every value in the class it was already in.
-    if len(edges) > 2:
+    if method == "discrete" and not res.integer_data and fmt.decimals is None:
+        d = _decimals_exact(edges)
+    if len(edges) > 2 and method != "discrete":
         interior = [math.ceil(e - 1e-9) if (res.integer_data and d == 0) else round(e, d) for e in edges[1:-1]]
         snapped = _dedupe([edges[0]] + interior + [edges[-1]])
         if len(snapped) < len(edges):
@@ -419,6 +435,8 @@ def classify_numeric(values, method: str = "quantile", classes: int = 5, manual_
     if empty:
         res.notes.append(f"class {', '.join(map(str, empty))} holds no features")
     res.labels = range_labels(edges, d, fmt, res.integer_data, label_style)
+    if method == "discrete":                                  # 2.4.0 (V-01): the values themselves, in order
+        res.labels = [fmt.fmt(v, d) for v in edges[:-1]]
     return res
 
 

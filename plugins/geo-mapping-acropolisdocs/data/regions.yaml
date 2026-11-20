@@ -1,0 +1,71 @@
+# 2.6.0 / 3.0.0 (G-03): named regions that are not one admin unit, as lists of members. A member is an ISO 3166-1 country (KE), an ISO
+# 3166-2 admin-1 area (US-WA, DE-BY, AT-8), or admin-2 areas inside one admin-1 area ({in: US-ID, names: [...]}). `codes` are admin codes the
+# region answers to (admin: GB-SCT). Names match case-insensitively, with aliases. A person adds their own in <work folder>/.geo-mapping/regions.yaml
+# (same shape; theirs win on a clash). Starter list (owner decision O7): mostly outside the United States.
+- name: Idaho Panhandle
+  aliases: [North Idaho, Northern Idaho]
+  members: [{in: US-ID, names: [Benewah, Bonner, Boundary, Clearwater, Idaho, Kootenai, Latah, Lewis, Nez Perce, Shoshone]}]
+  note: the ten northern counties (the common definition); the five-county definition is "Idaho Panhandle (5 counties)"
+- name: Idaho Panhandle (5 counties)
+  aliases: [Idaho Panhandle north, Inland Northwest Idaho]
+  members: [{in: US-ID, names: [Benewah, Bonner, Boundary, Kootenai, Shoshone]}]
+  note: the five northernmost counties
+- {name: Pacific Northwest, aliases: [PNW], members: [US-WA, US-OR, US-ID]}
+- {name: Cascadia, members: [US-WA, US-OR, US-ID, CA-BC], note: "the cross-border bioregion as three states and a province"}
+- {name: New England, members: [US-CT, US-ME, US-MA, US-NH, US-RI, US-VT]}
+- {name: Four Corners, members: [US-AZ, US-CO, US-NM, US-UT]}
+- name: San Francisco Bay Area
+  aliases: [Bay Area, SF Bay Area]
+  members: [{in: US-CA, names: [Alameda, Contra Costa, Marin, Napa, San Francisco, San Mateo, Santa Clara, Solano, Sonoma]}]
+  note: the nine counties that touch the bay
+- name: Great Lakes region
+  aliases: [Great Lakes]
+  members: [US-IL, US-IN, US-MI, US-MN, US-NY, US-OH, US-PA, US-WI, CA-ON]
+  note: the eight states and the province on the lakes' shores, whole
+- {name: Maritimes, aliases: [Maritime provinces], members: [CA-NB, CA-NS, CA-PE]}
+- {name: Atlantic Canada, members: [CA-NB, CA-NS, CA-PE, CA-NL]}
+- {name: Canadian Prairies, aliases: [Prairies, Prairie provinces], members: [CA-AB, CA-SK, CA-MB]}
+- {name: Northern Canada, aliases: [Canadian territories], members: [CA-YT, CA-NT, CA-NU]}
+- name: Scotland
+  codes: [GB-SCT]
+  members: [GB-ABD, GB-ABE, GB-AGB, GB-ANS, GB-CLK, GB-DGY, GB-DND, GB-EAY, GB-EDH, GB-EDU, GB-ELN, GB-ELS, GB-ERW, GB-FAL, GB-FIF, GB-GLG,
+            GB-HLD, GB-IVC, GB-MLN, GB-MRY, GB-NAY, GB-NLK, GB-ORK, GB-PKN, GB-RFW, GB-SAY, GB-SCB, GB-SLK, GB-STG, GB-WDU, GB-WLN, GB-ZET]
+  note: the 32 council areas
+- {name: British Isles, members: [GB, IE]}
+- {name: Benelux, members: [BE, NL, LU]}
+- {name: Nordic countries, aliases: [Nordics, Norden], members: [DK, FI, IS, "NO", SE]}
+- {name: Scandinavia, members: [DK, "NO", SE]}
+- {name: Baltic states, aliases: [Baltics], members: [EE, LV, LT]}
+- {name: Iberia, aliases: [Iberian Peninsula], members: [ES, PT]}
+- {name: DACH, aliases: [D-A-CH], members: [DE, AT, CH]}
+- name: Lake Constance
+  aliases: [Bodensee, Lake Constance region]
+  members: [DE-BW, DE-BY, AT-8, CH-SG, CH-TG]
+  note: the states, Land and cantons on the lake's shores, whole
+- {name: Visegrad Group, aliases: [Visegrád Group, V4], members: [CZ, HU, PL, SK]}
+- {name: Western Balkans, members: [AL, BA, ME, MK, RS, XK]}
+- {name: Caucasus, aliases: [South Caucasus, Transcaucasia], members: [AM, AZ, GE]}
+- {name: Central Asia, members: [KZ, KG, TJ, TM, UZ]}
+- {name: Maghreb, members: [DZ, LY, MA, MR, TN]}
+- {name: Gulf states, aliases: [GCC, Gulf Cooperation Council], members: [AE, BH, KW, OM, QA, SA]}
+- {name: Levant, members: [IL, JO, LB, PS, SY]}
+- {name: Horn of Africa, members: [DJ, ER, ET, SO]}
+- {name: East African Community, aliases: [EAC], members: [BI, CD, KE, RW, SO, SS, TZ, UG]}
+- {name: Southern Africa, members: [BW, LS, NA, SZ, ZA]}
+- {name: Central America, members: [BZ, CR, GT, HN, NI, PA, SV]}
+- {name: Greater Antilles, members: [CU, DO, HT, JM, PR]}
+- {name: Andean countries, aliases: [Andean Community], members: [BO, CO, EC, PE]}
+- {name: Southern Cone, members: [AR, CL, PY, UY]}
+- name: Argentine Patagonia
+  aliases: [Patagonia (Argentina)]
+  members: [AR-Q, AR-R, AR-U, AR-Z, AR-V]
+- {name: Mekong region, aliases: [Greater Mekong, Mainland Southeast Asia], members: [KH, LA, MM, TH, VN]}
+- {name: Korean Peninsula, members: [KP, KR]}
+- {name: Kanto, aliases: [Kantō, Greater Tokyo region], members: [JP-08, JP-09, JP-10, JP-11, JP-12, JP-13, JP-14]}
+- {name: Kansai, aliases: [Kinki], members: [JP-25, JP-26, JP-27, JP-28, JP-29, JP-30]}
+- name: Northeast India
+  aliases: [Seven Sister States]
+  members: [IN-AR, IN-AS, IN-MN, IN-ML, IN-MZ, IN-NL, IN-TR]
+- {name: Australian east coast, aliases: [Eastern seaboard (Australia)], members: [AU-QLD, AU-NSW, AU-ACT, AU-VIC]}
+- {name: Australia and New Zealand, aliases: [ANZ, Australasia], members: [AU, NZ]}
+- {name: Anatolia and Thrace, aliases: [Türkiye whole], members: [TR]}

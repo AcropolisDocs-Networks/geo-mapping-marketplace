@@ -52,7 +52,7 @@ feature counts and fetches nothing.
    read in the browser from memory), large point layers with their clusters made at build time, labels as symbol layers in Inter from the
    glyph files under `assets/glyphs/`. Then the controller, a content security policy, a host manifest, the static picture, a text summary
    and the hidden accreditation.
-   A 3D page (M15) also carries: the terrain, made from the DEM the print relief uses (3DEP in the United States; Terrarium elsewhere,
+   A 3D page (M15) also carries: the terrain, made from the DEM the print relief uses (from the source chain by coverage, 3DEP, Copernicus, Terrarium,
    its credit printed) and written as Terrarium PNG tiles in one base64 block, served to MapLibre through the page's
    own `gmdem://` protocol; a hillshade from the same tiles in place of the relief picture; the extruded layers' heights (`_h`, `_b`) on their
    features; the mast columns and the links' segments as their own GeoJSON sources; each link's profile chart (`profile_chart`, web size) as

@@ -991,7 +991,7 @@ def stage_fcc(c: Ctx) -> dict:
     cl = None
     try:
         cl = fb.Client(http=c.http)
-        got = fb.fetch_file(cl, c.inputs["file_id"], kind=c.options.get("kind") or "availability", fmt=c.options.get("format") or "csv", confirm_large=True)
+        got = fb.fetch_file(cl, c.inputs["file_id"], kind=c.options.get("kind") or "availability", fmt=c.options.get("format") or "auto", confirm_large=True)
         c.add_file(Path(got["path"]), "data")
         return {"ok": True, "summary": f"{got['bytes'] / 1024 ** 2:.0f} MB, {got.get('rows', '?')} rows", "findings": cl.findings}
     except fb.BDCError as ex:
@@ -999,6 +999,55 @@ def stage_fcc(c: Ctx) -> dict:
     finally:
         if cl is not None:
             cl.close()
+
+
+# ---------------------------------------------------------------------------------------------------------------- 2.6.0 (I-23): moving data
+def plan_move(inp: dict, opt: dict) -> dict:
+    files = [Path(f) for f in inp.get("files") or []]
+    missing = [f.name for f in files if not f.is_file()]
+    if missing:
+        raise PipelineInputError(f"not found here: {', '.join(missing[:5])} (stage them from the computer first)")
+    total = sum(f.stat().st_size for f in files)
+    zips = [f for f in files if f.suffix.lower() == ".zip"]
+    out = Path(opt.get("out") or "data")
+    return {"files_read": len(files), "bytes_in": total, "network_requests": 0, "est_seconds": 5 + total // 50_000_000, "files_written": len(files) + 1,
+            "lines": [f"{len(files)} file(s), {total / 1e6:.1f} MB, into {out.name}/" + (f"; {len(zips)} zip(s) unpacked" if zips else ""),
+                      "sizes and SHA-256 recorded in data/moved.json; nothing is fetched"]}
+
+
+def stage_move(c: Ctx) -> dict:
+    """One confirmed step for files fetched on the person's computer and staged here (the FCC hexagon zips): unzipped into the work folder's
+    data/<kind>/ with sizes and hashes recorded, so a session never stages, unzips and checks by hand."""
+    import hashlib
+    import zipfile
+    out = Path(c.options.get("out") or "data")
+    out.mkdir(parents=True, exist_ok=True)
+    kind = c.options.get("kind") or "moved"
+    dest = out / kind
+    dest.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for f in [Path(x) for x in c.inputs.get("files") or []]:
+        sha = hashlib.sha256(f.read_bytes()).hexdigest()
+        if f.suffix.lower() == ".zip":
+            with zipfile.ZipFile(f) as z:
+                for n in z.namelist():
+                    if n.endswith("/") or ".." in Path(n).parts:
+                        continue
+                    target = dest / Path(n).name
+                    target.write_bytes(z.read(n))
+                    rows.append({"from": f.name, "file": str(target), "bytes": target.stat().st_size,
+                                 "sha256": hashlib.sha256(target.read_bytes()).hexdigest()})
+        else:
+            target = dest / f.name
+            target.write_bytes(f.read_bytes())
+            rows.append({"from": f.name, "file": str(target), "bytes": target.stat().st_size, "sha256": sha})
+        rows[-1]["source_sha256"] = sha
+    man = out / "moved.json"
+    prev = json.loads(man.read_text(encoding="utf-8")) if man.is_file() else []
+    man.write_text(json.dumps(prev + rows, indent=2), encoding="utf-8")
+    for r in rows:
+        c.add_file(Path(r["file"]), "data")
+    return {"ok": True, "summary": f"{len(rows)} file(s) in {dest}, {sum(r['bytes'] for r in rows) / 1e6:.1f} MB", "findings": []}
 
 
 # ---------------------------------------------------------------------------------------------------------------- telecom maps (M6)
@@ -1687,7 +1736,7 @@ def plan_eval(inp: dict, opt: dict) -> dict:
     return {"files_read": sum(len(o["files"]) for o in outs), "bytes_in": sum(Path(f).stat().st_size for o in outs for f in o["files"] if Path(f).is_file()),
             "renders": 6 * svgs, "network_requests": 0, "est_seconds": 20 * frames + 6 * svgs + 75 * reads,
             "lines": [f"{len(outs)} output(s), {frames} frame(s) to read",
-                      f"{reads} image read(s) by fresh agents ({len(outs)} cold read(s) and {passes} graded read(s) per output)",
+                      f"{reads} image read(s) by fresh agents (1 cold read and {passes} graded read{'s' if passes != 1 else ''} per output)",   # 2.4.0 (MT-06)
                       "measured here; nothing is sent anywhere but to the agents that read the pictures"]}
 
 
@@ -1842,6 +1891,11 @@ REGISTRY = {
         "title": "FCC BDC download", "purpose": "One Broadband Data Collection file over 100 MB, after the size is shown.",
         "inputs": {"file_id": "the file id fcc_bdc_list returned"}, "options": {"kind": "availability|challenge", "format": "csv|shapefile|gpkg"},
         "plan": plan_fcc, "stages": [("fcc", "Download and read the file", stage_fcc)], "delivers": False,
+    },
+    "move-data": {
+        "title": "Move fetched data", "purpose": "Files fetched on the person's computer and staged here, unzipped into the work folder's data/ in one step with sizes and hashes recorded.",
+        "inputs": {"files": "the staged files (zips are unpacked)"}, "options": {"out": "the data folder (default data)", "kind": "subfolder (fcc-bdc, dem, ...)"},
+        "plan": plan_move, "stages": [("move", "Unpack and record", stage_move)], "delivers": False,
     },
     "map-evaluate": {
         "title": "Map evaluation (observe only)", "purpose": "Grade finished maps from their pictures against the evaluation rubric, by fresh agents, for improving the plugin later; it never changes a map or a build.",

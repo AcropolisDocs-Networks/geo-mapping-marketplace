@@ -109,6 +109,20 @@
       "type": "string",
       "minLength": 8
     },
+    "region": {
+      "type": "object", "additionalProperties": false,
+      "description": "3.0.0 (G-01): the place the map is about, resolved once to a geometry: the extent, the clip (ops: [{op: clip, layer: region}]), the H3 complete grid, the projection and the partitions every adapter fetches by",
+      "properties": {
+        "admin": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}], "description": "ISO 3166-1 (KE) or ISO 3166-2 (US-WA, DE-BY) codes"},
+        "admin2": {"type": "object", "required": ["in", "names"], "properties": {"in": {"type": "string"}, "names": {"type": "array", "items": {"type": "string"}, "minItems": 1}}},
+        "place": {"type": "string", "description": "a named region (data/regions.yaml, or your own .geo-mapping/regions.yaml)"},
+        "file": {"type": "string"},
+        "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+        "h3": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "buffer_km": {"type": "number", "exclusiveMinimum": 0},
+        "name": {"type": "string", "description": "the name the map uses for it (default: the gazetteer's or the admin areas')"}
+      }
+    },
     "extent": {
       "type": "object",
       "additionalProperties": false,
@@ -119,9 +133,10 @@
             "fit_message",
             "bbox",
             "place",
-            "preset"
+            "preset",
+            "region"
           ],
-          "description": "fit_layers (default): the frame fits every data layer. 1.22.0, fit_message: the frame fits what the map is about (the layers the message names or that say emphasis: primary, cut to their highlight: features when they have one), and the other layers are its surroundings; with nothing singled out it is fit_layers"
+          "description": "3.0.0, region (the default when the MapSpec has a region: block): the frame fits the region's own outline. fit_layers (the default otherwise): the frame fits every data layer. 1.22.0, fit_message: the frame fits what the map is about (the layers the message names or that say emphasis: primary, cut to their highlight: features when they have one), and the other layers are its surroundings; with nothing singled out it is fit_layers"
         },
         "bbox": {
           "type": [
@@ -277,6 +292,22 @@
           "id": {
             "type": "string"
           },
+          "h3": {
+            "type": "object", "additionalProperties": false,
+            "description": "2.6.0 (H-02, H-03, H-07): how an h3 source is rolled up and completed",
+            "properties": {
+              "resolution": {"anyOf": [{"type": "integer", "minimum": 0, "maximum": 15}, {"const": "auto"}], "description": "auto: the finest grid whose cells are at least 0.8 mm wide on the page, never finer than the data (MAP-HEX-002 under 1.2 mm)"},
+              "by": {"type": "string", "description": "the column whose groups are counted (brandname, provider)"},
+              "group": {"type": "string", "description": "agg share: the one group whose share is drawn"},
+              "share_min": {"type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "a group counts in a cell when it covers at least this share of the cell's children (default 0.5)"},
+              "agg": {"enum": ["count_groups", "share", "any", "all", "count", "sum", "mean", "max", "min"]},
+              "value_field": {"type": "string"},
+              "field": {"type": "string", "description": "the name of the rolled-up value (default: the layer's value_field, else value)"},
+              "complete": {"const": "region", "description": "every cell of the region at the resolution; cells with no data get the zero value"},
+              "mode": {"enum": ["centre", "intersect", "share"]}
+            }
+          },
+          "empty": {"enum": ["outline", "none", "fill"], "description": "2.6.0 (H-08): how the zero (no data) class of a cells layer is drawn: an outline only (default for a complete H3 grid), not at all, or filled"},
           "name": {"type": "string", "description": "the layer's name in the web page's Layers tab (1.1.0); else the legend label, a unique legend title, or the id in words"},
           "source": {
             "type": "object",
@@ -320,9 +351,22 @@
                   "ref",
                   "service",
                   "user-run",
-                  "geocode"
-                ]
+                  "geocode",
+                  "h3"
+                ],
+                "description": "2.6.0: h3 reads a table of H3 cell ids (id_field) from path (a file or a glob), or from an adapter, and draws its cells (the layer's h3: block rolls them up)"
               },
+              "id_field": {"type": "string", "description": "2.6.0, type h3: the column holding the cell ids (strings or 64-bit integers)"},
+              "path": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+              "layer": {"type": "string"},
+              "where": {"type": "string"},
+              "group_field": {"type": "string", "description": "2.6.0, type h3: the column the h3.by groups come from, when h3.by is not given"},
+              "adapter": {"type": "string", "description": "3.0.0 (G-11): a data adapter that fetches for the map's region, partition by partition (fcc-bdc-mobile)"},
+              "technology": {"type": "string"},
+              "speed": {"type": "string"},
+              "environment": {"enum": ["outdoor", "in-vehicle"]},
+              "as_of": {"type": "string"},
+              "providers": {"anyOf": [{"const": "all"}, {"type": "array", "items": {"type": "string"}}]},
               "mode": {
                 "enum": [
                   "image",
@@ -1062,6 +1106,8 @@
       "additionalProperties": false,
       "description": "Place, water and admin names from the bundled Natural Earth 10m gazetteer, drawn after the data labels (lower priority) and tiered by the map's scale. On for every template; `elements.names: {on: false}` is the same toggle.",
       "properties": {
+        "ink": {"enum": ["uniform", "adaptive"], "description": "2.6.0 (V-06): uniform (default): one dark ink with a page-colour halo over every class, the halo wider over dark ones; adaptive: the ink follows the colour under each name (2.5 and before)"},
+        "message_places": {"type": "boolean", "description": "3.0.0 (G-08): places the message names are labelled at any scale tier (default true)"},
         "on": {
           "type": "boolean",
           "default": true
@@ -1155,7 +1201,7 @@
     "terrain": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Relief (and contours) under the map from a DEM: USGS 3DEP in the United States, the AWS Terrain Tiles elsewhere (attribution required), or a DEM file. Off unless on: true (or context preset full on a regional to local sheet). Fetched at plan time and cached; a failed fetch leaves the map without relief and says so. `elements.terrain: {on: false}` is the same toggle.",
+      "description": "Relief (and contours) under the map from a DEM: 2.5.0, from the best source covering each part of the window (USGS 3DEP where its coverage reaches, the Copernicus DEM, then the AWS Terrain Tiles; a window two sources share is mosaicked and both are credited), or a DEM file. Off unless on: true (or context preset full on a regional to local sheet). Fetched at plan time and cached; a failed fetch leaves the map without relief and says so. `elements.terrain: {on: false}` is the same toggle.",
       "properties": {
         "on": {
           "type": "boolean"
@@ -1169,11 +1215,15 @@
           "description": "older MapSpecs only (before 0.23.0); ignored: Terrarium is the default outside the US and its credit is printed for you"
         },
         "opacity": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "default 0.35 (relief under data stays between 30 and 40 percent)"
+          "anyOf": [{"type": "number", "minimum": 0, "maximum": 1}, {"const": "auto"}],
+          "description": "auto (2.5.0, the default): 0.35 under sparse data, 0.6 under a cells grid or an outline-only layer; or a number"
         },
+        "azimuth": {"type": "number", "minimum": 0, "maximum": 360, "description": "2.5.0 (T-07): one sun, from this direction (degrees clockwise from north)"},
+        "altitude": {"type": "number", "exclusiveMinimum": 0, "maximum": 90, "description": "2.5.0: the sun's height above the horizon in degrees"},
+        "cast_shadows": {"type": "boolean", "description": "2.5.0: shadows marched toward the sun (one sun only)"},
+        "multidirectional": {"type": "boolean", "description": "2.5.0: four suns (the default when neither azimuth nor altitude is given)"},
+        "max_px": {"type": "integer", "minimum": 256, "maximum": 4096, "description": "2.5.0: the relief picture's longer side"},
+        "bathymetry": {"type": "boolean", "description": "2.5.0 (T-10): the sea floor too, where the DEM has it (Terrarium); by default water is masked with the map's own ocean and lakes and flat sea-level cells, and never shaded as land"},
         "exaggeration": {
           "anyOf": [
             {

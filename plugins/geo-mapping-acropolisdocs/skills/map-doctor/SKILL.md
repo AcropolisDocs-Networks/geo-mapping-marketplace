@@ -40,6 +40,7 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-env-probe        # any module i
 |-----------------|---|
 | `map-env-probe` | for the capability tiers and the two-edition guard |
 | `geo-cache`     | for what the plugin keeps on disk, and pruning |
+| `regions`       | when `--grids` names a region |
 
 Add `--device-bridge yes` when a call to the person's linked computer has already succeeded in this session, and `--mcp yes`
 when a call to the plugin's MCP server has; the script cannot see the model's tool list, so it only knows what it is told.
@@ -52,8 +53,15 @@ still kept after a rotation. Names only, never a value. When the credential fold
 An **Engines and routes** section (0.24.0) says whether DuckDB has its spatial extension (large tables and GeoParquet), whether PROJ has
 its datum grids (without them a NAD27 or older NAD83 layer is shifted by a coarser method, and the build's MAP-CRS-004 finding
 names the grid that would fix it) and whether the plugin's
-own data-service server can start here. `--fix --all` installs DuckDB's spatial extension; it does not download grids.
+own data-service server can start here. `--fix --all` installs DuckDB's spatial extension (the matching wheel first, else DuckDB's own download) and checks it again in the same run.
 
-Read the report to the person in plain words. State the tier in one line, name anything HARD that is missing,
+**Places and profiles (2.4.0, 3.0.0).** The first line names where the doctor runs: your computer, the Cowork VM or the cloud workspace,
+and whether a linked computer is reachable for data tools (tier T2 only on your own computer). Packages come in profiles, one pip call
+each: `--fix --profile map|raster|h3|web|video|db|all` (`--fix --all` is `all`, and installs DuckDB's spatial wheel); each SOFT row says
+its profile, and the **Fixed** section lists what was installed. `--grids <region>` lists the PROJ datum grids the region needs with their
+size, `--fix --grids <region>` downloads them; `--fix --place cowork-vm` makes a Linux venv inside the work folder so the Cowork VM can
+build; `--wheelhouse DIR` keeps the wheels for the next session (off unless asked). Where each step runs is in `data/execution-routes.yaml`.
+
+Read the report to the person in plain words. State the place and the tier in one line, name anything HARD that is missing,
 and offer `--fix --all`. Do not install anything unasked. Exit codes: 0 ready, 1 a HARD item is missing,
 2 two editions are installed.

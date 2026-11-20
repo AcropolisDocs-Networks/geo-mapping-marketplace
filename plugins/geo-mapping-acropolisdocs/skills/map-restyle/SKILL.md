@@ -85,7 +85,7 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the
 | plain background, no basemap / back to the bundled outlines | `--basemap none` / `--basemap bundled` |
 | streets or terrain behind the map | not a restyle option: `basemap-render` prepares the tiles once (`plan`, then `render`) and the next build reads them |
 | add roads, towns and water / take the roads off / only water | `--context full` / `--context none` / `--context water` (presets: auto, none, roads, urban, water, full, terrain) |
-| put hillshade / relief / terrain under this map, add contours, take the relief off | `--terrain on` / `--terrain contours` / `--terrain off` (3DEP in the US, fetched once and cached; a DEM file: `--set terrain.source=dem.tif`) |
+| put hillshade / relief / terrain under this map, add contours, take the relief off | `--terrain on` / `--terrain contours` / `--terrain off` (the source chain by coverage: 3DEP, Copernicus, Terrarium, mosaicked across borders; fetched once and cached; a DEM file: `--set terrain.source=dem.tif`) |
 | make the raster see-through, lighter colours on the raster | `--set layers.LAYER.raster.opacity=0.7` / `--set layers.LAYER.raster.vmax=2000` |
 | turn off the place names / put the city names back | `--names off` / `--names on` |
 | change the title | `--title "..."`, `--subtitle "..."` (written by the `map-text` module: subject-led Title Case title, a subtitle with one job; list the build's `map_text.callout` lines) |

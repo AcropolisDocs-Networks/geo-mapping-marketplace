@@ -321,6 +321,15 @@ def fetch_entry(entry_id: str, variant: str | None = None, level: str | None = N
     """One library fetch by id, whatever its mode (the host-side MCP tool and the CLI share this)."""
     e = find_entry(entry_id)
     d = e.get("delivery") or {}
+    try:
+        import map_raster
+        dem = map_raster.is_dem_entry(e["id"])
+    except Exception:  # noqa: BLE001
+        dem = False
+    if dem or str(e.get("type") or "") in ("terrain", "dem"):
+        # 2.4.0 (T-02, Day 20 issue 12): a DEM is not a vector file to cache; the build fetches it for its own window (terrain_fetch.dem_for)
+        raise FetchError(f"{entry_id} is an elevation model: DEM entries are fetched for a window by the build (role: hillshade, terrain: "
+                         "{on: true}), not cached ahead; to fetch one for a box run terrain_fetch.py fetch --bbox W,S,E,N", gc.EXIT_USAGE, "MAP-TER-007")
     if d.get("tool") in TOOLS and e.get("type") != "public-service":
         return fetch_by_tool(e, {"level": level, "state": variant}, refresh=refresh, http=http, store=store)
     if d.get("mode") == "service" and d.get("protocol") == "rest-json":

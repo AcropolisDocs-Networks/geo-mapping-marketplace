@@ -1,7 +1,7 @@
 ---
 name: map-atlas
 description: >
-  Make a series of branded maps from one design, one per market, state, vendor or month, with shared classes. Trigger on: one map
+  Make a series of branded maps from one design, one per market, region, vendor or month, with shared classes. Trigger on: one map
   per market, map series, small multiples.
 ---
 

@@ -56,32 +56,33 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the
 | `label-engine`           | when labels collide, drop out or fall below the minimum size |
 | `scalebar-northarrow`    | when the scale bar or north arrow is hidden or flagged |
 | `map-brand`              | when the person names a brand, or a brand finding appears |
-| `provenance-ledger`      | for the source line, the Data and Methods page, a provenance finding, or a file made from a library source (`provenance.library_entry`: its credit and any logo its terms require) |
+| `provenance-ledger`      | for the source line, the Data and Methods page, a provenance finding, or a file made from a library source (its credit and any logo its terms require) |
 | `map-pdf-publisher`      | when the PDF or PNG step fails, or needs a size or DPI option |
 | `mapspec-reference`      | **before writing or changing a MapSpec**: every field, the roles and symbols, and worked examples |
 | `transit-maps`           | for a transit map from a GTFS feed |
 | `map-ground-global`      | for a metro or city map that needs detailed land and water, and for any map outside the United States |
 | `map-build-options`      | for a layer over 50,000 features, side panels and the fit, or a style pack (antique, blueprint, classical, editorial, monochrome, sketch) |
 | `map-env-probe`          | when `env_probe.py` stops the build (tier, packages, two editions installed) |
+| `regions`                | **for every map**: the `region:` block |
+| `h3-grids`               | for data on the H3 grid (FCC mobile hexagons) |
 
 Exit 0 built; 3 a BLOCK finding (nothing is withheld unless `--strict`, which deletes the files); 2 a request this release cannot do.
 
 ## Order of work
 
-**A fresh cloud workspace has no map packages**: the build's first line installs them there (1.19.0); elsewhere run `doctor.py --fix --quick`
-once, before anything else. It installs what a map needs in one pip step, wheels first, within 10 minutes (1.2.0); never `pip install -r
-requirements-dev.txt`, which brings the test stack. On the person's own computer, ask before installing.
+**A fresh cloud workspace has no map packages**: the build's first line installs them. Elsewhere run `doctor.py --fix --quick` once, first
+(one pip step, wheels first); never `pip install -r requirements-dev.txt`. On the person's own computer, ask before installing.
 
+0. **Name the region** (`regions`): write `region:` (US-WA, "Idaho Panhandle", a file), run `region.py --place ...` once, say which
+   definition was used; never build one from FIPS codes.
 1. **Find the message.** A map says one thing. If the request does not, ask one short question ("What should the reader take from this map?") and
    nothing else. Write it as the MapSpec `message`: a full sentence, not "Map".
 2. **Inspect before mapping.** Run `geo-inspect` on any uploaded file (CRS, geometry, fields). Do not map data that reports "do not map as is".
-3. **Use the library first.** Ask `ref_library.py select --geography ... --level ... --use-for ... --scale ... --audience ...` for the layer that fits
+3. **Use the library first** (the region's adapters from `catalog_search --region` before it). Ask `ref_library.py select --geography ... --level ... --use-for ... --scale ... --audience ...` for the layer that fits
    (the `ref-library` module has every option). A layer is used as `source: {type: ref, id: <entry id>}`. Say which entry was chosen and why in one phrase. Entries that are not
    `active` are never used. Exit 4 ("no reference entry fits") hands over to `geo-find-data`; ask for a file if the web has nothing usable. A table the person
    supplies is joined on the entry's join key: read the key column as text, keep leading zeros. A service entry (FEMA flood zones, HIFLD cellular towers,
-   FCC CMAs, transmission lines) is fetched once for the map window and kept, so a rebuild sends nothing. `source: {type: ref, id: ..., where: "SFHA_TF = 'T'"}`
-   filters any library entry, a service or a file (the `where` goes inside `source`). Venue, site or business addresses become points with
-   `source: {type: geocode, table: venues.csv, address: [street, city, state, zip], purpose: venues}` (the `geocode-addresses` rules apply).
+   FCC CMAs): `mapspec-reference` ("Sources") for it, a `where` filter, geocoded addresses and H3 data.
 4. **Pick the map type from the data**, never from habit:
    - a rate or share per area → `role: choropleth` with `value_field` (normalized: per capita, per household, per sq mi, a percent);
    - a count per area → divide first, or proportional symbols, or dots (op `dot_density`); many points → op `density_surface`; movement
@@ -91,7 +92,7 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
    **Routing note.** A plain site map (where the sites are, what kind each is) is built here. A site list with azimuth and band columns whose
    reader should see sector footprints goes to the coverage-map pipeline (`/geo-mapping-acropolisdocs:map-run coverage-map`): it draws the wedges, applies
    coordinate privacy and words them as sectors, not coverage. A tracker with a status per location goes to `/geo-mapping-acropolisdocs:map-run program-map`; a client table to roll
-   up by state or county goes to `/geo-mapping-acropolisdocs:map-run market-map`; one map per market goes to `map-atlas`. Say which door you are taking in one phrase.
+   up by admin area (state, county, province, district) goes to `/geo-mapping-acropolisdocs:map-run market-map`; one map per market goes to `map-atlas`. Say which door you are taking in one phrase.
 5. **Write the MapSpec** (read `mapspec-reference` first), lint it, then build with
    `--draft`. **Show it before you say it** (the `message-check` module): open the mute picture and say what it shows; if that is not the
    `message`, change the frame, the emphasis or the key, never by adding a callout, and draft again. Then build the finished set. Show the PNG with a one-line caption, then the findings. Write the title and subtitle
@@ -127,5 +128,6 @@ Lead with the result: the PNG and one sentence on what the map shows. Then at mo
 remain, a note when the legend or scale bar moved or was hidden and why). Then the map text: the title and subtitle drawn (`map_text` in the build
 result) and every line of `map_text.callout`, as written ("Map text: N findings (not blocking)" and one line per finding with its suggested fix);
 these never count against the three and never block. Then the message check the same way (every line of `story.callout`). Change supplied text only when the person says so. Offer one next step: `map-restyle` for a look change, `map-export` for another size.
+Say a summary line `relief missing: <reason>` first. From the cloud workspace, hand back only the map files (a DEM is in `refetch`).
 Files are named `<brand prefix><id>_<template>_v<YYYYMMDD>.<ext>`. A provenance sidecar (`.provenance.json`) is written beside the map; send it only if asked.
 A map to pan, zoom and click is `webmap-create` (one HTML file). To show how the map was made, turn on `methods_page` and send its one-page Data and Methods file. A map told in steps (a story, a carousel) is finished here, then `map-story`.

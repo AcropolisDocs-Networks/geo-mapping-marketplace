@@ -8,7 +8,7 @@ description: >
 
 # basemap-render
 
-A print map normally draws the bundled basemap (country, state and lake outlines). When the person wants streets or terrain behind their data, this skill prepares **one picture** from tiles, once, and the build reads that picture. The build itself never fetches a tile.
+A print map normally draws the bundled basemap (country, admin-1 (state or province) and lake outlines). When the person wants streets or terrain behind their data, this skill prepares **one picture** from tiles, once, and the build reads that picture. The build itself never fetches a tile.
 
 ```bash
 GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"

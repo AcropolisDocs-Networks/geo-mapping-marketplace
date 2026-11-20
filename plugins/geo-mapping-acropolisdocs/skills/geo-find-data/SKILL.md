@@ -47,10 +47,14 @@ python3 "$GMAP_ROOT/scripts/modules.py" read geo-catalog-search        # any mod
 | `reference-library-guide` | for licence classes and how to read an entry's use_when and avoid_when |
 | `ref-library`             | for the `ref_library.py select` and `get` options |
 | `geo-service-explore`     | when a find is a live service: what it offers before anything is pulled |
+| `regions`                 | when the request names a place: resolve it once, then search by it |
 
 ## Order of work
 
-1. **Say what is needed.** Geography, level (state, county, tract, site and so on), what the map does with it (`use_for`), the scale,
+0. **Search by the region** (3.0.0). Resolve the place once (`region.py --place ...`), then list the data adapters that cover it before any
+   catalog or web search: `catalog_search.py "<words>" --region "<region>"` ranks them by how much of the region they cover. A US source
+   (FCC, Census, 3DEP) appears when the region is in the US, like any national source; a candidate adapter says what is left to verify.
+1. **Say what is needed.** Geography, level (admin-1 such as a state or province, admin-2 such as a county, tract, site and so on), what the map does with it (`use_for`), the scale,
    who sees the map (`--audience internal|external|regulatory`). If one of these is missing and the answer would change, ask one question.
    Geography words (1.5.0): `world`; the UN M49 regions and sub-regions (`africa`, `sub-saharan-africa`, `southern-europe`, `eastern-asia`, ...);
    every ISO 3166-1 country by its two letters or its name (`ng` or `nigeria`, `jp`, `gr`; the United Kingdom is `uk`, with `gb` an alias);

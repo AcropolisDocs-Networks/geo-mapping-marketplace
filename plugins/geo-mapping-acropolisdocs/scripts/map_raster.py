@@ -134,11 +134,30 @@ def terrain_config(spec: dict) -> dict:
     if "on" in el:
         on = el["on"]
     c = dict(t.get("contours") or {})
+    op = t.get("opacity", "auto")
     return {"on": on, "source": str(t.get("source") or "auto"), "terms_acknowledged": bool(t.get("terms_acknowledged")),
-            "opacity": float(t.get("opacity", RELIEF_OPACITY)), "exaggeration": t.get("exaggeration", "auto"),
-            "resolution_m": t.get("resolution_m"),
+            "opacity": (RELIEF_OPACITY if op in (None, "auto") else float(op)), "opacity_auto": op in (None, "auto"),
+            "exaggeration": t.get("exaggeration", "auto"), "resolution_m": t.get("resolution_m"),
+            # 2.5.0 (T-07): the sun keys of role: hillshade, here too
+            "sun": {k: t[k] for k in ("azimuth", "altitude", "cast_shadows", "multidirectional", "max_px") if k in t},
+            "bathymetry": bool(t.get("bathymetry", False)),
             "contours": {"on": bool(c.get("on", False)), "interval": c.get("interval", "auto"), "index_every": c.get("index_every"),
                          "labels": c.get("labels", True) is not False}}
+
+
+RELIEF_UNDER_GRID_OPACITY = 0.6           # 2.5.0 (T-07): relief under a cells grid or an outline-only layer reads through it at 55 to 65 percent
+
+
+def relief_opacity_auto(plan) -> float:
+    """`terrain.opacity: auto` (the default): 0.35 under sparse data; 0.6 under a cells grid (hexbin, grid, an h3 source) or an outline-only
+    polygon layer, where the relief is the ground the reader sees through the cells (Day 20 issue 8)."""
+    for l in getattr(plan, "layers", []) or []:
+        spec = getattr(l, "spec", None) or {}
+        sym = spec.get("symbol") or {}
+        if (getattr(l, "role", None) in ("hexbin", "grid") or (spec.get("source") or {}).get("type") == "h3" or spec.get("empty") == "outline"
+                or str(sym.get("fill", "")).lower() == "none"):
+            return RELIEF_UNDER_GRID_OPACITY
+    return RELIEF_OPACITY
 
 
 def terrain_wanted(spec: dict, tier: str | None = None) -> tuple[bool, str, bool]:
@@ -866,15 +885,18 @@ def fetch_dem(plan, win, shape, source: str, terms: bool, resolution_m=None, max
         if cache:
             return cache
         return {"ok": False, "findings": fs + [finding("MAP-TER-004", "INFO", "offline (GMAP_OFFLINE=1): no DEM is fetched and none is cached for this window")], "offline": True}
-    r = tf.dem_for(wgs, res, src, gc.workdir(create=True), terms_acknowledged=terms, max_px=max_px, surface_ok=True)   # relief: 1.5.0 Copernicus outside the US
+    r = tf.dem_for(wgs, res, src, gc.workdir(create=True), terms_acknowledged=terms, max_px=max_px, purpose="relief")   # 2.5.0: the relief chain, a mosaic where needed
     r["findings"] = fs + list(r.get("findings") or [])
     return r
 
 
 def _dem_cached(wgs, res, src):
     import terrain_fetch as tf
-    for s in ([src] if src != "auto" else (["3dep"] if tf.in_us(wgs) else ["copernicus", "terrarium"])):
-        out = tf.cache_root(gc.workdir()) / s / f"{tf.cache_key(s, wgs, res)}.tif"
+    plan_ = tf.plan_sources(wgs, src, "relief")                # 2.5.0: the same chain the fetch would use, a mosaic included
+    cands = ([("mosaic", tf.cache_key("mosaic-" + "+".join(s for s, _ in plan_), wgs, res))] if len(plan_) > 1 else []) + \
+            [(s, tf.cache_key(s, wgs, res)) for s, _ in plan_]
+    for s, key in cands:
+        out = tf.cache_root(gc.workdir()) / s / f"{key}.tif"
         if out.is_file() and out.with_suffix(".json").is_file():
             rec = json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))
             rec["cached"], rec["requests"] = True, []
@@ -950,8 +972,31 @@ def sun_config(hs: dict | None) -> dict:
     one = "azimuth" in hs or "altitude" in hs
     multi = bool(hs.get("multidirectional", not one))
     return {"azimuth": float(hs.get("azimuth", 315.0)), "altitude": float(hs.get("altitude", 45.0)), "multidirectional": multi,
-            "cast_shadows": bool(hs.get("cast_shadows", False)) and not multi,
+            "cast_shadows": bool(hs.get("cast_shadows", False)) and not multi, "bathymetry": bool(hs.get("bathymetry", False)),
             "max_px": int(min(RELIEF_MAX_PX_LIMIT, max(256, int(hs.get("max_px", RELIEF_MAX_PX))))), "custom": one or "multidirectional" in hs}
+
+
+def water_mask(plan, dem, g):
+    """Cells of the relief grid that are water: inside the map's own ocean and lake layers, or flat at sea level (a DSM's sea is 0 m, a
+    bathymetric DEM's sea is below it and flat at the surface). None when nothing can be said."""
+    try:
+        arr = np.ma.filled(np.ma.asarray(dem, dtype=float), np.nan)
+        mask = np.zeros(arr.shape, dtype=bool)
+        polys = [b["gdf"] for b in getattr(plan, "basemap", []) or [] if b.get("kind") in ("ocean", "lake", "lakes", "water") and b.get("gdf") is not None]
+        if polys:
+            from rasterio.features import geometry_mask
+            geoms = [geom for gd in polys for geom in gd.to_crs(plan.crs).geometry if geom is not None and not geom.is_empty]
+            if geoms:
+                mask |= ~geometry_mask(geoms, out_shape=arr.shape, transform=g.transform)
+        flat = np.zeros(arr.shape, dtype=bool)
+        if arr.shape[0] > 2 and arr.shape[1] > 2:
+            pad = np.pad(arr, 1, mode="edge")
+            win = np.stack([pad[i:i + arr.shape[0], j:j + arr.shape[1]] for i in range(3) for j in range(3)])
+            flat = (np.nanmax(win, axis=0) - np.nanmin(win, axis=0)) < 0.5
+        mask |= flat & (arr <= 0.5)
+        return mask
+    except Exception:  # noqa: BLE001 - a mask that cannot be made leaves the relief as it was
+        return None
 
 
 def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z: float, layer_id: str, entry: dict | None, title: str, sun: dict | None = None) -> dict:
@@ -979,13 +1024,17 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
             cs = rio.cast_shadows(dem, g.transform, sun["azimuth"], sun["altitude"], z_factor=z, crs=g.crs)
             hs = np.where(np.isfinite(cs), hs * (1.0 - CAST_SHADOW_DEPTH * np.nan_to_num(cs)), hs)
     hs[_grow(np.ma.getmaskarray(dem))] = np.nan       # a cell beside nodata has no true slope: no line along the DEM's edge
+    if not sun.get("bathymetry"):                     # 2.5.0 (T-10): water is not land relief: no shaded sea surface along Puget Sound
+        wm = water_mask(plan, dem, g)
+        if wm is not None and wm.any():
+            hs[wm] = np.nan
     rgba = relief_rgba(hs, plan.tokens)
     if getattr(plan, "look", "classic") != "classic":
         rgba = tinted_relief(rgba, dem, plan.tokens)      # 0.20.0: an elevation tint in the brand's neutrals under a slightly stronger shading
     valid = ~np.ma.getmaskarray(dem)
     # a DEM the plugin fetched for the window can be fetched again for a wider one (the build's second pass): only a file the person
     # supplied has an end the frame must respect
-    limits = None if rec.get("source") in ("3dep", "terrarium", "copernicus") else drop_empty_sides(file_limits(dem_path, plan.crs, win),
+    limits = None if rec.get("source") in ("3dep", "terrarium", "copernicus", "mosaic") else drop_empty_sides(file_limits(dem_path, plan.crs, win),
                                                                                                     ~np.ma.getmaskarray(dem), g.transform)
     if not valid.all() and valid.any():               # 0.26.0 (TODO M16): a DEM that ends inside the map fades out instead of stopping in a straight edge
         # 1.21.0 (Day 18): not toward an edge the fit will keep the frame inside of; there the fade only drew a pale band along the frame
@@ -1001,6 +1050,9 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
     attribution = rec.get("attribution")
     src_name = {"3dep": "USGS 3D Elevation Program (3DEP) bare-earth DEM", "terrarium": "Terrain Tiles on AWS (Mapzen Terrarium)",
                 "copernicus": "Copernicus DEM GLO-30 (surface model)"}.get(rec.get("source"), f"DEM supplied by the person ({Path(dem_path).name})")
+    if rec.get("source") == "mosaic":                                  # 2.5.0 (T-03): every source the window used, by its share
+        nm = {"3dep": "USGS 3DEP", "copernicus": "Copernicus DEM GLO-30", "terrarium": "Terrain Tiles on AWS"}
+        src_name = "DEM mosaic of " + " and ".join(f"{nm.get(x['source'], x['source'])} ({x['share']:.0%})" for x in rec.get("sources") or [])
     how = ("multidirectional hillshade (225, 270, 315 and 360 degrees, Horn method)" if sun["multidirectional"] else
            f"hillshade with one sun at azimuth {sun['azimuth']:g} and {sun['altitude']:g} degrees above the horizon (Horn method, relative to flat ground)"
            + (", with cast shadows marched toward the sun" if sun["cast_shadows"] else ""))
@@ -1015,11 +1067,23 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
               "retrieved_at": str(rec.get("retrieved_at") or "unknown"), "license": str((entry_rec.get("license") or {}).get("class") or rec.get("license") or "unknown"),
               "attribution_text": attribution, "crs_original": str(rec.get("crs") or "unknown"), "crs_used": plan.crs,
               "transformations": [step] + ([f"DEM fetched {rec.get('retrieved_at')}: {pub.get('request_count', 0)} request(s), {pub.get('request_bytes', 0) / 1e6:.1f} MB"
-                                            + (" (from the cache)" if rec.get("cached") else "")] if rec.get("source") in ("3dep", "terrarium", "copernicus") else
+                                            + (" (from the cache)" if rec.get("cached") else "")] if rec.get("source") in ("3dep", "terrarium", "copernicus", "mosaic") else
                                            [f"a DEM supplied by the person ({Path(dem_path).name}); nothing was fetched"]),
               "row_count": 0, "library_ref": entry_rec.get("id") if entry else None, "library_rev": entry_rec.get("rev") if entry else None,
               "sha256": rec.get("sha256") or _sha(dem_path), "terrain": pub}
-    return {"kind": "hillshade", "gdf": None, "entry": entry_rec, "layer_id": layer_id, "title": title,
+    extra = []
+    if rec.get("source") == "mosaic":                      # 2.5.0: the other sources of a mosaic, credited beside the first
+        import map_plan as mp
+        for s in (rec.get("sources") or [])[1:]:
+            try:
+                ee = mp.library_entry(s["entry"]) if s.get("entry") else None
+            except Exception:  # noqa: BLE001
+                ee = None
+            if ee is not None:
+                if s.get("attribution"):
+                    ee = dict(ee, license=dict(ee.get("license") or {}, attribution_text=s["attribution"]))
+                extra.append(ee)
+    return {"kind": "hillshade", "gdf": None, "entry": entry_rec, "layer_id": layer_id, "title": title, "extra_entries": extra,
             "image": {"png": png, "rgba": rgba, "bbox": list(g.bounds), "transform": g.transform, "crs": plan.crs, "opacity": opacity, "shape": [int(rgba.shape[1]), int(rgba.shape[2])],
                       "limits": limits},
             "record": record, "dem_path": dem_path, "z": z, "sun": sun}
@@ -1088,6 +1152,20 @@ def insert_relief(plan, item: dict) -> None:
     plan.basemap.insert(i, item)
 
 
+def relief_missing(plan, reason: str, layer: str | None = None) -> None:
+    """2.4.0 (T-06): relief the spec asked for and the map does not draw is loud: one line in the build's summary (plan.degraded), the trace's
+    `degraded` status, and MAP-TER-008 WARN, ordered first among the warnings."""
+    import re as _re
+    short = _re.sub(r"\s+", " ", str(reason)).strip()[:200]
+    item = f"relief missing: {short}"
+    if item not in plan.degraded:
+        plan.degraded.append(item)
+        f = finding("MAP-TER-008", "INFO" if offline() else "WARN", "relief was asked for and is not on this map: " + short
+                    + ". The build exits 0; say so with the map, or fix the source and build again", layer=layer)
+        f["degraded"] = True
+        plan.findings.append(f)
+
+
 def hillshade_layer(plan, l, win, shape) -> None:
     """`role: hillshade`: relief from the layer's DEM (a file: no network; a 3DEP or Terrarium library ref: fetched for the window). The layer moves
     to the basemap: drawn above the land and under everything else, never in the legend or the extent."""
@@ -1111,7 +1189,9 @@ def hillshade_layer(plan, l, win, shape) -> None:
                 fs = [{**f, "severity": "WARN" if f["severity"] == "BLOCK" else f["severity"], "layer": l.id,
                        "message": f["message"] + ("; the map was built without this hillshade" if f["severity"] == "BLOCK" else "")} for f in r.get("findings") or []]
                 plan.findings += fs
-                plan.notes.append(f"layer '{l.id}': hillshade not drawn (" + "; ".join(f["message"] for f in fs if f["id"] in ("MAP-WEB-011", "MAP-TER-001", "MAP-TER-004"))[:300] + ")")
+                why = "; ".join(f["message"] for f in fs if f["id"] in ("MAP-WEB-011", "MAP-TER-001", "MAP-TER-004"))[:300]
+                plan.notes.append(f"layer '{l.id}': hillshade not drawn ({why})")
+                relief_missing(plan, why or "the DEM could not be fetched", l.id)
                 return
             plan.findings += [{**f, "layer": l.id} for f in r.get("findings") or []]
         item = relief_item(plan, r["path"], r["record"], win, None, opacity=opacity, z=z, layer_id=l.id, entry=l.entry, title=l.title, sun=sun_config(hs))
@@ -1119,6 +1199,7 @@ def hillshade_layer(plan, l, win, shape) -> None:
         import ogc_http as oh
         plan.findings.append(finding("MAP-TER-004", "WARN", f"layer '{l.id}': the hillshade could not be made ({oh.untrusted(ex, 200)}); the map was built without it", layer=l.id))
         plan.notes.append(f"layer '{l.id}': hillshade not drawn ({oh.untrusted(ex, 160)})")
+        relief_missing(plan, f"the hillshade could not be made ({oh.untrusted(ex, 160)})", l.id)
         return
     if l.spec.get("provenance"):
         apply_dem_provenance(item, l.spec["provenance"])
@@ -1141,11 +1222,16 @@ def terrain_context(plan, win, shape, why: str, explicit: bool, tier: str) -> No
     if r is None:
         why_not = "; ".join(f["message"] for f in fs) or "no DEM"
         plan.notes.append(f"terrain ({why}): not drawn: {why_not[:300]}")
+        if explicit:
+            relief_missing(plan, why_not)
         return
     z = exaggeration(cfg["exaggeration"], tier)
     try:
         entry = _dem_entry(r["record"])
-        item = relief_item(plan, r["path"], r["record"], win, None, opacity=cfg["opacity"], z=z, layer_id="terrain", entry=entry, title="Relief")
+        op = relief_opacity_auto(plan) if cfg.get("opacity_auto") else cfg["opacity"]
+        cfg = {**cfg, "opacity": op}
+        item = relief_item(plan, r["path"], r["record"], win, None, opacity=op, z=z, layer_id="terrain", entry=entry, title="Relief",
+                           sun={**sun_config(cfg.get("sun")), "bathymetry": cfg.get("bathymetry", False)})
         tprov = (plan.spec.get("terrain") or {}).get("provenance")
         if tprov:                                         # 1.2.0 (Day 10 issue 11): a DEM file under terrain: is credited from its provenance
             apply_dem_provenance(item, tprov)
@@ -1153,6 +1239,8 @@ def terrain_context(plan, win, shape, why: str, explicit: bool, tier: str) -> No
         import ogc_http as oh
         plan.findings.append(finding("MAP-TER-004", "WARN" if explicit else "INFO", f"the relief could not be drawn ({oh.untrusted(ex, 200)}); the map was built without it"))
         plan.notes.append(f"terrain ({why}): not drawn ({oh.untrusted(ex, 160)})")
+        if explicit:
+            relief_missing(plan, f"the relief could not be drawn ({oh.untrusted(ex, 160)})")
         return
     insert_relief(plan, item)
     rec = r["record"]

@@ -24,7 +24,7 @@ finds = legend.check_blocks(blocks, layers, classified)                 # MAP-CA
 - Each classed block has a title that names the measure and its unit, and a "No data" swatch when any value is null.
 - Labels are formatted by `classify-and-color`: one number of decimals, thousands separators, ranges that do not overlap
   (MAP-CART-006).
-- Status maps (RAG) carry a **shape and a color** for every state; `status_block` refuses a state without a shape
+- Status maps (RAG) carry a **shape and a color** for every status; `status_block` refuses a status without a shape
   (MAP-A11Y-003).
 - Proportional symbols are scaled by **area**, not radius (MAP-CART-010). The size key shows the smallest, a middle and the
   largest value.

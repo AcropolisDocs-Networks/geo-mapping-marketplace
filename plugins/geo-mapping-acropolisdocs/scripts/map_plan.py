@@ -45,7 +45,8 @@ CONTEXT_REFS = {"urban": "ref.context.world.urban.ne10", "lakes": "ref.context.w
 TIGER_ROADS = {"tiger": "ref.infrastructure.us.road.tiger-primary", "tiger-prisec": "ref.infrastructure.us.road.tiger-prisec"}   # 0.25.0: context.roads
 TIGER_ROAD_TYPES = {"S1100": "Major Highway", "S1200": "Secondary Highway"}         # MTFCC: primary, secondary; the rest of a file are local roads
 NAMES_REFS = {"places": "ref.gazetteer.world.place.ne10", "lakes": "ref.context.world.lakes.ne10", "rivers": "ref.context.world.rivers.ne10",
-              "admin1": "ref.boundary.world.state.ne50", "states": "ref.boundary.us.state.cb20m"}  # toponymy (M10, P0-1)
+              "admin1": "ref.boundary.world.state.ne50", "states": "ref.boundary.us.state.cb20m",
+              "admin1_world": "ref.boundary.world.state.ne10-locator"}  # toponymy (M10, P0-1); 3.0.0 (G-07): admin-1 names worldwide
 DATA_ROLES = ("choropleth", "points", "lines", "polygons", "proportional", "heat", "hexbin", "grid", "raster")
 AREA_ROLES = ("choropleth", "hexbin", "grid")       # a classed fill over areas: equal-area display, water-only context, background-coloured outlines
 AGG_ROLES = ("hexbin", "heat", "grid")              # the layer's points are aggregated into cells before anything else looks at them (M11)
@@ -105,7 +106,11 @@ def names_config(spec: dict) -> dict:
     return {"on": on is not False, "places": str(n.get("places") or "auto"), "water": n.get("water", True) is not False,
             "admin": n.get("admin", True) is not False, "max": n.get("max"), "min_pop": int(n.get("min_pop") or 0),
             "exclude": {str(x).strip().lower() for x in (n.get("exclude") or [])},
-            "language": str(n.get("language") or "auto"), "second_line": str(n.get("second_line") or "none")}
+            "language": str(n.get("language") or "auto"), "second_line": str(n.get("second_line") or "none"),
+            # 2.6.0 (V-06): one ink for every name over data (dark on a page-colour halo, the halo wider over dark classes); adaptive is 2.5's
+            "ink": str(n.get("ink") or "uniform") if str(n.get("ink") or "uniform") in ("uniform", "adaptive") else "uniform",
+            # 3.0.0 (G-08): places the message names are labelled at any scale tier
+            "message_places": n.get("message_places", True) is not False}
 
 
 PLACE_NAMES = "assets/basemaps/ne_10m_place_names.parquet"     # 1.5.0: the 26 other-language names of the 10m places, by ne_id
@@ -388,6 +393,8 @@ class Plan:
     raster_window: tuple | None = None               # 1.21.0: the display-CRS window the rasters were read for (map_raster.prepare)
     raster_limits: tuple | None = None               # 1.21.0: where frame-filling rasters' data ends: (x0, y0, x1, y1), None on an open side
     direct_labels: list = field(default_factory=list)  # 1.22.0: the label entries of directly labelled layers ({layer, field, direct: True}); drawn before the spec's own labels
+    region: object = None                            # 3.0.0 (G-01): the resolved region (region.Region) when the MapSpec names one
+    degraded: list = field(default_factory=list)     # 2.4.0 (T-06, X-04): what the spec asked for and the build could not draw ("relief missing: <reason>")
     subject: list = field(default_factory=list)      # 1.22.0: [(layer id, mask or None)]: what `extent: {mode: fit_message}` framed (the layers the message names, or their highlighted features)
 
 
@@ -545,6 +552,10 @@ def uncached_ref_layers(spec: dict) -> list[dict]:
             continue                                  # the load says what is wrong with the id itself
         if (e.get("delivery") or {}).get("mode") != "fetch" or e.get("status") != "active":
             continue
+        import map_raster
+        if (map_raster.is_dem_entry(e["id"]) or ly.get("role") in ("hillshade", "contours", "raster", "terrain")
+                or str(e.get("type") or "") in ("terrain", "raster", "dem")):
+            continue                                  # 2.4.0 (T-02): a DEM is fetched for the map's window by the build, never cached ahead as a vector file
         v = src.get("variant")
         for one in (v if isinstance(v, (list, tuple)) else [v]):
             if ref_fetch.cached_path(e, None if one is None else str(one)) is None:
@@ -586,10 +597,83 @@ def _load_ref_layer(entry_id: str, variant: str | None = None):
     return geo_io.read(path).gdf, e
 
 
+_BUILD = {}          # 2.6.0: what a source loader may need of the build: the region (G-01) and the map frame in mm (H-07)
+
+
+# 2.6.0 (V-04): template auto-social and auto-slide pick the sheet by the subject's width over its height: (upper limit, template)
+SHAPE_AUTO = {"auto-social": ((0.6, "story"), (0.85, "portrait-social"), (1.25, "square-social"), (float("inf"), "16x9-slide")),
+              "auto-slide": ((0.75, "portrait-social"), (1.1, "square-social"), (float("inf"), "16x9-slide"))}
+
+
+def aspect_km(wgs) -> float:
+    import math as _m
+    W, S, E, N = wgs
+    return max(1e-6, (E - W) * _m.cos(_m.radians((S + N) / 2))) / max(1e-6, (N - S))
+
+
+CELL_EDGE_MAX_MM = 0.25 * 0.3528      # 2.6.0 (H-08): a cells layer's edge: at most a quarter point...
+CELL_EDGE_SHARE = 0.06                 # ...and at most 6 percent of a cell's printed width
+
+
+def h3_cells_style(plan, l, ly: dict, res, t: dict) -> None:
+    """2.6.0 (H-08, H-09): an H3 cells layer. The zero class (no data, from a complete grid) is drawn as an outline only by default
+    (`empty: outline|none|fill`), the data classes keep a hairline in the page colour, and the key is one group: the zero class first as an
+    outline swatch named None, the cell size in the group's note."""
+    info = (_BUILD.get("h3") or {}).get(l.id) or {}
+    l.cells_layer = True
+    zero = None
+    if res is not None and getattr(res, "edges", None) and res.kind != "categorical":
+        e = list(res.edges)
+        if e and float(e[0]) == 0.0 and (len(e) == 2 or float(e[1]) > 0):
+            zero = 0
+    complete = bool((ly.get("h3") or {}).get("complete"))
+    mode = ly.get("empty") or ("outline" if complete else "fill")
+    l.empty_class, l.empty_mode = (zero, mode) if zero is not None else (None, "fill")
+    blk = l.legend_block or {}                    # the data classes' edge is the page colour (an area role's default stroke), a hairline
+    items = blk.get("items") or []
+    if zero is not None and items and mode != "none":
+        it = items[0]
+        if mode == "outline":
+            it.update(fill=t["frame"], stroke=t["frame"], outline=True, width_mm=0.25, label="None" if str(it.get("label")) in ("0", "0–0") else it.get("label"))
+    elif zero is not None and items and mode == "none":
+        items[0].update(label="None (not drawn)", outline=True, fill=t["background"], stroke=t["frame"])
+    if info.get("resolution") is not None:
+        km2 = info.get("cell_km2")
+        note = f"H3 resolution {info['resolution']}, {km2:.1f} km² per cell" if km2 and km2 >= 1 else f"H3 resolution {info['resolution']}, {km2:.2f} km² per cell"
+        blk["note"] = (blk.get("note") + "; " if blk.get("note") else "") + note
+        l.legend_block = blk
+
+
+def mm_per_km(bounds_wgs84, frame_mm) -> float:
+    """The page scale a lon/lat box gets in a map frame of (w, h) mm, at a 92 percent fit."""
+    import math as _m
+    W, S, E, N = bounds_wgs84
+    wk = max(1e-6, (E - W) * 111.32 * _m.cos(_m.radians((S + N) / 2)))
+    hk = max(1e-6, (N - S) * 110.57)
+    return 0.92 * min(frame_mm[0] / wk, frame_mm[1] / hk)
+
+
 def load_source(layer: dict, base: Path, window=None):
     """`window` (a map build passes it) gives the lon/lat box a library service layer is fetched for (map_sources.window)."""
     src = layer["source"]
     t = src.get("type")
+    if t == "h3":                             # 2.6.0 (H-01 to H-03, H-07): H3 ids read, rolled up and completed over the region
+        import h3_source as hs
+        reg = _BUILD.get("region")
+        try:
+            mmk = _BUILD.get("mm_per_km")
+            if mmk is None and _BUILD.get("frame_mm") and reg is not None:
+                mmk = mm_per_km(reg.bounds, _BUILD["frame_mm"])
+            gdf, notes, steps, fs, info = hs.load_layer(layer, base, region_geom=reg.geometry if reg is not None else None, mm_per_km=mmk)
+        except hs.H3SourceError as ex:
+            raise PlanError(f"{ex.rule}: layer '{layer['id']}': {ex}", ex.code) from None
+        _BUILD.setdefault("findings", []).extend(fs)
+        _BUILD.setdefault("h3", {})[layer["id"]] = info
+        ent = None
+        if src.get("adapter"):
+            import adapters
+            ent = adapters.get(src["adapter"]).entry()
+        return gdf, ent, False, [{"message": n} for n in notes] + [{"step": s} for s in steps], None
     if t in ("ref", "geocode"):
         import map_sources                    # M13: a library entry served by a data service, and a table geocoded into points
         if t == "geocode":
@@ -1316,6 +1400,9 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     findings += style_lint.lint_palette(style, pack["tokens"]["modes"])     # MAP-STYLE-005: the pack's colours for this brand
     tpl_value = template or spec.get("template") or "letter-landscape"
     tpl_auto = tpl_value == "auto"                       # 1.5.0 (R3-UNITS): Letter or A-series by the country under the map, chosen once the extent is known
+    tpl_shape = tpl_value if isinstance(tpl_value, str) and tpl_value in SHAPE_AUTO else None     # 2.6.0 (V-04): portrait, square or landscape by the region's shape
+    if tpl_shape:
+        tpl_value = SHAPE_AUTO[tpl_shape][-1][1]          # a provisional sheet; the real one is chosen once the extent is known
     if tpl_auto:
         tpl_value = str((pack.get("pack") or {}).get("default_template") or "letter-landscape")
     try:
@@ -1333,6 +1420,19 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         for ref in ml.op_layer_refs(ly):
             used_by.setdefault(ref, []).append(ly["id"])
     pre_notes: list[str] = []                 # notes made before the Plan exists (a layer repair, an op); appended to plan.notes below
+    _BUILD.clear()                            # 2.6.0: the region resolved once (G-01) and the map frame, for the H3 source and the extent
+    if spec.get("region"):
+        import region as region_mod
+        try:
+            _BUILD["region"] = region_mod.resolve(spec["region"], base)
+        except region_mod.RegionError as ex:
+            raise PlanError(f"{ex.rule}: {ex}", ex.code) from None
+        pre_notes += _BUILD["region"].notes
+        if "region" not in {ly.get("id") for ly in spec["layers"]}:
+            loaded["region"] = _BUILD["region"].gdf()      # `ops: [{op: clip, layer: region}]` clips any layer to the region
+    fr = tpl.get("map_full") or tpl.get("map") or {}
+    if fr.get("w") and fr.get("h"):
+        _BUILD["frame_mm"] = (float(fr["w"]), float(fr["h"]))
     missing = uncached_ref_layers(spec)       # 2.1.0: every uncached library layer named at once, before any is read
     if missing:
         raise PlanError(uncached_message(missing), gc.EXIT_REFUSED)
@@ -1449,7 +1549,8 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
 
     # ---- extent in WGS84 first, to choose the display CRS
     ext = spec.get("extent") or {}
-    mode_e = ext.get("mode", "fit_layers")
+    mode_e = ext.get("mode", "region" if _BUILD.get("region") is not None else "fit_layers")      # 3.0.0 (G-01): a region frames its map
+    findings += _BUILD.get("findings") or []
     # 2.1.0 (Day 19 video issue 13): a legend-only layer with features (the events a video draws over the map) is part of what the map shows,
     # so the frame fits it too; the square video zoomed in on the other layers until a bbox was written
     placed = [l for l in layers if len(l.gdf)]              # a fetched or service raster has no footprint yet
@@ -1459,7 +1560,11 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         raise PlanError("the map's layers have no extent of their own (a service picture or a fetched raster is read for the map's window); "
                         "give extent: {mode: bbox, bbox: [...]} or {mode: place, place: ...}", gc.EXIT_USAGE)
     wgs = None
-    if mode_e == "bbox" and ext.get("bbox"):
+    if mode_e == "region":
+        if _BUILD.get("region") is None:
+            raise PlanError("extent: {mode: region} needs a region: block (admin, place, admin2, file, bbox or h3)", gc.EXIT_USAGE)
+        wgs = _BUILD["region"].bounds
+    elif mode_e == "bbox" and ext.get("bbox"):
         wgs = tuple(float(v) for v in ext["bbox"])
     elif mode_e == "place":
         wgs = place_bbox(ext.get("place", ""))
@@ -1480,6 +1585,13 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         a = np.array(parts)
         wgs = (float(a[:, 0].min()), float(a[:, 1].min()), float(a[:, 2].max()), float(a[:, 3].max()))
     area_stat = any(l.role in AREA_ROLES for l in layers)
+    if tpl_shape:
+        asp = aspect_km(wgs)
+        want = next(name for lim, name in SHAPE_AUTO[tpl_shape] if asp < lim)
+        if want != tpl_value:
+            tpl_value, tpl_name = want, want
+            tpl = lo.apply_layout(lo.load_template(want), spec, classic_layout)
+        pre_notes.append(f"template {tpl_shape}: {want}, for a subject {asp:.2f} times as wide as it is tall")
     if tpl_auto:
         try:
             import geo_locale as gl
@@ -1494,7 +1606,8 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         except (lo.LayoutError, Exception) as ex:  # noqa: BLE001 - the brand default stays
             pre_notes.append(f"template auto: kept {tpl_value} ({type(ex).__name__})")
     tiles_rec, tiles_notes = prepared_tiles(spec, use_tiles, wgs, base)
-    choice = ce.choose_display(wgs, "thematic" if area_stat else "reference", area_stat=area_stat or None, tiles=bool(tiles_rec), prefer=crs_spec.get("prefer"))
+    choice = ce.choose_display(wgs, "thematic" if area_stat else "reference", area_stat=area_stat or None, tiles=bool(tiles_rec), prefer=crs_spec.get("prefer"),
+                              legacy=map_look.look_of(spec) == "classic")
     tiles_own_crs = bool(tiles_rec) and crs_spec.get("display") not in (None, "auto", "EPSG:3857")     # 1.11.0: the composite is warped to it
     cs = ce.mapspec_crs(choice, "EPSG:3857" if tiles_rec and not tiles_own_crs else crs_spec.get("display"))
     display = cs["display"]
@@ -1535,12 +1648,16 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
                          + f", {float(spec['extent']['padding_pct']):g}% of the frame left round it for the surroundings")
     elif mode_e in ("fit_layers", "fit_message"):
         extent = _bounds_of(data_layers)
+    elif mode_e == "region":                  # the region's own outline in the display CRS, not its lon/lat box
+        import geopandas as _gpd
+        extent = tuple(float(v) for v in _gpd.GeoSeries([_BUILD["region"].geometry], crs="EPSG:4326").to_crs(display).total_bounds)
     else:
         extent = project_bbox(wgs, display)
     plan = Plan(spec=spec, spec_path=spec_path, manifest=manifest, brand=slug, brand_name=bl.brand_name(slug), pack=pack, tokens=tokens, mode=mode,
                 tpl=tpl, tpl_name=tpl_name, crs=display, crs_info=crs_info, extent=extent, layers=layers, basemap=[], findings=findings, helpers=helpers,
                 look=look, style=style)
     plan.look_asked = map_look.look_of(spec)
+    plan.region = _BUILD.get("region")
     plan.subject = [(l.id, m) for l, m in (subject if mode_e == "fit_message" else [])]
     plan.window_override = tuple(float(v) for v in window) if window is not None else None
     if (spec.get("extent") or {}).get("crop"):
@@ -2069,6 +2186,15 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
     if l.role in (*AREA_ROLES, "points", "polygons", "lines") and vf and ly.get("classification"):
         c = ly["classification"]
         method = cf.ALIASES.get(c.get("method", "quantile"), c.get("method", "quantile"))
+        if "method" not in c and not c.get("breaks") and not c.get("edges") and not c.get("classes") and vf in l.gdf.columns:
+            try:                                  # 2.4.0 (V-01): a field of a few whole numbers (carriers 0 to 3) classes one class per value
+                _v = l.gdf[vf].to_numpy(dtype="float64", na_value=np.nan)
+                _v = _v[np.isfinite(_v)]
+                if _v.size and np.all(_v == np.round(_v)) and 2 <= np.unique(_v).size <= cf.DISCRETE_AUTO:
+                    method = "discrete"
+                    plan.notes.append(f"layer '{l.id}': '{vf}' holds {np.unique(_v).size} whole-number values; one class each (classification.method: discrete)")
+            except (TypeError, ValueError):
+                pass
         fmt = cf.number_format(c.get("format") or ly.get("legend", {}).get("format"))
         if method == "categorical":
             res = cf.classify(l.gdf[vf].tolist(), "categorical", order=c.get("order"), max_categories=int(c.get("max_categories", cf.MAX_CATEGORIES)),
@@ -2141,7 +2267,11 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
             l.legend_block = lg.status_block(titled(ly, l), t, cats)
         else:
             swatch = (l.aggregation or {}).get("shape") if l.role in ("hexbin", "grid") else None
+            if (ly.get("source") or {}).get("type") == "h3":
+                swatch = "hexagon"
             l.legend_block = lg.class_block(titled(ly, l), res, colors, t, swatch=swatch)
+        if (ly.get("source") or {}).get("type") == "h3":
+            h3_cells_style(plan, l, ly, res, t)
     import map_look
     lk = map_look.params(plan.look)
     if l.kind == "polygon":

@@ -1,7 +1,7 @@
 ---
 name: terrain-dem-and-maps
 description: >
-  KNOWLEDGE MODULE - read by terrain-analysis. Fetching an elevation model (3DEP in the US, Copernicus GLO-30 and the terrain tiles elsewhere; sizes, caching, credit) and putting terrain on a map: hillshade, contours and the profile inset.
+  KNOWLEDGE MODULE - read by terrain-analysis. Fetching an elevation model (the source chain by coverage: 3DEP, Copernicus GLO-30/90, the terrain tiles, mosaicked where a window spans two; sizes, caching, credit) and putting terrain on a map: hillshade, contours and the profile inset.
 ---
 
 # terrain-dem-and-maps

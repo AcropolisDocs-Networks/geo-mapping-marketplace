@@ -345,7 +345,20 @@ def normalise_stac(doc: dict, query: str = "", limit: int = 10, root: str = "", 
 SEARCHERS = {"datagov": search_datagov, "hub": search_hub, "socrata": search_socrata, "stac": search_stac}
 
 
-def search(query: str, sources=None, bbox=None, limit: int = 10, http=None, stac_root: str | None = None, datetime: str | None = None) -> dict:
+def adapters_for(region_text: str | None) -> list[dict]:
+    """3.0.0 (G-11): the data adapters ranked by how much of the region they cover, listed before any catalog result."""
+    if not region_text:
+        return []
+    import adapters
+    import region as region_mod
+    txt = str(region_text).strip()
+    blk = {"admin": [c.strip() for c in txt.split(",")]} if all(region_mod.CODE.match(c.strip().upper()) for c in txt.split(",")) else {"place": txt}
+    reg = region_mod.resolve(blk)
+    return [d for d in adapters.ranked(reg) if float(d.get("covers") or 0) > 0]
+
+
+def search(query: str, sources=None, bbox=None, limit: int = 10, http=None, stac_root: str | None = None, datetime: str | None = None,
+           region: str | None = None) -> dict:
     """Every source in order, the library first whatever the order given; one source's failure never hides another's results."""
     srcs = [s.strip().lower() for s in (sources.split(",") if isinstance(sources, str) else (sources or SOURCES)) if s.strip()]
     bad = [s for s in srcs if s not in SOURCES]
@@ -360,6 +373,10 @@ def search(query: str, sources=None, bbox=None, limit: int = 10, http=None, stac
     limit = max(1, min(int(limit or 10), MAX_LIMIT))
     srcs = (["library"] if "library" in srcs else []) + [s for s in srcs if s != "library"]
     results: list[dict] = []
+    try:
+        ranked_adapters = adapters_for(region)
+    except Exception as ex:  # noqa: BLE001 - a region that does not resolve never hides the catalogs
+        ranked_adapters = [{"name": "(region)", "status": f"not resolved: {str(ex)[:120]}", "covers": 0}]
     per: dict[str, dict] = {}
     h = http
     for s in srcs:
@@ -375,7 +392,10 @@ def search(query: str, sources=None, bbox=None, limit: int = 10, http=None, stac
             results += rows
         except (oh.ServiceError, ValueError, KeyError, TypeError) as e:
             per[s] = {"count": 0, "error": oh.untrusted(str(e), 200), "rule": getattr(e, "rule", None)}
-    return {"ok": True, "query": query, "bbox": bb, "sources": srcs, "results": results, "per_source": per, "notice": NOTICE}
+    out = {"ok": True, "query": query, "bbox": bb, "sources": srcs, "results": results, "per_source": per, "notice": NOTICE}
+    if region:
+        out["adapters"] = ranked_adapters
+    return out
 
 
 def to_find_record(r: dict) -> dict:
@@ -418,11 +438,12 @@ def main(argv=None, http=None) -> int:
     ap.add_argument("--bbox", help="minx,miny,maxx,maxy (write --bbox=-115,31,-108,37 for the west)")
     ap.add_argument("--stac-root", help="a STAC API root (default earth-search; or planetary-computer)")
     ap.add_argument("--datetime", help="a STAC time window, start/end")
+    ap.add_argument("--region", help="3.0.0: a region (Cascadia, US-WA, GB-SCT): the data adapters that cover it are listed first")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--find-record", type=int, metavar="N", help="print result N as a draft find record")
     a = ap.parse_args(argv)
     root = STAC_ROOTS.get(a.stac_root or "", a.stac_root)
-    res = search(a.query, a.sources, a.bbox, a.limit, http=http, stac_root=root, datetime=a.datetime)
+    res = search(a.query, a.sources, a.bbox, a.limit, http=http, stac_root=root, datetime=a.datetime, region=a.region)
     if a.find_record and res.get("ok"):
         if not 1 <= a.find_record <= len(res["results"]):
             print(f"there is no result {a.find_record}", file=sys.stderr)

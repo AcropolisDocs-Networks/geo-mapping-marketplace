@@ -218,7 +218,7 @@ def call_name(e: dict) -> str:
 def outcome(e: dict) -> str:
     if e.get("stopped_by"):
         return "stopped"
-    return {"ok": "ok", "failed": "failed", "blocked": "blocked", "orphan": "no result", "self": "this report"}.get(e.get("status"), e.get("status") or "?")
+    return {"ok": "ok", "failed": "failed", "degraded": "degraded", "blocked": "blocked", "orphan": "no result", "self": "this report"}.get(e.get("status"), e.get("status") or "?")
 
 
 # ---------------------------------------------------------------------------------------------------------------- charts
@@ -491,6 +491,18 @@ def html(o: dict, generated: dt.datetime | None = None) -> str:
     if o.get("runs"):
         rows = [[esc(r.get("pipeline")), esc(r.get("status")), fmt_d(r.get("seconds")), esc(r.get("run_id") or r.get("id") or "")] for r in o["runs"][:30]]
         parts.append(section("This plugin's run records", "Pipeline runs", table(["Pipeline", "Status", "Time", "Run"], rows, {2})))
+
+    # 2.4.0: outputs never missed silently (MT-03), and the work done outside the plugin (X-06)
+    om = o.get("outputs_missed")
+    if om and not o.get("outputs"):
+        parts.append(section("Finished maps", "No output found",
+                             f"<p>{om['builds']} finished build(s), no output found: {esc(om['reason'])}. The map evaluation is offered on the builds' "
+                             "output folders when they still hold maps.</p>"))
+    if o.get("outside_plugin"):
+        rows = [[esc(g["n"]), esc(g["what"]), esc(", ".join(g["libraries"]))] for g in o["outside_plugin"][:20]]
+        parts.append(section("Backlog signal", "Work done outside the plugin",
+                             "<p>The session's own code or hand fetches between plugin calls. Each is a plugin feature that was missing, or a recipe "
+                             "the library should carry.</p>" + table(["Call", "What", "Libraries"], rows, {0})))
 
     # how measured
     # 2.2.0: the map evaluator's grades of this session's outputs, when it ran (observe only: nothing that makes a map reads them)

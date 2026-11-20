@@ -4,7 +4,8 @@ contextily             # tile compositing
 cartopy                # projection-aware rendering
 rasterio>=1.4          # raster inputs, zonal statistics, hillshade, DEM fetch (terrain-analysis); contourpy for contours comes with matplotlib
 h3>=4                  # H3 hex aggregation: role hexbin / heat, geo_ops hexbin, geo-analyze hexbin
-duckdb>=1.1            # large tables (M16): where filters, big join tables, grid sums; its spatial extension for point-in-polygon (INSTALL spatial once)
+duckdb>=1.1            # large tables (M16): where filters, big join tables, grid sums
+duckdb-extension-spatial  # 2.4.0: DuckDB's spatial extension as a wheel (its major.minor matches DuckDB's; constraints.txt pins the pair)
 imageio-ffmpeg         # the MP4 of an animated atlas (map_export --animate); the GIF needs only Pillow
 scipy                  # 3D web page terrain tiles (with rasterio); faster cluster baking on the MapLibre page
 playwright             # the last PNG route and web-map checks; then run `playwright install chromium` once

@@ -38,6 +38,50 @@ LOCAL_SPAN_DEG = 6.0
 STATE_SPAN_DEG = 16.0          # 1.13.0: a contiguous-US extent up to this wide and STATE_SPAN_H_DEG tall is state-sized: a centred Albers
 STATE_SPAN_H_DEG = 12.0
 POLAR_LAT = 80.0
+# 3.0.0 (G-06): one rule for a thematic map anywhere: an equal-area projection centred on the subject once it is larger than this across (its
+# longer side, in km); below it a UTM zone's area error is negligible and its shapes are better (street to metro scale)
+EA_SPAN_KM = 300.0
+MIDLAT = (30.0, 65.0)          # a conic (Albers) between these latitudes when the subject is about as wide as it is tall or wider
+CONIC_MIN_ASPECT = 0.8
+# the datum of a centred projection, by where its centre is (lon0, lat0, lon1, lat1, PROJ datum or ellipsoid, the name said)
+DATUMS = (((-170.0, 7.0, -50.0, 84.0), "+datum=NAD83", "NAD83"),
+          ((-25.0, 34.0, 45.0, 72.0), "+ellps=GRS80 +towgs84=0,0,0,0,0,0,0", "ETRS89"),
+          ((110.0, -45.0, 160.0, -9.0), "+ellps=GRS80 +towgs84=0,0,0,0,0,0,0", "GDA2020"),
+          ((-82.0, -56.0, -34.0, 13.0), "+ellps=GRS80 +towgs84=0,0,0,0,0,0,0", "SIRGAS 2000"))
+
+
+def datum_for(cx: float, cy: float) -> tuple[str, str]:
+    """(PROJ datum part, name) for a centred projection: NAD83 in North America, ETRS89 in Europe, GDA2020 in Australia, SIRGAS 2000 in South
+    America, WGS 84 elsewhere. ETRS89, GDA2020 and SIRGAS 2000 agree with WGS 84 within a metre at map scale, so they are written on GRS80."""
+    for (x0, y0, x1, y1), part, name in DATUMS:
+        if x0 <= cx <= x1 and y0 <= cy <= y1:
+            return part, name
+    return "+datum=WGS84", "WGS 84"
+
+
+def span_km(width: float, height: float, cy: float) -> float:
+    import math as _m
+    return max(width * 111.32 * max(0.05, _m.cos(_m.radians(cy))), height * 110.57)
+
+
+def centred_equal_area(minx, miny, maxx, maxy, cx, cy, width, height, *, why_size: str) -> tuple:
+    """G-06: (proj, name, why). Albers conic with standard parallels at 1/6 and 5/6 of the latitude span for a mid-latitude subject about as wide as
+    it is tall or wider; Lambert azimuthal equal-area for a compact, polar or equatorial one."""
+    import math as _m
+    part, dname = datum_for(cx, cy)
+    wide = width * max(0.05, _m.cos(_m.radians(cy))) >= CONIC_MIN_ASPECT * height
+    if MIDLAT[0] <= abs(cy) <= MIDLAT[1] and wide:
+        lat1, lat2 = round(miny + height / 6, 2), round(maxy - height / 6, 2)
+        lon0, lat0 = round(cx, 2), round(cy, 2)
+        proj = f"+proj=aea +lat_0={lat0} +lon_0={lon0} +lat_1={lat1} +lat_2={lat2} +x_0=0 +y_0=0 {part} +units=m +no_defs"
+        return (proj, f"Albers Equal Area ({dname}, centred on the extent)",
+                f"{why_size} An Albers equal-area projection centred on it (central meridian {lon0}, standard parallels {lat1} and {lat2}, {dname}) keeps "
+                "areas true and the subject upright.")
+    lon0, lat0 = round(cx, 1), round(cy, 1)
+    proj = f"+proj=laea +lat_0={lat0} +lon_0={lon0} +x_0=0 +y_0=0 {part} +units=m +no_defs"
+    return (proj, f"Lambert Azimuthal Equal Area ({dname}, centred on the extent)",
+            f"{why_size} A Lambert azimuthal equal-area projection centred on it ({lat0}, {lon0}, {dname}) keeps areas true and distortion low near the "
+            "centre; it suits a compact, polar or equatorial subject.")
 NAD83_UTM_ZONES = range(1, 24)       # NAD83 UTM (EPSG:269zz) exists for zones 1 to 23 north
 
 
@@ -67,6 +111,8 @@ def is_web_mercator(crs) -> bool:
 
 def is_equal_area(crs) -> bool:
     c = _crs(crs)
+    if c.is_bound:                                                   # 3.0.0: '+towgs84' (ETRS89, SIRGAS) wraps the projection in a bound CRS
+        c = c.source_crs
     if c.is_geographic:
         return False
     method = (c.coordinate_operation.method_name if c.coordinate_operation else "").lower()
@@ -428,9 +474,11 @@ def _national_choice(minx, miny, maxx, maxy, cx, purpose, equal_wanted, width):
     return None
 
 
-def choose_display(extent, purpose: str = "thematic", *, tiles: bool = False, area_stat: bool | None = None, prefer: str | None = None) -> dict:
+def choose_display(extent, purpose: str = "thematic", *, tiles: bool = False, area_stat: bool | None = None, prefer: str | None = None,
+                   legacy: bool = False) -> dict:
     """Pick a display CRS for an extent (a GeoDataFrame or a WGS84 bbox minx, miny, maxx, maxy).
 
+    legacy=True (the classic look, which draws what 0.16 drew) keeps the 2.3.0 rule: a UTM zone up to LOCAL_SPAN_DEG wide.
     purpose: 'thematic' (values per area; equal-area), 'reference' (locations; conformal is fine), 'world', 'engineering' (0.15.0: a local US
     map in the State Plane zone that holds it). prefer='state_plane' (MapSpec crs.prefer) asks for the same on any purpose.
     Returns {'crs', 'epsg', 'name', 'rationale', 'equal_area', 'antimeridian', 'alternatives'}.
@@ -478,7 +526,8 @@ def choose_display(extent, purpose: str = "thematic", *, tiles: bool = False, ar
     # "spans the US" means it reaches both Alaska or Hawaii longitudes and the lower 48: a Mexican or Caribbean box inside the same
     # window is not a US map and falls through to the local and regional rules
     spans_us = not anti and -180 <= minx <= -129 and -100 <= maxx <= -64 and 17 <= miny and maxy <= 72 and not (in_conus or in_alaska or in_hawaii)
-    if in_conus and width > LOCAL_SPAN_DEG and width <= STATE_SPAN_DEG and height <= STATE_SPAN_H_DEG:
+    big_ea = equal_wanted and not legacy and span_km(width, height, cy) > EA_SPAN_KM          # 3.0.0 (G-06): above street-to-metro scale, equal-area
+    if in_conus and (width > LOCAL_SPAN_DEG or big_ea) and width <= STATE_SPAN_DEG and height <= STATE_SPAN_H_DEG:
         # 1.13.0 (Day 12 issue 2): a state-sized US map gets an Albers equal-area centred on it, so the state stands upright (Conus Albers,
         # centred at 96 W, turned Washington about 10 degrees). State Plane when asked for and one zone holds it.
         if pref.replace("-", "_") == "state_plane" or purpose == "engineering":
@@ -511,6 +560,11 @@ def choose_display(extent, purpose: str = "thematic", *, tiles: bool = False, ar
         nat = _national_choice(minx, miny, maxx, maxy, cx, purpose, equal_wanted, width)
         if nat:
             return out(*nat)
+    # 3.0.0 (G-06): a thematic subject larger than street-to-metro scale gets a centred equal-area projection anywhere, not a UTM zone
+    if big_ea and width <= LOCAL_SPAN_DEG and abs(cy) <= POLAR_LAT and not anti and pref.replace("-", "_") not in ("state_plane", "utm") and purpose != "engineering":
+        proj, name, why = centred_equal_area(minx, miny, maxx, maxy, cx, cy, width, height,
+                                             why_size=f"The subject is about {span_km(width, height, cy):.0f} km across ({width:.1f} by {height:.1f} degrees) and the map compares values per area.")
+        return out(proj, name, why, True, None, ["the UTM zone of the centre, for a conformal map", "a national grid with crs.prefer: national"])
     # local extent
     if width <= LOCAL_SPAN_DEG and abs(cy) <= POLAR_LAT:
         north_america = -170 <= cx <= -50 and 7 <= cy <= 84
@@ -544,15 +598,17 @@ def choose_display(extent, purpose: str = "thematic", *, tiles: bool = False, ar
         nm = "WGS 84 / NSIDC Sea Ice Polar Stereographic " + pole.capitalize()
         return out(epsg, nm, f"The extent is polar ({pole}); a polar stereographic projection avoids the distortion and the antimeridian cut of a cylindrical one.", False, int(epsg.split(":")[1]))
     # regional elsewhere: Lambert azimuthal equal-area centred on the extent
-    lon0 = round(cx, 1)
-    lat0 = round(cy, 1)
-    proj = f"+proj=laea +lat_0={lat0} +lon_0={lon0} +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs"
-    why = (f"The extent is regional ({width:.0f} by {height:.0f} degrees), outside the United States presets. "
-           f"A Lambert azimuthal equal-area centred on the extent ({lat0}, {lon0}) keeps areas true and distortion low near the centre.")
     if anti:
-        why += " The extent crosses the antimeridian; centring on it avoids cutting the data at 180 degrees."
-    return out(proj, "Lambert Azimuthal Equal Area (centred on the extent)", why, True, None,
-               ["a national CRS for one country (for example a local Lambert Conformal Conic)"])
+        lon0, lat0 = round(cx, 1), round(cy, 1)
+        part, dname = datum_for(cx, cy)
+        proj = f"+proj=laea +lat_0={lat0} +lon_0={lon0} +x_0=0 +y_0=0 {part} +units=m +no_defs"
+        why = (f"The extent is regional ({width:.0f} by {height:.0f} degrees). A Lambert azimuthal equal-area centred on the extent ({lat0}, {lon0}) keeps areas "
+               "true and distortion low near the centre. The extent crosses the antimeridian; centring on it avoids cutting the data at 180 degrees.")
+        return out(proj, f"Lambert Azimuthal Equal Area ({dname}, centred on the extent)", why, True, None,
+                   ["a national CRS for one country (for example a local Lambert Conformal Conic)"])
+    proj, name, why = centred_equal_area(minx, miny, maxx, maxy, cx, cy, width, height,
+                                         why_size=f"The extent is regional ({width:.0f} by {height:.0f} degrees), outside the national presets.")
+    return out(proj, name, why, True, None, ["a national CRS for one country (for example a local Lambert Conformal Conic)"])
 
 
 # --------------------------------------------------------------------------- MapSpec fragment

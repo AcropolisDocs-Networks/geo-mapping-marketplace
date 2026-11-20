@@ -89,7 +89,7 @@ Three to seven classes (MAP-CART-002). Breaks unique and ordered; legend numbers
 
 ## Generalization
 
-Match detail to scale: boundaries from the library at the level whose `scale` facet fits the output (500k cartographic files for a state map,
+Match detail to scale: boundaries from the library at the level whose `scale` facet fits the output (500k cartographic files for a state or province map,
 TIGER full detail for a city), simplified for the page (`webmap` does it per zoom). Land and water from one source at one resolution so the
 coasts agree (MAP-CART-024).
 

@@ -9,7 +9,7 @@ description: >
 ## 3D and story maps (M15)
 
 ```yaml
-terrain: {on: true}                    # the same DEM as the print relief: 3DEP in the US, terrarium elsewhere (credit printed)
+terrain: {on: true}                    # the same DEM as the print relief: the source chain by coverage (credits printed)
 layers:
   - {id: buildings, role: buildings, source: {type: file, path: buildings.parquet, bbox: [-118.37, 33.93, -118.25, 34.06]}}
      # the person's own Overture or Microsoft file. role: buildings is polygons extruded from height, then num_floors x 3.5 m, then 9 m,

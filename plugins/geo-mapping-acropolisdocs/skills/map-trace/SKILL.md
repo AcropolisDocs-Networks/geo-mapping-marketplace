@@ -52,7 +52,12 @@ GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f 
    module and run the `MAP_TRACE_EVALUATE_RUN:` arguments through `pipelines.py`, then follow the module's steps 3 to 5, recording with
    `--trace` so this report's page gains its Map quality section; send the updated page and the evaluation report. On no, or with
    `MAP_TRACE_EVALUATE: skipped`, say nothing more about it. `--no-evaluate` leaves the offer out; `--evaluate-only` offers it again on
-   the newest trace of this session without tracing again.
+   the newest trace of this session without tracing again (2.4.0: it finds the outputs from the transcript again, so an older page with an
+   empty outputs list can still gain its Map quality section).
+   When the run prints a reason line, `MAP_TRACE_OUTPUTS: 0 (N finished build(s), no output found: <reason>)` (2.4.0), say that N finished
+   builds were not matched to outputs, give the reason, and offer the evaluation it lists (`MAP_TRACE_EVALUATE:` and
+   `MAP_TRACE_EVALUATE_RUN:` follow it when those builds' `--out` folders still hold maps). Never report a session that built maps as having
+   no outputs without saying why.
 
    ```bash
    GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
@@ -78,14 +83,15 @@ GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f 
 |---|---|
 | Map call | The Skill tool loading one of this plugin's skills (`declared`), Python running one of its scripts or lints (`path`), in the Bash or the PowerShell tool (1.17.3), an inline Python program importing them from a `scripts/` folder (`import`, weaker), or a tool of its OGC server (`server`). A `modules.py read` call (1.0.1) is a script call like any other and falls in the window of the skill that asked for the module. Reading a file with `grep`, `sed` or `cat` is not using the plugin. A `skills/<slug>/scripts/` path is another plugin's and is never counted |
 | Lane | The skill that runs the script (from this plugin's own skill files), or the skill a load opened; `(name)` for a script no skill runs directly |
-| Status | `ok`, `failed`, `blocked` (the harness or a permission refused it; excluded from the error rate), `unfinished` (no result: interrupted), `self` (this report's own call) |
+| Status | `ok`, `failed` (2.4.0: also an MCP result with `"ok": false`, and a script whose run ledger line has a non-zero exit even when `\| tail` or `> file` hid it), `degraded` (2.4.0: exited 0 but dropped something the spec asked for, such as relief; counted beside failed and listed in the fix spec), `blocked` (the harness or a permission refused it; excluded from the error rate), `unfinished` (no result: interrupted), `self` (this report's own call) |
 | Error class | `crash` (a traceback; the crash site is the deepest frame inside this plugin), `lint-block` (exit 3 or blocking MAP-* findings), `usage` (2), `refused` (4), `service` (5), `dependency` (a package or native library missing), `network`, `timeout`, `environment` (permissions, read-only folders), `failed` (the output does not say) |
 | Findings named | MAP-* ids in the map calls' output, with the severity printed beside them, ranked BLOCK first |
 | Rework | Retry: the same command again with nothing written between. Iteration loop: the same script on the same target again after a write, where the earlier run failed. Re-run after edit: the same shape after a success (normal for visual checks). Hotspot: 3 or more loops on one script. Writes made through the shell are inferred from the command and marked |
 | Time | Wall clock, tool time (map tool time on its own), idle gaps of 2 minutes or more, the residual, and the slowest map calls; a map call's time is measured when the timing hook logged it, else bounded |
 | Hooks | From the plugin's own hook log (`.geo-mapping/traces/hooks/<session>.ndjson`, joined by the call's id): how many map calls were measured, how many builds the pre-export check stopped (also read from the transcript when there is no log), how many times the credentials reminder fired. Never a command, an argument or a message |
 | Pipeline runs | This plugin's run records in the working folder: repeated or blocked pipeline jobs |
-| Outputs (2.2.0) | Finished maps named in the results of the plugin's map-writing scripts that ran ok and still exist (previews, mute and draft pictures and sidecars left out); their paths go only into the outputs list beside the report. The map evaluator's own calls are counted on their own line, never as map work |
+| Run ledger (2.4.0) | `.geo-mapping/traces/runs/*.ndjson`: one line per plugin script run (script, option names, exit code, duration, outputs, finding ids), joined to the calls by time and script |
+| Outputs (2.2.0, 2.4.0) | From the run ledger first; then paths in the results of the plugin's map-writing scripts, absolute or relative to the call's folder; then the files in the build's `--out` folder whose provenance sidecar was written during the call. Finished maps that ran ok and still exist (previews, mute and draft pictures and sidecars left out); their paths go only into the outputs list beside the report. The map evaluator's own calls are counted on their own line, never as map work |
 | Fix spec | One finding per class, script and crash site, each with one disposition: `product` (a crash inside the plugin: needs a diagnosis), `input` (a gate, the spec, the data or the arguments stopped it), `dependency`, `environment`, `operator` (a traceback with no frame in the plugin: the session's own inline script), `unclassified`; severity by whether a later run of the same target recovered |
 
 Printed: skill, script and tool names, option names (never their values), call numbers, timings, exit codes, MAP-* ids, and for each

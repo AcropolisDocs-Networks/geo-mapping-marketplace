@@ -227,8 +227,24 @@ def discover(paths: list[str | Path], specs: dict | None = None) -> tuple[list[d
     return outputs, fs
 
 
+def sidecar_spec(p: Path) -> dict | None:
+    """2.4.0 (map-trace MT-05): the `spec` block of the provenance sidecar beside a finished file ({path, sha256, id, message}), or None."""
+    side = Path(p).with_name(Path(p).stem + ".provenance.json")
+    try:
+        s = json.loads(side.read_text(encoding="utf-8")).get("spec")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return s if isinstance(s, dict) else None
+
+
 def _spec_beside(p: Path) -> str | None:
-    """The MapSpec a deliverable folder carries beside its map (map-build packages it as mapspec.yaml)."""
+    """The MapSpec a finished file came from: the one its provenance sidecar names (2.4.0, MT-05), else the one a deliverable folder carries
+    beside its map (map-build packages it as mapspec.yaml)."""
+    s = sidecar_spec(p)
+    if s and s.get("path"):
+        q = (Path(p).parent / s["path"])
+        if q.is_file():
+            return str(q.resolve())
     for name in ("mapspec.yaml", "MapSpec.yaml", f"{p.stem}.mapspec.yaml"):
         q = p.parent / name
         if q.is_file():
@@ -379,7 +395,9 @@ def intent_card(o: dict, opts: dict | None = None) -> dict:
     roles = [str(l.get("role") or "") for l in (spec or {}).get("layers") or [] if l.get("draw", True) is not False]
     if not roles and facts.get("layers"):
         roles = [("context" if r == "context" else "contour" if r == "contour" else "data") for _, r in facts["layers"]]
-    message = str((spec or {}).get("message") or ((spec or {}).get("story") or {}).get("claim") or facts.get("message") or "").strip()
+    side = sidecar_spec(Path(o["main"])) if not spec else None          # 2.4.0 (MT-05): the message as the build recorded it
+    message = str((spec or {}).get("message") or ((spec or {}).get("story") or {}).get("claim") or (side or {}).get("message")
+                  or facts.get("message") or "").strip()
     template = (spec or {}).get("template") or facts.get("template")
     medium = medium_of(o["kind"], template, Path(o["main"]))
     family = family_of(roles, o["kind"], spec)

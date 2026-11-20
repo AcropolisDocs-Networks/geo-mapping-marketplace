@@ -250,12 +250,56 @@ def newer_line(own: str, version: str | None) -> str | None:
             "Install it (or unpack it and run its scripts) to use its fixes.")
 
 
-def classify_tier(device_bridge: str, eg: dict, web_tools: str) -> str:
-    if device_bridge == "yes":
+PLACES = ("host-windows", "host-macos", "host-linux", "cowork-vm", "cloud")
+PLACE_LABEL = {"host-windows": "your Windows computer", "host-macos": "your Mac", "host-linux": "your Linux computer",
+               "cowork-vm": "the Cowork VM on your computer", "cloud": "cloud workspace", "unknown": "an unrecognised place"}
+
+
+def place(override: str | None = None) -> str:
+    """2.4.0 (I-10): where this process runs. `cloud` is the Claude cloud workspace (cloud_workspace()); `cowork-vm` is the Linux VM the
+    desktop app runs for a session (connected folders under $HOME/mnt/, no /mnt/user-data); otherwise the person's own computer by its
+    operating system. GMAP_PLACE or `override` wins (a test, or a place the probe cannot see)."""
+    want = (override or os.environ.get("GMAP_PLACE") or "").strip().lower()
+    if want in PLACES:
+        return want
+    if cloud_workspace():
+        return "cloud"
+    sysname = platform.system()
+    if sysname == "Linux":
+        mnt = Path.home() / "mnt"
+        try:
+            if mnt.is_dir() and any(c.is_dir() for c in mnt.iterdir()) and not Path("/mnt/user-data").exists():
+                return "cowork-vm"
+        except OSError:
+            pass
+        return "host-linux"
+    return {"Windows": "host-windows", "Darwin": "host-macos"}.get(sysname, "unknown")
+
+
+def is_host(pl: str) -> bool:
+    return pl.startswith("host-")
+
+
+def classify_tier(device_bridge: str, eg: dict, web_tools: str, pl: str | None = None) -> str:
+    """The capability level. T2 (rendering on the person's computer) only when this process IS on that computer: a linked computer seen
+    from the cloud workspace or the Cowork VM is a place for data tools, not where this build renders (2.4.0, I-10; Day 20 issue 22)."""
+    pl = pl or place()
+    if device_bridge == "yes" and is_host(pl):
         return "T2"
     if eg["classification"] in ("open", "allowlist") or web_tools == "yes":
         return "T1"
     return "T0"
+
+
+def place_line(pl: str, tier: str, egress_cls: str | None, device_bridge: str = "unknown", plugin: str = "") -> str:
+    """The doctor's first line (2.4.0, I-10): 'cloud workspace, tier T1 (shell egress open); linked computer reachable for data tools'."""
+    head = f"{plugin}: " if plugin else ""
+    txt = f"{head}{PLACE_LABEL.get(pl, pl)}, tier {tier} (shell egress {egress_cls or 'not checked'})"
+    if device_bridge == "yes" and not is_host(pl):
+        txt += "; linked computer reachable for data tools"
+    elif device_bridge == "no" and not is_host(pl):
+        txt += "; no linked computer"
+    return txt
 
 
 def status_line(env: dict) -> str:
@@ -266,6 +310,9 @@ def status_line(env: dict) -> str:
         "T1": "basemap data staged or fetched into the workspace",
         "T2": "rendering on your computer, direct tile and service access",
     }[tier]
+    pl = env.get("place")
+    if pl and not is_host(pl):
+        parts += f"; running in the {PLACE_LABEL.get(pl, pl)}"
     egress_txt = {"open": "shell egress open", "allowlist": "shell egress limited to an allowlist",
                   "closed": "shell egress closed", "unknown": "shell egress not checked"}[eg["classification"]]
     return f"Tier {tier}: {parts} ({egress_txt}; GDAL {env['gdal']['version'] or 'missing'})."
@@ -296,6 +343,42 @@ def auto_install() -> list[dict]:
     print("map-env-probe: " + (f"could not install {', '.join(bad)}; run doctor.py --fix --quick to see why" if bad else f"installed {len(log)} package(s)"),
           file=sys.stderr, flush=True)
     return log
+
+
+def needed_profiles(spec: dict) -> list[str]:
+    """2.6.0 (I-06): the doctor profiles a MapSpec's features need: h3 for an hexbin or h3 source, raster for relief, a raster or contours,
+    db for a large GeoParquet `where`, web for a page."""
+    out: list[str] = ["map"]
+    layers = spec.get("layers") or []
+    if any((ly.get("source") or {}).get("type") == "h3" or ly.get("role") in ("hexbin", "heat") for ly in layers):
+        out.append("h3")
+    if (spec.get("terrain") or {}).get("on") or any(ly.get("role") in ("raster", "hillshade", "contour") for ly in layers):
+        out.append("raster")
+    if any(str((ly.get("source") or {}).get("path") or "").lower().endswith((".parquet", ".geoparquet")) and (ly.get("source") or {}).get("where") for ly in layers):
+        out.append("db")
+    return list(dict.fromkeys(out))
+
+
+def install_for_spec(spec_path: str) -> list[dict]:
+    """In a cloud workspace only: every missing package of the profiles the spec needs, in one pip call (doctor --fix --profile). On the
+    person's own computer nothing is installed here (the skill asks first)."""
+    if os.environ.get("GMAP_NO_AUTO_INSTALL") == "1" or not cloud_workspace():
+        return []
+    try:
+        import doctor
+        spec = gc.load_mapspec(Path(spec_path))
+        names = needed_profiles(spec)
+        rows = doctor.check_deps()
+        want = set()
+        for n in names:
+            want |= set(doctor.profile_names(n))
+        if not any(not r["installed"] for r in rows if r["name"] in want):
+            return []
+        print(f"map-env-probe: installing the {', '.join(names)} profile(s) this MapSpec needs (one pip step)", file=sys.stderr, flush=True)
+        return doctor.fix_profile(rows, names)
+    except Exception as ex:  # noqa: BLE001 - the build then names what is missing
+        print(f"map-env-probe: the profile install did not run ({type(ex).__name__})", file=sys.stderr)
+        return []
 
 
 def begin_build(spec: str) -> str:
@@ -354,6 +437,7 @@ def main(argv=None) -> int:
             print("--begin-build needs --spec", file=sys.stderr)
             return gc.EXIT_USAGE
         auto_install()
+        install_for_spec(a.spec)                   # 2.6.0 (I-06): what this spec's features need, in a cloud workspace
         tok = begin_build(a.spec)
         print(tok if a.value else f"GMAP_BUILD_TOKEN={tok}")
         nl = newer_line(own, manifest.get("version"))
@@ -379,7 +463,8 @@ def main(argv=None) -> int:
         "workdir": str(gc.workdir()),
         "workdir_persistence": "unverified",  # decided by spike P6 (Appendix H); see risk 36
     }
-    env["tier"] = classify_tier(a.device_bridge, eg, a.web_tools)
+    env["place"] = place()
+    env["tier"] = classify_tier(a.device_bridge, eg, a.web_tools, env["place"])
     env["newer_copies"] = newer_copies(own, manifest.get("version"))
     env["status_line"] = status_line(env) + (" " + newer_line(own, manifest.get("version")) if env["newer_copies"] else "")
     if not a.no_write:

@@ -108,10 +108,24 @@ def scale_info(crs, bbox, frame_mm: float, *, units: str = "auto", rotation: flo
     return out
 
 
+import contextvars as _cv
+REGION_COUNTRIES: "_cv.ContextVar[list | None]" = _cv.ContextVar("gmap_region_countries", default=None)
+
+
 def units_auto(crs, bbox) -> tuple[str, str, list]:
     """units: auto (1.5.0, R3-UNITS): the distance units of the country under the centre (data/countries.yaml), with the reason, and the
     countries in the window whose units differ (MAP-LOC-002). Replaces the old US box, which gave Canada and Mexico miles (U2)."""
     import geo_locale as gl
+    reg = REGION_COUNTRIES.get()
+    if reg:                                   # 3.0.0 (G-10): the units of the region's own countries, not of whatever the window reaches
+        units = {c: (gl.country(c) or {}).get("units", "km") for c in reg}
+        if len(set(units.values())) == 1:
+            u = next(iter(units.values()))
+            names = ", ".join((gl.country(c) or {}).get("name") or c for c in reg[:3])
+            return u, f"the region is in {names}, which use{'s' if len(reg) == 1 else ''} {'miles' if u == 'mi' else 'kilometres'}", []
+        u = "mi" if "US" in reg else "km"
+        return u, "the region spans countries with different units; " + ("miles, as the region includes the United States" if u == "mi" else "kilometres"), \
+            [c for c, v in units.items() if v != u]
     xmin, ymin, xmax, ymax = bbox
     try:
         xs = [(xmin + xmax) / 2, xmin, xmax, xmin, xmax, (xmin + xmax) / 2, (xmin + xmax) / 2, xmin, xmax]

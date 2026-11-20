@@ -51,8 +51,12 @@ TERRARIUM_MAX_ZOOM = 15
 COP_ENTRY = "ref.terrain.world.dem.copernicus-glo30"                 # 1.5.0 (R3-DEM): the default outside the United States for relief
 COP_BUCKETS = {30: "https://copernicus-dem-30m.s3.amazonaws.com/", 90: "https://copernicus-dem-90m.s3.amazonaws.com/"}
 COP_ARCSEC = {30: 10, 90: 30}                                          # the file name carries the cell size in arc seconds, not metres
-COP_MAX_TILES = 16
+COP_MAX_TILES = 16                     # whole tiles; 2.5.0: a larger window reads COG overviews within a byte budget (T-04)
 COP_TILE_BYTES = 60_000_000
+COP_TILE_MB = {30: 25.0, 90: 4.0}      # the typical size of one whole tile, for the byte estimate
+COP_BYTE_BUDGET_MB = 40.0              # whole tiles past this estimate (or past COP_MAX_TILES) are read as overviews by range reads
+COP_COG_MAX_TILES = 400                # at most this many 1-degree tiles a map even by range reads
+COP_COG_MIN_M = 100.0                  # a coarser target than this reads overviews once whole tiles would pass the budget
 COP_REGISTRY = "https://registry.opendata.aws/copernicus-dem"
 COP_NOTICE = {30: ("produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by "
                    "the European Union and ESA; all rights reserved"),
@@ -155,7 +159,90 @@ def us_shape():
     return _US_SHAPE or None
 
 
+# ------------------------------------------------------------------------------------------- 2.5.0 (T-01, T-08): coverage, not boxes
+_SOURCES = None
+_COVER: dict = {}
+CHAINS = {"relief": ("3dep", "copernicus", "terrarium"),       # T-09: a picture may use a surface model
+          "analysis": ("3dep", "terrarium", "copernicus")}     # profiles, line of sight: bare earth first, a surface model last
+FULL_SHARE = 0.995
+SEAM_PX = 2
+
+
+def sources() -> list[dict]:
+    """data/terrain-sources.yaml: every elevation source with its coverage, licence and status (T-08)."""
+    global _SOURCES
+    if _SOURCES is None:
+        try:
+            _SOURCES = list(gc.load_yaml(gc.plugin_root() / "data" / "terrain-sources.yaml") or [])
+        except Exception:  # noqa: BLE001
+            _SOURCES = [{"id": "3dep", "coverage": "us+border", "buffer_deg": 0.3, "status": "active"},
+                        {"id": "copernicus", "coverage": "world", "status": "active"}, {"id": "terrarium", "coverage": "world", "status": "active"}]
+    return _SOURCES
+
+
+def source_info(sid: str) -> dict:
+    return next((s for s in sources() if s.get("id") == sid), {"id": sid, "coverage": "world"})
+
+
+def coverage_shape(sid: str):
+    """The coverage polygon of a source in lon/lat, or None for the whole world."""
+    if sid in _COVER:
+        return _COVER[sid]
+    info = source_info(sid)
+    shape = None
+    if info.get("coverage") == "us+border":
+        from shapely.geometry import box
+        from shapely.ops import unary_union
+        try:
+            import geopandas as gpd
+            g = gpd.read_parquet(gc.plugin_root() / "assets" / "basemaps" / "ne_110m_countries.parquet")
+            us = g[g["ADM0_A3"].eq("USA")].geometry.union_all() if "ADM0_A3" in g.columns else None
+        except Exception:  # noqa: BLE001
+            us = None
+        if us is not None:
+            shape = unary_union([us.buffer(float(info.get("buffer_deg", 0.3))), box(*US_BOXES[-1])])
+        else:
+            shape = unary_union([box(*b) for b in US_BOXES])
+    _COVER[sid] = shape
+    return shape
+
+
+def coverage_share(sid: str, bounds_wgs84) -> float:
+    """The share of the window (lon/lat box) inside the source's coverage, 0 to 1 (T-01: a coverage test, not a box and a centre test)."""
+    from shapely.geometry import box
+    shape = coverage_shape(sid)
+    if shape is None:
+        return 1.0
+    w = box(*bounds_wgs84)
+    return float(shape.intersection(w).area / w.area) if w.area > 0 else 0.0
+
+
+def chain_for(source: str | None, purpose: str) -> list[str]:
+    """T-03, T-09: the ordered sources for a purpose; a source named in the spec is first, never the only one."""
+    base = list(CHAINS.get(purpose, CHAINS["relief"]))
+    src = (source or "auto").lower()
+    return ([src] + [s for s in base if s != src]) if src != "auto" else base
+
+
+def plan_sources(bounds_wgs84, source: str | None, purpose: str) -> list[tuple[str, float]]:
+    """[(source, share of the window it covers)] in the order they fill the window, ending with the first that covers all of it."""
+    out = []
+    for s in chain_for(source, purpose):
+        sh = coverage_share(s, bounds_wgs84)
+        if sh <= 0.0:
+            continue
+        out.append((s, sh))
+        if sh >= FULL_SHARE:
+            break
+    return out
+
+
 def in_us(bounds_wgs84) -> bool:
+    """Whether 3DEP covers the whole window (2.5.0: by its coverage polygon; kept for older callers)."""
+    return coverage_share("3dep", bounds_wgs84) >= FULL_SHARE
+
+
+def _in_us_old(bounds_wgs84) -> bool:
     """Whether 3DEP covers the window: its centre lies in the United States (the lower 48, Alaska, Hawaii, Puerto Rico, the Virgin Islands)."""
     x0, y0, x1, y1 = bounds_wgs84
     if not any(x0 >= bx0 - 0.5 and x1 <= bx1 + 0.5 and y0 >= by0 - 0.5 and y1 <= by1 + 0.5 for bx0, by0, bx1, by1 in US_BOXES):
@@ -405,10 +492,14 @@ def fetch_3dep(bounds, target_m_per_px: float, out: Path, *, http=None, max_px: 
 
 def dem_for(bounds_wgs84, target_m_per_px: float = 30.0, source: str = "auto", cache_dir=None, *, terms_acknowledged: bool = False, dem_path=None,
             http=None, fetcher: TileFetcher | None = None, max_tiles: int = TERRARIUM_MAX_TILES, max_px: int = THREEDEP_MAX_PX,
-            surface_ok: bool = False) -> dict:
-    """A local DEM for the window. -> {ok, findings, path, record}. Terrarium needs no acknowledgment (0.23.0): it is the default outside the US
-    and its attribution is in the record, printed as the map's terrain credit. terms_acknowledged is kept for older callers and ignored. 3dep
-    outside the US falls to terrarium under `auto` and blocks when asked by name."""
+            surface_ok: bool = False, purpose: str | None = None) -> dict:
+    """A local DEM for the window. -> {ok, findings, path, record}.
+
+    2.5.0 (T-01, T-03, T-09): the sources come from the purpose's chain (relief: 3DEP, Copernicus, Terrarium; analysis: 3DEP, Terrarium,
+    Copernicus), a source named in the spec first and never the only one. Each source covers what its coverage polygon says
+    (data/terrain-sources.yaml); a window one source covers only in part is mosaicked from the next, the seam feathered over 2 cells, so a
+    Washington window that reaches British Columbia draws relief from 3DEP and Copernicus and credits both. `surface_ok` is the old name of
+    purpose relief. terms_acknowledged is kept for older callers and ignored (0.23.0)."""
     fs: list[dict] = []
     if dem_path:
         info = rio.open_info(dem_path)
@@ -423,19 +514,38 @@ def dem_for(bounds_wgs84, target_m_per_px: float = 30.0, source: str = "auto", c
     src = (source or "auto").lower()
     if src not in ("auto", "3dep", "terrarium", "copernicus"):
         raise rio.RasterError("source is auto, 3dep, copernicus or terrarium")
-    us = in_us(b)
-    if src == "auto":
-        # 1.5.0 (R3-DEM): outside the US, relief and 3D take the Copernicus DEM (a surface model, keyless); bare-earth analysis keeps Terrarium
-        src = "3dep" if us else ("copernicus" if surface_ok else "terrarium")
-        fs.append(finding("MAP-TER-001", "INFO", f"terrain source {src}: " + ("the window is inside the United States, where USGS 3DEP is the authority (public domain)" if us else
+    purpose = purpose or ("relief" if surface_ok else "analysis")
+    plan = plan_sources(b, src, purpose)
+    kw = dict(http=http, fetcher=fetcher, max_tiles=max_tiles, max_px=max_px)
+    if src != "auto" and (not plan or plan[0][0] != src):
+        fs.append(finding("MAP-TER-001", "INFO", f"{source_info(src).get('title') or src} has no data for this window (its coverage does not reach it); "
+                          f"{plan[0][0] if plan else 'terrarium'} is used, the next source for {purpose}"))
+    if len(plan) == 1:
+        s = plan[0][0]
+        if src == "auto":
+            us = s == "3dep"
+            fs.append(finding("MAP-TER-001", "INFO", f"terrain source {s}: " + ("the window is inside the United States, where USGS 3DEP is the authority (public domain)" if us else
                                                                               "the window is outside the United States, so the Copernicus DEM GLO-30 is used (keyless; its notice is printed)"
-                                                                              if src == "copernicus" else
+                                                                              if s == "copernicus" else
                                                                               "the window is outside the United States, so the AWS Terrain Tiles (Terrarium) are used; attribution is required")))
-    elif src == "3dep" and not us:
-        return {"ok": False, "findings": fs + [finding("MAP-TER-001", "BLOCK", "USGS 3DEP covers the United States only; use source terrarium (attribution required) for this window")]}
+        out = _single(s, b, res, cache_root(cache_dir), fs, named=src != "auto", source_arg=source, cache_dir=cache_dir, target=target_m_per_px, **kw)
+    else:
+        out = _mosaic(plan, b, res, cache_root(cache_dir), fs, cache_dir=cache_dir, target=target_m_per_px, **kw)
+    if purpose == "analysis" and out.get("ok"):               # T-09: an analysis says which elevation it stands on, and whether it is bare earth
+        used = [x["source"] for x in (out["record"].get("sources") or [])] or [out["record"].get("source")]
+        kinds = "; ".join(f"{u}: {source_info(u).get('surface') or 'unknown surface'}" for u in used)
+        bare = all("bare earth" in str(source_info(u).get("surface") or "") for u in used)
+        out["record"]["bare_earth"] = bare
+        out["findings"].append(finding("MAP-TER-001", "INFO", f"analysis DEM from {kinds}" + ("" if bare else
+                                       "; not bare earth everywhere: buildings, trees or mixed sources are in the heights, so a profile or a line of sight is optimistic or pessimistic there")))
+    return out
+
+
+def _single(src: str, b, res: float, root: Path, fs: list, *, named: bool, source_arg, cache_dir, target, http=None, fetcher=None,
+            max_tiles: int = TERRARIUM_MAX_TILES, max_px: int = THREEDEP_MAX_PX) -> dict:
+    """One source for the whole window (the 2.4 route), cached by (source, bounds, resolution)."""
     if src == "terrarium":                      # 0.23.0: a default outside the US; its credit is printed for you, so there is nothing to acknowledge
         fs.append(finding("MAP-WEB-011", "INFO", "the AWS Terrain Tiles need their sources credited; the credit is in the record and is printed as the map's terrain credit"))
-    root = cache_root(cache_dir)
     key = cache_key(src, b, res)
     out = root / src / f"{key}.tif"
     recp = out.with_suffix(".json")
@@ -450,17 +560,21 @@ def dem_for(bounds_wgs84, target_m_per_px: float = 30.0, source: str = "auto", c
         try:
             rec = fetch_copernicus(b, max(res, 30.0), out, root, http=http)
         except oh.ServiceError as ex:
-            if "limit is" in str(ex) and source in (None, "auto"):          # a wide window: Terrarium chooses its zoom by the tile cap
+            if "limit is" in str(ex) and source_arg in (None, "auto"):          # a wide window: Terrarium chooses its zoom by the tile cap
                 fs.append(finding("MAP-TER-003", "INFO", f"{ex}; the AWS Terrain Tiles are used for this window instead"))
-                return dem_for(bounds_wgs84, target_m_per_px, "terrarium", cache_dir, http=http, fetcher=fetcher, max_tiles=max_tiles, max_px=max_px)
+                return _single("terrarium", b, res, root, fs, named=False, source_arg="terrarium", cache_dir=cache_dir, target=target, http=http,
+                               fetcher=fetcher, max_tiles=max_tiles, max_px=max_px)
             raise
-        if rec["fallback_glo90"]:
+        if rec.get("fallback_glo90"):
             fs.append(finding("MAP-TER-003", "INFO", f"{len(rec['fallback_glo90'])} tile(s) are not in the public GLO-30 release, so GLO-90 was used there: "
                               + ", ".join(rec["fallback_glo90"][:4])))
+        if rec.get("route") == "cog-overviews":
+            fs.append(finding("MAP-TER-003", "INFO", f"{rec['tiles']} Copernicus tiles read as Cloud-Optimized GeoTIFF overviews at {rec['res_m']:g} m "
+                              f"(range reads, about {rec.get('estimated_mb', 0):.0f} MB), not as whole tiles"))
         fs.append(finding("MAP-TER-001", "INFO", "the Copernicus DEM is a surface model: buildings and trees are in it (fine for relief, not a bare-earth profile)"))
     elif src == "terrarium":
         rec = fetch_terrarium(b, res, out, fetcher=fetcher, max_tiles=max_tiles, http=http, tile_cache=root / "terrarium-tiles")
-        rec["attribution"] = TERRARIUM_ATTRIBUTION
+        rec["attribution"] = terrarium_attribution(b)                       # 2.5.0 (T-05): only the regional sources this window uses
         rec["terms_url"] = TERRARIUM_TERMS_URL
         rec["license"] = "attribution"
         if rec["limited_by_cap"]:
@@ -483,8 +597,134 @@ def dem_for(bounds_wgs84, target_m_per_px: float = 30.0, source: str = "auto", c
             fs.append(finding("MAP-TER-003", "WARN", f"{rec['missing_share']:.0%} of the window has no 3DEP elevation (water, or outside the coverage)"))
     rec.update({"terms_acknowledged": None, "retrieved_at": today(), "bounds_wgs84": list(b), "target_m_per_px": res,
                 "cache_key": key, "cached": False, "user_agent": getattr(http or getattr(fetcher, "http", None), "user_agent", None) or oh.default_user_agent()})
+    rec.setdefault("request", {"source": src, "bbox_wgs84": list(b), "res_m": res})      # 2.5.0 (I-22): enough to fetch the same DEM again where it is needed
     recp.write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
     return {"ok": True, "findings": fs, "path": str(out), "record": rec}
+
+
+def _mosaic(plan: list[tuple[str, float]], b, res: float, root: Path, fs: list, *, cache_dir, target, **kw) -> dict:
+    """T-03: one DEM from several sources: each part of the window from the first source that covers it (by coverage, and where that source
+    returned nodata, R3), the next source warped onto the first one's grid, a 2-cell feathered seam. Cached as a mosaic of its own."""
+    import rasterio
+    from rasterio.warp import reproject, Resampling
+    names = [s for s, _ in plan]
+    mkey = cache_key("mosaic-" + "+".join(names), b, res)
+    out = root / "mosaic" / f"{mkey}.tif"
+    recp = out.with_suffix(".json")
+    if out.is_file() and recp.is_file():
+        rec = json.loads(recp.read_text(encoding="utf-8"))
+        if hashlib.sha256(out.read_bytes()).hexdigest() == rec.get("sha256"):
+            rec["cached"], rec["requests"] = True, []
+            fs.append(finding("MAP-TER-002", "INFO", f"DEM mosaic read from the cache ({out.name}); nothing was requested"))
+            return {"ok": True, "findings": fs, "path": str(out), "record": rec}
+    parts = []
+    for s, share in plan:
+        sub: list = []
+        r = _single(s, b, res, root, sub, named=False, source_arg=s, cache_dir=cache_dir, target=target, **kw)
+        fs += [f for f in sub if f["id"] != "MAP-TER-001" or "surface model" in f["message"]]
+        parts.append((s, share, r))
+    with rasterio.open(parts[0][2]["path"]) as ds:
+        base = ds.read(1).astype("float64")
+        tr, crs = ds.transform, ds.crs
+        bnd = ds.bounds
+    valid = np.isfinite(base) & (base > NODATA + 1)
+    cov = coverage_shape(parts[0][0])
+    if cov is not None:
+        from rasterio.features import geometry_mask
+        from rasterio.warp import transform_geom
+        from shapely.geometry import box, mapping
+        g = cov.intersection(box(*b))
+        if not g.is_empty:
+            gg = transform_geom("EPSG:4326", crs, mapping(g)) if str(crs).upper() not in ("EPSG:4326", "OGC:CRS84") else mapping(g)
+            valid &= ~geometry_mask([gg], out_shape=base.shape, transform=tr)
+    used = {parts[0][0]: float(valid.mean())}
+    result = np.where(valid, base, np.nan)
+    for s, _share, r in parts[1:]:
+        if valid.all():
+            break
+        with rasterio.open(r["path"]) as ds:
+            nxt = np.full(base.shape, np.nan)
+            reproject(rasterio.band(ds, 1), nxt, src_transform=ds.transform, src_crs=ds.crs, dst_transform=tr, dst_crs=crs,
+                      src_nodata=ds.nodata if ds.nodata is not None else NODATA, dst_nodata=np.nan, resampling=Resampling.bilinear)
+        ok = np.isfinite(nxt) & (nxt > NODATA + 1)
+        w = _seam_weights(valid, SEAM_PX)
+        blend = np.where(ok & valid, w * result + (1.0 - w) * nxt, result)
+        fill = ~valid & ok
+        used[s] = float(fill.mean())
+        result = np.where(fill, nxt, blend)
+        valid = valid | ok
+    marr = np.ma.masked_invalid(result.astype("float32"))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    w_ = rio.write_geotiff(out, marr, tr, crs or "EPSG:4326", nodata=NODATA)
+    srcs = [{"source": s, "share": round(used.get(s, 0.0), 4), "entry": r["record"].get("entry"), "attribution": r["record"].get("attribution"),
+             "cache_key": r["record"].get("cache_key")} for s, _sh, r in parts if used.get(s, 0.0) > 0]
+    attr = " ".join(x["attribution"] for x in srcs if x.get("attribution"))
+    rec = {"source": "mosaic", "sources": srcs, "entry": srcs[0]["entry"] if srcs else None, "crs": rio.crs_string(crs or "EPSG:4326"),
+           "res_m": float(parts[0][2]["record"].get("res_m") or res), "bytes": w_["bytes"], "sha256": w_["sha256"], "path": str(out),
+           "requests": [q for _s, _sh, r in parts for q in (r["record"].get("requests") or [])], "nodata": NODATA, "seam_px": SEAM_PX,
+           "attribution": attr or None, "license": "public-domain" if all(x["source"] == "3dep" for x in srcs) else "attribution",
+           "surface": "mixed: " + ", ".join(f"{x['source']} {x['share']:.0%}" for x in srcs), "bounds_wgs84": list(b), "target_m_per_px": res,
+           "retrieved_at": today(), "cache_key": mkey, "cached": False, "terms_acknowledged": None,
+           "request": {"sources": names, "bbox_wgs84": list(b), "res_m": res}, "missing_share": float(1.0 - valid.mean()), "grid_bounds": list(bnd)}
+    recp.write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
+    fs.append(finding("MAP-TER-001", "INFO", "terrain mosaic: " + "; ".join(f"{x['source']} for {x['share']:.0%} of the window" for x in srcs)
+                      + " (each part from the first source that covers it, the seam feathered over 2 cells)"))
+    return {"ok": True, "findings": fs, "path": str(out), "record": rec}
+
+
+def _seam_weights(valid, px: int):
+    """1 deep inside the first source's area, falling to 0 over `px` cells toward its edge (the feathered seam)."""
+    if px <= 0 or valid.all() or not valid.any():
+        return valid.astype(float)
+    try:
+        from scipy.ndimage import distance_transform_edt
+        d = distance_transform_edt(valid)
+    except Exception:  # noqa: BLE001 - without scipy the seam is a hard edge
+        return valid.astype(float)
+    return np.clip(d / float(px + 1), 0.0, 1.0)
+
+
+# 2.5.0 (T-05): Terrarium's sources by region (tilezen joerd attribution), so a map credits only those its window uses
+TERRARIUM_PARTS = [
+    ("ARCTIC", "ArcticDEM terrain data DEM(s) were created from DigitalGlobe, Inc., imagery and funded under National Science Foundation awards 1043681, 1559691, and 1542736"),
+    ("AUS", "Australia terrain data (c) Commonwealth of Australia (Geoscience Australia) 2017"),
+    ("AUT", "Austria terrain data (c) offene Daten Osterreichs - Digitales Gelandemodell (DGM) Osterreich"),
+    ("CAN", "Canada terrain data contains information licensed under the Open Government Licence - Canada"),
+    ("EUROPE", "Europe terrain data produced using Copernicus data and information funded by the European Union - EU-DEM layers"),
+    ("SEA", "Global ETOPO1 terrain data U.S. National Oceanic and Atmospheric Administration"),
+    ("MEX", "Mexico terrain data source: INEGI, Continental relief, 2016"),
+    ("NZL", "New Zealand terrain data Copyright 2011 Crown copyright (c) Land Information New Zealand and the New Zealand Government (All rights reserved)"),
+    ("NOR", "Norway terrain data (c) Kartverket"),
+    ("GBR", "United Kingdom terrain data (c) Environment Agency copyright and/or database right 2015. All rights reserved"),
+    ("USA", "United States 3DEP (formerly NED)"),
+]
+TERRARIUM_GLOBAL = "global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey"
+
+
+def terrarium_attribution(bounds_wgs84) -> str:
+    """The Terrarium credit for the window: the regional sources it touches, then the global SRTM and GMTED2010 line. Falls back to the whole
+    text when the country shapes cannot be read."""
+    try:
+        import geopandas as gpd
+        from shapely.geometry import box
+        g = gpd.read_parquet(gc.plugin_root() / "assets" / "basemaps" / "ne_110m_countries.parquet")
+        w = box(*bounds_wgs84)
+        hit = g[g.geometry.intersects(w)]
+        codes = set(hit["ADM0_A3"]) if "ADM0_A3" in hit.columns else set()
+        if "CONTINENT" in hit.columns and (hit["CONTINENT"] == "Europe").any():
+            codes.add("EUROPE")
+        land = hit.geometry.union_all() if len(hit) else None
+        if land is None or land.area < w.area * 0.98:
+            codes.add("SEA")
+        if bounds_wgs84[3] > 60:
+            codes.add("ARCTIC")
+    except Exception:  # noqa: BLE001
+        return TERRARIUM_ATTRIBUTION
+    parts = [txt for code, txt in TERRARIUM_PARTS if code in codes]
+    if "USA" in codes:
+        parts = [p for p in parts if not p.startswith("United States")] + ["United States 3DEP (formerly NED) and " + TERRARIUM_GLOBAL]
+        return "Elevation: Terrain Tiles on AWS (Mapzen Terrarium). " + "; ".join(parts) + "."
+    return "Elevation: Terrain Tiles on AWS (Mapzen Terrarium). " + "; ".join(parts + [TERRARIUM_GLOBAL[0].upper() + TERRARIUM_GLOBAL[1:]]) + "."
 
 
 # --------------------------------------------------------------------------------------------------------------- Copernicus DEM (1.5.0)
@@ -522,11 +762,15 @@ def fetch_copernicus(bounds, target_m_per_px: float, out: Path, root: Path, *, h
     import rasterio
     from rasterio.merge import merge
     tiles = cop_tiles_for(bounds)
-    if len(tiles) > max_tiles:
-        raise oh.ServiceError(f"the window needs {len(tiles)} Copernicus tiles; the limit is {max_tiles} a map", "MAP-TER-003")
+    if len(tiles) > COP_COG_MAX_TILES:
+        raise oh.ServiceError(f"the window needs {len(tiles)} Copernicus tiles; the limit is {COP_COG_MAX_TILES} a map", "MAP-TER-003")
     h = http or safe_http(max_bytes=COP_TILE_BYTES)
     first = 90 if target_m_per_px >= 90 else 30
     lists = {g: cop_tile_list(g, root, h) for g in sorted({first, 90})}
+    uncached = [x for x in tiles if not (root / "copernicus-tiles" / f"{cop_tile_name(x[0], x[1], first)}.tif").is_file()]
+    est = len(uncached) * COP_TILE_MB[first]
+    if len(tiles) > max_tiles or (est > COP_BYTE_BUDGET_MB and target_m_per_px >= COP_COG_MIN_M):
+        return fetch_copernicus_cog(bounds, target_m_per_px, out, lists, first)
     paths, used, sea, fell_back, reqs = [], {}, [], [], []
     for la, lo in tiles:
         glo = None
@@ -575,6 +819,64 @@ def fetch_copernicus(bounds, target_m_per_px: float, out: Path, root: Path, *, h
             "glo": glo_used, "fallback_glo90": fell_back, "sea_tiles": sea, "surface": "DSM", "bytes": w["bytes"], "sha256": w["sha256"], "path": str(out),
             "requests": reqs, "pixels": [int(a.shape[1]), int(a.shape[0])], "nodata": NODATA,
             "attribution": "Elevation: " + "; ".join(COP_NOTICE[g] for g in (glo_used or [first])) + f". Copernicus DEM accessed {today()} from {COP_REGISTRY}.",
+            "license": "attribution", "terms_url": "https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM"}
+
+
+def cog_open(url: str):
+    """Open a public COG by range reads (GDAL /vsicurl/). The address is built from this module's fixed bucket names only."""
+    import rasterio
+    return rasterio.open("/vsicurl/" + url)
+
+
+def _gdal_http_env() -> dict:
+    env = {"GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR", "CPL_VSIL_CURL_ALLOWED_EXTENSIONS": ".tif", "GDAL_HTTP_USERAGENT": oh.default_user_agent(),
+           "GDAL_HTTP_MAX_RETRY": "3", "GDAL_HTTP_RETRY_DELAY": "1", "VSI_CACHE": "TRUE"}
+    ca = os.environ.get("CURL_CA_BUNDLE") or os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
+    if ca:
+        env["CURL_CA_BUNDLE"] = ca
+    return env
+
+
+def fetch_copernicus_cog(bounds, target_m_per_px: float, out: Path, lists: dict, first: int) -> dict:
+    """2.5.0 (T-04): a large window from the Copernicus COGs by HTTP range reads of the overview that matches the target cell size, not whole
+    tiles: a state-sized window (60 one-degree tiles) at 250 m reads a few MB instead of 1.5 GB. GLO-90 for targets of 90 m and more."""
+    import rasterio
+    from rasterio.merge import merge
+    W, S, E, N = bounds
+    lat_c = (S + N) / 2
+    dy = target_m_per_px / 111_320.0
+    dx = target_m_per_px / (111_320.0 * max(0.05, math.cos(math.radians(lat_c))))
+    names, sea, fell = [], [], []
+    for la, lo in cop_tiles_for(bounds):
+        glo = next((g for g in ([first] if first == 90 else [30, 90]) if cop_tile_name(la, lo, g) in lists.get(g, set())), None)
+        if glo is None:
+            sea.append(cop_tile_name(la, lo, first))
+            continue
+        if glo != first:
+            fell.append(cop_tile_name(la, lo, glo))
+        names.append((cop_tile_name(la, lo, glo), glo))
+    with rasterio.Env(**_gdal_http_env()):
+        srcs = [cog_open(f"{COP_BUCKETS[g]}{n}/{n}.tif") for n, g in names]
+        try:
+            if srcs:
+                arr, tr = merge(srcs, bounds=(W, S, E, N), res=(dx, dy), nodata=NODATA, resampling=rasterio.enums.Resampling.average)
+                a = arr[0].astype("float32")
+            else:
+                from rasterio.transform import from_origin
+                w_, h_ = max(1, int(round((E - W) / dx))), max(1, int(round((N - S) / dy)))
+                a, tr = np.full((h_, w_), NODATA, dtype="float32"), from_origin(W, N, dx, dy)
+        finally:
+            for x in srcs:
+                x.close()
+    a[a == NODATA] = 0.0 if sea else NODATA
+    w = rio.write_geotiff(out, np.ma.masked_equal(a, NODATA), tr, "EPSG:4326", nodata=NODATA)
+    glo_used = sorted({g for _n, g in names}) or [first]
+    est = float(a.size) * 4 / 1e6 * 1.5
+    return {"source": "copernicus", "entry": COP_ENTRY, "crs": "EPSG:4326", "res_m": target_m_per_px, "tiles": len(names), "tile_names": sorted(n for n, _ in names),
+            "glo": glo_used, "fallback_glo90": fell, "sea_tiles": sea, "surface": "DSM", "bytes": w["bytes"], "sha256": w["sha256"], "path": str(out),
+            "requests": [{"url": f"{COP_BUCKETS[g]}{n}/{n}.tif", "bytes": 0, "range_reads": True} for n, g in names], "pixels": [int(a.shape[1]), int(a.shape[0])],
+            "nodata": NODATA, "route": "cog-overviews", "estimated_mb": est,
+            "attribution": "Elevation: " + "; ".join(COP_NOTICE[g] for g in glo_used) + f". Copernicus DEM accessed {today()} from {COP_REGISTRY}.",
             "license": "attribution", "terms_url": "https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM"}
 
 

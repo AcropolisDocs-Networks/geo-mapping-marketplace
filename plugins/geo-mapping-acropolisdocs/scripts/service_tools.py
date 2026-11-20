@@ -615,11 +615,12 @@ def plan(profile: str = "", layer: str = "", protocol: str = "wfs", cql_filter: 
 
 # ---------------------------------------------------------------------------------------------------------------- M13: catalogs and geocoding
 @guarded
-def catalog_search(query: str, sources: str = "library,datagov,hub,socrata,stac", bbox: str = "", limit: int = 10, stac_root: str = "", datetime: str = "", http=None) -> dict:
+def catalog_search(query: str, sources: str = "library,datagov,hub,socrata,stac", bbox: str = "", limit: int = 10, stac_root: str = "", datetime: str = "", http=None,
+                   region: str = "") -> dict:
     """Open geodata in the public catalogs, the plugin's library first. Results are catalog text (data); a URL in a result is reported, never queried."""
     import catalog_search as cs
     root = cs.STAC_ROOTS.get(stac_root or "", stac_root or None)
-    res = cs.search(query, sources, bbox or None, limit, http=http or cs.make_http(), stac_root=root, datetime=datetime or None)
+    res = cs.search(query, sources, bbox or None, limit, http=http or cs.make_http(), stac_root=root, datetime=datetime or None, region=region or None)
     if res.get("ok"):
         res["draft_find_records"] = "catalog_search.to_find_record(result) drafts a find record for one result; verify it on the publisher's page before use"
     return res
@@ -793,15 +794,66 @@ def fcc_bdc_list_tool(as_of: str = "", category: str = "", subcategory: str = ""
             c.close()
 
 
-def fcc_bdc_fetch_tool(file_id: str = "", kind: str = "availability", fmt: str = "csv", confirm_large: bool = False, summary: bool = False, as_of: str = "",
-                       geography: str = "county", state: str = "", technology: str = "wired-lfw", speed: str = "100/20", biz_res: str = "R", http=None) -> dict:
+def fcc_bdc_fetch_tool(file_id: str = "", kind: str = "availability", fmt: str = "auto", confirm_large: bool = False, summary: bool = False, as_of: str = "",
+                       geography: str = "county", state: str = "", technology: str = "wired-lfw", speed: str = "100/20", biz_res: str = "R", http=None,
+                       subcategory: str = "") -> dict:
     import fcc_bdc as fb
     c = None
     try:
         c = fb.Client(http=http)
         if summary:
             return fb.summary(c, as_of=as_of, geography=geography, state=state or None, technology=technology, speed=speed, biz_res=biz_res, confirm_large=confirm_large)
-        return {"ok": True, **fb.fetch_file(c, file_id, kind=kind, fmt=fmt, confirm_large=confirm_large), "findings": c.findings}
+        if not subcategory and (fmt or "auto") in ("auto", "csv") and as_of:
+            try:                                          # 2.4.0 (H-10): the file's own subcategory decides csv or gpkg
+                hit = [f for f in fb.list_files(c, as_of, kind=kind) if str(f.get("file_id")) == str(file_id)]
+                subcategory = (hit[0].get("subcategory") if hit else "") or ""
+            except fb.BDCError:
+                subcategory = ""
+        return {"ok": True, **fb.fetch_file(c, file_id, kind=kind, fmt=fmt or "auto", confirm_large=confirm_large, subcategory=subcategory or None),
+                "findings": c.findings}
+    except fb.BDCError as ex:
+        return _tool_fail(ex)
+    finally:
+        if c is not None:
+            c.close()
+
+
+def fcc_bdc_coverage_tool(region: str = "", technology: str = "5GNR", speed: str = "35/3", environment: str = "outdoor", as_of: str = "latest",
+                          providers: str = "all", confirm: bool = False, http=None) -> dict:
+    """H-11 (2.6.0): one call per region, not per state and provider. Without confirm: the files the region needs across its states and their
+    size (the cost card), and the parts outside the FCC's coverage. With confirm=true (after the person agreed to the size): every file fetched
+    as a GeoPackage into the work folder's data/fcc-bdc/, and one list of paths the map's `source: {type: h3, adapter: fcc-bdc-mobile}` reads."""
+    import fcc_bdc as fb
+    import region as region_mod
+    from adapters import fcc_bdc_mobile as am
+    if not str(region).strip():
+        return fail("usage", "MAP-SVC-001", "region is a place name (Cascadia) or admin codes (US-WA,US-OR)")
+    try:
+        txt = str(region).strip()
+        blk = {"admin": [c.strip() for c in txt.split(",")]} if all(region_mod.CODE.match(c.strip().upper()) for c in txt.split(",")) else {"place": txt}
+        reg = region_mod.resolve(blk)
+    except region_mod.RegionError as ex:
+        return fail("usage", ex.rule, str(ex))
+    c = None
+    try:
+        c = fb.Client(http=http)
+        plan = am.coverage_plan(c, reg, technology=technology, speed=speed, as_of=as_of,
+                                providers="all" if providers in ("", "all") else [p.strip() for p in providers.split(",")])
+        out = {"ok": True, "region": reg.name, "as_of": plan["as_of"], "states": plan["partitions"]["inside"], "outside_fcc": plan["partitions"]["outside"],
+               "files": [{k: f.get(k) for k in ("file_id", "name", "provider", "state", "bytes")} for f in plan["files"]], "cost": plan["cost"],
+               "environment": am.ENVIRONMENT_LABEL.get(environment, environment), "findings": c.findings}
+        if plan["partitions"]["outside"]:
+            out["findings"] = list(out["findings"]) + [{"id": "MAP-FCC-008", "severity": "INFO", "message": f"{', '.join(plan['partitions']['outside'])} "
+                                                       "is outside the FCC's coverage (the United States and its territories); it has no data from this source"}]
+        if not confirm:
+            out["next"] = "show the person the cost (files, MB) and call again with confirm=true after they agree"
+            return out
+        got = []
+        for f in plan["files"]:
+            r = fb.fetch_file(c, f["file_id"], fmt="gpkg", confirm_large=True, subcategory="Hexagon Coverage")
+            got.append({"file_id": f["file_id"], "provider": f.get("provider"), "state": f["state"], "path": r.get("gpkg") or r["path"], "bytes": r["bytes"]})
+        out.update(fetched=got, path=str(gc.data_dir("fcc-bdc")), findings=c.findings)
+        return out
     except fb.BDCError as ex:
         return _tool_fail(ex)
     finally:
@@ -940,16 +992,67 @@ def check_work_folder(folder: str) -> Path:
     return r
 
 
+_LAST_FOLDER: dict = {}
+STICKY = False          # the MCP server turns it on: a folder one call named is the default for the next (scripts and tests stay as they were)
+PATH_KEYS = ("path", "csv", "gpkg", "file", "image", "out", "table", "parquet")
+
+
+def default_work_folder() -> str:
+    """2.4.0 (I-20): the work folder of a call that names none. GMAP_WORK_FOLDER (a folder the person set for the server), else the last
+    folder a call named in this server process. The desktop app starts the server in System32, where the old fallback was %USERPROFILE%,
+    a folder neither the Cowork VM nor the cloud workspace can read."""
+    env = (os.environ.get("GMAP_WORK_FOLDER") or "").strip()
+    if env:
+        return env
+    return (_LAST_FOLDER.get("folder") or "") if STICKY else ""
+
+
+def located(res: dict, folder: Path) -> dict:
+    """2.4.0 (I-21): every file path in a result also as `relative_path` (to the work folder) and `vm_path` ($HOME/mnt/<folder name>/...,
+    where the Cowork VM sees a connected folder), so the next step uses it without guessing."""
+    def one(v):
+        try:
+            p = Path(str(v))
+            rel = p.resolve().relative_to(folder.resolve()).as_posix()
+        except (OSError, ValueError):
+            return None
+        return {"relative_path": rel, "vm_path": f"$HOME/mnt/{folder.name}/{rel}"}
+    out = dict(res)
+    places = {}
+    for k in PATH_KEYS:
+        v = res.get(k)
+        if isinstance(v, str) and v:
+            loc = one(v)
+            if loc:
+                places[k] = loc
+    if res.get("files") and isinstance(res["files"], list):
+        places["files"] = [one(f if isinstance(f, str) else (f or {}).get("path", "")) for f in res["files"]]
+    if "path" in places:
+        out.update(places["path"])
+    if places:
+        out["locations"] = places
+    return out
+
+
 def in_work_folder(work_folder: str, fn, *a, **k) -> dict:
-    """Run a tool with its outputs in WORK_FOLDER/.geo-mapping (gmap_common.outputs_in), or as before when no folder is named."""
-    if not (work_folder or "").strip():
-        return fn(*a, **k)
+    """Run a tool with its outputs in WORK_FOLDER/.geo-mapping (gmap_common.outputs_in), or as before when no folder is named. 2.4.0: a call
+    that names none uses default_work_folder(); fetched data lands in WORK_FOLDER/data/<kind>/ (gmap_common.data_dir), and results carry
+    relative and Cowork VM paths (located)."""
+    named = (work_folder or "").strip()
+    if not named:
+        named = default_work_folder()
+        if not named:
+            return fn(*a, **k)
     try:
-        folder = check_work_folder(work_folder)
+        folder = check_work_folder(named)
     except ValueError as e:
+        if not (work_folder or "").strip():               # a remembered folder that has gone: as before, no folder
+            _LAST_FOLDER.pop("folder", None)
+            return fn(*a, **k)
         return fail("usage", "MAP-SVC-001", str(e))
+    _LAST_FOLDER["folder"] = str(folder)
     with gc.outputs_in(folder) as od:
         res = fn(*a, **k)
     if isinstance(res, dict) and res.get("ok") is not False:
-        res = {**res, "work_folder": str(od)}
+        res = {**located(res, folder), "work_folder": str(od)}
     return res

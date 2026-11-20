@@ -480,6 +480,26 @@ def methods_svg(plan, m: dict, assemble_root) -> str:
     return assemble_root(W, H, "".join(out), f"Data & Methods: {m['title']}", "Sources, processing steps and credits for the map.")
 
 
+def spec_ref(plan, sidecar: Path) -> dict | None:
+    """2.4.0 (map-trace MT-05): the MapSpec a finished file came from: its path relative to the sidecar, the file's SHA-256, its id and its
+    message as written (nothing else from the spec). map_evaluate.discover reads it, so a file alone leads back to what it was meant to say."""
+    import hashlib
+    import os
+    sp = getattr(plan, "spec_path", None)
+    if not sp:
+        return None
+    sp = Path(sp)
+    try:
+        rel = os.path.relpath(sp.resolve(), Path(sidecar).resolve().parent)
+    except (OSError, ValueError):                                  # another drive on Windows: the absolute path
+        rel = str(sp)
+    try:
+        sha = hashlib.sha256(sp.read_bytes()).hexdigest()
+    except OSError:
+        sha = None
+    return {"path": Path(rel).as_posix(), "sha256": sha, "id": plan.spec.get("id"), "message": plan.spec.get("message")}
+
+
 def write_sidecar(path: Path, plan, recs: list[dict], meth: dict | None) -> Path:
     doc = {"map_id": plan.spec["id"], "records": recs, "reproducibility": (meth or {}).get("reproducibility") or {
         "map_id": plan.spec["id"], "mapspec_sha256": spec_sha256(plan), "built": _today().isoformat(), "library_version": _library_version()}}
@@ -487,6 +507,9 @@ def write_sidecar(path: Path, plan, recs: list[dict], meth: dict | None) -> Path
         doc["methods"] = {k: v for k, v in meth.items() if k != "reproducibility"}
     if getattr(plan, "style", None) is not None:                # 1.4.0 (R2-PACK): the pack, its version and pack.yaml hash
         doc["style"] = plan.style.record()
+    sref = spec_ref(plan, path)
+    if sref:
+        doc["spec"] = sref
     path.write_text(json.dumps(doc, indent=2, ensure_ascii=False, default=str) + "\n", encoding="utf-8")
     return path
 

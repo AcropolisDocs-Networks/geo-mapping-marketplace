@@ -115,6 +115,15 @@ def outputs_dir(create: bool = False) -> Path:
     return p
 
 
+def data_dir(kind: str) -> Path:
+    """2.4.0 (I-21, Day 20 issue 3): where a fetch tool puts the data it downloads. Inside a tool call that named a work folder: that folder's
+    data/<kind>/ (two levels, beside the maps), not five levels down in .geo-mapping/cache/library/<kind>/. Otherwise the library cache."""
+    o = _OUTPUTS.get()
+    if o is not None:
+        return o.parent / "data" / kind
+    return outputs_dir() / "cache" / "library" / kind
+
+
 _SPEC_DIR: "contextvars.ContextVar[Path | None]" = contextvars.ContextVar("gmap_spec_dir", default=None)
 
 
@@ -339,3 +348,118 @@ def brand_dir(slug: str) -> Path:
         if (root / slug / "PACK.json").is_file():
             return root / slug
     return shipped / slug
+
+
+# ------------------------------------------------------------------------------------------------------------- 2.4.0 (X-02): the run ledger
+# Every plugin entrypoint writes one line when it exits: script, option names, exit code, duration, outputs written, finding ids and severities,
+# items it dropped. map_trace joins the lines to the transcript by time and script, so `| tail`, `> file` and `2>&1` no longer hide a failure or
+# an output from the trace. The line holds no option values (paths can carry names) beyond the outputs a script reports itself.
+LEDGER_DIRNAME = "traces/runs"
+_LEDGER: dict = {}
+
+
+def ledger_dir() -> Path:
+    base = os.environ.get("GMAP_LEDGER_DIR")
+    return Path(base) if base else workdir() / LEDGER_DIRNAME
+
+
+def ledger_file() -> Path:
+    import datetime as _dt
+    sess = os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("GMAP_SESSION")
+    name = "".join(ch for ch in (sess or "") if ch.isalnum() or ch in "-_")[:64] or _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d")
+    return ledger_dir() / f"{name}.ndjson"
+
+
+def ledger_note(*, outputs=None, findings=None, degraded=None, **extra) -> None:
+    """A script adds what it wrote and found to its ledger line (written at exit). Safe to call from library code: it does nothing until the
+    process's own entrypoint started the ledger."""
+    if not _LEDGER.get("on"):
+        return
+    if outputs:
+        _LEDGER.setdefault("outputs", [])
+        for o in outputs:
+            s = str(Path(o).resolve()) if o else None
+            if s and s not in _LEDGER["outputs"]:
+                _LEDGER["outputs"].append(s)
+    if findings:
+        _LEDGER.setdefault("findings", {})
+        for f in findings:
+            if isinstance(f, dict) and f.get("id"):
+                _LEDGER["findings"][f["id"]] = f.get("severity") or _LEDGER["findings"].get(f["id"])
+    if degraded:
+        _LEDGER.setdefault("degraded", [])
+        _LEDGER["degraded"] += [str(d) for d in degraded if str(d) not in _LEDGER["degraded"]]
+    for k, v in extra.items():
+        _LEDGER[k] = v
+
+
+def _ledger_write() -> None:
+    if not _LEDGER.get("on") or _LEDGER.get("written"):
+        return
+    _LEDGER["written"] = True
+    import datetime as _dt
+    import time as _time
+    row = {"script": _LEDGER["script"], "start": _LEDGER["start"], "end": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="milliseconds"),
+           "seconds": round(_time.monotonic() - _LEDGER["t0"], 2), "exit": _LEDGER.get("exit", 0), "options": _LEDGER["options"],
+           "cwd": _LEDGER["cwd"], "pid": os.getpid()}
+    for k in ("outputs", "findings", "degraded", "exception", "spec", "out"):
+        if _LEDGER.get(k):
+            row[k] = _LEDGER[k]
+    try:
+        f = ledger_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        with open(f, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, default=str) + "\n")
+    except OSError:                                          # a read-only folder: the trace falls back to the transcript alone
+        pass
+
+
+def ledger_start() -> None:
+    """Called once when this module is imported by a plugin script run as a program (its __main__ is in scripts/, lints/ or mcp/)."""
+    import atexit
+    import datetime as _dt
+    import time as _time
+    if _LEDGER.get("on") or os.environ.get("GMAP_NO_LEDGER") == "1":
+        return
+    main = sys.modules.get("__main__")
+    mf = getattr(main, "__file__", None)
+    if not mf:
+        return
+    mp = Path(mf).resolve()
+    if mp.parent.name not in ("scripts", "lints", "mcp") or not (mp.parent.parent / "scripts" / "gmap_common.py").is_file():
+        return
+    import re as _re
+    opts, spec, out, argv = [], None, None, sys.argv[1:]
+    for i, a in enumerate(argv):
+        if a.startswith("--"):
+            k = a.split("=", 1)[0]
+            if k not in opts:
+                opts.append(k)
+            val = a.split("=", 1)[1] if "=" in a else (argv[i + 1] if i + 1 < len(argv) else None)
+            if k == "--spec" and val:
+                spec = val
+            elif k == "--out" and val:
+                out = val
+    try:
+        cwd = str(Path.cwd())
+    except OSError:
+        cwd = None
+    _LEDGER.update(on=True, script=mp.stem, start=_dt.datetime.now(_dt.timezone.utc).isoformat(timespec="milliseconds"), t0=_time.monotonic(),
+                   options=opts[:16], cwd=cwd, spec=str(Path(spec).resolve()) if spec and _re.search(r"\.ya?ml$", spec) else None,
+                   out=str(Path(out).resolve()) if out else None)
+    real_exit = sys.exit
+
+    def _exit(code=0):
+        _LEDGER["exit"] = code if isinstance(code, int) else (0 if code is None else 1)
+        real_exit(code)
+    sys.exit = _exit
+    real_hook = sys.excepthook
+
+    def _hook(tp, val, tb):
+        _LEDGER.update(exit=1, exception=tp.__name__)
+        real_hook(tp, val, tb)
+    sys.excepthook = _hook
+    atexit.register(_ledger_write)
+
+
+ledger_start()

@@ -1,0 +1,31 @@
+# 3.0.0 (I-11): where each kind of step runs, in order of preference, and how files move between the places (env_probe.place names the place).
+# Places: host (the person's computer: the plugin's MCP server, their credentials and folders), cowork-vm (the Linux VM the desktop app runs for a
+# session: the connected folders at $HOME/mnt/<folder>), cloud (the cloud workspace: the synced plugin, pip, open egress, no credentials).
+# Skills cite this table instead of each carrying its own rule (map-create "Order of work", map-run, geo-find-data).
+places:
+  host: {has: [credentials, mcp data tools, the person's folders], lacks: [a shell for Claude, packages outside the server's venv]}
+  cowork-vm: {has: [connected folders, python3, network on the account's allowlist], lacks: [plugin packages unless doctor --fix --place cowork-vm made a venv, credentials]}
+  cloud: {has: [the synced plugin, pip, fast CPU], lacks: [the person's files (only staged copies), credentials]}
+steps:
+  credentialed-fetch:
+    run_on: [host]
+    how: the map server's tools (fcc_bdc_coverage, ref_fetch, census_query, basemap_tiles) with work_folder= the connected folder; files land in <folder>/data/<kind>/
+    move: map-run move-data stages them to the cloud and unpacks them in one step
+  public-fetch:
+    run_on: [cloud, cowork-vm, host]
+    how: where the file is used (3DEP, Copernicus, Terrarium, Natural Earth, geoBoundaries are keyless); never handed back, the provenance keeps the request (I-22)
+  build:
+    run_on: [cloud, cowork-vm]
+    how: build_map.py in the cloud workspace; in the Cowork VM only when doctor --fix --place cowork-vm made the venv in the work folder (O3)
+  export:
+    run_on: [cloud, cowork-vm]
+    how: map_export.py beside the build
+  hand-back:
+    run_on: [cloud]
+    how: the finished SVG, PDF and PNG (and the provenance sidecar) copied back to the connected folder; caches and DEMs stay behind
+  web-check:
+    run_on: [cloud]
+    how: Playwright and Chromium in the cloud workspace
+  video:
+    run_on: [cloud]
+    how: Chromium and ffmpeg in the cloud workspace (GPU when the host has one)

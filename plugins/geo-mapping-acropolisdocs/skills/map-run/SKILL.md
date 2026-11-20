@@ -2,7 +2,7 @@
 name: map-run
 description: "Run a map pipeline after confirming its cost: map or web map build, QA, data refresh, format batch, service harvest or refresh, coverage, market, program, network analysis, atlas, library refresh"
 ---
-Start the pipeline the person named. The pipelines are `map-build`, `webmap-build`, `map-qa`, `data-refresh`, `format-batch`, `service-harvest`, `service-refresh`, `coverage-map`, `market-map`, `program-map`, `network-analysis`, `map-atlas-run`, `reference-refresh`, `climate-fetch` (a Copernicus CDS job), `fcc-fetch` (an FCC BDC file over 100 MB), `flythrough` (a video flown over a 3D web page: a draft first, the final after you confirm) and `map-evaluate` (grades finished maps from their pictures for improving the plugin, observe only: it never changes a map); with no name, list them and ask which.
+Start the pipeline the person named. The pipelines are `map-build`, `webmap-build`, `map-qa`, `data-refresh`, `format-batch`, `service-harvest`, `service-refresh`, `coverage-map`, `market-map`, `program-map`, `network-analysis`, `map-atlas-run`, `reference-refresh`, `climate-fetch` (a Copernicus CDS job), `fcc-fetch` (an FCC BDC file over 100 MB), `flythrough` (a video flown over a 3D web page: a draft first, the final after you confirm), `map-evaluate` (grades finished maps from their pictures for improving the plugin, observe only: it never changes a map) and `move-data` (2.6.0: files fetched on the person's computer and staged here, unzipped into the work folder's data/ in one step with sizes and hashes recorded); with no name, list them and ask which.
 
 Each pipeline's guide is a module, not a skill: read it with the line below before planning (never with the Skill tool, which has no
 pipeline skills to load).

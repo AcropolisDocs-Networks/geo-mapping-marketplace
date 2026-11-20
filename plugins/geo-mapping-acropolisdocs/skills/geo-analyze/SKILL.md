@@ -42,6 +42,7 @@ python3 "$GMAP_ROOT/scripts/modules.py" read projections-guide        # any modu
 | `projections-guide`    | for the measuring CRS: geodesic against projected distances and areas |
 | `telecom-geo`          | for sites, sectors and what the layout analytics measure |
 | `site-confidentiality` | before a buffer or Voronoi around confidential sites |
+| `h3-grids`             | for data already on H3 (an h3 id column, FCC mobile hexagons): roll-ups with group shares and complete grids, beside `hexbin` for points and polygons |
 
 Exit 0 done; 2 a usage error (an op parameter, an ambiguous CSV); 3 a check blocked and the output was removed (`--no-strict` keeps it).
 The same ops run inside `geo-convert` (`--repair`, `--buffer`, `--clip-layer`, `--area`, `--op JSON`) and as an `ops:` list on a

@@ -150,9 +150,21 @@ def lint_spec(spec: dict) -> list[dict]:
                              "natural", "stddev", "sd", "quantiles", "fisher_jenks", "unique", "categories", "pretty", "geometric",
                              "equal_count", "equal_counts", "equal_frequency", "count", "nice", "rounded", "round", "even", "even_interval",
                              "geometric_interval", "geo", "log", "log10", "logarithmic", "log_scale", "head_tail", "headtail", "head-tail",
-                             "head_tail_breaks", "ht"}
+                             "head_tail_breaks", "ht", "discrete"}
             if cm not in from_classify:
                 out.append(finding("MAP-SPEC-003", "BLOCK", f"layer '{ly.get('id')}': unknown classification method '{cm}'", cm))
+        # 2.6.0: an H3 source and its roll-up (H-01 to H-03)
+        hb = ly.get("h3") if isinstance(ly.get("h3"), dict) else None
+        if src.get("type") == "h3" and not src.get("id_field") and not src.get("adapter"):
+            out.append(finding("MAP-SPEC-003", "BLOCK", f"layer '{ly.get('id')}': an h3 source needs id_field (the column of cell ids) or an adapter", ly.get("id")))
+        if hb is not None:
+            if hb.get("complete") and not spec.get("region"):
+                out.append(finding("MAP-SPEC-006", "BLOCK", f"layer '{ly.get('id')}': h3.complete: region needs a region: block (admin, place, admin2, file, bbox or h3)", "h3.complete"))
+            sm = hb.get("share_min")
+            if sm is not None and not (isinstance(sm, (int, float)) and 0 < float(sm) <= 1):
+                out.append(finding("MAP-SPEC-006", "BLOCK", f"layer '{ly.get('id')}': h3.share_min ({sm}) must be above 0 and at most 1", sm))
+            if src.get("type") != "h3":
+                out.append(finding("MAP-SPEC-011", "WARN", f"layer '{ly.get('id')}': an h3: block is read only with source type h3; for points or polygons use role hexbin", "h3"))
         # 006 classification keys that contradict each other (M10)
         cl = ly.get("classification") or {}
         if isinstance(cl, dict):
@@ -186,7 +198,7 @@ def lint_spec(spec: dict) -> list[dict]:
                 out.append(finding("MAP-SPEC-005", "BLOCK", msg, tpl))
         except lo.LayoutError as ex:
             out.append(finding("MAP-SPEC-005", "BLOCK", str(ex), tpl))
-    elif tpl and tpl != "auto" and tpl not in template_names():          # 1.5.0: auto is Letter or A-series by country
+    elif tpl and tpl not in ("auto", "auto-social", "auto-slide") and tpl not in template_names():          # 1.5.0: auto is Letter or A-series by country; 2.6.0: auto-social, auto-slide by shape
         out.append(finding("MAP-SPEC-005", "BLOCK", f"template '{tpl}' does not exist; choose one of {', '.join(template_names())}, or a custom sheet {{custom: {{w_mm, h_mm}}}}", tpl))
     out += lint_brand_refs(spec)          # 1.14.0: MAP-SPEC-012
     return out
@@ -262,7 +274,7 @@ def lint_ops_refs(layers: list, ids: list, spec: dict | None = None) -> list[dic
     BLOCK (an overlap of a layer with itself leaves `layer` out); a `draw: false` helper no op uses is a WARN (it would be loaded for nothing);
     layers whose ops need each other are a BLOCK (no load order can satisfy them)."""
     out: list[dict] = []
-    known = {i for i in ids if i is not None}
+    known = {i for i in ids if i is not None} | ({"region"} if (spec or {}).get("region") else set())    # 3.0.0: the region is a layer for ops
     refs: dict[str, list[str]] = {}
     for ly in layers:
         if not isinstance(ly, dict) or ly.get("id") is None:

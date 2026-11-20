@@ -238,6 +238,19 @@ def check_008(plan) -> list[dict]:
     return out
 
 
+def _better_template(plan) -> str | None:
+    """2.6.0 (V-04): the sheet whose shape fits the subject, by its width over its height in the display projection."""
+    try:
+        x0, y0, x1, y1 = plan.extent
+        asp = (x1 - x0) / max(1e-9, (y1 - y0))
+        import map_plan as mp
+        kind = "auto-social" if "social" in str(plan.tpl_name) or str(plan.tpl_name) == "story" else "auto-slide"
+        want = next(name for lim, name in mp.SHAPE_AUTO[kind] if asp < lim)
+        return None if want == plan.tpl_name else f"template {want} suits a subject {asp:.2f} times as wide as it is tall"
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def check_009(plan, report) -> list[dict]:
     out = []
     if (report or {}).get("picture_led"):           # 1.19.0 (Day 17 issue B3): the picture fills the frame; the points over it are annotation
@@ -249,7 +262,9 @@ def check_009(plan, report) -> list[dict]:
         # 2.1.0 (Day 19 issue 10): the rest of the frame is mostly water: the frame is as tight as the land allows
         out.append(finding("MAP-CART-009", "INFO", f"the data fills {ext:.0%} of the map frame, but {land_fill:.0%} of the land in it: the rest is water", ext))
     elif ext is not None and ext < 0.6:
-        out.append(finding("MAP-CART-009", "WARN", f"the data fills only {ext:.0%} of the map frame; zoom the extent or choose a template that fits the shape better", ext))
+        better = _better_template(plan)
+        out.append(finding("MAP-CART-009", "WARN", f"the data fills only {ext:.0%} of the map frame; zoom the extent or choose a template that fits the shape better"
+                           + (f" ({better}, or template: auto-social / auto-slide to pick by shape)" if better else ""), ext))
     elif cover is not None and cover < 0.03:
         out.append(finding("MAP-CART-009", "INFO", "the data covers very little of the frame", cover))
     clipped = (report or {}).get("clipped_features")

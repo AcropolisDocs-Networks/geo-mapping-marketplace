@@ -1,0 +1,94 @@
+id: ref.statistic.us.coverage.fcc-bdc-mobile-h3
+type: statistic
+rev: 1
+status: active
+title: 'FCC Broadband Data Collection: mobile coverage hexagons (H3)'
+summary: Provider-reported mobile broadband coverage per state, provider, technology and speed tier on the H3 grid at resolution 9 (the BDC's
+  'Hexagon Coverage' files), read by the fcc-bdc-mobile adapter for any region and rolled up to a map's resolution with the share each carrier covers.
+tags:
+  geography:
+  - us
+  level:
+  - grid
+  - state
+  domain:
+  - telecom
+  use_for:
+  - choropleth
+  - coverage-footprint
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - irregular
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- 'How many carriers report coverage across a region: source {type: h3, adapter: fcc-bdc-mobile}, h3 {by: provider, share_min: 0.5, agg: count_groups,
+  complete: region}; the recipe ref.recipe.telecom.carrier-choice-h3 writes the whole map.'
+- One carrier's footprint by its share of each cell (agg share), or where any carrier reaches (agg any), on the grid the FCC itself publishes.
+avoid_when:
+- The map claims measured performance; the hexagons are provider filings of where service is predicted, not speed tests.
+- A region outside the United States and its territories; the adapter says which parts have no FCC data.
+pairs_with:
+- ref.statistic.us.broadband.fcc-bdc-summary
+- ref.public-service.us.broadband.fcc-bdc-api
+- ref.boundary.us.county.cb500k
+join:
+  key: h3_res9_id
+  type: string
+  note: The H3 cell id at resolution 9 (a 15-character hex string); one row per cell, provider and environment (0 outdoor stationary, 1 in-vehicle).
+delivery:
+  mode: service
+  tool: fcc_bdc
+  format: GeoPackage in a zip per state and provider (Hexagon Coverage), from the FCC public data API (bdc.fcc.gov) with the person's fcc-bdc key
+  columns:
+  - frn
+  - providerid
+  - brandname
+  - technology
+  - mindown
+  - minup
+  - minsignal
+  - environmnt
+  - h3_res9_id
+  note: The map server's fcc_bdc_coverage tool lists every state's files for a region with their size, fetches them after the person agrees into the
+    work folder's data/fcc-bdc/, and the build reads only the id, brand and environment columns (no geometry is built).
+source:
+  publisher: FCC
+  product: 'Broadband Data Collection, National Broadband Map public data: mobile broadband Hexagon Coverage (H3 resolution 9)'
+vintage:
+  current: latest filing date on the download page (semiannual filings, June and December)
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: FCC National Broadband Map (Broadband Data Collection), mobile hexagon coverage.'
+  note: Public domain. Fetched through the FCC public data API (bdc.fcc.gov) with the person's key.
+  terms_accepted: the FCC API Terms of Use, agreed when the token is generated
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Active (2.6.0, H-11): the Day 20 Washington and Idaho files read through the fcc-bdc-mobile adapter; columns confirmed against the 2026-06-30
+      filing (bdc_53_*_5GNR_35_3_mobile_broadband_h3_*.gpkg).'

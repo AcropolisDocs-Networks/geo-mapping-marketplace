@@ -1,7 +1,7 @@
 ---
 name: market-map
 description: >
-  PIPELINE - started only through /geo-mapping-acropolisdocs:map-run, which reads this guide before planning. Market map: a state or county rollup
+  PIPELINE - started only through /geo-mapping-acropolisdocs:map-run, which reads this guide before planning. Market map: an admin-1 or admin-2 rollup (state or county, province or district)
   from a client table joined to Census boundaries, as a rate choropleth or proportional symbols.
 ---
 

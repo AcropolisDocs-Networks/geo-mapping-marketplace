@@ -2,6 +2,11 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-20
+
+- `ref.map-type.carrier-choice-h3` rev 1: Active (2.6.0, H-13): the Day 20 hexagon map as a recipe; the Washington roll-up matches day20-notes.md (24,923 / 8,071 / 4,197 / 461).
+- `ref.statistic.us.coverage.fcc-bdc-mobile-h3` rev 1: Active (2.6.0, H-11): the Day 20 Washington and Idaho files read through the fcc-bdc-mobile adapter; columns confirmed against the 2026-06-30 filing (bdc_53_*_5GNR_35_3_mobile_broadband_h3_*.gpkg).
+
 ## 2026-11-19
 
 - `ref.map-type.density-surface` rev 3: Day 19 (2.1.0): cap (one location counted at most N times, MAP-OPS-014 when one holds over 2 percent), scale (linear, sqrt, log, quantile), peak, within and outside (keep to the land), by (one surface per period on shared band edges).

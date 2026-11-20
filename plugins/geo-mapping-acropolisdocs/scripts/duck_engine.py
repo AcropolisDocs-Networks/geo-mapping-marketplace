@@ -54,8 +54,8 @@ AUTO_ROWS = {"where": 20_000, "table": 200_000, "pairs": None, "grid": 1_000_000
 MACHINE_FILE = "engine.json"
 BENCH_SIZES = (250_000, 1_000_000, 4_000_000)
 INSTALL_HINT = "pip install duckdb"
-SPATIAL_HINT = ("the DuckDB spatial extension is not on this machine; DuckDB downloads it only when told to (`INSTALL spatial`, once, by you), "
-                "or `pip install duckdb-extension-spatial`; without it point-in-polygon work stays on the pandas path")
+SPATIAL_HINT = ("the DuckDB spatial extension is not on this machine: `doctor.py --fix --profile db` installs it (the duckdb-extension-spatial "
+                "wheel that matches DuckDB, else DuckDB's own INSTALL spatial); without it point-in-polygon work stays on the pandas path")
 _SPATIAL_STATE: dict = {}
 
 
@@ -115,7 +115,19 @@ def load_spatial(con) -> tuple[bool, str]:
     return False, SPATIAL_HINT
 
 
-def spatial_available() -> bool:
+def reset_state() -> None:
+    """2.4.0 (I-02): forget the memoized spatial answer, so a check after an install in the same process looks again."""
+    _SPATIAL_STATE.clear()
+    try:
+        import importlib
+        importlib.invalidate_caches()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def spatial_available(fresh: bool = False) -> bool:
+    if fresh:
+        reset_state()
     if "ok" not in _SPATIAL_STATE:
         if version() is None:
             return False
@@ -487,12 +499,13 @@ def bench_pairs(sizes=BENCH_SIZES, *, polygons=None, seed: int = 1, write: bool 
     return rec
 
 
-def status() -> dict:
+def status(fresh: bool = False) -> dict:
+    """`fresh` (2.4.0, I-02) re-checks the spatial extension instead of reusing the first answer of this process."""
     v = version()
     out = {"duckdb": v, "install": None if v else INSTALL_HINT, "auto_rows": {k: auto_rows(k) for k in AUTO_ROWS},
            "measured_here": machine_thresholds() or None}
     if v:
-        out["spatial"] = spatial_available()
+        out["spatial"] = spatial_available(fresh=fresh)
         out["spatial_source"] = _SPATIAL_STATE.get("source")
         if not out["spatial"]:
             out["spatial_why"] = SPATIAL_HINT

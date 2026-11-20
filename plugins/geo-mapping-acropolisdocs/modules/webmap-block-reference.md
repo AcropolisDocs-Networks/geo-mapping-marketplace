@@ -39,7 +39,7 @@ What to ask for, in the person's words:
 - "Show it by year" or "animate the rollout": a `time_field` on the layer and `webmap.time`. The legend keeps the classes of the whole layer,
   so colours mean the same in every period. Features with no time value are hidden while the slider is on (the notes count them).
 - "Before and after", "compare 2020 with now": `webmap.compare` with the layers for each side.
-- "100,000 sites" or "every tower in the state": nothing to set. The page goes to MapLibre, the sites go in as tiles with clusters, and the
+- "100,000 sites" or "every tower in the region": nothing to set. The page goes to MapLibre, the sites go in as tiles with clusters, and the
   page stays under 16 MB for that many points with a few short fields. Keep only the fields the popup needs.
 - "A street background without a tile account": the person's own PMTiles basemap (`basemap: {provider: pmtiles, source: pmtiles:FILE}`),
   drawn in the brand's colours. The Protomaps API (`provider: protomaps`, a browser-class key registered with `/geo-mapping-acropolisdocs:map-credentials add protomaps --class browser`) is free for non-commercial

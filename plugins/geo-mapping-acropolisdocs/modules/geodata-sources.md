@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 163 entries (161 active); basemap-provider 14, boundary 33, boundary-derived 2, context 16, crosswalk 1, gazetteer 6, infrastructure 16, map-type 11, palette 2, public-service 37, statistic 14, symbol-set 1, template 6, terrain 4.
+Library: 165 entries (163 active); basemap-provider 14, boundary 33, boundary-derived 2, context 16, crosswalk 1, gazetteer 6, infrastructure 16, map-type 12, palette 2, public-service 37, statistic 15, symbol-set 1, template 6, terrain 4.
 
 ### Usable now
 
@@ -134,6 +134,7 @@ Library: 163 entries (161 active); basemap-provider 14, boundary 33, boundary-de
 | `ref.statistic.us.acs5.table` | ACS 5-year estimates, any table by variable (Census Data API or Summary File) | US Census Bureau, 2020-2024 | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | public-domain | GEO_ID parts (string, 5 chars) |
 | `ref.statistic.us.broadband.bead-ntia` | NTIA BEAD final proposal locations (Section 106 public layer) | NTIA (National Broadband Availability Map organization, owner NBAM_Admin), 2026-09 (service last edited 2026-09-22) | web service | public-domain | County_GEOID (string, 5 chars) |
 | `ref.statistic.us.broadband.fcc-bdc-summary` | FCC Broadband Data Collection: availability summary by geography | FCC, latest filing date on the download page (semiannual filings, June and December) | web service | public-domain | geography_id (string) |
+| `ref.statistic.us.coverage.fcc-bdc-mobile-h3` | FCC Broadband Data Collection: mobile coverage hexagons (H3) | FCC, latest filing date on the download page (semiannual filings, June and December) | web service | public-domain | h3_res9_id (string) |
 | `ref.statistic.us.lodes.lehd` | LEHD Origin-Destination Employment Statistics (LODES) workplace counts | US Census Bureau, Center for Economic Studies (LEHD), 2022 (LODES8 on 2020 blocks) | downloaded on first use | public-domain | w_geocode (string, 15 chars) |
 | `ref.statistic.us.storm-events.noaa` | NOAA Storm Events Database (bulk CSV) | NOAA National Centers for Environmental Information, 2025 events (details file created 2026-08-19); the 2026 file (created 2026-10-26) is partial | downloaded on first use | public-domain | STATE_FIPS,CZ_FIPS (string) |
 | `ref.statistic.world.climate.era5-land-monthly` | ERA5-Land monthly averaged data (CDS) | ECMWF for the Copernicus Climate Change Service (C3S), monthly, updated about five days after each month | web service | attribution | none (raster) |
@@ -153,7 +154,21 @@ These are in the library so that a request can be answered honestly, but a map c
 | Entry | What it is | Status | Why |
 |---|---|---|---|
 
+## Sources by country (3.0.0)
+
+Every national source is reached through a data adapter (`scripts/adapters/`) that takes the map's region and fetches by its partitions;
+`catalog_search --region` ranks them by how much of the region they cover. The gotchas below are grouped the same way.
+
+- **United States.** FCC Broadband Data Collection (the summary by geography; mobile coverage hexagons on H3 through the `fcc-bdc-mobile`
+  adapter, one call per region with `fcc_bdc_coverage`), Census (ACS, TIGER, cartographic boundaries), USGS 3DEP, HIFLD, EIA, FCC ULS.
+- **United Kingdom** (Ofcom Connected Nations), **France** (Arcep), **Germany** (Bundesnetzagentur), **Canada** (ISED), **Australia**
+  (ACMA/ACCC): national regulators' coverage adapters, listed as candidates until their terms and access are verified.
+- **Worldwide.** Natural Earth, geoBoundaries (CC BY 4.0) for admin-2, the Copernicus DEM, GHSL and WorldPop population (the default outside
+  the US for population covered), OpenCelliD (share-alike), Ookla open data (non-commercial: internal maps only), OSM and Overture.
+
 ## Gotchas that cause wrong maps
+
+### United States
 
 - **FIPS codes are text.** `04013` is Maricopa County; read as a number it becomes `4013` and joins nothing. Read join columns as text and zero-pad (state 2, county 5, tract 11, block group 12).
 - **Cartographic boundary files are clipped to the shoreline and generalized.** Use them for thematic maps. Legal boundaries and area calculations need the full-detail TIGER/Line files.
@@ -167,6 +182,8 @@ These are in the library so that a request can be answered honestly, but a map c
 - **FCC data changes monthly** and its site may refuse automated requests. Entries stay draft until a person has verified the download.
 - **HIFLD and other federal open-data portals move.** A dataset can be withdrawn or renamed; the entry's `verify_by` date says when it was last confirmed. In 2026 the HIFLD Open layers for cellular towers and transmission lines moved to the GeoPlatform Federal User Community services; microwave, land mobile and substation layers have no publisher copy, so those entries stay draft.
 - **HIFLD "Cellular Towers" is not every tower.** It is the FCC ULS cellular (Part 22) licence locations, about 24,000 points. Registered structures are ASR; PCS, AWS and 5G sites are not in it.
+### Worldwide
+
 - **Big open datasets are read by area, not downloaded.** Overture (GeoParquet on S3), Ookla tiles, Microsoft footprints and the national BEAD layer hold millions of rows: filter by bbox, state or quadkey first.
 - **Licences that block external use.** Ookla open data is CC BY-NC, GADM forbids redistribution, OpenCelliD is share-alike: the library marks them `restricted-license` and selection drops them for an external audience.
 - **OpenStreetMap data is ODbL.** Attribution is required, and a derived database shares alike. The tile servers have their own usage policy: see `tile-licensing`.

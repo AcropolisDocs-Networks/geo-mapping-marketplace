@@ -10,7 +10,7 @@ description: >
 - **Layers** keep the MapSpec order and roles. Choropleth classes, colors and the no-data class come from the same plan as the print map, so the page and the PDF agree. Points, proportional symbols and lines use the roles' sizes in screen pixels.
 - **The legend** (the panel's Legend tab) has one block per layer, with the same titles as the print legend and an eye toggle; a hidden layer's block stays, greyed and marked hidden. The source line, the per-layer sources, the data licences and the notes are in the About tab; the credits the terms require are in the map's corner (`webmap-controls`).
 - **Popups** show the fields the spec lists (`popup: {title, fields}`), or the label field and the value field. With the panel open a click fills the Details tab instead. Text is escaped; a value never becomes markup.
-- **The background** is always the bundled country, state and lake outlines. A tile layer, when allowed, is drawn above it, so a failed tile request leaves the outlines in place.
+- **The background** is always the bundled country, admin-1 (state or province) and lake outlines. A tile layer, when allowed, is drawn above it, so a failed tile request leaves the outlines in place.
 - **Two engines, one look.** Leaflet draws GeoJSON in the page; MapLibre draws the same layers from GeoJSON or, for a large layer, from a
   PMTiles archive embedded in the page, with the same tokens, legend and chrome. On MapLibre the place names and the data's labels are symbol
   layers set in Inter (glyph files generated from the plugin's own Inter), shown by the same scale tiers as the print map; the data's symbols

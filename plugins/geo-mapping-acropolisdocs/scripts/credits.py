@@ -148,6 +148,8 @@ def items(plan) -> list[Item]:
     out = [layer_item(l, "data") for l in layers if l.role != "context"]
     out += [basemap_item(b) for b in plan.basemap if b.get("kind") != "hillshade"]
     out += [basemap_item(b) for b in plan.basemap if b.get("kind") == "hillshade"]
+    # 2.5.0 (T-03, T-05): a relief mosaicked from several DEMs credits every source the window used
+    out += [basemap_item({"entry": e, "kind": "hillshade"}) for b in plan.basemap if b.get("kind") == "hillshade" for e in b.get("extra_entries") or []]
     out += [layer_item(l, "context") for l in layers if l.role == "context"]
     return [i for i in out if i]
 

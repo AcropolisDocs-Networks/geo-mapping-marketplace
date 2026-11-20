@@ -755,6 +755,8 @@ def main(argv=None) -> int:
     ap.add_argument("--timelapse", metavar="PAGE.html", help="1.14.0: a video of a MapLibre page's time slider played from its own view (flythrough --slider)")
     ap.add_argument("--events", metavar="MAP.yaml", help="1.14.0: an event-timeline video over the map: a point layer's events in time order (events_anim.py)")
     ap.add_argument("--external", metavar="FILE", help="1.16.0: QA, required credits and provenance for a PNG or MP4 made outside the pipeline (with --spec)")
+    ap.add_argument("--h3-cells", metavar="MAP.yaml", help="2.6.0 (H-06): write an h3 layer's cells (--layer ID) to --out: .csv/.parquet ids only, .gpkg/.fgb/.geojson polygons")
+    ap.add_argument("--layer", help="with --h3-cells: the layer id")
     ap.add_argument("--story", metavar="MAP.yaml", help="1.16.0: a story video over the map from a --timeline (story line, counters, feature events)")
     add_option_flags(ap)
     if argv is None:
@@ -780,6 +782,17 @@ def main(argv=None) -> int:
         i = argv.index("--flythrough")
         return fl.main([argv[i + 1]] + argv[:i] + argv[i + 2:])
     a = ap.parse_args(argv)
+    if a.h3_cells:                             # 2.6.0 (H-06): H3 out
+        import h3_source as hs
+        if not a.layer:
+            print("map_export: --h3-cells needs --layer ID", file=sys.stderr)
+            return gc.EXIT_USAGE
+        try:
+            print(json.dumps(hs.export_cells(a.h3_cells, a.layer, a.out), indent=2))
+        except hs.H3SourceError as ex:
+            print(f"map_export: {ex}", file=sys.stderr)
+            return ex.code
+        return gc.EXIT_OK
     if a.animate:                              # M15: animated export from an atlas-by-time run
         import animate as an
         try:

@@ -43,7 +43,27 @@ RESOLUTION = "TIGER/Line (full resolution)"              # what both the land an
 WATER_REF = "ref.context.us.water-area.tiger"
 COUNTY_INDEX_REF = "ref.boundary.us.county.cb"          # bundled: which counties a window touches
 STATES_REF = "ref.boundary.us.state.cb5m"
-MAX_COUNTIES = 60
+MAX_COUNTIES = 60                                         # kept for older callers; 3.0.0 (G-09) caps by area and bytes instead
+MAX_WINDOW_KM2 = 60_000                                   # a metro or city window (Seattle's metro is about 15,000 km2, Munich's 5,500)
+MAX_DETAIL_MB = 500                                       # the estimated download of the US TIGER variant (land per state, water per county)
+EST_MB_STATE, EST_MB_COUNTY = 30.0, 2.5
+
+
+def window_km2(window_ll) -> float:
+    import math
+    x0, y0, x1, y1 = window_ll
+    return abs(x1 - x0) * 111.32 * math.cos(math.radians((y0 + y1) / 2)) * abs(y1 - y0) * 110.57
+
+
+def too_large(window_ll, n_states: int = 0, n_counties: int = 0) -> str | None:
+    """3.0.0 (G-09): why a window is too large for detailed ground (by its area and the expected bytes, the same rule anywhere), or None."""
+    a = window_km2(window_ll)
+    mb = n_states * EST_MB_STATE + n_counties * EST_MB_COUNTY
+    if a > MAX_WINDOW_KM2:
+        return f"the window is about {a:,.0f} km2; detailed ground is for metro and city maps (at most {MAX_WINDOW_KM2:,} km2)"
+    if mb > MAX_DETAIL_MB:
+        return f"the window's detailed ground would be about {mb:,.0f} MB to fetch (at most {MAX_DETAIL_MB} MB)"
+    return None
 MIN_WATER_MM2 = 0.8                                       # a pond smaller than this on the page is left out
 
 
@@ -84,8 +104,9 @@ def status(window_ll) -> dict:
 def prepare(window_ll, refresh: bool = False, http=None) -> dict:
     import ref_fetch as rf
     st = status(window_ll)
-    if len(st["counties"]) > MAX_COUNTIES:
-        raise DetailError(f"the window touches {len(st['counties'])} counties; detailed ground is for metro and city maps (at most {MAX_COUNTIES} counties)")
+    why = too_large(window_ll, len(st["states"]), len(st["counties"]))
+    if why:
+        raise DetailError(why)
     done = []
     for s_, p in st["land"].items():
         if refresh or p is None:
@@ -222,8 +243,9 @@ def osm_status() -> dict:
 def provider_status(pid: str, window_ll) -> dict:
     if pid == "us-tiger":
         st = status(window_ll)
-        if len(st["counties"]) > MAX_COUNTIES:
-            st["missing"] = st["missing"] or [f"{len(st['counties'])} counties (at most {MAX_COUNTIES})"]
+        why = too_large(window_ll, len(st["states"]), len(st["counties"]))
+        if why:
+            st["missing"] = st["missing"] or [why]
             st["too_large"] = True
         return {"provider": pid, **st}
     if pid == "global-overture":

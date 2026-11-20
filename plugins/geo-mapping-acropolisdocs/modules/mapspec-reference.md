@@ -31,6 +31,10 @@ style: {look: auto}                # auto (default) picks focus (areas), clean (
 #   [1.2, 0.8] dashes it (a tribal or planning boundary), and the legend swatch shows the same. A point layer with symbol: {shape: none} draws only
 #   its labels (names at chosen spots; no legend entry)
 # style.hierarchy: off draws every layer at full strength; a proportional layer's symbol.scale_with: <layer id> shares that layer's size scale
+# Sources (moved from map-create in 3.0.0): a service entry (FEMA flood zones, HIFLD cellular towers, FCC CMAs, transmission lines) is fetched once for
+#   the map window and kept, so a rebuild sends nothing; source: {type: ref, id: ..., where: "SFHA_TF = 'T'"} filters any library entry, a service or a
+#   file (the where goes inside source); venue, site or business addresses become points with source: {type: geocode, table: venues.csv,
+#   address: [street, city, state, zip], purpose: venues} (the geocode-addresses rules apply); data on the H3 grid: source: {type: h3, ...} (h3-grids)
 # a library service layer's filter goes in its source: {type: ref, id: ..., where: "VOLT_CLASS IN ('345','500')"}; a file layer uses filter: {column, in}
 # elements.callouts: {on: true, items: [{text: "Large-load queue", figure: "692 MW", at: [lon, lat] | layer: id, where: {field: value}}]}: the figure set large
 # elements.title.halo: glow (default: a soft cloud of the page colour under the title block) | crisp | thin | none
@@ -80,7 +84,7 @@ layers:
     # a library layer needs no provenance block: the entry supplies source, license and vintage
 labels:
   - {layer: counties, field: NAME}
-names: {on: true}                  # place names from the bundled Natural Earth 10m data: cities, water bodies and state names, tiered by scale; on by default, `on: false` turns them off
+names: {on: true}                  # place names from the bundled Natural Earth 10m data: cities, water bodies and admin-1 names (states, provinces, regions), tiered by scale; on by default, `on: false` turns them off
 context: {preset: auto}            # roads, urban areas, lakes and rivers from the bundled Natural Earth 10m data; presets auto | none | roads | urban | water | full | terrain
 elements:
   title: {on: true, text: "Water Share of County Area, Arizona", subtitle: "2025 boundaries"}   # tagline: "#Series · Item · Theme" adds a slanted line
@@ -96,8 +100,8 @@ a different arrangement, write the corner they named; `position: auto` lets the 
 **Light is the default theme.** Use `theme: dark` only when the person asks for a dark map. Dark draws on a very dark grey (never black) with land,
 water, the locator and the frame kept apart by the contrast rules in MAP-A11Y-006.
 
-**Every map carries place names and context unless told otherwise.** The `names:` block draws city, water-body and state names from the bundled
-Natural Earth 10m data, tiered by scale (a state map names the big cities, a metro map the towns), placed by the label engine so they never collide
+**Every map carries place names and context unless told otherwise.** The `names:` block draws city, water-body and admin-1 (state, province, region) names from the bundled
+Natural Earth 10m data, tiered by scale (a state or province map names the big cities, a metro map the towns), placed by the label engine so they never collide
 with the data labels; `names: {on: false}` turns them off, and `names: {exclude: ["Fort *", Gila Bend]}` leaves out a name or a pattern. The `context:` block draws roads, urban areas, lakes and rivers from the same bundled data
 under the data layers: `auto` (the default) is `full` on a site map, water only under a choropleth, and nothing over a tile basemap; `none`, `roads`,
 `urban`, `water` and `full` set it outright. Both come from the plugin's own files, so a map stays offline. On a US map, `context: {roads: tiger}` (or `tiger-prisec`) draws the Census TIGER roads instead, once the file is in the library cache (`ref_fetch.py fetch ref.infrastructure.us.road.tiger-primary`); until then the Natural Earth roads stand in. Say in one phrase when names were thinned
@@ -225,7 +229,7 @@ Relief under a site map, from the DEM the person sent:
 
 ```yaml
 basemap: {provider: bundled}
-terrain: {on: true, source: dem.tif, contours: {on: true, interval: 50}}    # or source: auto (3DEP in the US, Copernicus GLO-30 elsewhere; cached)
+terrain: {on: true, source: dem.tif, contours: {on: true, interval: 50}}    # or source: auto (the chain by coverage: 3DEP, Copernicus, Terrarium; mosaicked across a border; cached)
 layers:
   - id: sites
     source: {type: file, path: sites.csv, x: lon, y: lat, crs: "EPSG:4326"}

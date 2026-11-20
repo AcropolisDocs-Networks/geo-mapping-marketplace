@@ -441,7 +441,14 @@ def lint_layer_crs(layers, display_crs, *, extent=None, map_width_mm: float = MA
             msg = (f"layer '{lid}' goes from {q['from_datum']} to {q['to_datum']} by {how}, so its positions can be off by up to about {err:g} m"
                    + (f", about {page_mm:.2g} mm on this map" if page_mm is not None else ""))
             if q["better_grids"]:
-                msg += (f". A better transform needs the grid file {q['better_grids'][0]}, which is not on this machine: install it with "
+                try:
+                    _b = ce._wgs84_bounds(extent) if extent is not None else None
+                    ctr = ((_b[0] + _b[2]) / 2, (_b[1] + _b[3]) / 2) if _b else None
+                except Exception:  # noqa: BLE001
+                    ctr = None
+                where = _country_code_at(ctr) if ctr else None
+                msg += (f". A better transform needs the grid file {q['better_grids'][0]}, which is not on this machine: install the grids for "
+                        f"this region with `doctor.py --fix --grids {where or 'REGION'}` (3.0.0, the size is shown first), or "
                         f"`projsync --file {q['better_grids'][0]}`, or let PROJ fetch grids by setting PROJ_NETWORK=ON")
             if sev == "INFO":
                 msg += "; at this scale the shift cannot be seen"
@@ -849,3 +856,12 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def _country_code_at(lonlat) -> str | None:
+    """The ISO country under a lon/lat point (for the grids command a datum finding names)."""
+    try:
+        import geo_locale as gl
+        return gl.country_at(float(lonlat[0]), float(lonlat[1]))
+    except Exception:  # noqa: BLE001
+        return None

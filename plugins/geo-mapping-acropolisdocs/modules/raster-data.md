@@ -28,7 +28,7 @@ Not read: NetCDF, HDF, JPEG2000 and MrSID (GDAL may open them; nothing here is t
 ## Windows, overviews, resampling
 
 - `read_window(path, bounds, crs, out_shape=None, max_px=4096, band=1, resampling="bilinear")` returns a `Grid`: a masked array, its transform and CRS. The window is warped to the CRS asked for (a WarpedVRT), so a DEM in degrees reads straight into the map's UTM.
-- The pixel count is the source's own at the window unless `out_shape` says otherwise; the longer side is capped at `max_px`, and then GDAL reads from the overview nearest that scale. A 10 m DEM under a state map is never read in full.
+- The pixel count is the source's own at the window unless `out_shape` says otherwise; the longer side is capped at `max_px`, and then GDAL reads from the overview nearest that scale. A 10 m DEM under a state or province map is never read in full.
 - Resampling: `bilinear` for continuous fields (elevation, signal, population density), `nearest` for classes and codes (land cover, a coverage category), `average` when shrinking a continuous field for statistics, `mode` when shrinking classes. `cubic` for a smooth-looking hillshade input. Say which was used when a figure comes from a resampled window (the `Grid.source` record carries it).
 - Nodata is masked everywhere: the file's nodata value, nan in a float raster, and the area outside the file's extent (an alpha band when the file declares no nodata). A statistic never includes it; a PNG makes it transparent; a zonal count reports it.
 
@@ -61,9 +61,14 @@ the classify-and-color rules apply (round breaks, at most seven classes, the leg
 | `ref.statistic.world.population.ghsl` | GHS-POP R2023A, 2020, 100 m, Mollweide, 10-degree tiles from the JRC | CC BY 4.0 (JRC reuse notice); cite the DOI | a tile is 17 MB zipped; fetched per window, never bundled |
 | `ref.statistic.world.population.worldpop` | WorldPop constrained 2020, 100 m, one GeoTIFF per country in degrees | CC BY 4.0; cite the country dataset | fetched per country, never bundled; a file over 200 MB (the US one is 494 MB) is not fetched whole: the map's window is read from it by byte range (1.11.0) |
 
-`terrain_fetch.dem_for(bounds_wgs84, target_m_per_px, source="auto", cache_dir, dem_path=None)` picks 3DEP inside
-the US and Terrarium elsewhere (MAP-TER-001 says which and why), caches by source, window and resolution (MAP-TER-002 on a hit), and
-returns `{ok, findings, path, record}`. The record is provenance: source, entry, CRS, resolution reached, tiles or pixels, bytes, sha256,
+`terrain_fetch.dem_for(bounds_wgs84, target_m_per_px, source="auto", cache_dir, dem_path=None, purpose="relief"|"analysis")` reads the
+sources in `data/terrain-sources.yaml` by coverage, not by a box (2.5.0): for `relief` 3DEP, then Copernicus, then Terrarium; for
+`analysis` (profiles, line of sight) bare earth first: 3DEP, Terrarium, then Copernicus with its surface-model caveat. A source named in the
+spec goes first and is never the only one. A window one source covers in part (Washington reaching British Columbia) is a mosaic: each part
+from the first source that covers it, and where that source returned nodata, with a 2-cell feathered seam; the credit names every source
+used, and Terrarium's credit lists only the regional sources the window touches. Large Copernicus windows read COG overviews by range
+reads within a 40 MB budget. MAP-TER-001 says which and why; it caches by source, window and resolution (MAP-TER-002 on a hit), and
+returns `{ok, findings, path, record}`. Water is masked from the relief with the map's own ocean and lakes (`terrain.bathymetry: true` keeps a sea floor). The record is provenance: source, entry, CRS, resolution reached, tiles or pixels, bytes, sha256,
 attribution text, `retrieved_at`, the User-Agent, and every request (redacted URL, status, bytes, time, sha256).
 `public_record(rec)` is the same with the request list reduced to counts, for a map's provenance file. A `dem_path` the person supplies is
 recorded as `source: user` and nothing is fetched.
