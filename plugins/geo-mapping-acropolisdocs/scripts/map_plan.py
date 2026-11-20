@@ -346,6 +346,7 @@ class LayerPlan:
     casing: dict | None = None                  # 0.17.0: {color, extra_mm, opacity}: a band of the land colour under a data line layer
     highlight: object = None                    # 0.22.0: a boolean per feature: the `highlight:` subset (map_render.highlight_groups)
     highlight_rest: dict | None = None          # 1.13.0: how the rest is drawn: {dim, opacity} (highlight.rest, highlight.rest_opacity)
+    smooth: dict | None = None                  # 2.3.0: a smooth density surface: {fine: step per feature, colors: the ramp steps} (smooth_surface)
     edge_in_fill: bool = False                  # 0.22.0: polygons drawn see-through with the edge in each fill colour at full strength
     outline: bool = False                       # 1.2.0: a polygons layer with no fill, drawn as its edge only
     stroke_named: bool = False                  # 1.2.0: the spec names the edge colour, so it is drawn at full strength
@@ -2241,6 +2242,7 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
                     it["opacity"] = a_
     import symbology
     symbology.after_classes(plan, l)          # class patterns, graduated line widths, line swatches for classed lines, nested circles (M15)
+    smooth_surface(plan, l, ly)                # 2.3.0: a density surface drawn smooth (density_surface smooth: true)
     hl = ly.get("highlight")
     if hl == "auto":
         # 1.22.0: the message says which part of the layer the map is about (named values, the top N, one end of the classes); the builder
@@ -2248,8 +2250,11 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
         import map_emphasis
         sg = map_emphasis.suggest_highlight(plan.spec.get("message"), l)
         hl = sg["highlight"] if sg else None
+        gr = None if sg else map_emphasis.gradient(l)
         plan.notes.append(f"layer '{l.id}': highlight auto: " + (f"{sg['why']}, so highlight: {sg['highlight']}" if sg else
-                          "the message names no value, top N or end of this layer's values, so it is drawn at one strength"))
+                          (f"the classes already rise toward the {gr['toward']} across the frame (R² {gr['r2']}), so the ramp carries the message "
+                           "and no highlight is drawn" if gr else
+                           "the message names no value, top N or end of this layer's values, so it is drawn at one strength")))
     if hl and l.kind in ("polygon", "line", "point") and l.role != "context":
         m, what = highlight_mask(l, hl)
         if not m.any():
@@ -2260,6 +2265,10 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
         else:
             l.highlight = m
             l.highlight_rest = highlight_rest(hl)
+            if l.cls is not None and getattr(l.cls, "kind", None) == "numeric" and hl.get("rest_opacity") is None:
+                # 2.3.0: the rest of a classed number keeps its class steps apart (at 30 percent over the land they ran into one grey)
+                import map_look
+                l.highlight_rest["opacity"] = max(l.highlight_rest["opacity"], map_look.HIGHLIGHT_REST_CLASSED_OPACITY)
             plan.notes.append(f"layer '{l.id}': {int(m.sum())} of {len(m)} feature(s) highlighted ({what}); the rest "
                               + ("desaturated" if l.highlight_rest["dim"] else "faded") + f" at {l.highlight_rest['opacity']:.0%}")
             dim_legend_keys(l, m)
@@ -2277,6 +2286,36 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
                             f"{('layer ' + repr(prev[-1].id)) if prev else 'none'}; list '{l.id}' right after '{cont}'", gc.EXIT_USAGE)
         l.legend_block = {**l.legend_block, "title": None, "continues": cont}
     l.provenance = layer_provenance(l)
+
+
+def smooth_surface(plan: Plan, l: LayerPlan, ly: dict) -> None:
+    """2.3.0: a density surface made with `smooth: true` (geo_ops: fine bands that stack) is drawn as a smooth heat map: each fine band in its
+    own step of the layer's ramp, no edges, and a continuous ramp in the legend, named at its ends by the first and last coarse classes. The coarse classes
+    stay the layer's classes, so the checks, the highlight and the counts read the map as before."""
+    if l.kind != "polygon" or l.gdf is None or "band_fine" not in l.gdf.columns or l.cls is None or getattr(l.cls, "kind", None) != "numeric":
+        return
+    if not any(isinstance(o, dict) and o.get("op") == "density_surface" and o.get("smooth") for o in (ly.get("ops") or [])):
+        return
+    import pandas as pd
+    fine = pd.to_numeric(l.gdf["band_fine"], errors="coerce").fillna(1).astype(int).to_numpy() - 1
+    n = int(fine.max()) + 1
+    pal = ly.get("palette") or {}
+    t = plan.tokens
+    anchor = resolve_color(pal["anchor"], t, f"layer '{l.id}' palette anchor") if pal.get("anchor") else None
+    kind = l.palette_kind if l.palette_kind in ("sequential", "diverging") else "sequential"
+    try:
+        cols = cf.palette(t, kind, n, bool(pal.get("reverse")), anchor=anchor)["colors"]
+    except cf.ClassifyError:
+        return
+    l.smooth = {"fine": fine, "colors": cols}
+    l.stroke, l.stroke_w_mm = "none", 0.0
+    k = l.cls.k
+    if l.legend_block is not None:
+        lspec = {**ly, "title": l.title}
+        labs = list(l.cls.labels[:k])
+        stops = [{"label": labs[0], "pos": 0.0}, {"label": labs[-1], "pos": 1.0}]      # a heat ramp reads from its two ends; five names crowd it
+        l.legend_block = lg.ramp_block(lspec, stops, cols, t, note=(ly.get("legend") or {}).get("note"))
+    plan.notes.append(f"layer '{l.id}': drawn smooth, {n} steps of the ramp with no edges; the legend is a continuous ramp named at its ends")
 
 
 def single_entry_block(plan: Plan, l: LayerPlan, ly: dict) -> dict:
@@ -2349,12 +2388,22 @@ def dim_legend_keys(l: LayerPlan, m) -> None:
     blk = l.legend_block
     if l.cls is None or not isinstance(blk, dict) or blk.get("kind") not in ("classes", "categories") or len(l.cls.assigned) != len(m):
         return
+    import map_look
     asg = np.asarray(l.cls.assigned)
     k = float((l.highlight_rest or {}).get("opacity", 0.3))
+    dimmed = bool((l.highlight_rest or {}).get("dim", True))
     items = []
     for i, it in enumerate(blk.get("items") or []):
         ci = -1 if it.get("nodata") else i
-        items.append(it if (m & (asg == ci)).any() else {**it, "opacity": round(float(it.get("opacity", 1.0)) * k, 3), "rest": True})
+        if (m & (asg == ci)).any():
+            items.append(it)
+            continue
+        rest = {**it, "opacity": round(float(it.get("opacity", 1.0)) * k, 3), "rest": True}
+        if dimmed:                              # 2.3.0: the key's swatch takes the map's own dimmed colour, not only its opacity
+            for key in ("fill", "stroke", "color"):
+                if isinstance(rest.get(key), str) and rest[key].startswith("#") and len(rest[key]) == 7:
+                    rest[key] = map_look.dim(rest[key])
+        items.append(rest)
     l.legend_block = {**blk, "items": items}
 
 

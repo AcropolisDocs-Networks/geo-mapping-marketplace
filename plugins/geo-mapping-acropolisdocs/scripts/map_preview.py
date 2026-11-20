@@ -72,6 +72,42 @@ def write_mute(svg: str, out_dir, stem: str, dpi: float = DRAFT_DPI) -> tuple[Pa
     return p, info
 
 
+def write_draft_and_mute(svg: str, out_dir, stem: str, dpi: float = DRAFT_DPI) -> tuple[Path, Path, dict]:
+    """2.3.0: the draft and the mute picture from ONE PDF of two pages, so a draft starts WeasyPrint once (its font work is most of a
+    draft's rendering time; the label and layout passes are a small part, measured on the gallery maps, so they stay: a draft looks like
+    the map). -> (draft path, mute path, what the mute picture took off)."""
+    import math
+    import re
+    import map_export as mx
+    import pdf_stack
+    import pypdfium2 as pdfium
+    msvg, info = mute_svg(svg)
+    W, H = mx.svg_size_mm(svg)
+    faces = "\n".join(re.findall(r"@font-face\s*\{.*?\}\s*", svg, re.S))
+    html = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>draft</title><style>{faces}'
+            f"@page{{size:{W}mm {H}mm;margin:0}}html,body{{margin:0;padding:0;font-family:Inter,sans-serif}}"
+            f"svg{{display:block;width:{W}mm;height:{H}mm}}.pg{{break-after:page}}</style></head><body>"
+            f'<div class="pg">{svg}</div><div>{msvg}</div></body></html>')
+    pdf = pdf_stack.html_to_pdf(html)
+    sizes = pdf_stack.page_sizes_pt(pdf_stack.read_pdf(pdf))
+    doc = pdfium.PdfDocument(pdf)
+    out = []
+    try:
+        for i, name in enumerate(("draft", "mute")):
+            w_pt, h_pt = sizes[min(i, len(sizes) - 1)]
+            tw, th = max(1, math.ceil(w_pt * dpi / 72.0)), max(1, math.ceil(h_pt * dpi / 72.0))
+            im = doc[i].render(scale=max(tw / w_pt, th / h_pt)).to_pil().convert("RGB")
+            if im.size != (tw, th):
+                im = im.resize((tw, th))
+            p = Path(out_dir) / f"{stem}_{name}.png"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            im.save(p, "PNG", dpi=(dpi, dpi))
+            out.append(p)
+    finally:
+        doc.close()
+    return out[0], out[1], info
+
+
 MUTE_QUESTION = ("Look at the mute picture before you answer: with no title, legend text or callout, what does this map say? "
                  "If that is not the message, change the frame (extent: {mode: fit_message}), the emphasis (emphasis:, highlight:) or the "
                  "labels, not the words.")

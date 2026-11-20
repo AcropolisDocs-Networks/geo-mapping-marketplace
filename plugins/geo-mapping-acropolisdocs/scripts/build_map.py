@@ -189,7 +189,7 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
         map_brand.write_spec_brand(Path(spec_path), plan.brand)
     recs = provenance.records(plan) + (web.records if web else [])
     findings = (plan.findings + rendered.findings + guard_findings(rendered.svg, plan) + voice_findings(plan, rendered)
-                + provenance.validate(plan, recs) + reference_findings(plan) + service_lint.lint_plan(plan) + telecom_lint.lint_plan(plan) + cartographic_lint.lint_plan(plan, rendered.report, rendered.svg) + a11y_lint.lint(plan, rendered) + output_lint.check_svg(rendered.svg)
+                + provenance.validate(plan, recs) + ([] if draft else reference_findings(plan)) + service_lint.lint_plan(plan) + telecom_lint.lint_plan(plan) + cartographic_lint.lint_plan(plan, rendered.report, rendered.svg) + a11y_lint.lint(plan, rendered) + output_lint.check_svg(rendered.svg)
                 + output_lint.check_layer_load(rendered.svg) + text_findings(plan, rendered))
     findings += style_findings(plan, out_dir)
     # 1.22.0: the message check, on every build: does the drawing carry the message by itself? Measures and findings, never a BLOCK.
@@ -252,12 +252,17 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
         import map_preview as pv
         if not static and web is not None:
             raise mp.PlanError("--draft draws the print sheet; a page (--formats html) has its own layout check", gc.EXIT_USAGE)
-        dp = pv.write_draft(rendered.svg, out, rendered.filename_stem)
-        mute_picture()
+        try:                                              # 2.3.0: both pictures from one PDF of two pages (one WeasyPrint run, not two)
+            dp, mp_, info = pv.write_draft_and_mute(rendered.svg, out, rendered.filename_stem)
+            story.update(mute_preview=str(mp_), mute_removed=info, ask=pv.MUTE_QUESTION)
+        except Exception:  # noqa: BLE001 - the two-page route failed: the two pictures one at a time, as before
+            dp = pv.write_draft(rendered.svg, out, rendered.filename_stem)
+            mute_picture()
         result["draft"] = True
         result["dpi"] = pv.DRAFT_DPI
         result["files"] = [str(dp)] + ([story["mute_preview"]] if story.get("mute_preview") else [])
-        result["notes"] = list(result["notes"]) + ["draft: one picture at 96 dpi; run again without --draft for the SVG, PDF and full-size PNG"]
+        result["notes"] = list(result["notes"]) + ["draft: one picture at 96 dpi; run again without --draft for the SVG, PDF and full-size PNG "
+                                                   "(and the reference library checks, which a draft leaves to the full build)"]
         return finish()
     svg_path = out / f"{rendered.filename_stem}.svg"
     svg_path.write_text(mx.inkscape_svg(rendered.svg) if opts["inkscape"] else rendered.svg, encoding="utf-8")

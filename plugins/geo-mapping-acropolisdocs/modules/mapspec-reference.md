@@ -61,6 +61,7 @@ style: {look: auto}                # auto (default) picks focus (areas), clean (
 #   (extrude.dissolve: off tiles it); webmap.relief_colors (48) writes the page relief as a palette PNG; source.widen reads a layer wider
 # change a MapSpec with map_restyle.py --set (or gmap_common.dump_mapspec): plain PyYAML writes on: back as true: (read as on again since 1.13.0)
 focus: {mask: auto, lift: true}    # auto: a choropleth or grid fades the land around it and sits on a soft shadow; area: <layer id> picks the outline
+#   2.3.0: area may name a point or line layer: the mask opens reach_mm (default 6) around them on the sheet; the lift stays for areas
 # elements.source_note.style: consolidated (one Sources: line, each organization once; default on slide and social) or detailed (print default)
 message: "Water makes up a small share of Arizona county area, highest along the Colorado River."
 audience: external                 # any | internal | external | regulatory; who sees the map (default external, the safe assumption)
@@ -149,7 +150,9 @@ over the extent. `role: heat` is `hexbin` at automatic resolution with a count: 
 `ref.map-type.density-surface` has the full block). Use the hexbin when a reader should count; the surface when the pattern matters more than
 any cell. The surface's options: `within:` / `outside:` a layer (keep it on land, off the water), `cap:` (one address counts at most N
 times), `scale: linear | sqrt | log | quantile` (how the bands are cut), `peak:` (the top of the scale, per km2, so separate maps share it) and `by:`
-(one surface per period on shared bands, each row carrying its period: draw it with `split_by` or an atlas by time). MAP-OPS-014 (WARN) says
+(one surface per period on shared bands, each row carrying its period: draw it with `split_by` or an atlas by time). `smooth: true` (2.3.0)
+draws it as a smooth heat map rather than bands: many fine steps of the ramp with no edges, and a continuous ramp in the legend named at
+its ends by the first and last classes (keep `value_field: band` and the classification as they are). MAP-OPS-014 (WARN) says
 when one location holds more than 2 percent of the points and no `cap` is given: it would make a bullseye. A cell count is not a raw count over unequal units (cells are equal), so MAP-CART-001
 does not apply; MAP-DATA-008 and MAP-CART-011 (too many points to draw) point here.
 

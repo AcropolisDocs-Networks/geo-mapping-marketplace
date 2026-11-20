@@ -45,6 +45,9 @@
     E.setView = function (z, lat, lng) { map.setView([lat, lng], z, { animate: false }); };
     E.zoom = function () { return map.getZoom(); };
     E.onMove = function (fn) { moveFns.push(fn); };
+    // 2.3.0: a place on screen, and a call on every frame of a move or zoom (the story's marks follow the map)
+    E.project = function (lng, lat) { var pt = map.latLngToContainerPoint([lat, lng]); return { x: pt.x, y: pt.y }; };
+    E.onRender = function (fn) { map.on("move zoom viewreset resize zoomanim", function () { fn(); }); };
     E.onMapClick = function (fn) { clickFns.push(fn); };
     E.idle = function (fn) { setTimeout(fn, 0); };
     E.setMeasuring = function (on) { measuring = on; if (on) map.closePopup(); map.getContainer().style.cursor = on ? "crosshair" : ""; };
@@ -142,11 +145,16 @@
       if (t == null || t < 0) return false;
       return timeMode === "cumulative" ? t <= timeIndex : t === timeIndex;
     }
+    var chHl = null;                                                    // 2.3.0: the open story chapter's highlight {layer, key}
+    function hlState(def, p) {
+      if (chHl && chHl.layer === def.id) return String(p._hc || "").indexOf(chHl.key) >= 0 ? 1 : 0;
+      return p._hl;
+    }
     function styleFor(def, f) {
       var s = def.style, p = (f && f.properties) || {}, k = factor[def.id] == null ? 1 : factor[def.id];
-      var hs = 1;                                                       // 0.23.0: the print's highlight: the rest faded, the subset larger
-      if (s.highlight && p._hl === 0) k *= s.highlight.rest;
-      if (s.highlight && p._hl === 1) hs = s.highlight.size;
+      var hs = 1, hv = hlState(def, p);                                 // 0.23.0: the print's highlight: the rest faded, the subset larger
+      if (s.highlight && hv === 0) k *= s.highlight.rest;
+      if (s.highlight && hv === 1) hs = s.highlight.size;
       var op = (s.opacity == null ? 1 : s.opacity) * k;
       if (def.kind === "polygon") return { fillColor: p._c || s.fill, fillOpacity: s.fillOpacity * k, color: s.stroke, weight: s.weight * hs, opacity: op, stroke: s.weight > 0 };
       if (def.kind === "line") {
@@ -242,6 +250,18 @@
       thinLabels();
     };
     E.isLayerVisible = function (id) { return !!layers[id] && map.hasLayer(layers[id]); };
+    // 2.3.0: a story chapter's highlight on a Leaflet page, as MapLibre draws it: on the chapter's layer the features whose chapter list (_hc)
+    // holds this chapter are drawn at full strength and the rest faded; every other layer gets the map's own highlight (_hl) back.
+    E.storyHighlight = function (i, lid, all) {
+      chHl = lid ? { layer: lid, key: "," + i + "," } : null;
+      (all || []).forEach(function (id) {
+        var g = layers[id], def = defs[id];
+        if (!g || !def || picture(def) || !g.setStyle) return;
+        g.setStyle(function (f) { return styleFor(def, f); });
+        if (id === lid && g.eachLayer) g.eachLayer(function (lyr) {                    // the picked features over the faded rest
+          if (lyr.feature && hlState(def, lyr.feature.properties || {}) === 1 && lyr.bringToFront) lyr.bringToFront(); });
+      });
+    };
     E.setLayerOpacity = function (id, k) {
       var g = layers[id], def = defs[id];
       if (!g || !def) return;

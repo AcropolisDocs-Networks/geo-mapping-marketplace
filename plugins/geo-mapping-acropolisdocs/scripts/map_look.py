@@ -35,6 +35,7 @@ AUTO_LOOKS = ("focus", "clean", "network", "terrain", "surface")    # what `auto
 DEFAULT_LOOK = "auto"
 RAMP_STEPS = 9                  # the generated ramp kept as the `sequential_ramp` / `diverging_ramp` token (raster ramps and legends read it)
 CLASS_COUNTS = range(1, 10)     # class counts a palette is generated for (and the brand lint allows)
+SMOOTH_COUNTS = tuple(sorted({min(48, 6 * k) for k in range(2, 10)}))   # 2.3.0: the steps of a smooth density surface (geo_ops SMOOTH_*)
 
 # Oklab lightness of the two ends of a generated sequential ramp, light ground and dark ground. 0.94 is about L* 93, 0.36 about L* 25.
 SEQ_L = {"light": (0.94, 0.36), "dark": (0.90, 0.45)}
@@ -279,11 +280,11 @@ def derived_colors(tokens: dict) -> set[str]:
     ramps = ("std", "bold") + (("flip",) if g == "dark" else ())      # every look's ramp for this ground (the dark look's only on a dark one)
     for a in anchors(base):
         for r in ramps:
-            for n in list(CLASS_COUNTS) + [RAMP_STEPS]:
+            for n in list(CLASS_COUNTS) + [RAMP_STEPS] + list(SMOOTH_COUNTS):
                 out |= {c.upper() for c in sequential(a, n, g, r)}
     lo, hi, mid = diverging_parts(base)
     for h in [hi] + anchors(base):
-        for n in list(CLASS_COUNTS) + [RAMP_STEPS]:
+        for n in list(CLASS_COUNTS) + [RAMP_STEPS] + list(SMOOTH_COUNTS):
             out |= {c.upper() for c in diverging(lo, h, mid, n, g)}
     return out
 
@@ -293,6 +294,7 @@ POLYGON_EDGE_MM = 0.5           # ...with its edge in the fill colour at this wi
 HIGHLIGHT_DIM_CHROMA = 0.35     # the rest of a highlighted layer keeps this share of its colour's chroma...
 HIGHLIGHT_REST_OPACITY = 0.3    # ...and is drawn at this opacity
 HIGHLIGHT_SIZE = 1.2            # the highlighted features: symbols and lines this much larger
+HIGHLIGHT_REST_CLASSED_OPACITY = 0.6   # 2.3.0: the rest of a classed numeric layer, so its class steps stay apart
 
 
 def dim(h: str) -> str:

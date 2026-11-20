@@ -1618,6 +1618,8 @@ def op_dot_density(gdf, p: dict, ctx: Ctx) -> OpResult:
 
 
 DENSITY_SCALES = ("linear", "sqrt", "log", "quantile")
+SMOOTH_STEPS_PER_CLASS = 6     # 2.3.0: `smooth: true` cuts this many fine bands per class...
+SMOOTH_STEPS_MAX = 48          # ...up to this many
 HOT_SPOT_SHARE = 0.02          # 2.1.0: one location holding more than this share of the points is said (MAP-OPS-014): it can make a bullseye
 
 
@@ -1660,7 +1662,9 @@ def op_density_surface(gdf, p: dict, ctx: Ctx) -> OpResult:
     (per km2) and `band_label`. 2.1.0 (Day 19): `cap` counts each location at most N times; `scale` spaces the bands (linear, sqrt, log,
     quantile); `peak` fixes the top of the scale (per km2) so separate maps share it; `within` keeps the bands inside another layer (the land)
     and `outside` cuts another layer out (the water); `by` makes one surface per value of a column (a month, a year) on one shared set of
-    band edges, each row carrying that value."""
+    band edges, each row carrying that value. 2.3.0: `smooth: true` draws it as a smooth heat map: classes x SMOOTH_STEPS_PER_CLASS fine bands
+    (`band_fine`, `tone` 0..1), each the whole area at or above its level so the bands stack with no seam, every row keeping its coarse
+    `band` and `band_label`; the map draws them in a continuous ramp with a ramp legend (map_plan)."""
     import geopandas as gpd
     import shapely
 
@@ -1752,7 +1756,24 @@ def op_density_surface(gdf, p: dict, ctx: Ctx) -> OpResult:
     levels = density_levels(np.concatenate([z.ravel() for _v, z in surfaces]), peak, floor, k, scale)
     names = _band_names(k)
     rows, geoms = [], []
-    for v, z in surfaces:
+    smooth = bool(p.get("smooth"))
+    if smooth:
+        n = min(SMOOTH_STEPS_MAX, k * SMOOTH_STEPS_PER_CLASS)
+        fine = density_levels(np.concatenate([z.ravel() for _v, z in surfaces]), peak, floor, n, scale)
+        for v, z in surfaces:
+            parts = list(tm.bands(xs, ys, np.minimum(z, fine[-1] * 0.9999999), fine))
+            cum, stack = None, []
+            for lo, hi, g in reversed(parts):                 # the area at or above each level: each band covers the ones above it
+                cum = _clean_area(g if cum is None else shapely.union(cum, _clean_area(g, cell)), cell)
+                stack.append((lo, cum))
+            for j, (lo, g) in enumerate(reversed(stack)):
+                ci = min(k - 1, int(np.searchsorted(levels, lo, side="right") - 1)) if lo >= levels[0] else 0
+                rows.append({**({by: v} if by is not None else {}), "band": max(0, ci) + 1, "band_fine": j + 1, "tone": round((j + 0.5) / len(stack), 4),
+                             "density_min": round(lo, 4), "density_max": round(float(levels[-1]), 4), "band_label": names[max(0, ci)]})
+                geoms.append(g)
+        steps.append(f"drawn smooth: {n} fine bands, each the area at or above its level, so they stack with no seam")
+        extra.update(smooth_steps=n)
+    for v, z in ([] if smooth else surfaces):
         for i, (lo, hi, g) in enumerate(tm.bands(xs, ys, np.minimum(z, levels[-1] * 0.9999999), levels)):
             rows.append({**({by: v} if by is not None else {}), "band": i + 1, "density_min": round(lo, 4), "density_max": round(hi, 4), "band_label": names[i]})
             geoms.append(g)
@@ -1780,6 +1801,26 @@ def op_density_surface(gdf, p: dict, ctx: Ctx) -> OpResult:
                           + f", measured in {crs}." + ("".join(f" {s[0].upper() + s[1:]}." for s in steps))], find,
                     _prov("density_surface", p, len(gdf), len(out), crs, bandwidth_m=round(bw, 1), cell_m=round(cell, 1), peak=round(peak, 4),
                           levels=[round(float(v), 6) for v in levels], scale=scale, **({"periods": [v.item() if hasattr(v, "item") else v for v, _z in surfaces]} if by is not None else {}), **extra))
+
+
+def _clean_area(g, cell: float):
+    """2.3.0: a band's area made valid and free of slivers: polygons and holes smaller than half a grid cell are dropped (the unions of the
+    smooth surface leave rings of a few points that a reprojection makes invalid)."""
+    import shapely
+    from shapely.geometry import MultiPolygon, Polygon
+    g = shapely.make_valid(g)
+    polys = [x for x in getattr(g, "geoms", [g]) if x.geom_type in ("Polygon", "MultiPolygon")]
+    parts = [q for x in polys for q in (x.geoms if x.geom_type == "MultiPolygon" else [x])]
+    keep = []
+    for q in parts:
+        if q.area < 0.5 * cell * cell:
+            continue
+        holes = [r for r in q.interiors if Polygon(r).area >= 0.5 * cell * cell]
+        keep.append(Polygon(q.exterior, holes))
+    if not keep:
+        return Polygon()
+    out = keep[0] if len(keep) == 1 else MultiPolygon(keep)
+    return out if out.is_valid else shapely.make_valid(out)
 
 
 def _fit_grid(z, shape):

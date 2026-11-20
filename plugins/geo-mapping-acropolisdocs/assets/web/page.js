@@ -548,9 +548,73 @@
     // 2.0.0: what stands out in a chapter: the features its highlight picks at full strength, the rest of that layer faded; a chapter with
     // no highlight gives every layer back the map's own. The engine does the drawing (MapLibre; a Leaflet page leaves its layers as they are).
     function storyHighlight(i) {
+      storyMarks(i);
       if (!S || !E.storyHighlight || !(S.hl_layers || []).length) return;
       var ch = S.chapters[Math.max(0, Math.min(S.chapters.length - 1, i | 0))];
       E.storyHighlight(i | 0, ch && ch.hl ? ch.hl : null, S.hl_layers);
+    }
+    // 2.3.0: a chapter's marks (a story beat's rings, arrows and brackets), drawn as in print: the label ink over a halo of the page, in one
+    // SVG laid over the map and moved with it, so both engines and the video flown over the page show them. Pointer events pass through.
+    var markSvg = null, markList = null, NS = "http://www.w3.org/2000/svg";
+    function markEl(tag, attrs, parent) {
+      var el = document.createElementNS(NS, tag);
+      Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+      (parent || markSvg).appendChild(el); return el;
+    }
+    function markStroke(d, w) {
+      var tk = cfg.tokens || {};
+      markEl("path", { d: d, fill: "none", stroke: tk.label_halo || tk.background || "#fff", "stroke-width": w + 4, "stroke-linecap": "round", "stroke-linejoin": "round", "stroke-opacity": 0.85 });
+      markEl("path", { d: d, fill: "none", stroke: tk.label || "currentColor", "stroke-width": w, "stroke-linecap": "round", "stroke-linejoin": "round" });
+    }
+    function markText(x, y, text, anchor) {
+      if (!text) return;
+      var tk = cfg.tokens || {};
+      var t = markEl("text", { x: x, y: y, "text-anchor": anchor || "start", "font-size": 13, "font-weight": 600, fill: tk.label || "currentColor",
+                               stroke: tk.label_halo || tk.background || "#fff", "stroke-width": 3.5, "paint-order": "stroke", "stroke-linejoin": "round",
+                               style: "font-family:Inter,system-ui,sans-serif" });
+      t.textContent = text;
+    }
+    function drawMarks() {
+      if (!markSvg) return;
+      while (markSvg.firstChild) markSvg.removeChild(markSvg.firstChild);
+      if (!markList || !markList.length || !E.project) return;
+      markList.forEach(function (m) {
+        if (m.type === "ring") {
+          var c = E.project(m.at[0], m.at[1]), r = m.r || 17;
+          markStroke("M" + (c.x - r) + " " + c.y + "a" + r + " " + r + " 0 1 0 " + 2 * r + " 0a" + r + " " + r + " 0 1 0 " + -2 * r + " 0", 1.7);
+          markText(c.x + r * 0.75 + 4, c.y - r * 0.75, m.label);
+        } else if (m.type === "arrow") {
+          var h = E.project(m.to[0], m.to[1]), tl = m.from ? E.project(m.from[0], m.from[1]) : { x: h.x + (m.dx || -60), y: h.y + (m.dy || -42) };
+          var mx = (h.x + tl.x) / 2 - (h.y - tl.y) * 0.18, my = (h.y + tl.y) / 2 + (h.x - tl.x) * 0.18;     // a gentle curve, as in print
+          var ang = Math.atan2(h.y - my, h.x - mx), a = 9;
+          var hd = "M" + (h.x - a * Math.cos(ang - 0.45)) + " " + (h.y - a * Math.sin(ang - 0.45)) + "L" + h.x + " " + h.y +
+                   "L" + (h.x - a * Math.cos(ang + 0.45)) + " " + (h.y - a * Math.sin(ang + 0.45));
+          markStroke("M" + tl.x + " " + tl.y + "Q" + mx + " " + my + " " + h.x + " " + h.y + hd, 1.7);
+          markText(tl.x, tl.y + (tl.y <= h.y ? -6 : 16), m.label, tl.x <= h.x ? "end" : "start");
+        } else if (m.type === "bracket") {
+          var p = E.project(m.from[0], m.from[1]), q = E.project(m.to[0], m.to[1]);
+          var len = Math.hypot(q.x - p.x, q.y - p.y) || 1, nx = -(q.y - p.y) / len, ny = (q.x - p.x) / len, side = m.side === "right" ? -1 : 1, d = 9 * side;
+          markStroke("M" + (p.x + nx * d) + " " + (p.y + ny * d) + "L" + p.x + " " + p.y + "L" + q.x + " " + q.y + "L" + (q.x + nx * d) + " " + (q.y + ny * d), 1.7);
+          markText((p.x + q.x) / 2 - nx * 14 * side, (p.y + q.y) / 2 - ny * 14 * side + 4, m.label, "middle");
+        }
+      });
+    }
+    function storyMarks(i) {
+      if (!S) return;
+      var ch = S.chapters[Math.max(0, Math.min(S.chapters.length - 1, i | 0))];
+      markList = ch && ch.marks && ch.marks.length ? ch.marks : null;
+      if (markList && !markSvg) {
+        var host = document.getElementById("gm-map");
+        if (!host) return;
+        markSvg = document.createElementNS(NS, "svg");
+        markSvg.setAttribute("class", "gm-marks");
+        markSvg.setAttribute("aria-hidden", "true");
+        markSvg.setAttribute("style", "position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:450;overflow:visible");
+        host.appendChild(markSvg);
+        if (E.onRender) E.onRender(drawMarks);
+        if (E.onMove) E.onMove(drawMarks);
+      }
+      drawMarks();
     }
     function storyFocus(i) { storyGo(i, "key"); }
 

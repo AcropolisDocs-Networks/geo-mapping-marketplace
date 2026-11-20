@@ -12,6 +12,7 @@ whether the drawing agrees with that, on every build, from the plan and the layo
     MAP-STORY-005  the map is explained in words (callouts) more than it is shown
     MAP-STORY-006  the message singles out part of a layer that the drawing does not single out (with the highlight: line that would)
     MAP-STORY-007  a layer was named on the map in place of its key (legend.direct) and a name found no room
+    MAP-STORY-008  (2.3.0) the highlighted features are drawn in colours so close to the land that they barely show at full strength
 
 None blocks, and none moves a map element: each says what to change in the MapSpec. They are called out in chat beside the MAP-TEXT
 findings (`summary_lines`). The measures themselves go into the build result (`story.measures`) with the mute preview, a second picture
@@ -167,6 +168,39 @@ def lookalike_keys(plan) -> list[dict]:
     return out
 
 
+FAINT_DELTA_E = 15.0            # 2.3.0: highlighted features whose colours are all this close to the land barely show at full strength
+
+
+def faint_highlights(plan) -> list[dict]:
+    """2.3.0: a highlight on the light end of a sequential layer (the lowest values, the fewest) keeps those features at full strength, and
+    full strength is still the palest colour of the ramp: they barely stand off the land while the dimmed rest is darker. -> one entry per
+    layer whose highlighted colours are all within FAINT_DELTA_E of the land."""
+    out = []
+    land = plan.tokens.get("land")
+    for l in data_layers(plan):
+        m = getattr(l, "highlight", None)
+        cls = l.cls
+        if m is None or cls is None or not l.colors or len(getattr(cls, "assigned", [])) != len(m):
+            continue
+        import numpy as np
+        asg = np.asarray(cls.assigned)[np.asarray(m, dtype=bool)]
+        idx = sorted({int(i) for i in asg if 0 <= int(i) < len(l.colors)})
+        if not idx:
+            continue
+        try:
+            des = [cl.delta_e(l.colors[i], land) for i in idx]
+        except Exception:  # noqa: BLE001 - a pattern or an unresolved token: not judged
+            continue
+        if max(des) < FAINT_DELTA_E:
+            where = None
+            hl = (l.spec or {}).get("highlight")
+            if isinstance(hl, dict) and hl.get("in") and hl.get("column"):
+                where = {str(hl["column"]): hl["in"][0]}
+            out.append({"layer": l.id, "delta_e": round(max(des), 1), "classes": [cls.labels[i] for i in idx if i < len(cls.labels)],
+                        "suggest": {"type": "ring", "layer": l.id, **({"where": where} if where else {})}})
+    return out
+
+
 def words_on_map(plan) -> dict:
     els = plan.spec.get("elements") or {}
     co = els.get("callouts") or {}
@@ -196,6 +230,8 @@ def suggestions(plan, subj: list) -> list[dict]:
 
 def _yaml(d: dict) -> str:
     def v(x):
+        if isinstance(x, dict):
+            return _yaml(x)
         if isinstance(x, list):
             return "[" + ", ".join(v(i) for i in x) + "]"
         if isinstance(x, float):
@@ -262,6 +298,13 @@ def lint(plan, report: dict) -> tuple[list[dict], dict]:
         fs.append(finding("MAP-STORY-006", "INFO", f"layer '{s['layer']}': {s['why']}, but the layer is drawn at one strength throughout; "
                           f"highlight: {_yaml(s['highlight'])} holds the rest back (or highlight: auto)",
                           {"layer": s["layer"], "highlight": s["highlight"], "suggest": f"highlight: {_yaml(s['highlight'])}"}))
+    faint = faint_highlights(plan)
+    measures["faint_highlights"] = faint
+    for x in faint:
+        fs.append(finding("MAP-STORY-008", "WARN", f"layer '{x['layer']}': the highlighted features are drawn in {', '.join(x['classes'][:3])}, whose colour is only "
+                          f"{x['delta_e']} delta E from the land, so at full strength they barely show while the rest is darker. Ring them "
+                          f"(elements.marks: {{items: [{_yaml(x['suggest'])}]}}), or reverse the ramp so the values the map is about are the dark end",
+                          {**x, "suggest": f"elements.marks: {{items: [{_yaml(x['suggest'])}]}}"}))
     direct = ((report.get("labels") or {}).get("direct") or {})
     measures["direct_labels"] = {k: {"named": len(v.get("asked") or []) - len(v.get("missing") or []), "missing": v.get("missing") or []} for k, v in direct.items()}
     for lid, v in direct.items():

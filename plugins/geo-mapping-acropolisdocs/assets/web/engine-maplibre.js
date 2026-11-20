@@ -618,6 +618,9 @@
     };
     E.zoom = function () { return map.getZoom() + 1; };
     E.onMove = function (fn) { moveFns.push(fn); };
+    // 2.3.0: a place on screen, and a call on every frame the map draws (the story's marks follow the map, also under pitch and bearing)
+    E.project = function (lng, lat) { var pt = map.project([lng, lat]); return { x: pt.x, y: pt.y }; };
+    E.onRender = function (fn) { map.on("render", function () { fn(); }); };
     E.onMapClick = function (fn) { clickFns.push(fn); };
     E.idle = function (fn) {
       var n = maps.length, k = 0;

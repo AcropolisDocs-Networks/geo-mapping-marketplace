@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
+
 EMPHASIS = ("auto", "primary", "supporting", "background")
 SUPPORTING_OPACITY = 0.55
 BACKGROUND_OPACITY = 0.3
@@ -200,6 +202,43 @@ def _named_values(message: str, l) -> tuple[str, list] | None:
     return best
 
 
+GRADIENT_R2 = 0.6               # 2.3.0: a classed layer whose classes follow a straight trend across the frame this well is a gradient
+GRADIENT_MIN_FEATURES = 8
+
+
+def gradient(l) -> dict | None:
+    """2.3.0 (the grid example, 2.2.1): does a classed numeric layer already run from one side of the frame to the other? A plane fitted to
+    each feature's class against its centre; R squared at or above GRADIENT_R2 is a gradient, and the ramp itself carries a message about
+    the highest or lowest values. -> {"r2", "toward"} (the compass direction the values rise toward) or None."""
+    cls = getattr(l, "cls", None)
+    if cls is None or getattr(cls, "kind", None) != "numeric" or l.gdf is None or len(l.gdf) < GRADIENT_MIN_FEATURES:
+        return None
+    asg = np.asarray(cls.assigned, dtype="float64")
+    if len(asg) != len(l.gdf):
+        return None
+    ok = asg >= 0
+    if ok.sum() < GRADIENT_MIN_FEATURES or len(set(asg[ok].tolist())) < 3:
+        return None
+    try:
+        c = l.gdf.geometry[ok].representative_point()
+        x, y = c.x.to_numpy(dtype="float64"), c.y.to_numpy(dtype="float64")
+    except Exception:  # noqa: BLE001 - geometry without centres: not a gradient
+        return None
+    v = asg[ok]
+    A = np.column_stack([np.ones_like(x), x - x.mean(), y - y.mean()])
+    coef, *_ = np.linalg.lstsq(A, v, rcond=None)
+    ss_res = float(((v - A @ coef) ** 2).sum())
+    ss_tot = float(((v - v.mean()) ** 2).sum())
+    if ss_tot <= 0:
+        return None
+    r2 = 1 - ss_res / ss_tot
+    if r2 < GRADIENT_R2:
+        return None
+    ang = (np.degrees(np.arctan2(coef[1], coef[2])) + 360) % 360          # bearing of steepest rise (x east, y north)
+    toward = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"][int(((ang + 22.5) % 360) // 45)]
+    return {"r2": round(r2, 2), "toward": toward}
+
+
 def suggest_highlight(message: str, l) -> dict | None:
     """The `highlight:` block the message asks of this layer, with the reason in words: {"highlight": {...}, "why": "..."}; None when the
     message singles nothing out in it. Order: named values, then "top N", then one end of a classed number."""
@@ -222,6 +261,8 @@ def suggest_highlight(message: str, l) -> dict | None:
     raw = {w.lower().strip("'’.,;:") for w in re.split(r"\s+", msg)}
     edges = [float(e) for e in (cls.edges or [])]
     if len(edges) < 3:
+        return None
+    if gradient(l):                     # 2.3.0: the ramp already says where the highest (or lowest) values are; a highlight would hide it
         return None
     low, high = raw & LOW_WORDS, raw & HIGH_WORDS
     if low and not high:

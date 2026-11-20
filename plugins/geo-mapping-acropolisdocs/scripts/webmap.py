@@ -240,6 +240,9 @@ def layer_collection(plan, l, label_field: str | None, px: dict, time_field: str
             ci = int(assigned[i])
             props["_c"] = plan.tokens["no_data"] if ci < 0 else l.colors[ci]
             props["_k"] = "no data" if ci < 0 else l.cls.labels[ci]
+            sm = getattr(l, "smooth", None)
+            if sm is not None and len(sm["fine"]) == len(gdf):          # 2.3.0: a smooth surface's step of the ramp, as in print
+                props["_c"] = sm["colors"][int(sm["fine"][i])]
         if vals is not None:
             v = vals[i]
             if not (v == v) or v <= 0:
@@ -1445,9 +1448,6 @@ def _page_engine_view(base_defs, cfg, collections, compare_cfg, ctl, defs, findi
     if engine == "leaflet" and cfg["story"] and any(isinstance(c, dict) and ((c.get("view") or {}).get("pitch") or (c.get("view") or {}).get("bearing"))
                                                    for c in (cfg["story"].get("chapters") or [])):
         findings.append(finding("MAP-WEB-025", "INFO", "the story's chapters have a pitch or bearing, which the Leaflet page does not draw: its chapters fly flat and north up"))
-    if engine == "leaflet" and cfg["story"] and any(isinstance(c, dict) and c.get("highlight") for c in (cfg["story"].get("chapters") or [])):
-        findings.append(finding("MAP-WEB-025", "INFO", "the story's chapters have a highlight, which the Leaflet page does not draw: its chapters move the map "
-                                                       "and switch layers only (webmap.engine: maplibre draws them)"))
     if engine == "leaflet" and live_mvt:
         findings.append(finding("MAP-SVC-043", "BLOCK", f"live vector tile layer(s) {', '.join(live_mvt)} are drawn by the MapLibre engine only; this page is built with Leaflet "
                                 f"({engine_why}). Leave webmap.engine at auto or maplibre"))
@@ -1790,7 +1790,8 @@ def _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_
         "names": {"id": NAMES_ID, "on": names_on, "tier": names_stats.get("tier")}, "featureLabels": feature_labels, "labelZoom": label_zoom,
         "imagePanes": images > 0, "units": measure_units(spec_in, wgs), "time": time_cfg, "compare": compare_cfg,
         "legend": export_legend(blocks), "searchIndex": search_idx, "searchPacked": {k: f"gmap-search-{k}" for k in search_packed},
-        "tokens": {k: t[k] for k in ("label", "land", "water", "legend_bg", "legend_frame", "frame", "emphasis", "background")},
+        "tokens": {**{k: t[k] for k in ("label", "land", "water", "legend_bg", "legend_frame", "frame", "emphasis", "background")},
+                   "label_halo": t.get("label_halo") or t["background"]},             # 2.3.0: the halo of the story's marks, as in print
         # the PNG text chunks of the print PNG, base64 so the page text holds none of their words (the brand lint reads the page for them)
         "export": {"fileName": f"{plan.spec['id']}.png", "text64": base64.b64encode(json.dumps(map_brand.props_for(plan.brand, plan.manifest, "png")["tEXt"]).encode("ascii")).decode("ascii")},
         "frame": {"preset": fc["preset"], "panel": {k: fc["panel"][k] for k in ("show", "side", "width", "start", "remember", "default_tab")},
@@ -1819,7 +1820,7 @@ def _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_
         page_cfg["view3d"] = p3["cfg"]
     story_in = cfg["story"] or {}
     if story_cfg:
-        page_cfg["story"] = {"chapters": [{k: c[k] for k in ("title", "view", "layers", "time", "select", "id", "hl")} for c in story_cfg["chapters"]],
+        page_cfg["story"] = {"chapters": [{k: c.get(k) for k in ("title", "view", "layers", "time", "select", "id", "hl", "marks")} for c in story_cfg["chapters"]],
                              "hl_layers": sorted({c["hl"] for c in story_cfg["chapters"] if c.get("hl")}),
                              "navigation": story_in.get("navigation") or "buttons", "follow_time": bool(story_in.get("follow_time")),
                              "printPictures": print_pics}
@@ -2016,6 +2017,7 @@ def build_page(spec_path, *, brand: str | None = None, template: str | None = No
         cfg["story"], story_fs = story_mod.web_story(spec_in, plan)
         findings += story_fs
     findings += ws.chapter_highlights(plan, cfg["story"])
+    ws.resolve_mark_places(plan, cfg["story"])        # 2.3.0: a chapter's marks found in the full layer data, before the page keeps its few fields
     notes = list(plan.notes)
     audience = spec.get("audience") or "external"
     ctl = cfg["controls"]

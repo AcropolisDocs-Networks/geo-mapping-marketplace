@@ -431,18 +431,20 @@ def draw_layers(plan: mp.Plan, frame: lo.Frame, rep: dict) -> tuple[list[str], l
     import map_focus
     fcfg = map_focus.config(plan.spec, getattr(plan, "look", "classic"))
     farea = map_focus.study_area(plan, fcfg)
-    fsheet = map_focus.to_sheet_geom(farea, frame) if farea is not None else None
+    fsheet = map_focus.to_sheet_geom(farea, frame, fcfg["reach_mm"]) if farea is not None else None
     plan.focus_sheet = fsheet                          # draw_names fades the names outside it
     focus_done = fsheet is None
     for l in mp.draw_order(plan.layers):
         if not focus_done and l.role not in ("context", "contour") and l.kind != "raster":
             # 0.18.0: the neighbours fade back (the frame with the study area cut out, in the page colour), then the study area's soft shadow
             parts.append(map_focus.mask_markup(fsheet, frame.rect, t["land"]))
-            if fcfg["lift"]:
+            lift = map_focus.lift_on(fcfg, farea)
+            if lift:
                 import colorlib
                 shadow = min((t["label"], t["background"]), key=colorlib.luminance)      # a shadow is dark on a dark page too
                 parts.append(map_focus.lift_markup(fsheet, frame.rect, shadow))
-            rep["focus"] = {"mask": True, "lift": bool(fcfg["lift"]), "area": fcfg["area"] or "auto"}
+            rep["focus"] = {"mask": True, "lift": bool(lift), "area": fcfg["area"] or "auto",
+                            "subject": "region" if farea.geom_type in ("Polygon", "MultiPolygon") else "points or lines"}
             focus_done = True
         if getattr(l, "legend_only", False):            # 1.14.0: keyed in the legend, not drawn
             continue
@@ -524,7 +526,18 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
                 sw_mm = 0.0 if cw < CELL_OUTLINE_NONE_MM else l.stroke_w_mm * cw / CELL_OUTLINE_FULL_MM
                 rep.setdefault("notes", []).append(f"layer '{l.id}': cells about {cw:.2f} mm across on the sheet, so their outlines are "
                                                    + ("left off" if sw_mm == 0 else f"thinned to {sw_mm:.2f} mm"))
-        if l.cls is not None:
+        if getattr(l, "smooth", None) is not None and len(l.smooth["fine"]) == len(keep):
+            # 2.3.0: a smooth density surface: each fine band (the area at or above its level) in its own step of the ramp, low to high, no edge
+            fine = np.asarray(l.smooth["fine"])
+            for fi, fill in enumerate(l.smooth["colors"]):
+                sel = np.where(keep & (fine == fi))[0]
+                if not len(sel):
+                    continue
+                op = f' fill-opacity="{sd.num(l.fill_opacity)}"' if l.fill_opacity < 1 else ""
+                g.append(f'<g fill="{sketch_fill(plan, l, fill, g)}"{op} stroke="none" fill-rule="{rule}">')
+                emit(sel)
+                g.append("</g>")
+        elif l.cls is not None:
             assigned = np.asarray(l.cls.assigned)
             order = list(range(l.cls.k)) + [-1]
             for ci in order:

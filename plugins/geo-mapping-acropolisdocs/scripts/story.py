@@ -376,6 +376,8 @@ def chapters(resolved: list[dict]) -> list[dict]:
             ch["highlight"] = dict(r["highlight"])
         if r.get("figure"):
             ch["figure"] = r["figure"]
+        if r["show"].get("marks"):                    # 2.3.0: the beat's rings, arrows and brackets on the page (and so in the video flown over it)
+            ch["marks"] = [dict(m) for m in r["show"]["marks"] if isinstance(m, dict)]
         out.append(ch)
     return out
 

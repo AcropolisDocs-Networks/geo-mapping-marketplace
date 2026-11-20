@@ -4,7 +4,12 @@
     focus:
       mask: auto          # auto (the default under style.look auto): on when a choropleth or grid covers a region; true; false
       area: counties      # the layer whose outline is the study area (default: the union of the choropleth and grid layers)
-      lift: true          # a soft shadow under the study area (default true with the mask)
+                          # 2.3.0: or a point or line layer: its features (the highlighted ones, when it has a highlight) buffered on the
+                          # sheet by reach_mm, so a route, a corridor or a set of sites is the study area
+      reach_mm: 6         # 2.3.0: how far around a point or line subject the study area reaches, in sheet millimetres
+      lift: true          # a soft shadow under the study area (default: on for a region, off for a point or line subject)
+
+With `mask: true` and no choropleth, grid or named area, the subject is the map's primary point or line layers (2.3.0).
 
 What it draws, all safe for the PDF route (no SVG filter, mask or blend mode; WeasyPrint ignores or drops those):
 
@@ -28,6 +33,7 @@ LIFT_OPACITY = 0.18
 LIFT_REACH_MM = 2 * LIFT_SIGMA_MM            # how far the shadow fades out past the outline (about two sigma of the blur it stands for)
 LIFT_STEPS = 8
 SIMPLIFY_MM = 0.15
+REACH_MM = 6.0                                # 2.3.0: the default reach round a point or line subject
 
 
 def config(spec: dict, look: str) -> dict:
@@ -35,39 +41,79 @@ def config(spec: dict, look: str) -> dict:
     mask = f.get("mask", "auto")
     if look == "classic" and mask == "auto":
         mask = False
-    return {"mask": mask, "area": f.get("area"), "lift": f.get("lift", True) is not False}
+    return {"mask": mask, "area": f.get("area"), "lift": f.get("lift"), "reach_mm": float(f.get("reach_mm") or REACH_MM)}
+
+
+def lift_on(cfg: dict, area) -> bool:
+    """The shadow: as asked, else on under a region and off round a point or line subject (a shadow under a corridor reads as a smudge)."""
+    if cfg.get("lift") is not None:
+        return cfg["lift"] is not False
+    return area is not None and area.geom_type in ("Polygon", "MultiPolygon")
+
+
+def _subject_layers(plan, cfg: dict) -> list:
+    if cfg["area"]:
+        return [l for l in plan.layers if l.id == cfg["area"] and l.kind in ("polygon", "point", "line")]
+    if cfg["mask"] not in ("auto", True):
+        return []
+    ls = [l for l in plan.layers if l.role in FOCUS_ROLES and l.kind == "polygon"]
+    if ls or cfg["mask"] is not True:
+        return ls
+    # 2.3.0: asked for (mask: true) on a map without a region: the primary point and line layers are the subject
+    data = [l for l in plan.layers if l.kind in ("point", "line") and l.role not in ("context", "contour") and not getattr(l, "legend_only", False)]
+    prim = [l for l in data if getattr(l, "emphasis", "primary") == "primary"]
+    return prim or data
 
 
 def study_area(plan, cfg: dict):
-    """The study area in display coordinates, or None: the named layer's outline, else the union of the choropleth and grid layers (auto)."""
+    """The study area in display coordinates, or None: the named layer, else the union of the choropleth and grid layers (auto), else (2.3.0,
+    mask: true) the primary point and line layers. A point or line subject is returned as its geometry; to_sheet_geom gives it its reach."""
     import shapely
     if cfg["mask"] is False:
         return None
-    if cfg["area"]:
-        ls = [l for l in plan.layers if l.id == cfg["area"] and l.kind == "polygon"]
-    else:
-        ls = [l for l in plan.layers if l.role in FOCUS_ROLES and l.kind == "polygon"] if cfg["mask"] in ("auto", True) else []
-    geoms = [g for l in ls for g in l.gdf.geometry.values if g is not None and not g.is_empty]
+    ls = _subject_layers(plan, cfg)
+    geoms = []
+    for l in ls:
+        vals = l.gdf.geometry.values
+        hl = getattr(l, "highlight", None)
+        if hl is not None and len(hl) == len(vals) and np.asarray(hl, dtype=bool).any():
+            vals = vals[np.asarray(hl, dtype=bool)]           # the highlighted features are what the map is about
+        geoms += [g for g in vals if g is not None and not g.is_empty]
     if not geoms:
         return None
     try:
-        u = shapely.union_all(shapely.make_valid(np.asarray(geoms, dtype=object)))
+        arr = np.asarray(geoms, dtype=object)
+        if all(g.geom_type in ("Polygon", "MultiPolygon") for g in geoms):
+            arr = shapely.make_valid(arr)
+        u = shapely.union_all(arr)
     except Exception:  # noqa: BLE001 - a union GEOS refuses: no focus rather than a wrong one
         return None
     return None if u.is_empty else u
 
 
-def to_sheet_geom(area, frame):
-    """The study area in sheet millimetres, clipped to the frame and simplified to SIMPLIFY_MM."""
+def to_sheet_geom(area, frame, reach_mm: float = REACH_MM):
+    """The study area in sheet millimetres, clipped to the frame and simplified to SIMPLIFY_MM. A point or line subject (2.3.0) is buffered
+    by reach_mm on the sheet, its corners rounded, so the area is the same size on the page at any scale."""
     import shapely
     from shapely import affinity
-    g = shapely.clip_by_rect(area, *frame.visible)
+    region = area.geom_type in ("Polygon", "MultiPolygon")
+    s = frame.scale
+    if region:
+        g = shapely.clip_by_rect(area, *frame.visible)
+    else:
+        pad = reach_mm / s if s else 0.0
+        x0, y0, x1, y1 = frame.visible
+        g = shapely.clip_by_rect(area, x0 - pad, y0 - pad, x1 + pad, y1 + pad)
     if g.is_empty:
         return None
     # display -> sheet: x' = ox + (x - cx) * s ; y' = oy - (y - cy) * s
-    s = frame.scale
     ox, oy = (frame.inner.x0 + frame.inner.x1) / 2, (frame.inner.y0 + frame.inner.y1) / 2
     g = affinity.affine_transform(g, [s, 0, 0, -s, ox - frame.cx * s, oy + frame.cy * s])
+    if not region:
+        r = max(0.5, float(reach_mm))
+        g = g.buffer(r * 1.5, quad_segs=8).buffer(-r * 0.5, quad_segs=8)          # rounded, with the gaps between close features filled
+        rect = frame.rect
+        g = shapely.clip_by_rect(g, rect.x0, rect.y0, rect.x1, rect.y1)
     g = g.simplify(SIMPLIFY_MM, preserve_topology=True)
     return None if g.is_empty else g
 

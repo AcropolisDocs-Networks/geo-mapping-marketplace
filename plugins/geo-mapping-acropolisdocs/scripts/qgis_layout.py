@@ -206,9 +206,57 @@ def _path_polygon(d: str):
     return geom
 
 
+def svg_transform_matrix(tr: str) -> tuple[float, float, float, float, float, float] | None:
+    """2.3.0: an SVG transform list (matrix, translate, scale, rotate, skewX, skewY, applied right to left as SVG does) as one affine matrix
+    (a, b, c, d, e, f): x' = a*x + c*y + e, y' = b*x + d*y + f. None for a list it cannot read."""
+    import math
+    import re
+    m = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+    def mul(p, q):                                   # p then q in SVG's order: the list "p q" maps a point by q first, then p
+        a1, b1, c1, d1, e1, f1 = p
+        a2, b2, c2, d2, e2, f2 = q
+        return (a1 * a2 + c1 * b2, b1 * a2 + d1 * b2, a1 * c2 + c1 * d2, b1 * c2 + d1 * d2, a1 * e2 + c1 * f2 + e1, b1 * e2 + d1 * f2 + f1)
+
+    body = (tr or "").strip()
+    if not body:
+        return m
+    pos = 0
+    for mt in re.finditer(r"\s*(matrix|translate|scale|rotate|skewX|skewY)\s*\(([^)]*)\)\s*,?", body):
+        if mt.start() != pos:
+            return None
+        pos = mt.end()
+        try:
+            v = [float(x) for x in re.split(r"[\s,]+", mt.group(2).strip()) if x]
+        except ValueError:
+            return None
+        op = mt.group(1)
+        if op == "matrix" and len(v) == 6:
+            q = tuple(v)
+        elif op == "translate" and len(v) in (1, 2):
+            q = (1.0, 0.0, 0.0, 1.0, v[0], v[1] if len(v) == 2 else 0.0)
+        elif op == "scale" and len(v) in (1, 2):
+            q = (v[0], 0.0, 0.0, v[1] if len(v) == 2 else v[0], 0.0, 0.0)
+        elif op == "rotate" and len(v) in (1, 3):
+            r = math.radians(v[0])
+            cs, sn = math.cos(r), math.sin(r)
+            q = (cs, sn, -sn, cs, 0.0, 0.0)
+            if len(v) == 3:
+                q = mul(mul((1.0, 0.0, 0.0, 1.0, v[1], v[2]), q), (1.0, 0.0, 0.0, 1.0, -v[1], -v[2]))
+        elif op == "skewX" and len(v) == 1:
+            q = (1.0, 0.0, math.tan(math.radians(v[0])), 1.0, 0.0, 0.0)
+        elif op == "skewY" and len(v) == 1:
+            q = (1.0, math.tan(math.radians(v[0])), 0.0, 1.0, 0.0, 0.0)
+        else:
+            return None
+        m = mul(m, q)
+    return m if pos == len(body) else None
+
+
 def _outline_rows(svg: str, frame) -> tuple[list[dict], int]:
     """1.12.0: the labels the SVG path draws as outlines (a script set in its own Noto face) as polygons in map coordinates, with the fill
-    and the halo of each, so QGIS draws the same letter shapes without the font. -> (rows, labels left out: a turned or slanted outline)."""
+    and the halo of each, so QGIS draws the same letter shapes without the font. 2.3.0: a turned or slanted label (its group's SVG transform)
+    travels too, the transform applied to its letter shapes. -> (rows, labels left out: a transform that cannot be read)."""
     import shapely
     from lxml import etree
     root = etree.fromstring(f'<g xmlns="http://www.w3.org/2000/svg">{svg}</g>'.encode("utf-8"), etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=True))
@@ -224,7 +272,8 @@ def _outline_rows(svg: str, frame) -> tuple[list[dict], int]:
         if el.tag != f"{ns}g" or "gm-script" not in cls:
             continue
         p = el.find(f"{ns}path")
-        if p is None or el.get("transform"):
+        mx = svg_transform_matrix(el.get("transform") or "")
+        if p is None or mx is None:
             skipped += 1
             halo = None
             continue
@@ -232,6 +281,9 @@ def _outline_rows(svg: str, frame) -> tuple[list[dict], int]:
         if g is None or g.is_empty:
             halo = None
             continue
+        if mx != (1.0, 0.0, 0.0, 1.0, 0.0, 0.0):
+            import shapely.affinity
+            g = shapely.affinity.affine_transform(g, [mx[0], mx[2], mx[1], mx[3], mx[4], mx[5]])
         gm = shapely.transform(g, lambda c: np.column_stack(frame.to_display(c[:, 0], c[:, 1])))
         h = halo if halo and halo[0] == p.get("d") else None
         rows.append({"text": el.get("aria-label") or "", "color": p.get("fill") or "black", "halo": h[1] if h else "", "halo_mm": round(h[2] / 2, 3) if h else 0.0,
@@ -508,7 +560,7 @@ def build_kit(spec_path, out_dir, *, brand: str | None = None, template: str | N
             og_.to_file(gp, layer="label_outlines", driver="GPKG")
             placed_labels = {**(placed_labels or {}), "outlines": {"table": "label_outlines", "count": len(orows)}}
         if skipped + oskip:
-            notes.append(f"{skipped + oskip} label(s) the SVG path turns or slants as outlines are not in this layout")
+            notes.append(f"{skipped + oskip} label(s) set along a curve, or turned by a transform the export cannot read, are not in this layout")
     except Exception as ex:  # noqa: BLE001 - QGIS places the labels itself then, as before 1.11.0
         notes.append(f"the plugin's label placements could not be carried over ({type(ex).__name__}); QGIS places the labels itself")
     for k, (c, r, cov) in placed.items():

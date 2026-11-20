@@ -203,13 +203,121 @@ def plan(story: dict | None, defs: list[dict], collections: dict, time_cfg: dict
             fs.append(finding("MAP-WEB-026", "WARN", f"chapter {n} ('{title}'): its highlight names layer '{hlc.get('layer')}', which the page does not have; "
                               "the chapter is drawn without it"))
             hlc = None
+        marks, mfs = chapter_marks(ch.get("marks"), collections, ids, alias, n) if ch.get("marks") else ([], [])
+        fs += mfs
         out.append({"title": title, "text": str(ch.get("text") or ""), "view": v, "bbox": [round(x, 6) for x in bb], "layers": shown, "layers_given": layers,
                     "time": t, "hl": alias.get(hlc["layer"], hlc["layer"]) if hlc else None, "highlight": hlc, "figure": ch.get("figure"),
-                    "select": sel, "id": f"gm-ch-{i}"})
+                    "select": sel, "id": f"gm-ch-{i}", "marks": marks or None})
     if not out:
         return None, fs, notes
     notes.append(f"story: {len(out)} chapter(s); each flies the map to its view and shows its layers")
     return {"chapters": out}, fs, notes
+
+
+MARK_TYPES = ("ring", "arrow", "bracket")
+PX_PER_MM = 3.78                     # the print's millimetres as page pixels (webmap.PX_PER_MM)
+RING_MM = 4.5                        # map_extras: a ring's radius when none is given
+ARROW_OFFSET_MM = (-16.0, -11.0)     # map_extras: where an arrow's tail sits from its head when no `from` is given
+
+
+def _mark_place(where, collections: dict, ids: set, alias: dict):
+    """[lon, lat] of a mark's place: [lon, lat] as written, or {layer, where: {field: value}} (the first matching feature's point on surface)."""
+    if isinstance(where, (list, tuple)) and len(where) == 2:
+        try:
+            return [round(float(where[0]), 6), round(float(where[1]), 6)]
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(where, dict) or not where.get("layer"):
+        return None
+    lid = alias.get(where["layer"], where["layer"])
+    if lid not in ids:
+        return None
+    from shapely.geometry import shape
+    for f in (collections.get(lid) or {}).get("features") or []:
+        props = f.get("properties") or {}
+        if all(str(props.get(k)) == str(v) for k, v in (where.get("where") or {}).items()):
+            try:
+                p = shape(f["geometry"]).representative_point()
+            except Exception:  # noqa: BLE001 - a geometry shapely cannot read: try the next
+                continue
+            return [round(p.x, 6), round(p.y, 6)]
+    return None
+
+
+def resolve_mark_places(plan, story: dict | None) -> None:
+    """2.3.0: a mark placed by {layer, where: {field: value}} is found in the map's own layer data (every column, before the page keeps only the
+    fields it shows) and written as [lon, lat], in place, so the page's chapters carry plain places."""
+    import shapely
+    from pyproj import Transformer
+    tr = None
+    by_id = {l.id: l for l in list(plan.layers) + list(getattr(plan, "helpers", None) or [])}
+
+    def place(w):
+        nonlocal tr
+        if not isinstance(w, dict) or not w.get("layer") or w["layer"] not in by_id:
+            return w
+        g = by_id[w["layer"]].gdf
+        for k, v in (w.get("where") or {}).items():
+            if k not in g.columns:
+                return w
+            g = g[g[k].astype(str) == str(v)]
+        if not len(g):
+            return w
+        pt = shapely.point_on_surface(g.geometry.values[0])
+        if g.crs is not None and not g.crs.equals("EPSG:4326"):
+            tr = tr or Transformer.from_crs(g.crs, "EPSG:4326", always_xy=True)
+            x, y = tr.transform(pt.x, pt.y)
+        else:
+            x, y = pt.x, pt.y
+        return [round(float(x), 6), round(float(y), 6)]
+    for ch in (story or {}).get("chapters") or []:
+        if not isinstance(ch, dict):
+            continue
+        for m in ch.get("marks") or []:
+            if not isinstance(m, dict):
+                continue
+            if m.get("type") == "ring" and m.get("at") is None and m.get("layer"):
+                m["at"] = place({"layer": m.get("layer"), "where": m.get("where")})
+            for key in ("to", "from"):
+                if isinstance(m.get(key), dict):
+                    m[key] = place(m[key])
+
+
+def chapter_marks(marks, collections: dict, ids: set, alias: dict, n: int) -> tuple[list[dict], list[dict]]:
+    """2.3.0: a chapter's marks (a story beat's show.marks) for the page: each place as [lon, lat], each size in page pixels. The page draws
+    them over the map while the chapter is open, so the video flown over the page carries them too. -> (marks, findings)."""
+    out, fs = [], []
+    for i, m in enumerate(marks or []):
+        if not isinstance(m, dict) or m.get("type") not in MARK_TYPES:
+            fs.append(finding("MAP-WEB-026", "WARN", f"chapter {n}, mark {i + 1}: type is one of {', '.join(MARK_TYPES)}; it is not drawn"))
+            continue
+        k, label = m["type"], str(m.get("label") or "").strip()
+        if k == "ring":
+            at = _mark_place(m.get("at") if m.get("at") is not None else {x: m[x] for x in ("layer", "where") if x in m}, collections, ids, alias)
+            if at is None:
+                fs.append(finding("MAP-WEB-026", "WARN", f"chapter {n}, mark {i + 1}: the ring's place was not found; it is not drawn"))
+                continue
+            out.append({"type": "ring", "at": at, "r": round(max(3.0, float(m.get("radius_mm") or RING_MM)) * PX_PER_MM, 1), "label": label})
+        elif k == "arrow":
+            to = _mark_place(m.get("to"), collections, ids, alias)
+            frm = _mark_place(m.get("from"), collections, ids, alias) if m.get("from") is not None else None
+            if to is None:
+                fs.append(finding("MAP-WEB-026", "WARN", f"chapter {n}, mark {i + 1}: the arrow's head was not found; it is not drawn"))
+                continue
+            off = m.get("offset_mm") or ARROW_OFFSET_MM
+            item = {"type": "arrow", "to": to, "label": label}
+            if frm is not None:
+                item["from"] = frm
+            else:
+                item["dx"], item["dy"] = round(float(off[0]) * PX_PER_MM, 1), round(float(off[1]) * PX_PER_MM, 1)
+            out.append(item)
+        else:
+            a, b = _mark_place(m.get("from"), collections, ids, alias), _mark_place(m.get("to"), collections, ids, alias)
+            if a is None or b is None:
+                fs.append(finding("MAP-WEB-026", "WARN", f"chapter {n}, mark {i + 1}: the bracket needs from and to places; it is not drawn"))
+                continue
+            out.append({"type": "bracket", "from": a, "to": b, "side": "right" if str(m.get("side") or "left") == "right" else "left", "label": label})
+    return out, fs
 
 
 def chapter_highlights(plan, story: dict | None) -> list[dict]:
