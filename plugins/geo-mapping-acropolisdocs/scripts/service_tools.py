@@ -79,6 +79,29 @@ def guarded(fn):
     return wrapper
 
 
+def _disk_version() -> str | None:
+    """The version of the plugin files on disk now (its .claude-plugin/plugin.json), or None in the source tree."""
+    try:
+        return str(json.loads((Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"])
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_LOADED_VERSION = _disk_version()          # 3.2.1: the version this server process loaded at start
+
+
+def stale_server() -> dict | None:
+    """3.2.1: an update replaces the plugin's files while the map server keeps running the code it loaded at start, so modules it had
+    already imported stay old and modules it imports later are new (seen after 3.2.0: the old credentials code beside the new ref_fetch).
+    Every result then says so, until the app is restarted."""
+    now = _disk_version()
+    if not now or not _LOADED_VERSION or now == _LOADED_VERSION:
+        return None
+    return {"id": "MAP-SVC-044", "severity": "WARN", "detail": {"running": _LOADED_VERSION, "installed": now},
+            "message": f"the map server is still running {_LOADED_VERSION}, loaded before the update to {now}: quit the Claude app completely and open it "
+                       f"again, then start a new chat, so the server runs {now} and its new tools appear; until then results may mix the two versions"}
+
+
 def masked(fn):
     """Every result that leaves the process (0.6.0, credentials spec R7): the exact value of any credential read during the call is masked, then the
     secret patterns are scrubbed. An exception becomes a result too, masked the same way, so a message that echoes a request URL never carries a key."""
@@ -94,6 +117,9 @@ def masked(fn):
                 res = {"ok": False, "error_kind": "refused", "findings": e.findings}
             except Exception as e:  # noqa: BLE001 - a crash is reported as data, masked, never as raw text
                 res = fail("runtime", "MAP-SVC-013", f"{type(e).__name__}: {e}")
+            st_ = stale_server()
+            if st_ and isinstance(res, dict):
+                res = {**res, "server_restart_needed": st_["message"], "findings": [st_] + list(res.get("findings") or [])}
             return vs.clean(res)
     return wrapper
 

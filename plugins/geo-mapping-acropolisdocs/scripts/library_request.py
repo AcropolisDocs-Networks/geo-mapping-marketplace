@@ -242,6 +242,9 @@ def records(obj, path: str | None = None):
         return obj
     if not isinstance(obj, dict):
         return []
+    flat_keys = {k.lower() for k in obj} | {f"{k}.{j}".lower() for k, v in obj.items() if isinstance(v, dict) for j in v}
+    if any(a.lower() in flat_keys and b.lower() in flat_keys for a, b in zip(LON, LAT)):
+        return [obj]           # 3.2.1: an answer that carries its own coordinates is one record (OpenWeatherMap's coord beside a weather list)
     best: list = []
 
     def scan(o, depth):
@@ -265,6 +268,7 @@ def _num(s):
 def with_points(df, read: dict | None = None):
     """A GeoDataFrame when the table has coordinates (declared, or the usual names), else the table. Lon/lat out of range are left empty."""
     import geopandas as gpd
+    import pandas as pd
     read = read or {}
     cols = {c.lower(): c for c in df.columns}
     lon = read.get("lon")
@@ -279,6 +283,14 @@ def with_points(df, read: dict | None = None):
         ok = x.between(-180, 180) & y.between(-90, 90)
         if ok.any():
             return gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(x.where(ok), y.where(ok)), crs="EPSG:4326"), f"{lon}, {lat}"
+    for pre in ("geometry", "computed_geometry", "geom", "shape"):            # 3.2.1: a GeoJSON object split into .type and .coordinates
+        tc, cc = f"{pre}.type", f"{pre}.coordinates"
+        if tc in df.columns and cc in df.columns:
+            g = _parse_geoms(pd.Series([{"type": t, "coordinates": c} if isinstance(t, str) and c is not None else None
+                                        for t, c in zip(df[tc], df[cc])], index=df.index))
+            if g is not None:
+                rest = df.drop(columns=[x for x in (tc, cc, "geometry") if x in df.columns])
+                return gpd.GeoDataFrame(rest, geometry=g, crs="EPSG:4326"), pre
     for c in [c for c in df.columns if str(c).lower() in GEOM_COLS]:          # CARTO's geom, a WKT or GeoJSON text column
         g = _parse_geoms(df[c])
         if g is not None:

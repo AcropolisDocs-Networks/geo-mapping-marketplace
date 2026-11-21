@@ -335,7 +335,15 @@ class SafeHTTP:
         hops = 0
         while True:
             t0 = self._clock()
-            resp, final = self._follow(full, method, hdrs, cap, cred, body=payload)
+            try:
+                resp, final = self._follow(full, method, hdrs, cap, cred, body=payload)
+            except ServiceError as ex:
+                # 3.2.1: a GET whose connection failed before any answer (ConnectError, seen once from Open-Meteo) is tried once more
+                if method in ("GET", "HEAD") and retry is None and attempt == 0 and str(ex).startswith("the request failed: Connect"):
+                    attempt += 1
+                    self._sleep(1.0)
+                    continue
+                raise
             ms = int((self._clock() - t0) * 1000)
             status = resp["status"]
             body = resp["content"] if cred is None else cred.mask_bytes(resp["content"])   # a body that echoes the request never carries the key

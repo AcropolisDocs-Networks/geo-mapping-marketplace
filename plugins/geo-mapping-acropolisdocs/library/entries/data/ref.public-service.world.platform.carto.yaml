@@ -1,6 +1,6 @@
 id: ref.public-service.world.platform.carto
 type: public-service
-rev: 3
+rev: 4
 status: active
 title: CARTO platform API (US East region)
 summary: "The person's own CARTO account on the US East platform host (connections, maps, SQL and data services), called with an API access token sent as a bearer token. Other regions use their own host."
@@ -37,7 +37,8 @@ avoid_when:
 - The account is in another region: register that region's host (gcp-europe-west1, gcp-asia-northeast1, gcp-australia-southeast1 .api.carto.com) as its own credential.
 delivery:
   sample:
-    request: connections
+    request: query
+    params: {connection: carto_dw, q: SELECT 1 AS a}
   mode: service
   protocol: rest-json
   request: https://gcp-us-east1.api.carto.com/v3/connections
@@ -100,3 +101,6 @@ maintenance:
   - rev: 3
     date: '2026-11-21'
     note: '3.2.0: the connections list and the SQL API query (a SELECT on one of the person''s connections) are sent by library_request with the bearer token; without one the API answered 401 Authentication failed on 2026-11-21.'
+  - rev: 4
+    date: '2026-11-21'
+    note: '3.2.1: the sample is one SQL SELECT on carto_dw, which answered with your token on 2026-11-21; the connections list answered 403 because that token is scoped to the exports, lds, maps and sql APIs.'

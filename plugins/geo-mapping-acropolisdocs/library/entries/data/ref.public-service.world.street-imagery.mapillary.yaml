@@ -1,6 +1,6 @@
 id: ref.public-service.world.street-imagery.mapillary
 type: public-service
-rev: 5
+rev: 6
 status: active
 title: Mapillary street-level imagery (Graph API)
 summary: Crowd-sourced street-level photos worldwide with their capture points and directions, from the Mapillary Graph API with a free client token, for
@@ -39,13 +39,14 @@ use_when:
 - Where street-level photos exist around candidate sites, poles or venues, as capture points on a desk-survey map, with the person's own client token registered
   (map-credentials add mapillary).
 avoid_when:
+- 'A box much larger than a few city blocks: with your key on 2026-11-21 a 2 x 2 km box in downtown Phoenix answered HTTP 500 three times, while a 0.5 km box answered 1,677 images; split a larger area into small boxes.'
 - 'Coverage must be complete or recent: imagery is contributed and uneven; check the capture date of each image.'
 - 'Vector tiles in a web page: tiles come from tiles.mapillary.com, a second host this credential is not registered for, and a web page would expose the
   token.'
 - 'People or plates would be shown: use the images for context, not to identify anyone.'
 delivery:
   sample:
-    bbox: -112.08,33.44,-112.06,33.46
+    bbox: -112.075,33.445,-112.07,33.45
   mode: service
   protocol: rest-json
   requires_credential:
@@ -114,3 +115,6 @@ maintenance:
   - rev: 5
     date: '2026-11-14'
     note: 'Live check (1.15.0): a wrong client token, sent in the authorization header with the OAuth prefix, answers HTTP 401 {"error":{"message":"Error validating application","type":"OAuthException","code":190}}, a rejection by status and body; "Error validating application" added to reject.body. Without a token the Graph API answers 500 MLYApiException "Invalid OAuth 2.0 Access Token"; the plugin always sends the registered token, so that answer is recorded here only. Read 2026-11-14.'
+  - rev: 6
+    date: '2026-11-21'
+    note: '3.2.1: a 0.5 km box in downtown Phoenix answered 1,677 images with your key on 2026-11-21; a 2 km box answered HTTP 500; the sample is the small box and avoid_when says so.'

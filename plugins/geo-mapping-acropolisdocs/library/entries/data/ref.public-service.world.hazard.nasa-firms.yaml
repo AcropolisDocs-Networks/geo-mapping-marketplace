@@ -1,6 +1,6 @@
 id: ref.public-service.world.hazard.nasa-firms
 type: public-service
-rev: 3
+rev: 4
 status: active
 title: NASA FIRMS active fire detections (VIIRS, MODIS)
 summary: Near-real-time satellite fire detections worldwide from NASA FIRMS, as CSV by area and day range, with a free MAP_KEY; for wildfire context near
@@ -44,9 +44,9 @@ avoid_when:
 - 'A large area over many days: one request can count as several transactions against the 5,000 per 10 minutes of a MAP_KEY.'
 delivery:
   sample:
-    request: viirs-snpp
-    params: {days: '1'}
-    bbox: -112.5,33.2,-111.5,33.8
+    request: viirs-noaa20
+    params: {days: '2'}
+    bbox: -125,25,-66,50
   mode: service
   protocol: csv
   format: CSV (latitude, longitude, bright_ti4, acq_date, acq_time, confidence, frp)
@@ -144,3 +144,6 @@ maintenance:
       working key; a 400 now counts as a rejection only when the answer says Invalid MAP_KEY (reject.body). The WFS and WMS info pages read on
       2026-11-09: no global WFS, twelve regions, the WFS layer names, Landsat only in three North American regions; the profiles nasa-firms-wms and
       nasa-firms-wfs-us ship with the plugin.'
+  - rev: 4
+    date: '2026-11-21'
+    note: '3.2.1: with your key on 2026-11-21, VIIRS NOAA-20 answered 2,048 detections over the lower 48 for two days while VIIRS S-NPP answered none; the sample uses NOAA-20.'

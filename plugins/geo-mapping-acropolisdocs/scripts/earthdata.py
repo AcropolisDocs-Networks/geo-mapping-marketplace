@@ -377,8 +377,29 @@ def nightlights_tiles(bounds) -> list[tuple[int, int]]:
 
 
 BLACK_MARBLE = {"short_name": "VNP46A4", "version": "2", "dataset": "HDFEOS/GRIDS/VIIRS_Grid_DNB_2d/Data_Fields/AllAngle_Composite_Snow_Free",
-                "fill": 65535, "scale": 0.1, "units": "nW/cm2/sr", "px": 2400,
+                "fill": 65535, "scale": 0.1,                   # collection 1 (uint16) only: collection 2 is float32 in nW/cm²/sr "units": "nW/cm2/sr", "px": 2400,
                 "attribution": "Night lights: NASA Black Marble VNP46A4 (Román et al. 2018), NASA LAADS DAAC"}
+
+
+def bm_values(ds, th: int, tv: int, dx: float):
+    """3.2.1: one Black Marble tile's radiance in nW/cm²/sr and its transform. Collection 2 (version 2) stores float32 already in physical
+    units with nodata -999.9 (seen 2026-11-21: downtown Phoenix 194); collection 1 stored uint16 to be scaled by 0.1 with 65535 as fill.
+    The tile's own bounding coordinates place it when the file carries them."""
+    import numpy as np
+    from rasterio.transform import from_origin
+    a = ds.read(1).astype("float32")
+    if np.issubdtype(np.dtype(ds.dtypes[0]), np.integer):
+        scale = ds.scales[0] if ds.scales and ds.scales[0] not in (None, 1, 1.0) else BLACK_MARBLE["scale"]
+        a = np.where(a == BLACK_MARBLE["fill"], np.nan, a * scale)
+    if ds.nodata is not None:
+        a[a == np.float32(ds.nodata)] = np.nan
+    a[a < 0] = np.nan                                  # every fill value of the product is negative or the uint16 top
+    t = ds.tags()
+    try:
+        west, north = float(t["WestBoundingCoord"]), float(t["NorthBoundingCoord"])
+    except (KeyError, ValueError):
+        west, north = -180 + 10 * th, 90 - 10 * tv
+    return a, from_origin(west, north, dx, dx)
 
 
 def nightlights(bounds, out: Path, *, year: int | None = None, http=None, store=None, max_tiles: int = 4) -> dict:
@@ -420,9 +441,7 @@ def nightlights(bounds, out: Path, *, year: int | None = None, http=None, store=
         path = Path(got["folder"]) / file_name(url)
         sub = f'HDF5:"{path}"://{BLACK_MARBLE["dataset"]}'
         with rasterio.open(sub) as ds:
-            a = ds.read(1).astype("float32")
-        a = np.where(a == BLACK_MARBLE["fill"], np.nan, a * BLACK_MARBLE["scale"])
-        src_tr = from_origin(-180 + 10 * th, 90 - 10 * tv, dx, dx)
+            a, src_tr = bm_values(ds, th, tv, dx)
         tmp = np.full((h, w), np.nan, dtype="float32")
         reproject(a, tmp, src_transform=src_tr, src_crs="EPSG:4326", dst_transform=dst_tr, dst_crs="EPSG:4326", src_nodata=np.nan, dst_nodata=np.nan,
                   resampling=Resampling.nearest)
