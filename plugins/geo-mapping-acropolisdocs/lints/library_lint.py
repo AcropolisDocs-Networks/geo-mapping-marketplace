@@ -183,8 +183,11 @@ def credential_findings(e: dict, eid: str) -> list[dict]:
         out.append(f("MAP-LIB-001", "BLOCK", eid, f"requires_credential.reject.status lists {', '.join(map(str, loose))}, which the service can also answer for a malformed "
                      "request; add reject.body, the text its answer carries when the key is wrong", loose))
     hosts = set()
+    # 3.3.0: a request the entry marks keyless (read.requests.NAME.keyless: true, a file on another host) is sent without the credential
+    keyless = {n for n, rr in ((d.get("read") or {}).get("requests") or {}).items() if isinstance(rr, dict) and rr.get("keyless") is True}
+    keyed = [d.get("request")] + [v for n, v in (d.get("requests") or {}).items() if n not in keyless]
     # 1.21.1: a vector style template (provider.vector_style_template) carries the same key, so it must name the same host
-    for u in [r for r in requests if r] + [b.get("probe"), e.get("url_template"), (e.get("provider") or {}).get("vector_style_template")]:
+    for u in [r for r in keyed if r] + [b.get("probe"), e.get("url_template"), (e.get("provider") or {}).get("vector_style_template")]:
         if u:
             m = re.match(r"https?://([^/:?#]+)", str(u).replace("{", "").replace("}", ""))
             if m:

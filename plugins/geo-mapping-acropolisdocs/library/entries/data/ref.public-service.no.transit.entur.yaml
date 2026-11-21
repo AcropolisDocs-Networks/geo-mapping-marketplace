@@ -1,6 +1,6 @@
 id: ref.public-service.no.transit.entur
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: Entur (Norway) national journey planner and GTFS
 summary: 'All of Norway''s public transport from Entur: the national GTFS (keyless) and the JourneyPlanner GraphQL API, which needs only an ET-Client-Name
@@ -49,6 +49,7 @@ delivery:
   request: https://api.entur.io/journey-planner/v3/graphql
   requests:
     stops: https://api.entur.io/journey-planner/v3/graphql
+    gtfs-norway: https://storage.googleapis.com/marduk-production/outbound/gtfs/rb_norway-aggregated-gtfs.zip
   api:
     host: api.entur.io
     requests:
@@ -61,6 +62,10 @@ delivery:
       calls_per_minute: 60
   read:
     requests:
+      gtfs-norway:
+        format: file
+        suffix: .zip
+        max_mb: 900
       stops:
         query: '{ stopPlacesByBbox(minimumLatitude: {south}, minimumLongitude: {west}, maximumLatitude: {north}, maximumLongitude: {east}) { id name latitude longitude transportMode } }'
         records: data.stopPlacesByBbox
@@ -98,3 +103,6 @@ maintenance:
     date: '2026-11-21'
     note: '3.2.0: stops in a box through library_request (a declared GraphQL POST with ET-Client-Name); 117 stop places answered over central Oslo
       on 2026-11-21.'
+  - rev: 3
+    date: '2026-11-21'
+    note: '3.3.0: the national GTFS (rb_norway-aggregated-gtfs.zip, 556 MB on 2026-11-21) is fetched by library_request request=gtfs-norway, written to disk as it arrives (at most 900 MB).'

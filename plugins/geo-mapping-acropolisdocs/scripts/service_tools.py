@@ -1315,3 +1315,22 @@ def library_request_tool(entry_id: str, request: str = "", params: str = "", bbo
     except (lr.RequestError,) as ex:
         kind = "usage" if ex.code == gc.EXIT_USAGE else "refused" if ex.code == gc.EXIT_REFUSED else "service"
         return fail(kind, ex.rule or "MAP-SVC-013", str(ex), **ex.extra)
+
+
+def earthdata_subset_tool(short_name: str = "", concept_id: str = "", version: str = "", bbox: str = "", temporal: str = "", variable: str = "",
+                          output_format: str = "", max_results: int = 10, confirm: bool = False, job_id: str = "", fetch: bool = False,
+                          http=None, store=None) -> dict:
+    """3.3.0: NASA Harmony subsetting with the person's Earthdata token: plan, submit (confirm), follow (job_id), download (fetch)."""
+    import earthdata as ed
+    try:
+        if job_id:
+            if fetch:
+                return ed.harmony_fetch(job_id, http=http, store=store or cred_store())
+            return ed.harmony_job(job_id, http=http, store=store or cred_store())
+        kw = {"short_name": short_name or None, "concept_id": concept_id or None, "version": version or None, "bbox": bbox or None,
+              "temporal": temporal or None, "variable": variable or None, "fmt": output_format or None, "max_results": int(max_results or 10)}
+        if not confirm:
+            return ed.harmony_plan(http=http, **kw)
+        return ed.harmony_submit(http=http, store=store or cred_store(), **kw)
+    except ed.EarthdataError as ex:
+        return _ed_fail(ex)

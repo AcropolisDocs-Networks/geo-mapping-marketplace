@@ -816,9 +816,9 @@ entries:
   file: entries/data/ref.public-service.ch.transit.opentransportdata.yaml
   type: public-service
   status: active
-  rev: 1
+  rev: 2
   tags_digest: 79b6fd6ad4dd
-  entry_digest: f965ec584133
+  entry_digest: 5e7dc13e14bc
 - id: ref.public-service.cz.weather.chmi
   file: entries/data/ref.public-service.cz.weather.chmi.yaml
   type: public-service
@@ -886,16 +886,16 @@ entries:
   file: entries/data/ref.public-service.nl.weather.knmi.yaml
   type: public-service
   status: active
-  rev: 3
+  rev: 4
   tags_digest: fb140c99b40b
-  entry_digest: 358186ccf4f6
+  entry_digest: f2d8933d3f9f
 - id: ref.public-service.no.transit.entur
   file: entries/data/ref.public-service.no.transit.entur.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: 5f98d22e862b
-  entry_digest: 1da6ff52d8a1
+  entry_digest: f17f59c7c109
 - id: ref.public-service.no.weather.met-frost
   file: entries/data/ref.public-service.no.weather.met-frost.yaml
   type: public-service

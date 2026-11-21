@@ -128,7 +128,8 @@ second step, not the first; a draft is never chosen for a map until the person a
   product in CMR (keyless; land cover, vegetation, snow, precipitation, sea surface, night lights) and lists its files in a box and a date
   range; `earthdata_fetch` shows the plan, then downloads from whichever DAAC holds them. Built in: NASADEM elevation
   (`ref.terrain.world.dem.nasadem`, terrain.source nasadem) and Black Marble night lights (`ref.statistic.world.night-lights.black-marble`,
-  `earthdata_nightlights`). Daily global imagery as a picture stays NASA GIBS (keyless tiles).
+  `earthdata_nightlights`). Only a box or one variable of a big product: `earthdata_subset` (3.3.0) sends NASA Harmony the cut (plan first,
+  then a job; fetch its files when it finishes). Daily global imagery as a picture stays NASA GIBS (keyless tiles).
 - **Population denominators** for a rate "per 1,000 people" outside the US: GHSL or WorldPop (`ref.statistic.world.population.ghsl`,
   `.worldpop`); Kontur on H3 (`.kontur`, the `kontur-population` adapter); Meta's 30 m HRSL for a site's surroundings (`.hrsl`, read by
   window). The ACS is US-only.
@@ -138,6 +139,8 @@ second step, not the first; a draft is never chosen for a map until the person a
   where the answer has coordinates): `plan_only=true` names the values it needs, `use_sample=true` sends the entry's test request. Weather (NWS,
   Open-Meteo, OpenWeatherMap, WeatherAPI, NOAA CDO, DMI, SMHI, FMI, DWD, CHMI, MET Frost, KNMI, Météo-France), energy (EIA), transit (TfL,
   Entur, Digitransit, Transitland, Navitia; STM's GTFS file), Mapillary images, NASA FIRMS fires, CARTO SQL (one SELECT) and OpenTopography.
+  3.3.0: whole GTFS feeds (Norway, Switzerland) stream to disk; KNMI `files` then `file` gives station points; opentransportdata.swiss
+  `stops` and `trips` (Open Journey Planner) give stops and the legs of real journeys.
 - **National services** (3.1.0): weather from DMI, SMHI, FMI, CHMI and DWD (keyless), Météo-France and WeatherAPI (keyed); transit from Entur,
   opentransportdata.swiss and Navitia; maps from IGN (keyless basemaps and ADMIN EXPRESS boundaries), NLS Finland, Dataforsyningen and
   Lantmäteriet; basemaps from Jawg, HERE and TomTom with the person's key; US climate normals by station (`ref.statistic.us.climate.noaa-normals`,

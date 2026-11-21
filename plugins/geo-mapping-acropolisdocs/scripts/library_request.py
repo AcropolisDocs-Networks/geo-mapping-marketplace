@@ -28,6 +28,7 @@ path slot and is never filled from a value. The table is written as GeoParquet (
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import hashlib
 import io
@@ -173,8 +174,10 @@ def build(entry: dict, request: str | None, params: dict | None, bbox=None, file
         raise RequestError("a value changed the request's host; it is refused", gc.EXIT_REFUSED, "MAP-SVC-001")
     method = "GET"
     api = d.get("api") or {}
-    if any(str(r.get("method", "")).upper() == "POST" for r in api.get("requests") or []) and d.get("protocol") == "graphql":
-        method = "POST"
+    posts = [r for r in api.get("requests") or [] if str(r.get("method", "")).upper() == "POST"]
+    if posts and d.get("protocol") in ("graphql", "ojp") and (u.hostname or "").lower() == str(api.get("host") or "").lower() and any(
+            re.fullmatch(re.sub(r"\\\{[^}]+\\\}", "[^/]+", re.escape(str(x.get("path") or ""))), u.path or "") for x in posts):
+        method = "POST"                                 # 3.3.0: only a request to the declared POST address (a GTFS file of the same entry is a GET)
     return {"name": name, "url": url, "missing": missing, "method": method, "template": tpl}
 
 
@@ -453,6 +456,60 @@ def read_gml(raw: bytes, work: Path):
     return _flat(g), "GML geometry" if "geometry" in g and g.geometry.notna().any() else None, len(g)
 
 
+def read_netcdf_stations(path: Path):
+    """3.3.0: a station file in netCDF (KNMI's 10-minute observations): latitude and longitude by station, and every variable with one value per
+    station as a column (its _FillValue left empty), read through GDAL's netCDF driver. -> (table, geometry note, rows, units)."""
+    import geopandas as gpd
+    import numpy as np
+    import pandas as pd
+    import rasterio
+    with rasterio.open(str(path)) as d:
+        subs = list(d.subdatasets or [])
+    names = {sd.rsplit(":", 1)[-1]: sd for sd in subs}
+
+    def opens(n):                                     # a 1-D variable (lat, lon) is not listed as a subdataset but opens by name
+        try:
+            with rasterio.open(f'netcdf:"{path}":{n}'):
+                names.setdefault(n, f'netcdf:"{path}":{n}')
+                return True
+        except Exception:  # noqa: BLE001
+            return False
+    lat_n = next((n for n in ("lat", "latitude", "LAT") if n in names or opens(n)), None)
+    lon_n = next((n for n in ("lon", "longitude", "LON") if n in names or opens(n)), None)
+    if not (lat_n and lon_n):
+        raise RequestError("the netCDF file has no station latitude and longitude; it is kept as a file", gc.EXIT_SERVICE)
+    for extra in ("height", "stationname"):
+        opens(extra)
+
+    def one(n):
+        with rasterio.open(names[n]) as x:
+            a = x.read(1).astype("float64").ravel()
+            tags = x.tags()
+        fill = tags.get(f"{n}#_FillValue")
+        if fill not in (None, ""):
+            with contextlib.suppress(ValueError):
+                a[a == float(fill)] = np.nan
+        return a, tags.get(f"{n}#units")
+    lat, _ = one(lat_n)
+    lon, _ = one(lon_n)
+    n = len(lat)
+    cols, units = {}, {}
+    for name in names:
+        if name in (lat_n, lon_n):
+            continue
+        try:
+            a, u = one(name)
+        except Exception:  # noqa: BLE001 - a variable GDAL cannot read as numbers (station names) is left out
+            continue
+        if len(a) == n:
+            cols[name] = a
+            if u:
+                units[name] = u
+    df = pd.DataFrame({"station_index": range(n), "latitude": lat, "longitude": lon, **cols})
+    g = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(lon, lat), crs="EPSG:4326")
+    return g, f"{lon_n}, {lat_n}", n, units
+
+
 def kind_of(raw: bytes, ctype: str, read: dict) -> str:
     k = (read.get("format") or "").lower()
     if k:
@@ -504,13 +561,23 @@ def run(entry_id: str, request: str | None = None, params: dict | None = None, b
     try:
         b0 = cr.entry_block(e)
         rhost = (urllib.parse.urlsplit(r["url"]).hostname or "").lower()
-        own = bool(b0) and cr.covers(str(b0.get("host") or ""), cr.family_of(None, b0), rhost)
+        own = bool(b0) and cr.covers(str(b0.get("host") or ""), cr.family_of(None, b0), rhost) and read.get("keyless") is not True
         auth = rf.credential_for(e, r["url"], store) if own else None     # a keyless request of a keyed entry (a GTFS file elsewhere) goes without it
     except rf.FetchError as ex:
         raise RequestError(str(ex), gc.EXIT_REFUSED, ex.rule) from None
     http = http or oh.SafeHTTP(limits={"timeout_s": 90, "max_bytes": MAX_BYTES, "retries": 2})
     try:
-        if r["method"] == "POST":
+        if r["method"] == "POST" and read.get("ojp"):
+            # 3.3.0: Open Journey Planner 2.0: the XML body built by ojp.py from plain values, sent as the entry declares (POST, xml)
+            import declared as dcl
+            import ojp
+            try:
+                xml = ojp.body(read["ojp"], values_with_bbox(params, bbox))
+            except ojp.OjpError as ex:
+                raise RequestError(f"{e['id']} ({r['name']}): {ex}", gc.EXIT_USAGE, "MAP-SVC-001") from None
+            resp = http.request("POST", r["url"], system=dcl.from_entry(e), content=xml, expect="any", auth=auth,
+                                headers={"Content-Type": "application/xml; charset=utf-8", "Accept": "application/xml"})
+        elif r["method"] == "POST":
             import declared as dcl
             system = dcl.from_entry(e)
             q = (body or {}) if body else ({"query": (params or {}).get("query")} if (params or {}).get("query") else None)
@@ -527,6 +594,11 @@ def run(entry_id: str, request: str | None = None, params: dict | None = None, b
                 raise RequestError(f"{e['id']} answers a GraphQL query: give it as params query=...", gc.EXIT_USAGE, "MAP-SVC-001")
             resp = http.request("POST", r["url"], system=system, json=q, expect="json", auth=auth,
                                 headers={"ET-Client-Name": "acropolisdocs-geo-mapping"} if "entur" in e["id"] else None)
+        elif (read.get("format") or "").lower() == "file":
+            # 3.3.0: a file kept as it is (a GTFS feed) goes straight to disk, up to the entry's max_mb (Entur's Norway feed is 556 MB)
+            ext = (read.get("suffix") or Path(urllib.parse.urlsplit(r["url"]).path).suffix or ".bin")[:8]
+            folder.mkdir(parents=True, exist_ok=True)
+            resp = http.download(r["url"], folder / f"{stem}{ext}", auth=auth, max_mb=int(read.get("max_mb") or 200), headers=(read.get("headers") or None))
         else:
             resp = http.get(r["url"], expect="any", auth=auth, headers=(read.get("headers") or None))
     except oh.ServiceError as ex:
@@ -535,7 +607,24 @@ def run(entry_id: str, request: str | None = None, params: dict | None = None, b
         if auth is not None:
             auth.close()
     raw = resp.content
-    k = kind_of(raw, resp.content_type, read)
+    follow = read.get("follow")
+    if follow and getattr(resp, "streamed_bytes", None) is None:
+        # 3.3.0: the answer names a temporary download address (KNMI's temporaryDownloadUrl); it is fetched without the key, only on a declared host
+        try:
+            nxt = str(_dig(json.loads(raw), follow) or "")
+        except ValueError:
+            nxt = ""
+        nu = urllib.parse.urlsplit(nxt)
+        if nu.scheme != "https" or not any((nu.hostname or "").endswith(h) for h in (read.get("follow_hosts") or [])):
+            raise RequestError(f"the answer's {follow} is not an https address on a host the entry names; it is not fetched", gc.EXIT_REFUSED, "MAP-SVC-020")
+        ext = (read.get("suffix") or Path(nu.path).suffix or ".bin")[:8]
+        folder.mkdir(parents=True, exist_ok=True)
+        try:
+            resp = http.download(nxt, folder / f"{stem}{ext}", max_mb=int(read.get("max_mb") or 200))
+        except oh.ServiceError as ex:
+            raise RequestError(str(ex), gc.EXIT_SERVICE, ex.rule) from None
+        raw = resp.content
+    k = "file" if getattr(resp, "streamed_bytes", None) is not None else kind_of(raw, resp.content_type, read)
     if k == "json":                                  # an error told with HTTP 200 (Open-Meteo's daily limit, an API's {"error": ...})
         try:
             j = json.loads(raw)
@@ -551,13 +640,31 @@ def run(entry_id: str, request: str | None = None, params: dict | None = None, b
         path = folder / f"{stem}.tif"
         path.write_bytes(raw)
         rows, cols, geo = None, None, "raster"
-    elif k == "file":                                 # a file kept as it is (a GTFS feed, which map-create and gtfs.py read directly)
+    elif k == "file":                                 # a file kept as it is (a GTFS feed, which map-create and gtfs.py read directly), already on disk
         ext = (read.get("suffix") or Path(urllib.parse.urlsplit(r["url"]).path).suffix or ".bin")[:8]
+        if follow:
+            ext = (read.get("suffix") or Path(urllib.parse.urlsplit(resp.url).path).suffix or ".bin")[:8]
         path = folder / f"{stem}{ext}"
-        path.write_bytes(raw)
         rows, cols, geo = None, None, None
+        if read.get("table") == "netcdf-stations":   # 3.3.0: KNMI's station file becomes a point layer beside the file
+            df, geo, rows, units = read_netcdf_stations(path)
+            cols = [str(c) for c in df.columns]
+            tpath = folder / f"{stem}.parquet"
+            df.to_parquet(tpath, index=False)
+            (folder / f"{stem}.units.json").write_text(json.dumps(units, indent=1), encoding="utf-8")
+            path = tpath
+            k = "netcdf-stations"
     else:
-        if k == "json":
+        if read.get("ojp"):
+            import ojp
+            try:
+                df = ojp.parse(read["ojp"], raw)
+            except ojp.OjpError as ex:
+                raise RequestError(str(ex), gc.EXIT_SERVICE, "MAP-SVC-013") from None
+            n = len(df)
+            geo = "OJP positions" if len(df) and df.geometry.notna().any() else None
+            k = "ojp"
+        elif k == "json":
             df, geo, n = read_json(raw, read)
         elif k == "csv":
             df, geo, n = read_csv(raw, read)
@@ -581,7 +688,8 @@ def run(entry_id: str, request: str | None = None, params: dict | None = None, b
     b = cr.entry_block(e)
     rec = {"request_version": 1, "entry": e["id"], "rev": e.get("rev"), "request": r["name"], "send": shown(e, r["url"]), "method": r["method"],
            "retrieved_at": os.environ.get("GMAP_FIXED_DATE") or dt.date.today().isoformat(), "credential": f"cred:{b['name']}" if b else None,
-           "answer": k, "path": str(path), "rows": rows, "columns": cols, "geometry": geo, "sha256": hashlib.sha256(raw).hexdigest(),
+           "answer": k, "path": str(path), "rows": rows, "columns": cols, "geometry": geo,
+           "sha256": resp.sha256 if k == "file" else hashlib.sha256(raw).hexdigest(), **({"bytes": int(resp.streamed_bytes)} if k == "file" else {}),
            "attribution": (e.get("license") or {}).get("attribution_text"), "calls": http.audit.calls}
     rec, _ = redact.scrub_obj(rec)
     rec_path.write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")

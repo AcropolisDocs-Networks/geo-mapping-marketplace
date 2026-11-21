@@ -1,6 +1,6 @@
 id: ref.public-service.nl.weather.knmi
 type: public-service
-rev: 3
+rev: 4
 status: active
 title: KNMI Data Platform (Netherlands weather and climate)
 summary: Dutch weather observations, radar, model output and climate datasets from the KNMI Data Platform Open Data API, with a free key in the Authorization
@@ -63,11 +63,19 @@ delivery:
       the person's own
   request: https://api.dataplatform.knmi.nl/open-data/v1/datasets/{dataset}/versions/{version}/files
   requests:
-    files: https://api.dataplatform.knmi.nl/open-data/v1/datasets/{dataset}/versions/{version}/files
+    files: https://api.dataplatform.knmi.nl/open-data/v1/datasets/{dataset}/versions/{version}/files?maxKeys=20&orderBy=created&sorting=desc
     file-url: https://api.dataplatform.knmi.nl/open-data/v1/datasets/{dataset}/versions/{version}/files/{filename}/url
+    file: https://api.dataplatform.knmi.nl/open-data/v1/datasets/{dataset}/versions/{version}/files/{filename}/url
   defaults:
-    dataset: Actuele10mindataKNMIstations
-    version: '2'
+    dataset: 10-minute-in-situ-meteorological-observations
+    version: '1.0'
+  read:
+    requests:
+      file:
+        follow: temporaryDownloadUrl
+        follow_hosts: [.s3.eu-west-1.amazonaws.com]
+        table: netcdf-stations
+        max_mb: 200
   note: Without a key the API answers 401 "Authorization field missing" (2026-11-07). An EDR API sits at api.dataplatform.knmi.nl/edr/v1 (not checked).
 source:
   publisher: Royal Netherlands Meteorological Institute (KNMI)
@@ -101,3 +109,6 @@ maintenance:
   - rev: 3
     date: '2026-11-21'
     note: '3.2.0: the file list and a file''s temporary download address through library_request (dataset Actuele10mindataKNMIstations version 2 by default); 401 Authorization field missing without a key on 2026-11-21.'
+  - rev: 4
+    date: '2026-11-21'
+    note: '3.3.0: the 10-minute station data moved to the dataset 10-minute-in-situ-meteorological-observations version 1.0 (files every 10 minutes on 2026-11-21; Actuele10mindataKNMIstations version 2 stopped on 2025-10-02); request=file follows the temporaryDownloadUrl (S3 in eu-west-1, no key) and reads the netCDF into 70 station points with every reading.'

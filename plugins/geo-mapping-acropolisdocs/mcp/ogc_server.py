@@ -474,6 +474,19 @@ def earthdata_fetch(short_name: str = "", bbox: str = "", temporal: str = "", ve
 
 @mcp.tool()
 @st.masked
+def earthdata_subset(short_name: str = "", concept_id: str = "", version: str = "", bbox: str = "", temporal: str = "", variable: str = "",
+                     output_format: str = "", max_results: int = 10, confirm: bool = False, job_id: str = "", fetch: bool = False,
+                     work_folder: str = "") -> dict:
+    """NASA Harmony subsetting (3.3.0) with the person's ONE Earthdata token: the server cuts a collection to bbox (W,S,E,N), temporal
+    (START/END) and one variable, and writes output_format (geotiff, netcdf, png, zarr) for up to max_results granules (at most 50), so a
+    long time series arrives already clipped. Without confirm: the plan (what Harmony can do with the collection, its variables, how many
+    granules match, the request); show it to the person. confirm=true submits and returns a job_id. job_id= follows the job; with fetch=true
+    a finished job's results are downloaded into WORK_FOLDER/data/earthdata/harmony/<job>/ (each handed to a signed address without the token)."""
+    return st.in_work_folder(work_folder, st.earthdata_subset_tool, short_name, concept_id, version, bbox, temporal, variable, output_format,
+                             max_results, confirm, job_id, fetch)
+
+@mcp.tool()
+@st.masked
 def earthdata_nightlights(bbox: str, year: int = 0, out: str = "", confirm: bool = False, work_folder: str = "") -> dict:
     """NASA Black Marble annual night lights (VNP46A4, 15 arc seconds, snow-free) for bbox W,S,E,N as one GeoTIFF in lon/lat, radiance in
     nW/cm2/sr (3.2.0), with the person's earthdata token. year defaults to the latest. Without confirm: the 10-degree tiles and their size

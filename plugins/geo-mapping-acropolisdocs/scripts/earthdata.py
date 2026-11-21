@@ -292,16 +292,12 @@ def download(url: str, dest: Path, *, auth, http) -> dict:
     if s.scheme != "https" or not auth.covers(s.hostname or ""):
         raise EarthdataError(f"{_clean(oh.redact_url(url), 120)} is not on an Earthdata host; the token is never sent there", gc.EXIT_REFUSED, "MAP-CRED-005")
     try:
-        r = http.get(url, expect="any", auth=auth, max_bytes=200_000_000)
+        r = http.download(url, dest, auth=auth, max_mb=MAX_MB)      # 3.3.0: written to disk as it arrives (a granule may be large)
     except oh.ServiceError as ex:
         raise EarthdataError(str(ex), gc.EXIT_REFUSED if ex.auth else gc.EXIT_SERVICE, ex.rule) from None
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_name(dest.name + ".part")
-    tmp.write_bytes(r.content)
-    os.replace(tmp, dest)
     calls = [c for c in http.audit.calls if c.get("url")]
     hand = next((c.get("handoff_to") for c in reversed(calls) if c.get("handoff_to")), None)
-    return {"url": oh.redact_url(url), "path": str(dest), "bytes": len(r.content), "sha256": hashlib.sha256(r.content).hexdigest(), "handoff": hand}
+    return {"url": oh.redact_url(url), "path": str(dest), "bytes": int(r.streamed_bytes), "sha256": r.sha256, "handoff": hand}
 
 
 def fetch(*, urls=None, max_files: int = MAX_FILES, max_mb: float = MAX_MB, refresh: bool = False, http=None, store=None, **kw) -> dict:
@@ -457,6 +453,157 @@ def nightlights(bounds, out: Path, *, year: int | None = None, http=None, store=
            "valid_share": float(np.isfinite(arr).mean()), "max": float(np.nanmax(arr)) if np.isfinite(arr).any() else None}
     out.with_suffix(".json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
     return {"ok": True, **rec}
+
+
+# ---------------------------------------------------------------------------------------------------------------- 3.3.0: Harmony subsetting
+HARMONY = "https://harmony.earthdata.nasa.gov"
+HARMONY_HOST = "harmony.earthdata.nasa.gov"
+HARMONY_FORMATS = {"geotiff": "image/tiff", "tiff": "image/tiff", "netcdf": "application/x-netcdf4", "netcdf4": "application/x-netcdf4",
+                   "netcdf-classic": "application/netcdf",
+                   "zarr": "application/x-zarr", "png": "image/png", "csv": "text/csv", "shapefile": "application/shapefile+zip"}
+HARMONY_MAX_RESULTS = 50
+VAR_RE = re.compile(r"^[A-Za-z0-9_.:/-]{1,120}$")
+JOB_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def concept_for(short_name: str | None, version: str | None, concept_id: str | None, http=None) -> str:
+    """The collection's CMR concept id (Harmony addresses a collection by it)."""
+    if concept_id:
+        if not CONCEPT_RE.match(concept_id) or not concept_id.startswith("C"):
+            raise EarthdataError(f"'{concept_id}' is not a collection concept id (C1234-PROVIDER)", gc.EXIT_USAGE, "MAP-SVC-001")
+        return concept_id
+    if not short_name:
+        raise EarthdataError("name the collection: short_name (MUR-JPL-L4-GLOB-v4.1) or concept_id", gc.EXIT_USAGE, "MAP-SVC-001")
+    res = search("collections", http=http, short_name=short_name, version=version, limit=5)
+    rows = [r for r in res["rows"] if r.get("cloud_hosted")] or res["rows"]
+    if not rows:
+        raise EarthdataError(f"CMR lists no collection {short_name}" + (f" version {version}" if version else ""), gc.EXIT_USAGE, "MAP-SVC-001")
+    return rows[0]["concept_id"]
+
+
+def harmony_capabilities(concept_id: str, http=None) -> dict:
+    """What Harmony can do with a collection (keyless): subsetting by box, time, variable; output formats; its variables."""
+    import ogc_http as oh
+    http = http or http_client({"timeout_s": 60, "max_bytes": 10_000_000, "retries": 2})
+    try:
+        r = http.get(f"{HARMONY}/capabilities", {"collectionId": concept_id}, expect="json")
+    except oh.ServiceError as ex:
+        raise EarthdataError(f"Harmony capabilities: {ex}", gc.EXIT_SERVICE, ex.rule) from None
+    d = json.loads(r.content)
+    summ = d.get("summary") or {}
+    return {"concept_id": d.get("conceptId") or concept_id, "short_name": d.get("shortName"), "subsetting": summ.get("subsetting") or {},
+            "formats": [f.get("mimeType") for f in summ.get("outputFormats") or [] if f.get("mimeType")],
+            "variables": [v.get("name") for v in d.get("variables") or [] if v.get("name")][:200],
+            "services": [x.get("name") for x in d.get("services") or []]}
+
+
+def harmony_url(concept_id: str, bbox=None, temporal: str | None = None, variable: str | None = None, fmt: str | None = None,
+                max_results: int = 10) -> str:
+    """The Harmony OGC coverages request: /{collection}/ogc-api-coverages/1.0.0/collections/{variable|all}/coverage/rangeset."""
+    var = variable or "all"
+    if not VAR_RE.match(var) or ".." in var:
+        raise EarthdataError(f"'{_clean(var, 60)}' is not a variable name", gc.EXIT_USAGE, "MAP-SVC-001")
+    q = [("forceAsync", "true"), ("maxResults", str(max(1, min(int(max_results or 10), HARMONY_MAX_RESULTS))))]
+    b = _bbox(bbox)
+    if b:
+        q += [("subset", f"lat({b[1]:g}:{b[3]:g})"), ("subset", f"lon({b[0]:g}:{b[2]:g})")]
+    t = _temporal(temporal)
+    if t:
+        a, z = t.split(",", 1)
+        q.append(("subset", f'time("{a or "*"}":"{z or "*"}")'.replace('"*"', "*")))
+    if fmt:
+        mime = HARMONY_FORMATS.get(fmt.lower(), fmt)
+        if mime not in HARMONY_FORMATS.values():
+            raise EarthdataError(f"format is one of {', '.join(sorted(HARMONY_FORMATS))}", gc.EXIT_USAGE, "MAP-SVC-001")
+        q.append(("format", mime))
+    path = f"/{concept_id}/ogc-api-coverages/1.0.0/collections/{urllib.parse.quote(var, safe='')}/coverage/rangeset"
+    return HARMONY + path + "?" + urllib.parse.urlencode(q, safe="():,*", quote_via=urllib.parse.quote)
+
+
+def harmony_plan(*, short_name=None, version=None, concept_id=None, bbox=None, temporal=None, variable=None, fmt=None, max_results: int = 10,
+                 http=None) -> dict:
+    """What a Harmony subset would do, before anything is submitted: the capabilities, how many granules match, the request (no token)."""
+    cid = concept_for(short_name, version, concept_id, http)
+    cap = harmony_capabilities(cid, http)
+    sub = cap["subsetting"]
+    problems = []
+    if bbox and not sub.get("bbox"):
+        problems.append("Harmony cannot cut this collection to a box")
+    if temporal and not sub.get("temporal"):
+        problems.append("Harmony cannot cut this collection by time")
+    if variable and not sub.get("variable"):
+        problems.append("Harmony cannot pick variables from this collection")
+    if variable and cap["variables"] and variable not in cap["variables"]:
+        problems.append(f"'{variable}' is not one of its variables ({', '.join(cap['variables'][:12])})")
+    mime = HARMONY_FORMATS.get((fmt or "").lower(), fmt) if fmt else None
+    if mime and "netcdf" in mime and cap["formats"] and mime not in cap["formats"]:
+        alt = next((m for m in cap["formats"] if "netcdf" in m), None)     # the collection names netCDF one way or the other
+        if alt:
+            fmt = mime = alt
+    if mime and cap["formats"] and mime not in cap["formats"]:
+        problems.append(f"it does not write {fmt}; it writes {', '.join(cap['formats'])}")
+    hits = search("granules", http=http, concept_id=cid, bbox=bbox, temporal=temporal, limit=1)["hits"]
+    url = harmony_url(cid, bbox, temporal, variable, fmt, max_results)
+    return {"ok": not problems, "concept_id": cid, "short_name": cap.get("short_name") or short_name, "capabilities": cap, "granules_matching": hits,
+            "granules_processed": min(hits, max(1, min(int(max_results or 10), HARMONY_MAX_RESULTS))), "request": url, "problems": problems,
+            "credential": f"cred:{CRED}", "host": HARMONY_HOST,
+            "next": "show the person the plan; submit with confirm=true, then follow the job with job_id" if not problems else "change the request"}
+
+
+def _job_row(d: dict) -> dict:
+    links = [lk for lk in d.get("links") or [] if lk.get("rel") == "data" and str(lk.get("href", "")).startswith("https://")]
+    return {"job_id": d.get("jobID"), "status": d.get("status"), "progress": d.get("progress"), "message": _clean(d.get("message"), 300),
+            "granules": d.get("numInputGranules"), "results": [lk["href"] for lk in links][:HARMONY_MAX_RESULTS],
+            "request": d.get("request") and __import__("ogc_http").redact_url(str(d.get("request"))), "created": d.get("createdAt"),
+            "updated": d.get("updatedAt")}
+
+
+def harmony_submit(*, http=None, store=None, **kw) -> dict:
+    """Submit the planned subset with the token (the person agreed). -> the job: id, status, progress."""
+    import ogc_http as oh
+    p = harmony_plan(http=http, **{k: v for k, v in kw.items() if k in ("short_name", "version", "concept_id", "bbox", "temporal", "variable", "fmt", "max_results")})
+    if p["problems"]:
+        raise EarthdataError("; ".join(p["problems"]), gc.EXIT_USAGE, "MAP-SVC-001")
+    http = http or http_client({"timeout_s": 120, "max_bytes": 20_000_000, "retries": 1})
+    auth = token(store)
+    try:
+        r = http.get(p["request"], expect="json", auth=auth)
+    except oh.ServiceError as ex:
+        raise EarthdataError(f"Harmony: {ex}", gc.EXIT_REFUSED if ex.auth else gc.EXIT_SERVICE, ex.rule) from None
+    finally:
+        auth.close()
+    job = _job_row(json.loads(r.content))
+    if not job["job_id"] or not JOB_RE.match(str(job["job_id"])):
+        raise EarthdataError("Harmony did not answer with a job", gc.EXIT_SERVICE)
+    return {"ok": True, **job, "concept_id": p["concept_id"], "granules_matching": p["granules_matching"],
+            "next": "follow it with job_id; when status is successful, fetch=true downloads the results"}
+
+
+def harmony_job(job_id: str, *, http=None, store=None) -> dict:
+    import ogc_http as oh
+    if not JOB_RE.match(str(job_id or "")):
+        raise EarthdataError("job_id is the id Harmony gave (a UUID)", gc.EXIT_USAGE, "MAP-SVC-001")
+    http = http or http_client({"timeout_s": 60, "max_bytes": 20_000_000, "retries": 2})
+    auth = token(store)
+    try:
+        r = http.get(f"{HARMONY}/jobs/{job_id}", expect="json", auth=auth)
+    except oh.ServiceError as ex:
+        raise EarthdataError(f"Harmony: {ex}", gc.EXIT_REFUSED if ex.auth else gc.EXIT_SERVICE, ex.rule) from None
+    finally:
+        auth.close()
+    return {"ok": True, **_job_row(json.loads(r.content))}
+
+
+def harmony_fetch(job_id: str, *, max_files: int = MAX_FILES, refresh: bool = False, http=None, store=None) -> dict:
+    """Download a finished job's results (Harmony hands each to a signed S3 address, which gets no token) into data/earthdata/harmony/<job>/."""
+    job = harmony_job(job_id, http=http, store=store)
+    if job["status"] not in ("successful", "complete_with_errors"):
+        return {**job, "ok": False, "downloaded": 0, "next": f"the job is {job['status']} ({job.get('progress')}%): ask again later"}
+    urls = [u for u in job["results"] if is_earthdata_host(urllib.parse.urlsplit(u).hostname or "")][:max_files]
+    got = fetch(urls=urls, short_name=f"harmony/{job_id}", max_files=max_files, refresh=refresh, http=http, store=store) if urls else {"files": [], "downloaded": 0}
+    return {"ok": True, "job_id": job_id, "status": job["status"], "downloaded": got.get("downloaded", 0), "files": got.get("files", []),
+            "folder": got.get("folder"), "record": got.get("record"), "handoff": got.get("handoff"), "attribution": ATTRIBUTION,
+            "left_out": max(0, len(job["results"]) - len(urls))}
 
 
 # ---------------------------------------------------------------------------------------------------------------- CLI

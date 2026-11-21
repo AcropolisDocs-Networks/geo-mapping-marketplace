@@ -1,6 +1,6 @@
 id: ref.public-service.ch.transit.opentransportdata
 type: public-service
-rev: 1
+rev: 2
 status: active
 title: opentransportdata.swiss (Switzerland public transport)
 summary: Switzerland's timetable as GTFS (keyless download) and the Open Journey Planner 2.0 API (with the person's own token), from the Swiss public transport
@@ -41,8 +41,11 @@ use_when:
 avoid_when:
 - 'Live or journey data without a token: OJP answers 403 without one (2026-11-20).'
 delivery:
+  sample:
+    request: stops
+    params: {name: Bern, limit: '5'}
   mode: service
-  protocol: xml
+  protocol: ojp
   requires_credential:
     name: opentransportdata
     kind: bearer
@@ -59,6 +62,31 @@ delivery:
     limits: No quota stated on the pages read 2026-11-20 (the API manager shows a token's limits).
     note: A token per API from the platform's API manager; OJP 2.0 answered 403 'Requested endpoint is forbidden' without one (2026-11-20).
   request: https://api.opentransportdata.swiss/ojp20
+  requests:
+    stops: https://api.opentransportdata.swiss/ojp20
+    trips: https://api.opentransportdata.swiss/ojp20
+    gtfs: https://data.opentransportdata.swiss/en/dataset/timetable-2026-gtfs2020/permalink
+  api:
+    host: api.opentransportdata.swiss
+    requests:
+    - method: POST
+      path: /ojp20
+      body: xml
+      changes: false
+      note: OJP 2.0 LocationInformationRequest and TripRequest (read-only)
+    limits:
+      calls_per_minute: 30
+  read:
+    requests:
+      stops:
+        ojp: stops
+      trips:
+        ojp: trips
+      gtfs:
+        format: file
+        suffix: .zip
+        max_mb: 900
+        keyless: true
   gtfs: https://data.opentransportdata.swiss/en/dataset/timetable-2026-gtfs2020/permalink
   note: The GTFS permalink redirects to the current file (gtfs_fp2026_20261118.zip on 2026-11-20), keyless.
 source:
@@ -89,3 +117,6 @@ maintenance:
     date: '2026-11-20'
     note: 'Added (3.1.0, a source the 2026-11-07 dive did not reach): the GTFS permalink and OJP''s answer without a token read on 2026-11-20; terms from
       the opendata.swiss record.'
+  - rev: 2
+    date: '2026-11-21'
+    note: '3.3.0: OJP 2.0 stops (LocationInformationRequest by name or box) and trips (TripRequest with leg tracks) through library_request, the XML built and read by ojp.py and sent as a declared POST; the GTFS permalink fetched as a file (request=gtfs). OJP answered 403 without a token; checked with a token on the person''s computer.'

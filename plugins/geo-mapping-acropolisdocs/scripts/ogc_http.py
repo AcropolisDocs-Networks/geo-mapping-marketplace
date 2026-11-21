@@ -48,6 +48,7 @@ import httpx  # noqa: E402
 from lxml import etree  # noqa: E402
 
 MAX_REDIRECTS = 3
+STREAM_CEILING_MB = 2048        # 3.3.0: SafeHTTP.download writes to disk; a file may be this large at most
 CEILING = {"timeout_s": 120.0, "max_bytes": 200_000_000, "retries": 3, "backoff_cap_s": 30.0}
 DEFAULTS = {"timeout_s": 30.0, "max_bytes": 50_000_000, "retries": 2}
 READ_REQUESTS = {"getcapabilities", "describefeaturetype", "getfeature", "getmap", "getfeatureinfo", "getlegendgraphic", "getstyles", "gettile", "describelayer", "getpropertyvalue", "liststoredqueries"}
@@ -323,20 +324,51 @@ class SafeHTTP:
                 e.args = (cred.mask(str(e)),)
             raise
 
+    def download(self, url: str, dest, *, auth=None, max_mb: int = 1024, headers: dict | None = None) -> Response:
+        """3.3.0: a GET whose body is written to `dest` as it arrives (a 556 MB GTFS feed, a large granule): every guard of `get` holds (public
+        addresses at every hop, the credential only to its own hosts and never across a hand-off, rejections), the size is capped at max_mb
+        (at most STREAM_CEILING_MB), and the file is written to dest + '.part' and moved into place only when complete. The Response carries no
+        content: `streamed_bytes`, its `sha256` and `head` (the first 4 KB)."""
+        import os as _os
+        full = url
+        check_read_only(full)
+        cred = self._auth_for(full, auth)
+        if cred is not None:
+            check_auth_target(full, cred)
+        cap = int(min(max_mb, STREAM_CEILING_MB) * 1_000_000)
+        dest = Path(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        part = dest.with_name(dest.name + ".part")
+        try:
+            with open(part, "w+b") as fh:
+                r = self._get(full, "any", headers, "GET", None, None, cred, sink=fh, stream_cap=cap)
+            if not getattr(r, "streamed_bytes", None) and r.content:
+                part.write_bytes(r.content)              # an answer that was not streamed (a small body) is written as it came
+                r.streamed_bytes = len(r.content)
+            _os.replace(part, dest)
+            return r
+        except ServiceError as e:
+            if cred is not None:
+                e.args = (cred.mask(str(e)),)
+            raise
+        finally:
+            if part.exists():
+                part.unlink()
+
     def _get(self, full: str, expect: str, headers: dict | None, method: str, max_bytes: int | None, origin: str | None, cred, *, payload: bytes | None = None,
-             retry: tuple | None = None, audit_extra: dict | None = None) -> Response:
+             retry: tuple | None = None, audit_extra: dict | None = None, sink=None, stream_cap: int | None = None) -> Response:
         """`retry` (1.3.0): None for a GET's usual rule (429 and 5xx, up to the client's retries); else (statuses, times) for a declared request."""
         hdrs = {"User-Agent": self.user_agent, "Accept": "*/*", "Accept-Encoding": "gzip"}
         hdrs.update(headers or {})
         if origin:
             hdrs["Origin"] = origin
-        cap = min(int(max_bytes or self.limits["max_bytes"]), self.limits["max_bytes"])
+        cap = min(int(max_bytes or self.limits["max_bytes"]), self.limits["max_bytes"]) if stream_cap is None else int(stream_cap)
         attempt = 0
         hops = 0
         while True:
             t0 = self._clock()
             try:
-                resp, final = self._follow(full, method, hdrs, cap, cred, body=payload)
+                resp, final = self._follow(full, method, hdrs, cap, cred, body=payload, sink=sink)
             except ServiceError as ex:
                 # 3.2.1: a GET whose connection failed before any answer (ConnectError, seen once from Open-Meteo) is tried once more
                 if method in ("GET", "HEAD") and retry is None and attempt == 0 and str(ex).startswith("the request failed: Connect"):
@@ -348,7 +380,9 @@ class SafeHTTP:
             status = resp["status"]
             body = resp["content"] if cred is None else cred.mask_bytes(resp["content"])   # a body that echoes the request never carries the key
             pinned, why = self._last_pin
-            self.audit.add(url=redact_url(final), method=method, status=status, bytes=len(body), ms=ms, sha256=hashlib.sha256(body).hexdigest(), attempt=attempt + 1,
+            streamed = resp.get("streamed")
+            self.audit.add(url=redact_url(final), method=method, status=status, bytes=streamed[0] if streamed else len(body), ms=ms,
+                           sha256=streamed[1] if streamed else hashlib.sha256(body).hexdigest(), attempt=attempt + 1,
                            pinned=pinned, **({"reason": why} if why else {}), **({"credential": cred.name} if cred is not None else {}), **(audit_extra or {}))
             if method not in ("GET", "HEAD") and status in REDIRECTS and cred is None:
                 raise ServiceError(f"the service answered {status} to a {method} with a redirect to {untrusted(redact_url(resp.get('location') or ''), 120)}; "
@@ -419,12 +453,18 @@ class SafeHTTP:
                 raise ServiceError(f"the service answered HTTP {status} with its placeholder for a wrong or missing key, not the data: it rejected the "
                                    f"credential '{cred.name}'; the run stops here and is not retried. Get a key that works and run map-credentials rotate "
                                    f"{cred.name}", "MAP-CRED-008", auth=True, status=status, rejected=True)
+            if streamed:
+                r = Response(final, status, resp["headers"], b"", ms, streamed[1], resp["headers"].get("content-type", ""))
+                r.streamed_bytes, r.head = streamed[0], bytes(resp["content"])
+                if sniff_html(r.head, r.content_type) and expect != "html":
+                    raise ServiceError("the service answered a web page where a file was expected (a sign-in or error page)", "MAP-SVC-013", status=status)
+                return r
             r = Response(final, status, resp["headers"], body, ms, hashlib.sha256(body).hexdigest(), resp["headers"].get("content-type", ""))
             if method != "HEAD":
                 validate_body(r, expect)
             return r
 
-    def _follow(self, url: str, method: str, headers: dict, cap: int, cred=None, *, body: bytes | None = None):
+    def _follow(self, url: str, method: str, headers: dict, cap: int, cred=None, *, body: bytes | None = None, sink=None):
         for hop in range(MAX_REDIRECTS + 1):
             try:
                 addrs = ssrf.public_addresses(url, self._resolver)
@@ -448,7 +488,22 @@ class SafeHTTP:
                     with c.stream(method, req_url, headers=req_headers, extensions=ext, **({"content": body} if body else {})) as r:
                         status, rh = r.status_code, {k.lower(): v for k, v in r.headers.items()}
                         buf = bytearray()
-                        if method != "HEAD":
+                        streamed = None
+                        if method != "HEAD" and sink is not None and 200 <= status < 300:
+                            # 3.3.0: a large file goes straight to disk, counted and hashed as it arrives; only its first 4 KB stay in memory
+                            h, n = hashlib.sha256(), 0
+                            sink.seek(0)
+                            sink.truncate()
+                            for chunk in r.iter_bytes():
+                                n += len(chunk)
+                                if n > cap:
+                                    raise ServiceError(f"the file is larger than the {cap // 1_000_000} MB limit (counted after decompression)", "MAP-SVC-013")
+                                h.update(chunk)
+                                sink.write(chunk)
+                                if len(buf) < 4096:
+                                    buf += chunk[:4096 - len(buf)]
+                            streamed = (n, h.hexdigest())
+                        elif method != "HEAD":
                             for chunk in r.iter_bytes():
                                 buf += chunk
                                 if len(buf) > cap:
@@ -469,7 +524,7 @@ class SafeHTTP:
                 check_read_only(nxt)
                 url = nxt
                 continue
-            return {"status": status, "headers": rh, "content": bytes(buf)}, url
+            return {"status": status, "headers": rh, "content": bytes(buf), "streamed": streamed}, url
         raise Refusal(f"more than {MAX_REDIRECTS} redirects", "MAP-SVC-020")
 
 
