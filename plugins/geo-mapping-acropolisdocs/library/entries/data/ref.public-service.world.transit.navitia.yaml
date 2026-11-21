@@ -42,6 +42,8 @@ use_when:
 avoid_when:
 - The free quota was not stated in the documentation read on 2026-11-20; check the account before a batch.
 delivery:
+  sample:
+    params: {}
   mode: service
   protocol: rest-json
   requires_credential:

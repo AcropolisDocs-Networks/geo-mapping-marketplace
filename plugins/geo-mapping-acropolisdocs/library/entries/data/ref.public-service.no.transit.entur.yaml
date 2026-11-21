@@ -1,6 +1,6 @@
 id: ref.public-service.no.transit.entur
 type: public-service
-rev: 1
+rev: 2
 status: active
 title: Entur (Norway) national journey planner and GTFS
 summary: 'All of Norway''s public transport from Entur: the national GTFS (keyless) and the JourneyPlanner GraphQL API, which needs only an ET-Client-Name
@@ -41,9 +41,29 @@ use_when:
 avoid_when:
 - 'The national GTFS is 556 MB: a city map reads the stops and routes of its own operators after the download, not the whole file on every build.'
 delivery:
+  sample:
+    request: stops
+    bbox: 10.70,59.90,10.78,59.93
   mode: service
   protocol: graphql
   request: https://api.entur.io/journey-planner/v3/graphql
+  requests:
+    stops: https://api.entur.io/journey-planner/v3/graphql
+  api:
+    host: api.entur.io
+    requests:
+    - method: POST
+      path: /journey-planner/v3/graphql
+      body: json
+      changes: false
+      note: GraphQL queries only (the journey planner has no mutations)
+    limits:
+      calls_per_minute: 60
+  read:
+    requests:
+      stops:
+        query: '{ stopPlacesByBbox(minimumLatitude: {south}, minimumLongitude: {west}, maximumLatitude: {north}, maximumLongitude: {east}) { id name latitude longitude transportMode } }'
+        records: data.stopPlacesByBbox
   gtfs: https://storage.googleapis.com/marduk-production/outbound/gtfs/rb_norway-aggregated-gtfs.zip
   note: 'Keyless: requests carry ET-Client-Name: <company>-<application> (the plugin sends acropolisdocs-geo-mapping); a stopPlace query answered ''Oslo
     S'' on 2026-11-20. The GTFS zip answered HEAD 200.'
@@ -74,3 +94,7 @@ maintenance:
   - rev: 1
     date: '2026-11-20'
     note: 'Added (3.1.0, library P3): a GraphQL query and the GTFS HEAD answered on 2026-11-20 without a key.'
+  - rev: 2
+    date: '2026-11-21'
+    note: '3.2.0: stops in a box through library_request (a declared GraphQL POST with ET-Client-Name); 117 stop places answered over central Oslo
+      on 2026-11-21.'

@@ -44,6 +44,9 @@ avoid_when:
 - 'More than 50 calls a day on a non-academic key, or a commercial integration: OpenTopography asks for a Plus or Enterprise key.'
 crs: EPSG:4326
 delivery:
+  sample:
+    params: {demtype: COP30}
+    bbox: -112.1,33.4,-112.0,33.5
   mode: fetch
   format: GeoTIFF
   requires_credential:

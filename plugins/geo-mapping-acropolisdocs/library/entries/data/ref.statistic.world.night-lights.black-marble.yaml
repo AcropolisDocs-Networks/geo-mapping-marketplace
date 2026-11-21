@@ -1,0 +1,87 @@
+id: ref.statistic.world.night-lights.black-marble
+type: statistic
+rev: 1
+status: active
+title: NASA Black Marble annual night lights (VNP46A4, 15 arc seconds), with an Earthdata token
+summary: 'Annual composites of night-time radiance from VIIRS (Black Marble VNP46A4, collection 2), snow-free, all viewing angles, in 10 x 10
+  degree HDF5 tiles from LAADS DAAC''s cloud archive; the plugin reads the tiles a window touches into one GeoTIFF (nW/cm²/sr). A proxy for where
+  people and activity are, for a density surface or a context layer.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [demographics, energy, general]
+  use_for: [density-surface, context-basemap]
+  avoid_for: [engineering-grade, site-precision, parcel-level, normalization]
+  scale: [world, national, regional, state, metro]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [annual]
+  tier: [T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- Where lights are at night across a country, a metro area or a corridor, for demand, outage context or settlement (earthdata.py nightlights,
+  the MCP tool earthdata_nightlights).
+avoid_when:
+- Population counts; lights measure radiance, not people (WorldPop, GHSL or Kontur count people).
+- A window that touches more than 4 ten-degree tiles (each about 95 MB).
+pairs_with: [ref.public-service.world.earth-observation.nasa-earthdata, ref.statistic.world.population.ghsl]
+crs: EPSG:4326
+join:
+  key: none
+  type: raster
+  note: 'No join: radiance is read under polygons with raster_io.zonal (mean or sum of lit pixels), or drawn as a density surface.'
+delivery:
+  mode: fetch
+  tool: earthdata
+  url_template: https://data.laadsdaac.earthdatacloud.nasa.gov/prod-lads/VNP46A4/VNP46A4.A{year}001.h{h}v{v}.002.{production}.h5
+  format: HDF5 (HDF-EOS5 grid VIIRS_Grid_DNB_2d, AllAngle_Composite_Snow_Free, uint16, scale 0.1, fill 65535), 2400 x 2400 per tile
+  cap: 4 tiles a map
+  requires_credential:
+    name: earthdata
+    kind: bearer
+    class: secret
+    host: cmr.earthdata.nasa.gov
+    host_suffixes:
+    - .earthdatacloud.nasa.gov
+    - .eosdis.nasa.gov
+    handoff_hosts:
+    - .s3.us-west-2.amazonaws.com
+    inject:
+      bearer: true
+    signup_url: https://urs.earthdata.nasa.gov/users/new
+    free: true
+    limits: '"EDL Tokens will expire after a set duration (currently 60 days)" (LAADS DAAC, Download Files Using EDL Tokens, read 2026-11-21)'
+    note: The same cred:earthdata as every NASA archive.
+  note: 'CMR collection C3860065683-LAADS (VNP46A4 version 2, cloud hosted, from 2012, seen 2026-11-21); a granule over Phoenix (h06v05) is about
+    94 MB, with its https link on data.laadsdaac.earthdatacloud.nasa.gov.'
+source:
+  publisher: NASA Goddard Space Flight Center (Black Marble team), distributed by LAADS DAAC
+  product: VIIRS/NPP Lunar BRDF-Adjusted Nighttime Lights Yearly L3 Global 15 arc second Linear Lat Lon Grid (VNP46A4), collection 2
+  url: https://ladsweb.modaps.eosdis.nasa.gov/missions-and-measurements/products/VNP46A4/
+  terms_url: https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance
+url_verified_on: '2026-11-21'
+vintage:
+  current: annual composites from 2012
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Night lights: NASA Black Marble VNP46A4 (Román, M.O. et al., 2018, Remote Sensing of Environment 210), LAADS DAAC.'
+  note: A NASA-led mission's product, CC0 under the ESDIS data use guidance (read 2026-11-21), which asks for the dataset citation.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-21'
+  verify_by: '2027-11-21'
+  check:
+    kind: http_get
+    url: https://cmr.earthdata.nasa.gov/search/collections.json?short_name=VNP46A4
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-21'
+    note: 'Added (3.2.0): CMR lists VNP46A4 v2 granules by box and year (2026-11-21); the tile download goes with the Earthdata token from LAADS''s
+      cloud archive.'

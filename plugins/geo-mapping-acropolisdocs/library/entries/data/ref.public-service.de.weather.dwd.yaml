@@ -39,6 +39,8 @@ use_when:
 avoid_when:
 - 'Forecasts: those are DWD''s ICON and MOSMIX products in other folders.'
 delivery:
+  sample:
+    file: TU_Stundenwerte_Beschreibung_Stationen.txt
   mode: service
   protocol: files
   request: https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/hourly/air_temperature/recent/

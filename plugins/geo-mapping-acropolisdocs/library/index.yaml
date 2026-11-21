@@ -802,9 +802,9 @@ entries:
   file: entries/data/ref.public-service.ca-qc.transit.stm.yaml
   type: public-service
   status: active
-  rev: 1
+  rev: 2
   tags_digest: 36a4efee5b27
-  entry_digest: 5718345e1691
+  entry_digest: ea3e3d21220b
 - id: ref.public-service.ca.weather.eccc-geomet
   file: entries/data/ref.public-service.ca.weather.eccc-geomet.yaml
   type: public-service
@@ -825,14 +825,14 @@ entries:
   status: active
   rev: 1
   tags_digest: 732b394fc038
-  entry_digest: 8dac5ef9301b
+  entry_digest: 8cdc194f78d2
 - id: ref.public-service.de.weather.dwd
   file: entries/data/ref.public-service.de.weather.dwd.yaml
   type: public-service
   status: active
   rev: 1
   tags_digest: 80ed4006dbf1
-  entry_digest: f7947437f1ab
+  entry_digest: 3547b66aac62
 - id: ref.public-service.dk.mapping.dataforsyningen
   file: entries/data/ref.public-service.dk.mapping.dataforsyningen.yaml
   type: public-service
@@ -846,7 +846,7 @@ entries:
   status: active
   rev: 1
   tags_digest: 250339f70f86
-  entry_digest: 86d0fc006140
+  entry_digest: 90d4bec3974d
 - id: ref.public-service.es.weather.aemet
   file: entries/data/ref.public-service.es.weather.aemet.yaml
   type: public-service
@@ -865,44 +865,44 @@ entries:
   file: entries/data/ref.public-service.fi.transit.digitransit.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: e78929bf3b60
-  entry_digest: 1f6060d099c1
+  entry_digest: e371b0cf8ec2
 - id: ref.public-service.fi.weather.fmi
   file: entries/data/ref.public-service.fi.weather.fmi.yaml
   type: public-service
   status: active
   rev: 1
   tags_digest: 2f31c4c35a92
-  entry_digest: 0695c018cffa
+  entry_digest: 3a3fbb4d7b0e
 - id: ref.public-service.fr.weather.meteo-france
   file: entries/data/ref.public-service.fr.weather.meteo-france.yaml
   type: public-service
   status: active
   rev: 1
   tags_digest: 55f43523ce24
-  entry_digest: a89c736c512c
+  entry_digest: 34f305d02fc7
 - id: ref.public-service.nl.weather.knmi
   file: entries/data/ref.public-service.nl.weather.knmi.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: fb140c99b40b
-  entry_digest: d55a76b5afbd
+  entry_digest: 358186ccf4f6
 - id: ref.public-service.no.transit.entur
   file: entries/data/ref.public-service.no.transit.entur.yaml
   type: public-service
   status: active
-  rev: 1
+  rev: 2
   tags_digest: 5f98d22e862b
-  entry_digest: e8cfaf791362
+  entry_digest: 1da6ff52d8a1
 - id: ref.public-service.no.weather.met-frost
   file: entries/data/ref.public-service.no.weather.met-frost.yaml
   type: public-service
   status: active
   rev: 2
   tags_digest: 4b5475f38856
-  entry_digest: dfedb52877ca
+  entry_digest: 3cdf3321f19b
 - id: ref.public-service.se.mapping.lantmateriet
   file: entries/data/ref.public-service.se.mapping.lantmateriet.yaml
   type: public-service
@@ -916,21 +916,21 @@ entries:
   status: active
   rev: 1
   tags_digest: 5142451a21f5
-  entry_digest: cd4c822d1458
+  entry_digest: 13b42a5b0a2f
 - id: ref.public-service.uk.coverage.ofcom-api
   file: entries/data/ref.public-service.uk.coverage.ofcom-api.yaml
   type: public-service
   status: active
   rev: 1
   tags_digest: c5b800dce73c
-  entry_digest: 9bc2bc052921
+  entry_digest: d7bcc1050539
 - id: ref.public-service.uk.transit.tfl
   file: entries/data/ref.public-service.uk.transit.tfl.yaml
   type: public-service
   status: active
   rev: 1
   tags_digest: f29e165fd03c
-  entry_digest: b62522d4ce73
+  entry_digest: a5754f621620
 - id: ref.public-service.uk.weather.metoffice-datahub
   file: entries/data/ref.public-service.uk.weather.metoffice-datahub.yaml
   type: public-service
@@ -993,21 +993,21 @@ entries:
   status: active
   rev: 1
   tags_digest: 7d094528354b
-  entry_digest: 907f1132cd75
+  entry_digest: c68467a926df
 - id: ref.public-service.us.geocoder.census
   file: entries/data/ref.public-service.us.geocoder.census.yaml
   type: public-service
   status: active
   rev: 1
   tags_digest: fd9ad1911420
-  entry_digest: 9ffea4d8567b
+  entry_digest: f15073932644
 - id: ref.public-service.us.weather.noaa-cdo
   file: entries/data/ref.public-service.us.weather.noaa-cdo.yaml
   type: public-service
   status: active
   rev: 3
   tags_digest: a8b93991cb76
-  entry_digest: 8b391d2a3e43
+  entry_digest: ae2e25f0c385
 - id: ref.public-service.us.weather.nws
   file: entries/data/ref.public-service.us.weather.nws.yaml
   type: public-service
@@ -1021,7 +1021,7 @@ entries:
   status: active
   rev: 1
   tags_digest: 457caaa8aaf6
-  entry_digest: c9b4e3c05c46
+  entry_digest: ad59fba362d3
 - id: ref.public-service.world.climate.copernicus-cds
   file: entries/data/ref.public-service.world.climate.copernicus-cds.yaml
   type: public-service
@@ -1029,6 +1029,13 @@ entries:
   rev: 3
   tags_digest: 06d54cffdbea
   entry_digest: 26aa3a6c99c2
+- id: ref.public-service.world.earth-observation.nasa-earthdata
+  file: entries/data/ref.public-service.world.earth-observation.nasa-earthdata.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 368a64f3d3ae
+  entry_digest: 7be07f3c0cb0
 - id: ref.public-service.world.earthquake.usgs
   file: entries/data/ref.public-service.world.earthquake.usgs.yaml
   type: public-service
@@ -1042,21 +1049,21 @@ entries:
   status: active
   rev: 1
   tags_digest: 1b1b2a98579a
-  entry_digest: 6bb952418bb5
+  entry_digest: 3acdf2348ac3
 - id: ref.public-service.world.geocoder.nominatim
   file: entries/data/ref.public-service.world.geocoder.nominatim.yaml
   type: public-service
   status: active
   rev: 2
   tags_digest: a85ca8aec797
-  entry_digest: 78f3ab83fea0
+  entry_digest: fa1add7f96b7
 - id: ref.public-service.world.hazard.nasa-firms
   file: entries/data/ref.public-service.world.hazard.nasa-firms.yaml
   type: public-service
   status: active
   rev: 3
   tags_digest: 21f99a1237d7
-  entry_digest: 74de190d19b1
+  entry_digest: 5c6b644ee523
 - id: ref.public-service.world.osm.overpass
   file: entries/data/ref.public-service.world.osm.overpass.yaml
   type: public-service
@@ -1068,9 +1075,9 @@ entries:
   file: entries/data/ref.public-service.world.platform.carto.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: f4e192a87cf0
-  entry_digest: 5883d3cf240f
+  entry_digest: 55623c573043
 - id: ref.public-service.world.router.ors
   file: entries/data/ref.public-service.world.router.ors.yaml
   type: public-service
@@ -1091,35 +1098,35 @@ entries:
   status: active
   rev: 5
   tags_digest: f677c51841c4
-  entry_digest: 9a0293abb7bb
+  entry_digest: 2325a1d1a876
 - id: ref.public-service.world.transit.navitia
   file: entries/data/ref.public-service.world.transit.navitia.yaml
   type: public-service
   status: active
   rev: 1
   tags_digest: 622bd3cf569a
-  entry_digest: f3ee11b706f7
+  entry_digest: 3303487d43ca
 - id: ref.public-service.world.transit.transitland
   file: entries/data/ref.public-service.world.transit.transitland.yaml
   type: public-service
   status: active
   rev: 2
   tags_digest: f0f1477ab458
-  entry_digest: f48f58c42af6
+  entry_digest: 00e38467fe41
 - id: ref.public-service.world.weather.open-meteo
   file: entries/data/ref.public-service.world.weather.open-meteo.yaml
   type: public-service
   status: active
   rev: 2
   tags_digest: 83435ef5ea2f
-  entry_digest: 670fd3961bb9
+  entry_digest: 7c67d3e5d662
 - id: ref.public-service.world.weather.openweathermap
   file: entries/data/ref.public-service.world.weather.openweathermap.yaml
   type: public-service
   status: active
   rev: 3
   tags_digest: 6aeeb8aff9a8
-  entry_digest: d3263b432ec8
+  entry_digest: 9e1e85e85704
 - id: ref.public-service.world.weather.visual-crossing
   file: entries/data/ref.public-service.world.weather.visual-crossing.yaml
   type: public-service
@@ -1133,7 +1140,7 @@ entries:
   status: active
   rev: 1
   tags_digest: f5759d59fb32
-  entry_digest: 056ab5387635
+  entry_digest: 4e8902dec456
 - id: ref.public-service.world.wikidata
   file: entries/data/ref.public-service.world.wikidata.yaml
   type: public-service
@@ -1281,6 +1288,13 @@ entries:
   rev: 2
   tags_digest: 84ae0466c1bf
   entry_digest: 545aed307c39
+- id: ref.statistic.world.night-lights.black-marble
+  file: entries/data/ref.statistic.world.night-lights.black-marble.yaml
+  type: statistic
+  status: active
+  rev: 1
+  tags_digest: 7db78f9e49a2
+  entry_digest: 5682da4debcd
 - id: ref.statistic.world.population.ghsl
   file: entries/data/ref.statistic.world.population.ghsl.yaml
   type: statistic
@@ -1449,13 +1463,20 @@ entries:
   rev: 1
   tags_digest: 1bd49d2988ce
   entry_digest: b8562ba92e1a
+- id: ref.terrain.world.dem.nasadem
+  file: entries/data/ref.terrain.world.dem.nasadem.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 5431e84da762
+  entry_digest: 6b6baad99a5f
 - id: ref.terrain.world.dem.opentopography
   file: entries/data/ref.terrain.world.dem.opentopography.yaml
   type: terrain
   status: active
   rev: 2
   tags_digest: c6dddac3cb0a
-  entry_digest: 85d5eb0736cf
+  entry_digest: cbd0196c0da0
 - id: ref.terrain.world.dem.terrarium
   file: entries/data/ref.terrain.world.dem.terrarium.yaml
   type: terrain

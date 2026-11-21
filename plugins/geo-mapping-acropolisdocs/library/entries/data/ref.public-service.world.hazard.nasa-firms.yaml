@@ -43,6 +43,10 @@ avoid_when:
 - 'Fire perimeters: FIRMS detections are 375 m (VIIRS) or 1 km (MODIS) pixels, not mapped perimeters.'
 - 'A large area over many days: one request can count as several transactions against the 5,000 per 10 minutes of a MAP_KEY.'
 delivery:
+  sample:
+    request: viirs-snpp
+    params: {days: '1'}
+    bbox: -112.5,33.2,-111.5,33.8
   mode: service
   protocol: csv
   format: CSV (latitude, longitude, bright_ti4, acq_date, acq_time, confidence, frp)

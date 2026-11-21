@@ -42,6 +42,8 @@ avoid_when:
 - 'Storing the data: current conditions may be cached 60 minutes and forecasts 24 hours, and nothing beyond the subscription term.'
 - 'A national weather service covers the country (DMI, SMHI, FMI, DWD, the NWS): an authority is better for a regulated deliverable.'
 delivery:
+  sample:
+    params: {place: London}
   mode: service
   protocol: rest-json
   requires_credential:

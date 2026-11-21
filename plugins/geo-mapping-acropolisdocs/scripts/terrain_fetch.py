@@ -165,9 +165,12 @@ _COVER: dict = {}
 NATIONAL = ("canada-mrdem", "ign-rge-alti", "flanders-dhmv", "lantmateriet", "ga-lidar-5m", "gsi-japan")   # 3.1.0 (T-08): bare-earth national models
 POLAR_SOURCES = ("arcticdem", "rema")                                       # the polar authorities, their voids filled by the next source
 CHAINS = {"relief": ("3dep",) + NATIONAL + POLAR_SOURCES + ("copernicus", "terrarium"),       # T-09: a picture may use a surface model
-          "analysis": ("3dep",) + NATIONAL + ("terrarium",) + POLAR_SOURCES + ("copernicus",)}  # profiles, line of sight: bare earth first, a surface model last
+          "analysis": ("3dep",) + NATIONAL + ("nasadem", "terrarium") + POLAR_SOURCES + ("copernicus",)}
+# 3.2.0: NASADEM (reprocessed SRTM) is the bare ground for an analysis outside the national models when the person's Earthdata token is
+# registered (cred:earthdata); without it the chain passes it over with an INFO and goes on to Terrarium. A relief picture names it with
+# terrain.source: nasadem.  # profiles, line of sight: bare earth first, a surface model last
 SOURCE_NAMES = ("auto", "3dep", "terrarium", "copernicus", "canada-mrdem", "gsi-japan", "ga-lidar-5m", "ign-rge-alti", "flanders-dhmv", "flanders-lidar",
-                "lantmateriet", "arcticdem", "rema", "gebco")
+                "lantmateriet", "arcticdem", "rema", "gebco", "nasadem", "opentopography")
 FULL_SHARE = 0.995
 SEAM_PX = 2
 
@@ -568,14 +571,15 @@ def dem_for(bounds_wgs84, target_m_per_px: float = 30.0, source: str = "auto", c
     purpose = purpose or ("relief" if surface_ok else "analysis")
     skipped: list = []
     plan = plan_sources(b, src, purpose, skipped)
-    for s in skipped:
-        si = source_info(s)
-        fs.append(finding("MAP-TER-001", "INFO", f"{si.get('title') or s} covers this window at {si.get('native_m')} m but needs your free login "
-                          f"(map-credentials add {si.get('credential')}); the next source is used"))
     kw = dict(http=http, fetcher=fetcher, max_tiles=max_tiles, max_px=max_px)
     if src != "auto" and (not plan or plan[0][0] != src):
         fs.append(finding("MAP-TER-001", "INFO", f"{source_info(src).get('title') or src} has no data for this window (its coverage does not reach it); "
                           f"{plan[0][0] if plan else 'terrarium'} is used, the next source for {purpose}"))
+    for s in skipped:
+        si = source_info(s)
+        what = "your free Earthdata token" if si.get("credential") == "earthdata" else "your free login"
+        fs.append(finding("MAP-TER-001", "INFO", f"{si.get('title') or s} covers this window at {si.get('native_m')} m but needs {what} "
+                          f"(map-credentials add {si.get('credential')}); the next source is used"))
     if len(plan) == 1:
         s = plan[0][0]
         if src == "auto":

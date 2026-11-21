@@ -53,7 +53,8 @@ DEFAULTS = {"timeout_s": 30.0, "max_bytes": 50_000_000, "retries": 2}
 READ_REQUESTS = {"getcapabilities", "describefeaturetype", "getfeature", "getmap", "getfeatureinfo", "getlegendgraphic", "getstyles", "gettile", "describelayer", "getpropertyvalue", "liststoredqueries"}
 WRITE_REQUESTS = {"transaction", "lockfeature", "getfeaturewithlock", "createstoredquery", "dropstoredquery"}
 ARCGIS_WRITE = {"addfeatures", "updatefeatures", "deletefeatures", "applyedits", "append", "createservice", "deleteservice", "addattachment", "updateattachment", "deleteattachments", "uploads", "addtopipeline", "truncate", "calculate", "updatedefinition", "adddefinition", "deletefromdefinition", "refresh", "rebuildcache"}
-SECRET_PARAM = re.compile(r"^(key|token|apikey|api_key|api-key|access_token|auth|authorization|password|passwd|pwd|secret|sig|signature|x-api-key|client_secret|sas|code)$", re.I)
+SECRET_PARAM = re.compile(r"^(key|token|apikey|api_key|api-key|access_token|auth|authorization|password|passwd|pwd|secret|sig|signature|x-api-key|client_secret|sas|code"
+                          r"|x-amz-signature|x-amz-credential|x-amz-security-token|policy|key-pair-id)$", re.I)   # 3.2.0: a signed S3 or CloudFront hand-off address
 PATH_SLOT_SHOWN = re.compile(r"(?i)\{key\}|%7Bkey%7D")       # 1.0.2: the path slot a credential fills at send time
 
 
@@ -192,12 +193,18 @@ def proxy_for(url: str, env=None) -> str | None:
 REDIRECTS = (301, 302, 303, 307, 308)
 
 
+def _covers(auth, host) -> bool:
+    """3.2.0: the credential's own host, or a host of its family (one Earthdata token for CMR and every DAAC)."""
+    fn = getattr(auth, "covers", None)
+    return bool(fn(host or "")) if callable(fn) else (host or "").lower() == auth.host
+
+
 def check_auth_target(url: str, auth) -> None:
     """MAP-CRED-005: a credential goes only to its registered host, over https, on the default port."""
     u = urllib.parse.urlsplit(url)
     if (u.scheme or "").lower() != "https":
         raise Refusal(f"the credential '{auth.name}' is sent only over https; this address is not https", "MAP-CRED-005")
-    if (u.hostname or "").lower() != auth.host:
+    if not _covers(auth, u.hostname):
         raise Refusal(f"the credential '{auth.name}' is registered for {auth.host} and is never sent to another host ({untrusted(u.hostname, 80)})", "MAP-CRED-005")
     if u.port not in (None, 443):
         raise Refusal(f"the credential '{auth.name}' is sent only to the default https port of {auth.host}", "MAP-CRED-005")
@@ -228,7 +235,7 @@ class SafeHTTP:
     def _auth_for(self, url: str, auth):
         if auth is not None:
             return auth
-        if self.auth is not None and (urllib.parse.urlsplit(url).hostname or "").lower() == self.auth.host:
+        if self.auth is not None and _covers(self.auth, urllib.parse.urlsplit(url).hostname):
             return self.auth
         return None
 
@@ -325,6 +332,7 @@ class SafeHTTP:
             hdrs["Origin"] = origin
         cap = min(int(max_bytes or self.limits["max_bytes"]), self.limits["max_bytes"])
         attempt = 0
+        hops = 0
         while True:
             t0 = self._clock()
             resp, final = self._follow(full, method, hdrs, cap, cred, body=payload)
@@ -339,6 +347,27 @@ class SafeHTTP:
                                    "a redirect after a request that is not a GET is reported, not followed", "MAP-SVC-020", status=status)
             if cred is not None and status in REDIRECTS:
                 nxt = resp["location"]
+                nhost = urllib.parse.urlsplit(nxt).hostname or ""
+                if cred.is_reject_redirect(nxt) and callable(getattr(cred, "reject_redirect_marks", None)) and not cred.reject_redirect_marks():
+                    # 3.2.0: Earthdata sends an unknown token and a token whose profile has not approved this archive to the same sign-in page
+                    raise ServiceError(f"the service sent the request carrying '{cred.name}' to its sign-in page ({untrusted(urllib.parse.urlsplit(nxt).path, 80)}): "
+                                       f"the token was not accepted for {untrusted(urllib.parse.urlsplit(full).hostname, 80)}. Either it has ended, or your account has "
+                                       "not approved this archive's application yet (sign in at the service and approve it once). The credential was not marked "
+                                       f"rejected; map-credentials check {cred.name} --probe tests the token itself", "MAP-SVC-013", auth=True, status=status)
+                fam = getattr(cred, "family", None) or {}
+                if (fam.get("hosts") or fam.get("suffixes") or fam.get("handoff")) and method in ("GET", "HEAD") and hops < MAX_REDIRECTS \
+                        and not cred.is_reject_redirect(nxt) and urllib.parse.urlsplit(nxt).scheme == "https":
+                    # 3.2.0: a redirect inside the credential's family keeps it; one to a declared hand-off host (a signed S3 or CloudFront
+                    # address) is followed without it; any other is refused below
+                    if _covers(cred, nhost) or (callable(getattr(cred, "hands_off", None)) and cred.hands_off(nhost)):
+                        check_read_only(nxt)
+                        hops += 1
+                        if not _covers(cred, nhost):
+                            if self.audit.calls:
+                                self.audit.calls[-1]["handoff_to"] = nhost      # the next call goes there without the credential
+                            cred = None
+                        full = nxt
+                        continue
                 if cred.is_reject_redirect(nxt):
                     cred.rejected(f"redirect to {urllib.parse.urlsplit(nxt).path}", url=redact_url(full))
                     raise ServiceError(f"the service rejected the credential '{cred.name}' (HTTP {status} to its reject page {untrusted(urllib.parse.urlsplit(nxt).path, 80)}); "

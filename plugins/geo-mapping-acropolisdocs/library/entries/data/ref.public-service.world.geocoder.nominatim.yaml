@@ -43,6 +43,9 @@ avoid_when:
 - 'Bulk or recurring geocoding: "bulk geocoding of larger amounts of data is not encouraged"; recurring scripts are held to 4 requests a minute.'
 - 'Search-as-you-type in a web page: autocomplete on the public server is forbidden.'
 delivery:
+  sample:
+    request: search
+    params: {query: Phoenix City Hall}
   mode: service
   protocol: rest-json
   request: https://nominatim.openstreetmap.org/search?q={query}&format=jsonv2&limit=1

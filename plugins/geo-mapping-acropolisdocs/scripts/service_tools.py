@@ -711,10 +711,10 @@ def credentials_status(store=None) -> dict:
 
 
 def credentials_add(name: str, credential_class: str = "", confirm_restricted: bool = False, host: str = "", inject: str = "", kind: str = "", expires: str = "",
-                    store=None) -> dict:
+                    store=None, also_hosts: str = "", adopt: bool = True) -> dict:
     import credentials as cr
     return _cred_result(cr.add(store or cred_store(), name, cls=credential_class or None, restricted=bool(confirm_restricted), host=host or None, inject=inject or None,
-                               kind=kind or None, expires=expires or None))
+                               kind=kind or None, expires=expires or None, also_hosts=also_hosts or None, adopt=bool(adopt)))
 
 
 def credentials_check(name: str, probe: bool = False, confirm_probe: str = "", fix: bool = False, store=None, http=None) -> dict:
@@ -1196,3 +1196,96 @@ def in_work_folder(work_folder: str, fn, *a, **k) -> dict:
     if isinstance(res, dict) and res.get("ok") is not False:
         res = {**located(res, folder), "work_folder": str(od)}
     return res
+
+
+# ---------------------------------------------------------------------------------------------------------------- 3.2.0: NASA Earthdata
+def _ed_fail(ex) -> dict:
+    kind = "usage" if ex.code == gc.EXIT_USAGE else "refused" if ex.code == gc.EXIT_REFUSED else "service"
+    return fail(kind, ex.rule or "MAP-SVC-013", str(ex))
+
+
+def earthdata_search_tool(query: str = "", short_name: str = "", kind: str = "collections", bbox: str = "", temporal: str = "", provider: str = "",
+                          version: str = "", concept_id: str = "", limit: int = 10, cloud_hosted: bool = False, with_token: bool = False,
+                          http=None, store=None) -> dict:
+    """CMR search (keyless unless with_token): collections by keyword or short name, or a collection's granules in a box and a date range."""
+    import earthdata as ed
+    try:
+        kw = {k: v for k, v in (("short_name", short_name), ("bbox", bbox), ("temporal", temporal), ("provider", provider), ("version", version),
+                                ("concept_id", concept_id), ("keyword", query)) if v}
+        if cloud_hosted and kind == "collections":
+            kw["cloud_hosted"] = True
+        return ed.search(kind or "collections", http=http, store=store or (cred_store() if with_token else None), with_token=bool(with_token),
+                         limit=int(limit or 10), **kw)
+    except ed.EarthdataError as ex:
+        return _ed_fail(ex)
+
+
+def earthdata_fetch_tool(short_name: str = "", bbox: str = "", temporal: str = "", version: str = "", concept_id: str = "", urls: str = "",
+                         max_files: int = 6, confirm: bool = False, refresh: bool = False, http=None, store=None) -> dict:
+    """Without confirm: the plan (files, MB, hosts, folder). With confirm=true: download them with the person's one Earthdata token."""
+    import earthdata as ed
+    kw = {k: v for k, v in (("short_name", short_name), ("bbox", bbox), ("temporal", temporal), ("version", version), ("concept_id", concept_id)) if v}
+    ul = [u.strip() for u in str(urls or "").split(",") if u.strip()] or None
+    try:
+        if not confirm:
+            p = ed.plan(urls=ul, max_files=max(1, min(int(max_files or 6), ed.MAX_FILES)), http=http, **kw)
+            p["next"] = ("show the person the files, their size and the hosts the token goes to, then call again with confirm=true after they agree"
+                         if p["count"] else "nothing matched: widen the box or the dates, or check the short name with earthdata_search")
+            try:
+                p["token_registered"] = bool((store or cred_store()).get(ed.CRED))
+                if not p["token_registered"]:
+                    p["token_hint"] = ("run map-credentials add earthdata first: it takes over earthdata-* per-host credentials, or names the file "
+                                       "to paste your Earthdata Login token into (urs.earthdata.nasa.gov, Generate Token)")
+            except Exception:  # noqa: BLE001
+                pass
+            return p
+        return ed.fetch(urls=ul, max_files=max(1, min(int(max_files or 6), ed.MAX_FILES)), refresh=bool(refresh), http=http, store=store or cred_store(), **kw)
+    except ed.EarthdataError as ex:
+        return _ed_fail(ex)
+
+
+def earthdata_nightlights_tool(bbox: str = "", year: int = 0, out: str = "", confirm: bool = False, http=None, store=None) -> dict:
+    """Black Marble VNP46A4 annual night lights for a box, as one GeoTIFF (nW/cm²/sr). Without confirm: the tiles and their size."""
+    import earthdata as ed
+    try:
+        b = ed._bbox(bbox)
+        if b is None:
+            return fail("usage", "MAP-SVC-001", "bbox is W,S,E,N")
+        tiles = ed.nightlights_tiles(b)
+        if not confirm:
+            return {"ok": True, "tiles": [f"h{h:02d}v{v:02d}" for h, v in tiles], "approx_mb": 95 * len(tiles), "year": year or "the latest",
+                    "credential": f"cred:{ed.CRED}", "next": "show the person the tile count and size, then call again with confirm=true"}
+        dest = Path(out) if out else gc.data_dir("earthdata") / f"black-marble-{year or 'latest'}-{'_'.join(f'{x:g}' for x in b)}.tif"
+        if not dest.is_absolute():
+            dest = gc.outputs_dir().parent / dest
+        return ed.nightlights(b, dest, year=int(year) if year else None, http=http, store=store or cred_store())
+    except ed.EarthdataError as ex:
+        return _ed_fail(ex)
+
+
+# ---------------------------------------------------------------------------------------------------------------- 3.2.0: a library entry's own request
+def _kv(text: str) -> dict:
+    out = {}
+    for piece in [x for x in str(text or "").split(",") if "=" in x]:
+        k, _, v = piece.partition("=")
+        out[k.strip()] = v.strip()
+    return out
+
+
+def library_request_tool(entry_id: str, request: str = "", params: str = "", bbox: str = "", file: str = "", refresh: bool = False, plan_only: bool = False,
+                         use_sample: bool = False, http=None, store=None) -> dict:
+    import library_request as lr
+    try:
+        if use_sample:                                # 3.2.0: the entry's own test request, to check that the source answers
+            import ref_fetch as rf
+            smp = lr.sample(rf.find_entry(entry_id))
+            if not smp:
+                return fail("usage", "MAP-SVC-001", f"{entry_id} has no sample request")
+            request, bbox, file = smp["request"] or request, smp["bbox"] or bbox, smp["file"] or file
+            params = ",".join(f"{k}={v}" for k, v in {**smp["params"], **_kv(params)}.items())
+        if plan_only:
+            return lr.plan(entry_id, request or None, _kv(params), bbox or None, file or None)
+        return lr.run(entry_id, request or None, _kv(params), bbox or None, file or None, bool(refresh), http=http, store=store or cred_store())
+    except (lr.RequestError,) as ex:
+        kind = "usage" if ex.code == gc.EXIT_USAGE else "refused" if ex.code == gc.EXIT_REFUSED else "service"
+        return fail(kind, ex.rule or "MAP-SVC-013", str(ex), **ex.extra)

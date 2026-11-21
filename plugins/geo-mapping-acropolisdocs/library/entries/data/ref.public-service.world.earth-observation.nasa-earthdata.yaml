@@ -1,0 +1,117 @@
+id: ref.public-service.world.earth-observation.nasa-earthdata
+type: public-service
+rev: 1
+status: active
+title: NASA Earthdata (CMR search and every DAAC), one Earthdata Login token
+summary: 'NASA''s Earth observation archives: the Common Metadata Repository (CMR) to find collections and granules, and downloads from every
+  DAAC (LP DAAC, NSIDC, LAADS, GES DISC, PO.DAAC, ORNL, GHRC, ASDC, ASF) with ONE Earthdata Login bearer token, registered once as cred:earthdata.
+  The plugin''s NASADEM terrain and Black Marble night lights use it.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [imagery, general, hazard, weather]
+  use_for: [context-basemap, density-surface, site-map]
+  avoid_for: [engineering-grade, site-precision, parcel-level]
+  scale: [world, national, regional, state, metro]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- A NASA product for a map (elevation, night lights, land cover, vegetation, snow and ice, precipitation, sea surface) found by short name in CMR
+  and downloaded with the person's own Earthdata token (earthdata_search, then earthdata_fetch after the person agrees to the plan).
+- One token for every archive: map-credentials add earthdata takes over earthdata-lpdaac, earthdata-nsidc, earthdata-laads and the like.
+avoid_when:
+- A daily global mosaic as a picture behind a map: NASA GIBS serves those as keyless tiles (ref.basemap-provider.nasa-gibs).
+- Hundreds of granules or a long time series: the fetch is capped (24 files, 1.5 GB); NASA's Harmony or AppEEARS subsetting services fit that work.
+- 'Active fires: NASA FIRMS (ref.public-service.world.hazard.nasa-firms) has its own MAP_KEY and a CSV area API.'
+pairs_with: [ref.terrain.world.dem.nasadem, ref.statistic.world.night-lights.black-marble, ref.basemap-provider.nasa-gibs]
+delivery:
+  mode: service
+  protocol: rest-json
+  tool: earthdata
+  format: CMR search JSON (collections, granules with their data links); granule files as the archive serves them (HDF5, netCDF, GeoTIFF, zipped HGT)
+  request: https://cmr.earthdata.nasa.gov/search/collections.json?short_name=NASADEM_HGT
+  requires_credential:
+    name: earthdata
+    kind: bearer
+    class: secret
+    host: cmr.earthdata.nasa.gov
+    hosts:
+    - n5eil01u.ecs.nsidc.org
+    - datapool.asf.alaska.edu
+    - sentinel1.asf.alaska.edu
+    - cumulus.asf.alaska.edu
+    host_suffixes:
+    - .earthdata.nasa.gov
+    - .earthdatacloud.nasa.gov
+    - .eosdis.nasa.gov
+    handoff_hosts:
+    - .s3.us-west-2.amazonaws.com
+    - .s3.amazonaws.com
+    - .cloudfront.net
+    replaces:
+    - earthdata-lpdaac
+    - earthdata-nsidc
+    - earthdata-laads
+    - earthdata-gesdisc
+    - earthdata-podaac
+    - earthdata-ornl
+    - earthdata-ghrc
+    - earthdata-asdc
+    - earthdata-asf
+    - earthdata-cmr
+    inject:
+      bearer: true
+    reject:
+      status:
+      - 401
+      redirect_path:
+      - /oauth/authorize
+      redirect_marks: false
+    probe: https://cmr.earthdata.nasa.gov/search/collections.json?page_size=1&short_name=NASADEM_HGT
+    lifetime_days: 60
+    signup_url: https://urs.earthdata.nasa.gov/users/new
+    free: true
+    limits: '"EDL Tokens will expire after a set duration (currently 60 days)"; "An Earthdata Download token (EDL) will work on any Earthdata site
+      including all LAADS DAAC sites" (LAADS DAAC, Download Files Using EDL Tokens, read 2026-11-21)'
+    note: One token for CMR and every DAAC; make it at urs.earthdata.nasa.gov (Generate Token). A cloud DAAC hands the download to a signed S3
+      address, which gets no token.
+  note: 'Seen on 2026-11-21: CMR answers a made-up token with HTTP 401 {"errors":["Token does not exist"]} (the probe); LP DAAC''s cloud archive
+    answers a request without a token, or with a made-up one, with 302 to urs.earthdata.nasa.gov/oauth/authorize (the same page a valid token
+    gets when the person''s profile has not approved that archive''s application, so the redirect does not mark the token rejected). CMR''s
+    metadata search needs no token.'
+source:
+  publisher: NASA Earth Science Data and Information System (ESDIS)
+  product: Common Metadata Repository search API and the EOSDIS DAAC archives behind Earthdata Login
+  url: https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html
+  terms_url: https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance
+url_verified_on: '2026-11-21'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Data: NASA Earthdata (EOSDIS); cite each dataset by its DOI.'
+  note: 'ESDIS data use guidance (read 2026-11-21): "data provided from a NASA-led mission are licensed as Creative Commons Zero (CC0)"; "Non-NASA
+    data available through the ESDIS project is subject to the license arrangements of the sponsoring organization"; NASA asks that datasets be cited
+    and that NASA material not suggest endorsement. Each fetch record names the collection so its DOI can be cited.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-21'
+  verify_by: '2027-02-21'
+  check:
+    kind: http_get
+    url: https://cmr.earthdata.nasa.gov/search/collections.json?short_name=NASADEM_HGT
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-21'
+    note: 'Added (3.2.0): one Earthdata token for CMR and every DAAC (cred:earthdata, a family of hosts), the signed S3 hand-off followed without the
+      token; CMR''s 401 for a made-up token and LP DAAC''s 302 to the sign-in page seen on 2026-11-21; LAADS''s token page and the ESDIS data use
+      guidance read.'

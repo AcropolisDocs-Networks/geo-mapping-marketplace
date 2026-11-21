@@ -1,6 +1,6 @@
 id: ref.public-service.world.platform.carto
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: CARTO platform API (US East region)
 summary: "The person's own CARTO account on the US East platform host (connections, maps, SQL and data services), called with an API access token sent as a bearer token. Other regions use their own host."
@@ -36,8 +36,19 @@ avoid_when:
 - The person has no CARTO account, or wants to redistribute what the account holds without checking their own CARTO agreement; the free CARTO basemap tiles are a different service (carto-positron, host basemaps.cartocdn.com, key sent as ?key=).
 - The account is in another region: register that region's host (gcp-europe-west1, gcp-asia-northeast1, gcp-australia-southeast1 .api.carto.com) as its own credential.
 delivery:
+  sample:
+    request: connections
   mode: service
   protocol: rest-json
+  request: https://gcp-us-east1.api.carto.com/v3/connections
+  requests:
+    connections: https://gcp-us-east1.api.carto.com/v3/connections
+    query: https://gcp-us-east1.api.carto.com/v3/sql/{connection}/query?q={q}
+  read:
+    free_params: [q]
+    requests:
+      query:
+        records: rows
   requires_credential:
     name: carto
     kind: bearer
@@ -86,3 +97,6 @@ maintenance:
     date: '2026-11-18'
     note: 'Active (1.21.1): the terms located (carto.com/legal points to the Platform Terms & Conditions; the text itself could not be read), the
       licence kept at its most restrictive (no redistribution, no commercial use claimed); the rate-limit page read (per IP, 429).'
+  - rev: 3
+    date: '2026-11-21'
+    note: '3.2.0: the connections list and the SQL API query (a SELECT on one of the person''s connections) are sent by library_request with the bearer token; without one the API answered 401 Authentication failed on 2026-11-21.'

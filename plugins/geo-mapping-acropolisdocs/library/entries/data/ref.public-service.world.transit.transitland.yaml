@@ -42,6 +42,8 @@ avoid_when:
 - The free quota and terms were not read (2026-11-07).
 - 'Each feed keeps its own licence: Transitland lists it per feed.'
 delivery:
+  sample:
+    params: {}
   mode: service
   protocol: rest-json
   requires_credential:

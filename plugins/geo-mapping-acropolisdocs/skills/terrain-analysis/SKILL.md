@@ -69,7 +69,7 @@ requirements-dev.txt`, which brings the test stack. On the person's own computer
 
 ## Caveats, said every time they matter
 
-1. **Bare earth.** 3DEP and the Terrain Tiles are ground height. Buildings, trees, towers and other clutter are not in them, so a clear line of sight is optimistic: it says the ground does not block the path, not that nothing does. Say so in every LOS and viewshed reply. A 1 m lidar DEM is still bare earth.
+1. **Bare earth.** 3DEP and the Terrain Tiles are ground height. Buildings, trees, towers and other clutter are not in them, so a clear line of sight is optimistic: it says the ground does not block the path, not that nothing does. Say so in every LOS and viewshed reply. A 1 m lidar DEM is still bare earth. NASADEM (3.2.0, with an Earthdata token) is radar ground: canopy and buildings partly in it.
 2. **Resolution.** A 10 m or 30 m cell averages the ground across it; a ridge narrower than a cell, a cut or an embankment can be missed. The report states `dem_resolution_m`; repeat it.
 3. **Earth curvature and k.** The path is corrected for the bulge of an effective earth of radius k x 6,371 km. k = 4/3 (the default) is the standard atmosphere's refraction, the usual microwave planning value; k = 1 is the geometric earth; k = 2/3 is a pessimistic sub-refractive case. A 30 km path bulges 13 m at k = 4/3. Say which k was used.
 4. **Fresnel.** With a frequency, the first Fresnel zone radius at the worst point is given (17.32 x sqrt(d1 x d2 / (f x D)) metres, distances in km, f in GHz, largest at mid-path) and the link is "Fresnel ok" when at least 60 percent of F1 is clear everywhere. Without a frequency only the geometric line is judged. Neither is a link budget: no rain, no multipath, no antenna pattern.

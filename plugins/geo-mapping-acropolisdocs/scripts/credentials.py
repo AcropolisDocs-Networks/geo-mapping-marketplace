@@ -12,7 +12,7 @@ credential folder to the session and these scripts read the key in-process (fall
 or a printed command. Whatever this module learns about a credential file is a handful of yes/no answers, never its content.
 
     credentials.py status                               names, hosts, classes, status, dates; never a value
-    credentials.py add NAME [--class browser] [--confirm-restricted] [--host H --inject query:key|header:NAME|header:NAME:PREFIX|bearer|basic|path|user=header:A,key=header:B [--kind userkey]|postgres:database=D,user=U[,port=P][,sslmode=S]] [--expires YYYY-MM-DD]
+    credentials.py add NAME [--also-hosts H1,H2] [--no-adopt] [--class browser] [--confirm-restricted] [--host H --inject query:key|header:NAME|header:NAME:PREFIX|bearer|basic|path|user=header:A,key=header:B [--kind userkey]|postgres:database=D,user=U[,port=P][,sslmode=S]] [--expires YYYY-MM-DD]
     credentials.py check NAME [--probe --confirm-probe HOST]
     credentials.py rotate NAME [--finish] [--probe --confirm-probe HOST]
     credentials.py remove NAME [--delete-files]
@@ -72,6 +72,53 @@ PATH_RE = re.compile(r"^(?:\$HOME|~|[A-Za-z]:)?[\\/][A-Za-z0-9._\\/@+= -]+$")
 # A connected folder seen from the device shell can report invented permissions: every file mode 700, chmod ignored (checked on the owner's
 # Windows machine, 2026-11-05). On these file systems privacy is not verifiable from here (MAP-CRED-012), never "yes".
 SYNTHETIC_FS = ("9p", "virtiofs", "drvfs", "vboxsf", "vmhgfs", "prl_fs", "cifs", "smb3", "smbfs", "ntfs", "ntfs3", "vfat", "msdos", "exfat")
+# 3.2.0: one credential for a family of hosts (NASA Earthdata: one bearer token for CMR and every DAAC). A family is the primary `host`, exact
+# `hosts` and `host_suffixes` of at least three labels that one organisation owns (".earthdata.nasa.gov"); only a library entry declares suffixes.
+# `handoff_hosts` are suffixes a credentialed request may be redirected to, followed WITHOUT the credential (a DAAC hands a download to a signed
+# S3 or CloudFront address); any other redirect is still refused.
+SUFFIX_RE = re.compile(r"^\.(?:[a-z0-9](?:[a-z0-9-]{0,62})\.){2,}[a-z]{2,63}$")
+HANDOFF_RE = re.compile(r"^\.(?:[a-z0-9](?:[a-z0-9-]{0,62})\.)+[a-z]{2,63}$")
+MAX_FAMILY = 40
+
+
+def _hostlist(v) -> list[str]:
+    if isinstance(v, str):
+        v = [x for x in re.split(r"[,\s]+", v) if x]
+    return [str(x).strip().lower() for x in (v or []) if str(x).strip()]
+
+
+def family_of(e: dict | None, block: dict | None = None) -> dict:
+    """The hosts a credential may be sent to, from its registry entry, else its library block: {hosts: [...], suffixes: [...], handoff: [...]},
+    each checked (a malformed one is dropped, never widened)."""
+    e, block = e or {}, block or {}
+    hosts = [h for h in _hostlist(e.get("hosts") if e.get("hosts") is not None else block.get("hosts")) if HOST_RE.match(h)][:MAX_FAMILY]
+    suf = [s for s in _hostlist(e.get("host_suffixes") if e.get("host_suffixes") is not None else block.get("host_suffixes")) if SUFFIX_RE.match(s)][:MAX_FAMILY]
+    hand = [s for s in _hostlist(e.get("handoff_hosts") if e.get("handoff_hosts") is not None else block.get("handoff_hosts")) if HANDOFF_RE.match(s)][:MAX_FAMILY]
+    return {"hosts": hosts, "suffixes": suf, "handoff": hand}
+
+
+def covers(primary: str, fam: dict | None, host: str) -> bool:
+    """Whether `host` is the credential's own host or one of its family (an exact host, or a name under a declared suffix)."""
+    host = (host or "").lower().rstrip(".")
+    if not host:
+        return False
+    if host == (primary or "").lower():
+        return True
+    fam = fam or {}
+    return host in (fam.get("hosts") or []) or any(host.endswith(s) for s in (fam.get("suffixes") or []))
+
+
+def family_problem(hosts, suffixes, handoff) -> str | None:
+    for h in _hostlist(hosts):
+        if not HOST_RE.match(h):
+            return f"'{h}' is not a host name (also_hosts takes exact names such as data.example.org)"
+    for s in _hostlist(suffixes):
+        if not SUFFIX_RE.match(s):
+            return f"'{s}' is not a host suffix of at least three labels starting with a dot (.earthdata.nasa.gov)"
+    for s in _hostlist(handoff):
+        if not HANDOFF_RE.match(s):
+            return f"'{s}' is not a redirect host suffix starting with a dot (.amazonaws.com)"
+    return None
 
 
 def finding(fid: str, sev: str, message: str, detail=None) -> dict:
@@ -1026,8 +1073,9 @@ class Resolved:
     """One credential, read for one request or one tool call. The value is held privately, noted for masking, and never returned."""
 
     def __init__(self, name: str, kind: str, host: str, inject: dict, value: str, *, cls: str = "secret", reject: dict | None = None, store: Store | None = None,
-                 findings: list[dict] | None = None, ref: str | None = None):
+                 findings: list[dict] | None = None, ref: str | None = None, family: dict | None = None):
         self.name, self.kind, self.host, self.inject, self.cls = name, kind, host.lower(), inject, cls
+        self.family = family or {"hosts": [], "suffixes": [], "handoff": []}     # 3.2.0: the other hosts this one credential is for
         self.reject = reject or {}
         self._u = ""
         if kind == "userkey":               # the file holds username:token; the token is the secret, the username an identifier sent beside it
@@ -1053,6 +1101,15 @@ class Resolved:
 
     def record(self) -> dict:
         return {"credential": self.name, "kind": self.kind, "host": self.host}
+
+    def covers(self, host: str) -> bool:
+        """3.2.0: whether this credential may be sent to `host` (its own host or its family)."""
+        return covers(self.host, self.family, host)
+
+    def hands_off(self, host: str) -> bool:
+        """3.2.0: whether a redirect to `host` may be followed with the credential left behind (a signed download address)."""
+        host = (host or "").lower().rstrip(".")
+        return bool(host) and not self.covers(host) and any(host.endswith(s) for s in (self.family.get("handoff") or []))
 
     def apply(self, url: str, headers: dict) -> tuple[str, dict]:
         """The request URL and headers with the credential added (called by SafeHTTP at send time only)."""
@@ -1115,7 +1172,12 @@ class Resolved:
     def is_reject_redirect(self, url: str) -> bool:
         u = urllib.parse.urlsplit(url)
         paths = self.reject.get("redirect_path") or []
-        return (not u.hostname or u.hostname.lower() == self.host) and any(u.path == p or u.path.endswith(p) for p in paths)
+        return (not u.hostname or self.covers(u.hostname)) and any(u.path == p or u.path.endswith(p) for p in paths)
+
+    def reject_redirect_marks(self) -> bool:
+        """3.2.0: a redirect to the reject page marks the credential rejected unless the entry says it can also mean something else
+        (Earthdata: a valid token whose profile has not approved that archive's application is sent to the same sign-in page)."""
+        return self.reject.get("redirect_marks", True) is not False
 
     def rejected(self, why: str, url: str | None = None) -> None:
         self.was_rejected = why
@@ -1179,6 +1241,8 @@ def resolve(ref: str, *, store: Store | None = None, host: str | None = None, bl
         path = store.path_of(e)
         reject = effective_reject(name, e.get("reject"), block, store)
         shape = e.get("shape") or (block or {}).get("shape")
+        lib_block = block or library_defaults(name, _try(store.entries, []))[0]
+        fam = family_of(e, lib_block if (lib_block or {}).get("host", "").lower() == ehost else None)
     else:
         name = (block or {}).get("name") or Path(r["path"]).stem
         kind = {"apikey": (block or {}).get("kind", "apikey"), "netrc": "basic", "file": "basic"}[r["kind"]]
@@ -1188,13 +1252,15 @@ def resolve(ref: str, *, store: Store | None = None, host: str | None = None, bl
         path = Path(os.path.expanduser(r["path"].replace("$HOME", "~")))
         reject = (block or {}).get("reject") or {}
         shape = (block or {}).get("shape")
+        fam = family_of(None, block)
         e = {"status": "unchecked"}
         if r["kind"] == "netrc":
             raise CredentialError([finding("MAP-CRED-001", "BLOCK", "netrc: references are for approved runs on your computer (credential-broker); register the login with map-credentials add instead")])
     if not ehost or not host_ok(ehost, kind):
         raise CredentialError([finding("MAP-CRED-013", "BLOCK", f"the credential '{name}' names no host it may be sent to; add it again with --host")])
-    if host and host.lower() != ehost:
-        raise CredentialError([finding("MAP-CRED-013", "BLOCK", f"the credential '{name}' is registered for {ehost}, but this request goes to {host}; it is never sent to another host")])
+    if host and not covers(ehost, fam, host):
+        also = (f" (or {', '.join(fam['hosts'] + ['*' + s for s in fam['suffixes']])})" if fam["hosts"] or fam["suffixes"] else "")
+        raise CredentialError([finding("MAP-CRED-013", "BLOCK", f"the credential '{name}' is registered for {ehost}{also}, but this request goes to {host}; it is never sent to another host")])
     if not inject:
         raw = e.get("inject") if r["kind"] == "cred" else (block or {}).get("inject")
         raise CredentialError([finding("MAP-CRED-001", "BLOCK", f"the credential '{name}' cannot be sent as registered: {inject_problem(raw)}")])
@@ -1223,7 +1289,8 @@ def resolve(ref: str, *, store: Store | None = None, host: str | None = None, bl
     warn = [x for x in found if x["severity"] != "BLOCK"]
     rv = _review_warnings(name, e)
     value = _read_value(path)
-    return Resolved(name, kind, ehost, inject, value, cls=cls, reject=reject, store=store if r["kind"] == "cred" else None, findings=warn + rv, ref=ref)
+    return Resolved(name, kind, ehost, inject, value, cls=cls, reject=reject, store=store if r["kind"] == "cred" else None, findings=warn + rv, ref=ref,
+                    family=fam)
 
 
 def not_registered(name: str, store: Store) -> dict:
@@ -1281,13 +1348,41 @@ def _create_private(store: Store, path: Path, folder: bool = False) -> list[dict
     return fs
 
 
+def _adopt(store: Store, names: list[str]) -> tuple[str | None, dict]:
+    """3.2.0: the value a family credential takes over from the per-host credentials it replaces (earthdata-laads, earthdata-lpdaac, ... were
+    one Earthdata token registered once per host). Read in this process only, never returned to a caller: (value, what to tell)."""
+    reg = store.load()["credentials"]
+    found = []
+    for n in names:
+        e = reg.get(n)
+        if not e:
+            continue
+        p = store.path_of(e)
+        v = _try(lambda p=p: _read_value(p), "") if p is not None and store.has_value(e, p) else ""
+        if v:
+            mt = _try(lambda p=p: os.stat(p).st_mtime, 0.0) if e.get("store") != "keychain" else 0.0
+            found.append((n, v, _date(e.get("expires")) or dt.date.min, mt, e))
+    if not found:
+        return None, {}
+    same = len({f[1] for f in found}) == 1
+    best = max(found, key=lambda f: (f[2], f[3]))
+    tell = {"adopted_from": [f[0] for f in found], "same_value": same, "used": best[0],
+            "expires": best[4].get("expires"), "status_before": {f[0]: f[4].get("status") for f in found}}
+    return best[1], tell
+
+
 def add(store: Store, name: str, *, cls: str | None = None, restricted: bool = False, host: str | None = None, inject=None, kind: str | None = None,
-        review_after: str | None = None, note: str | None = None, expires: str | None = None) -> dict:
-    """Create the folder (private), an empty private file and the registry entry. Never asks for the key: the person opens the file and pastes it."""
+        review_after: str | None = None, note: str | None = None, expires: str | None = None, also_hosts=None, adopt: bool = True) -> dict:
+    """Create the folder (private), an empty private file and the registry entry. Never asks for the key: the person opens the file and pastes it.
+    3.2.0: a library credential for a family of hosts (Earthdata) records the family; `also_hosts` adds exact hosts to any credential; a family
+    credential whose file is empty takes over the value of the per-host credentials it `replaces` (adopt=False leaves the file empty)."""
     if not NAME_RE.match(name or ""):
         return {"ok": False, "findings": [finding("MAP-CRED-001", "BLOCK", "a credential name is lower-case letters, digits, - and _ (at most 40), such as census")]}
     block, entry = library_defaults(name, store.entries())
     b = dict(block or {})
+    fam_problem = family_problem(also_hosts, None, None)
+    if fam_problem:
+        return {"ok": False, "findings": [finding("MAP-CRED-013", "BLOCK", fam_problem)]}
     host = (host or b.get("host") or "").lower()
     inj = parse_inject(inject) if inject else parse_inject(b.get("inject"))
     pg_text = (isinstance(inject, str) and inject.strip().startswith("postgres:")) or (isinstance(inject, dict) and "postgres" in inject)
@@ -1335,6 +1430,32 @@ def add(store: Store, name: str, *, cls: str | None = None, restricted: bool = F
     fresh = not path.exists()
     fs += _create_private(store, path)
     e.update({"kind": kind, "class": cls, "host": host, "file": fname, "inject": inj})
+    fam = family_of(None, b if (b.get("host") or "").lower() == host else None)
+    extra = [h for h in _hostlist(also_hosts) if h != host]
+    fam["hosts"] = list(dict.fromkeys(fam["hosts"] + _hostlist(e.get("also_hosts")) + extra))[:MAX_FAMILY]
+    if extra:
+        e["also_hosts"] = list(dict.fromkeys(_hostlist(e.get("also_hosts")) + extra))
+    for k, v in (("hosts", fam["hosts"]), ("host_suffixes", fam["suffixes"]), ("handoff_hosts", fam["handoff"])):
+        if v:
+            e[k] = v
+        else:
+            e.pop(k, None)
+    adopted: dict = {}
+    replaces = [n for n in _hostlist(b.get("replaces")) if NAME_RE.match(n) and n != name]
+    if adopt and replaces and not _try(lambda: _read_value(path), "") and e.get("store") != "keychain":
+        val, adopted = _adopt(store, replaces)
+        if val:
+            with open(path, "w", encoding="utf-8", newline="\n") as fh:     # the file was made private above; writing keeps its access list
+                fh.write(val + "\n")
+            val = ""
+            fresh = False
+            if adopted.get("expires") and not expires and _date(adopted["expires"]) and _date(adopted["expires"]) > today():
+                exp = _date(adopted["expires"])
+            reg2 = store.load()
+            for n in adopted["adopted_from"]:
+                if n in reg2["credentials"]:
+                    reg2["credentials"][n]["superseded_by"] = name
+            reg["credentials"].update({n: reg2["credentials"][n] for n in adopted["adopted_from"] if n in reg2["credentials"]})
     if b.get("reject") or e.get("reject"):
         e["reject"] = effective_reject(name, e.get("reject"), b)
     if b.get("probe"):
@@ -1365,15 +1486,27 @@ def add(store: Store, name: str, *, cls: str | None = None, restricted: bool = F
     win = str(path) if store.plat.windows else None
     what = ("your username, a colon and your token as the only line (username:token)" if kind == "userkey" else
             "the database password of a read-only account as the only line" if kind == "postgres" else "your own key as the only line")
-    nxt = [f"Open {win or shown} in your editor (Notepad on Windows), paste {what}, and save." if fresh or not _try(lambda: _read_value(path), "") else
-           f"The file {shown} is already there; it was kept as it is.",
-           f"Then run /{_prefix()}:map-credentials check {name}."]
+    probe_host = (urllib.parse.urlsplit(b["probe"]).hostname if b.get("probe") else None) or host
+    if adopted:
+        nxt = [(f"The token already registered as {', '.join(adopted['adopted_from'])} (" + ("the same token in each" if adopted["same_value"] else
+                f"not the same token: the one of {adopted['used']}, which ends last, was taken") + f") is now in {shown}; nothing was shown or copied anywhere else."),
+                f"Then run /{_prefix()}:map-credentials check {name} --probe and confirm {probe_host} to test it once.",
+                "The per-host names are no longer needed: remove each with /" + _prefix() + ":map-credentials remove NAME --delete-files ("
+                + ", ".join(adopted["adopted_from"]) + ")."]
+    else:
+        nxt = [f"Open {win or shown} in your editor (Notepad on Windows), paste {what}, and save." if fresh or not _try(lambda: _read_value(path), "") else
+               f"The file {shown} is already there; it was kept as it is.",
+               f"Then run /{_prefix()}:map-credentials check {name}."]
     if cls == "browser" and not restricted:
         nxt.append("This is a browser key: restrict it to your web site's domain in the provider's dashboard, then run add again with --confirm-restricted.")
     if exp:
-        nxt.append(f"The token ends on {exp.isoformat()}" + ("" if expires else f" ({b['lifetime_days']} days from today, the service's lifetime); if you made it earlier, run add again with --expires and the date the service shows")
-                   + f". Status warns {EXPIRY_WARN_DAYS} days before; after that day runs refuse to send it until you rotate.")
+        how = ("" if expires else " (the end date of the token it took over)" if adopted.get("expires") else
+               f" ({b['lifetime_days']} days from today, the service's lifetime); if you made it earlier, run add again with --expires and the date the service shows"
+               if b.get("lifetime_days") else "")
+        nxt.append(f"The token ends on {exp.isoformat()}{how}. Status warns {EXPIRY_WARN_DAYS} days before; after that day runs refuse to send it until you rotate.")
+    covers_shown = fam["hosts"] + ["*" + s for s in fam["suffixes"]]
     out = {"ok": not blocks(fs), "name": name, "file": shown, "host": host, "kind": kind, "class": cls, "already_registered": existed, "expires": e.get("expires"),
+           **({"also_sent_to": covers_shown} if covers_shown else {}), **({"adopted": adopted} if adopted else {}),
            "signup_url": b.get("signup_url"), "free": b.get("free"), "library_entry": (entry or {}).get("id"), "next": nxt, "findings": fs,
            "never": "Never paste the key into the chat. If you already did, treat it as exposed: get a new one and rotate.",
            "terms": (f"A key is a customization beyond the plugin's defaults, and it is your own acceptance of {(entry or {}).get('title') or name}'s terms: "
@@ -1394,7 +1527,11 @@ def _row(store: Store, name: str, e: dict, now: dt.date) -> dict:
     prev = store.path_of(e, "previous_file")
     a = store.check_file(path, e.get("kind", "apikey"), e.get("shape"), e.get("host")) if exists else None
     privacy = None if a is None else ("yes" if a["private"] and a["folder_private"] else "not verifiable here" if a["private"] is None and a["mount_synthetic"] else "no")
-    return {"name": name, "host": e.get("host"), "kind": e.get("kind"), "class": e.get("class", "secret"), "status": st_, "last_checked": e.get("last_checked"),
+    fam = family_of(e)
+    extra = ({"also_sent_to": fam["hosts"] + ["*" + s for s in fam["suffixes"]]} if fam["hosts"] or fam["suffixes"] else {})
+    if e.get("superseded_by"):
+        extra["superseded_by"] = e["superseded_by"]
+    return {"name": name, "host": e.get("host"), **extra, "kind": e.get("kind"), "class": e.get("class", "secret"), "status": st_, "last_checked": e.get("last_checked"),
             "review_after": e.get("review_after"), "expires": e.get("expires"), "age_days": (now - created).days if created else None, "private": privacy,
             "kept_in": "OS keychain" if e.get("store") == "keychain" else "file",
             "filled": bool(a and a["shaped"]), "old_file_pending": (e.get("previous_file") if prev and prev.is_file() else None),
@@ -1402,6 +1539,8 @@ def _row(store: Store, name: str, e: dict, now: dt.date) -> dict:
             "findings": _review_warnings(name, e, now) + ([finding("MAP-CRED-009", "WARN", f"'{name}' was rejected and has not been rotated; get a new key and run map-credentials rotate {name}", name)]
                                                        if st_ == "rejected" else [])
                         + ([finding("MAP-CRED-012", "WARN", f"privacy of '{name}' cannot be verified from here", name)] if privacy == "not verifiable here" else [])
+                        + ([finding("MAP-CRED-014", "INFO", f"'{name}' is replaced by '{e['superseded_by']}', which holds the same token for every host; "
+                                                          f"remove it with map-credentials remove {name} --delete-files", name)] if e.get("superseded_by") else [])
                         + ([finding("MAP-CRED-002", "BLOCK", f"the file of '{name}' can be read by other accounts; run map-credentials check {name}", name)] if privacy == "no" else [])}
 
 
@@ -2033,6 +2172,8 @@ def main(argv=None) -> int:
     p.add_argument("--kind", choices=KINDS)
     p.add_argument("--review-after")
     p.add_argument("--expires", help="the day the service says the token ends (YYYY-MM-DD); runs refuse it after that day")
+    p.add_argument("--also-hosts", default="", help="3.2.0: exact hosts (comma-separated) this credential may also be sent to")
+    p.add_argument("--no-adopt", action="store_true", help="3.2.0: a family credential (earthdata) does not take over the per-host credentials' token")
     p = sub.add_parser("check")
     p.add_argument("name")
     p.add_argument("--probe", action="store_true")
@@ -2070,7 +2211,8 @@ def main(argv=None) -> int:
             if a.op == "status":
                 res = status(store)
             elif a.op == "add":
-                res = add(store, a.name, cls=a.cls, restricted=a.confirm_restricted, host=a.host, inject=a.inject, kind=a.kind, review_after=a.review_after, expires=a.expires)
+                res = add(store, a.name, cls=a.cls, restricted=a.confirm_restricted, host=a.host, inject=a.inject, kind=a.kind, review_after=a.review_after, expires=a.expires,
+                          also_hosts=a.also_hosts or None, adopt=not a.no_adopt)
             elif a.op == "check":
                 res = check(store, a.name, probe=a.probe, probe_host=a.confirm_probe, fix=a.fix)
             elif a.op == "rotate":

@@ -53,6 +53,11 @@ should be treated as exposed, and point to `/geo-mapping-acropolisdocs:map-crede
   the person, SYSTEM (S-1-5-18) and Administrators (S-1-5-32-544), read from the access list by SID. `check` gives the exact fix.
 - **MAP-CRED-003.** The file and folder are outside the plugin, project and output folders. **MAP-CRED-004 (WARN):** not in a cloud-synced folder.
 - **MAP-CRED-005.** Sent only to the registered host, only over https on the default port, never across a redirect.
+  *3.2.0:* a library credential may cover a **family of hosts** one organisation owns (`hosts`, `host_suffixes` such as `.earthdata.nasa.gov`):
+  `cred:earthdata` is ONE Earthdata Login token for CMR and every DAAC. A redirect inside the family keeps it; one to a declared hand-off host
+  (`handoff_hosts`: a signed S3 or CloudFront address) is followed without it; any other redirect is refused. Earthdata's sign-in redirect
+  (`reject.redirect_marks: false`) says the token was not accepted for that archive and does not mark it rejected. `add earthdata` takes
+  over per-host `earthdata-*` credentials (MAP-CRED-014 then names the old ones for removal); `also_hosts=` adds exact hosts to any credential.
 - **MAP-CRED-008.** A rejection (401, 403, or the provider's reject page: Census redirects to `invalid_key.html` or `missing_key.html`) ends the run
   with no retry and marks the credential `rejected`, with the request that was refused and its profile; runs that need it refuse to start until
   `check` passes. Another declared code (FIRMS's 400) is a rejection only when the answer carries the entry's `reject.body` text; otherwise it is

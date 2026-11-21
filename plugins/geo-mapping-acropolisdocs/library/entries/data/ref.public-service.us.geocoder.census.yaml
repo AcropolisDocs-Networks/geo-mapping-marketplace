@@ -44,6 +44,9 @@ avoid_when:
 - 'Addresses of private individuals: the plugin never geocodes them.'
 - 'Rooftop accuracy matters: matches are interpolated along address ranges; check the match quality column.'
 delivery:
+  sample:
+    request: oneline
+    params: {address: 200 W Washington St Phoenix AZ 85003}
   mode: service
   protocol: rest-json
   request: https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address={address}&benchmark=Public_AR_Current&format=json

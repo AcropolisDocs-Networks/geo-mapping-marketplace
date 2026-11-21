@@ -87,7 +87,10 @@ def load_entries(entries_dir: Path, scope: str) -> list[dict]:
 
 CRED_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 CRED_HOST = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}\.)+[a-z]{2,63}$")
-CRED_FIELDS = {"name", "kind", "class", "class_allowed", "host", "inject", "reject", "probe", "signup_url", "free", "limits", "shape", "note", "lifetime_days"}
+CRED_FIELDS = {"name", "kind", "class", "class_allowed", "host", "inject", "reject", "probe", "signup_url", "free", "limits", "shape", "note", "lifetime_days",
+               "hosts", "host_suffixes", "handoff_hosts", "replaces"}       # 3.2.0: one credential for a family of hosts (Earthdata)
+_SUFFIX = re.compile(r"^\.(?:[a-z0-9](?:[a-z0-9-]{0,62})\.){2,}[a-z]{2,63}$")
+_HANDOFF = re.compile(r"^\.(?:[a-z0-9](?:[a-z0-9-]{0,62})\.)+[a-z]{2,63}$")
 _KEY_IN_REQUEST = re.compile(r"(?i)[?&](key|api_key|apikey|token|access_token)=(?!\{key\}(?:&|$))|\$[A-Za-z_{]")
 
 
@@ -160,7 +163,8 @@ def credential_findings(e: dict, eid: str) -> list[dict]:
         out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.lifetime_days is the token's lifetime in whole days (1 to 3650), as the service states it"))
     rj = b.get("reject") or {}
     if rj and (not all(isinstance(s, int) and 300 <= s < 600 for s in rj.get("status") or []) or not all(isinstance(p, str) and p.startswith("/") for p in rj.get("redirect_path") or [])
-               or set(rj) - {"status", "redirect_path", "body", "content_sha256"}
+               or set(rj) - {"status", "redirect_path", "body", "content_sha256", "redirect_marks"}
+               or not isinstance(rj.get("redirect_marks", True), bool)
                or not all(isinstance(h, str) and len(h) == 64 and all(c in "0123456789abcdef" for c in h.lower()) for h in rj.get("content_sha256") or [])):
         out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.reject is {status: [HTTP codes], redirect_path: [/path, ...], body: [text, ...], content_sha256: [64 hex]}"))
     body = rj.get("body")
@@ -191,7 +195,18 @@ def credential_findings(e: dict, eid: str) -> list[dict]:
         # reference library additions spec (2026-11-07) R2 and test A6: say where the key is issued and, for a free tier, its limit in the
         # provider's words with the date it was read. WARN, so entries written before the field existed still pass the gate.
         out.append(f("MAP-LIB-016", "WARN", eid, "a key-gated entry names its signup_url and, when free, the free-tier limits as the provider states them"))
-    bad = sorted(h for h in hosts if h != host)
+    fam_hosts = [str(x).lower() for x in b.get("hosts") or []]
+    fam_suf = [str(x).lower() for x in b.get("host_suffixes") or []]
+    if not all(CRED_HOST.match(x) for x in fam_hosts) or not all(_SUFFIX.match(x) for x in fam_suf) or not isinstance(b.get("hosts") or [], list) \
+            or not isinstance(b.get("host_suffixes") or [], list):
+        out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.hosts are exact host names and host_suffixes start with a dot and have at least three labels "
+                                                   "(.earthdata.nasa.gov)"))
+    if not all(isinstance(x, str) and _HANDOFF.match(x.lower()) for x in b.get("handoff_hosts") or []):
+        out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.handoff_hosts are host suffixes starting with a dot (.amazonaws.com): a redirect there is followed "
+                                                   "without the credential"))
+    if not all(isinstance(x, str) and CRED_NAME.match(x) for x in b.get("replaces") or []):
+        out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.replaces lists credential names this one takes over"))
+    bad = sorted(h for h in hosts if h != host and h not in fam_hosts and not any(h.endswith(x) for x in fam_suf))
     if host and bad:
         out.append(f("MAP-CRED-013", "BLOCK", eid, f"the request or probe goes to {', '.join(bad)}, but the credential is registered for {host}"))
     return out

@@ -43,6 +43,9 @@ avoid_when:
 - 'A busy or repeated pull without a key: register and subscribe to the data plan, then send app_key as a query parameter.'
 - 'Outside London: TfL covers London only.'
 delivery:
+  sample:
+    request: line-status
+    params: {mode: tube}
   mode: service
   protocol: rest-json
   request: https://api.tfl.gov.uk/StopPoint/Mode/{mode}

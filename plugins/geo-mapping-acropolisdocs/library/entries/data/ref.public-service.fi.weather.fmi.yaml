@@ -39,6 +39,8 @@ use_when:
 avoid_when:
 - 'More than a week of observations a request: the stored queries cap the time span.'
 delivery:
+  sample:
+    bbox: 24.5,60.0,25.5,60.5
   mode: service
   protocol: files
   request: https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature&storedquery_id=fmi::observations::weather::simple&bbox={bbox}&parameters=t2m

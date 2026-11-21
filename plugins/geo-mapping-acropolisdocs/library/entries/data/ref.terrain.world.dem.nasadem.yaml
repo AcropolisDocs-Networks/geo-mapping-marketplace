@@ -1,0 +1,93 @@
+id: ref.terrain.world.dem.nasadem
+type: terrain
+rev: 1
+status: active
+title: NASADEM (reprocessed SRTM, 1 arc second), 60 N to 56 S, with an Earthdata token
+summary: 'NASA''s 2020 reprocessing of the Shuttle Radar Topography Mission at 1 arc second (about 30 m), voids filled mostly from ASTER GDEM,
+  as 1-degree zipped HGT tiles from LP DAAC''s cloud archive; found through CMR and downloaded with the person''s own Earthdata token. Bare-ish
+  ground for profiles and line of sight where no national model covers the window.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [general, telecom]
+  use_for: [context-basemap, site-map]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level, site-precision]
+  scale: [national, regional, state, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- A terrain profile, line of sight or viewshed outside the national models, where the Copernicus surface model would raise the ground with
+  buildings and trees (terrain.source nasadem, or the analysis chain with cred:earthdata registered).
+- An SRTM-era ground (February 2000) for a comparison with today's surface model.
+avoid_when:
+- North of 60 N or south of 56 S (SRTM did not fly there); ArcticDEM, REMA or Copernicus cover those.
+- A window wider than 9 one-degree tiles (each 10 to 25 MB zipped); Copernicus is read by range there.
+- 'Without an Earthdata token: the chain goes on to Terrarium and Copernicus.'
+pairs_with: [ref.public-service.world.earth-observation.nasa-earthdata, ref.terrain.world.dem.copernicus-glo30]
+distinct_from:
+- {id: ref.terrain.world.dem.copernicus-glo30, why: 'a 2011-2015 surface model (buildings and trees), keyless'}
+- {id: ref.terrain.world.dem.terrarium, why: 'resampled SRTM-class terrain in web tiles, keyless, coarser and older processing'}
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  tool: earthdata
+  url_template: https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/NASADEM_HGT.001/NASADEM_HGT_{tile}/NASADEM_HGT_{tile}.zip
+  format: zipped SRTM HGT (int16 big-endian, 3601 x 3601, metres above the EGM96 geoid), one per 1-degree tile; ocean tiles do not exist
+  cap: 9 tiles a map, each fetched whole with the Earthdata token and kept under the work folder's data/earthdata/NASADEM_HGT/
+  requires_credential:
+    name: earthdata
+    kind: bearer
+    class: secret
+    host: cmr.earthdata.nasa.gov
+    host_suffixes:
+    - .earthdatacloud.nasa.gov
+    - .earthdata.nasa.gov
+    handoff_hosts:
+    - .s3.us-west-2.amazonaws.com
+    inject:
+      bearer: true
+    signup_url: https://urs.earthdata.nasa.gov/users/new
+    free: true
+    limits: '"EDL Tokens will expire after a set duration (currently 60 days)" (LAADS DAAC, Download Files Using EDL Tokens, read 2026-11-21)'
+    note: The same cred:earthdata as every NASA archive (ref.public-service.world.earth-observation.nasa-earthdata).
+  note: 'CMR collection C2763264762-LPCLOUD (NASADEM_HGT 001, cloud hosted, seen 2026-11-21); a granule search by box lists the tiles that exist
+    (Phoenix: n33w112 and n33w113), each with its https data link on data.lpdaac.earthdatacloud.nasa.gov and an s3:// link that is not used.'
+source:
+  publisher: NASA JPL, distributed by the NASA Land Processes DAAC (LP DAAC)
+  product: NASADEM Merged DEM Global 1 arc second V001 (NASADEM_HGT)
+  url: https://doi.org/10.5067/MEaSUREs/NASADEM/NASADEM_HGT.001
+  terms_url: https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance
+url_verified_on: '2026-11-21'
+vintage:
+  current: 'NASADEM 001 (2020), SRTM data of February 2000'
+  cadence: static
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: NASA JPL (2020). NASADEM Merged DEM Global 1 arc second V001, NASA EOSDIS Land Processes DAAC, doi:10.5067/MEaSUREs/NASADEM/NASADEM_HGT.001.'
+  note: A NASA-led mission's data, CC0 under the ESDIS data use guidance (read 2026-11-21), which asks for the dataset citation.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-21'
+  verify_by: '2027-11-21'
+  check:
+    kind: http_get
+    url: https://cmr.earthdata.nasa.gov/search/collections.json?short_name=NASADEM_HGT
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-21'
+    note: 'Added (3.2.0): CMR lists the collection and its tiles keylessly; the tile download goes with the Earthdata token and hands off to a signed
+      S3 address (2026-11-21).'
+attribution:
+  corner: 'Elevation: NASADEM (NASA JPL, LP DAAC)'
+  required_on_map: true
+  collapse: allowed
+  terms_read: '2026-11-21'

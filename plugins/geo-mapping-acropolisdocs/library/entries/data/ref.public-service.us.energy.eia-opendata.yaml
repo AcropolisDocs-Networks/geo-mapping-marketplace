@@ -41,6 +41,8 @@ avoid_when:
 - 'Live grid conditions: EIA series are monthly or annual.'
 - 'More than 5,000 rows in one request: page with offset and length.'
 delivery:
+  sample:
+    params: {}
   mode: service
   protocol: rest-json
   requires_credential:

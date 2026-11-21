@@ -44,6 +44,9 @@ avoid_when:
 - 'More than 3,000 credits a day or 5 requests a second: a paid plan.'
 - 'The map cannot carry the credit: the free plan requires Geoapify and data-source attribution.'
 delivery:
+  sample:
+    request: geocode
+    params: {text: Phoenix Arizona}
   mode: service
   protocol: rest-json
   requires_credential:

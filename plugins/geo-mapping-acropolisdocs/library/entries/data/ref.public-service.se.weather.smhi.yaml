@@ -39,6 +39,8 @@ use_when:
 avoid_when:
 - 'Forecast fields: those are the SMHI forecast API, not this one.'
 delivery:
+  sample:
+    params: {parameter: '1'}
   mode: service
   protocol: rest-json
   request: https://opendata-download-metobs.smhi.se/api/version/1.0/parameter/{parameter}/station-set/all/period/latest-hour/data.json

@@ -1,6 +1,6 @@
 id: ref.public-service.fi.transit.digitransit
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: Digitransit (Finland) routing and transit APIs
 summary: Finnish public transport routing (OpenTripPlanner), stops and real-time data for HSL (Helsinki), Waltti cities and all of Finland from Digitransit,
@@ -44,8 +44,26 @@ avoid_when:
 - Cost and licence are not confirmed (the terms of use were not read, 2026-11-07).
 - 'Large batches: the provider asks for 0.5 to 1 second between requests and suggests hosting the API locally for heavy use.'
 delivery:
+  sample:
+    request: stops
+    bbox: 24.93,60.16,24.95,60.175
   mode: service
-  protocol: rest-json
+  protocol: graphql
+  request: https://api.digitransit.fi/routing/v2/finland/gtfs/v1
+  requests:
+    stops: https://api.digitransit.fi/routing/v2/finland/gtfs/v1
+    stops-hsl: https://api.digitransit.fi/routing/v2/hsl/gtfs/v1
+  api:
+    host: api.digitransit.fi
+    requests:
+    - method: POST
+      path: /routing/v2/{router}/gtfs/v1
+      body: json
+      changes: false
+      note: GraphQL queries only
+  read:
+    query: '{ stopsByBbox(minLat: {south}, minLon: {west}, maxLat: {north}, maxLon: {east}) { gtfsId name lat lon vehicleMode } }'
+    records: data.stopsByBbox
   requires_credential:
     name: digitransit
     kind: apikey
@@ -91,3 +109,6 @@ maintenance:
   - rev: 2
     date: '2026-11-15'
     note: 'Active (1.17.0): the terms of use read: CC BY 4.0 (HSL, Fintraffic, Waltti), credit with date and time, no fees, ODbL for OSM-derived geography.'
+  - rev: 3
+    date: '2026-11-21'
+    note: '3.2.0: the GraphQL routing endpoints /routing/v2/finland/gtfs/v1 and /routing/v2/hsl/gtfs/v1 answered 401 "missing subscription key" to a POST without a key on 2026-11-21 (so the path is right); stops by box through library_request.'

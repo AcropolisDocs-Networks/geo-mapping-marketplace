@@ -39,6 +39,8 @@ use_when:
 avoid_when:
 - 'A live layer: the files are per station and day, so a map reads a day''s set, not a stream.'
 delivery:
+  sample:
+    params: {}
   mode: service
   protocol: rest-json
   request: https://opendata.chmi.cz/meteorology/climate/now/data/

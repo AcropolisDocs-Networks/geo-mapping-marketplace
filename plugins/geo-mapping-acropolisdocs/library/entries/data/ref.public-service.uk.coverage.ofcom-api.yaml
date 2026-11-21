@@ -40,6 +40,8 @@ avoid_when:
 - 'A national map: the basic plan allows 50,000 calls a month.'
 crs: EPSG:4326
 delivery:
+  sample:
+    params: {postcode: SW1A1AA}
   mode: service
   requires_credential:
     name: ofcom-mobile

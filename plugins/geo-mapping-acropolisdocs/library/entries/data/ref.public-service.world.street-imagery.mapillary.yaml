@@ -44,6 +44,8 @@ avoid_when:
   token.'
 - 'People or plates would be shown: use the images for context, not to identify anyone.'
 delivery:
+  sample:
+    bbox: -112.08,33.44,-112.06,33.46
   mode: service
   protocol: rest-json
   requires_credential:

@@ -39,6 +39,8 @@ avoid_when:
 - Request limits are not stated, and the terms page refuses automated readers, so they were not read (2026-11-07).
 - 'Forecasts: those come from MET Norway''s separate Locationforecast API, not Frost.'
 delivery:
+  sample:
+    params: {}
   mode: service
   protocol: rest-json
   requires_credential:

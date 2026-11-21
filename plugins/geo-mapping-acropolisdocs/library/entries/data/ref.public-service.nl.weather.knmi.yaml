@@ -1,6 +1,6 @@
 id: ref.public-service.nl.weather.knmi
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: KNMI Data Platform (Netherlands weather and climate)
 summary: Dutch weather observations, radar, model output and climate datasets from the KNMI Data Platform Open Data API, with a free key in the Authorization
@@ -41,6 +41,8 @@ avoid_when:
 - Dataset licences are not stated on the API page (2026-11-07); check each dataset's page before a deliverable.
 - 'Files, not features: the Open Data API lists and downloads files (NetCDF, HDF5), which the plugin reads only where it has a reader.'
 delivery:
+  sample:
+    request: files
   mode: service
   protocol: rest-json
   requires_credential:
@@ -60,6 +62,12 @@ delivery:
     note: The raw key is the Authorization header's value, with no prefix. KNMI also publishes a shared anonymous key for light use; the plugin stores only
       the person's own
   request: https://api.dataplatform.knmi.nl/open-data/v1/datasets/{dataset}/versions/{version}/files
+  requests:
+    files: https://api.dataplatform.knmi.nl/open-data/v1/datasets/{dataset}/versions/{version}/files
+    file-url: https://api.dataplatform.knmi.nl/open-data/v1/datasets/{dataset}/versions/{version}/files/{filename}/url
+  defaults:
+    dataset: Actuele10mindataKNMIstations
+    version: '2'
   note: Without a key the API answers 401 "Authorization field missing" (2026-11-07). An EDR API sits at api.dataplatform.knmi.nl/edr/v1 (not checked).
 source:
   publisher: Royal Netherlands Meteorological Institute (KNMI)
@@ -90,3 +98,6 @@ maintenance:
   - rev: 2
     date: '2026-11-15'
     note: 'Active (1.17.0): the Authorization header, the anonymous and registered key limits, and CC BY 4.0 on the station dataset read.'
+  - rev: 3
+    date: '2026-11-21'
+    note: '3.2.0: the file list and a file''s temporary download address through library_request (dataset Actuele10mindataKNMIstations version 2 by default); 401 Authorization field missing without a key on 2026-11-21.'

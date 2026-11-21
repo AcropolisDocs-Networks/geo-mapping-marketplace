@@ -45,6 +45,9 @@ avoid_when:
 - 'More than a few thousand points: the free tier allows fewer than 10,000 calls a day, 5,000 an hour and 600 a minute.'
 - 'Official warnings: use the national service (NWS, ECCC, Met Office).'
 delivery:
+  sample:
+    request: current
+    params: {lat: '33.45', lon: '-112.07'}
   mode: service
   protocol: rest-json
   request: https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,precipitation,wind_speed_10m

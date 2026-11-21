@@ -159,7 +159,7 @@ def credential_for(entry: dict, url: str, store=None):
     if not b:
         return None
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
-    if (b.get("host") or "").lower() != host:
+    if not cr.covers(str(b.get("host") or ""), cr.family_of(None, b), host):      # 3.2.0: or a host of the credential's family
         raise FetchError(f"{entry['id']}: the credential '{b.get('name')}' is declared for {b.get('host')}, but the request goes to {host}", gc.EXIT_REFUSED, "MAP-CRED-013")
     try:
         return cr.resolve(f"cred:{b['name']}", store=store, host=host, block=b)
@@ -333,10 +333,22 @@ def fetch_entry(entry_id: str, variant: str | None = None, level: str | None = N
         # 2.4.0 (T-02, Day 20 issue 12): a DEM is not a vector file to cache; the build fetches it for its own window (terrain_fetch.dem_for)
         raise FetchError(f"{entry_id} is an elevation model: DEM entries are fetched for a window by the build (role: hillshade, terrain: "
                          "{on: true}), not cached ahead; to fetch one for a box run terrain_fetch.py fetch --bbox W,S,E,N", gc.EXIT_USAGE, "MAP-TER-007")
+    if d.get("tool") == "earthdata":                     # 3.2.0: NASA Earthdata needs a box, dates and the person's agreement to a download plan
+        raise FetchError(f"{entry_id} is fetched with the Earthdata tools and your one token (cred:earthdata): earthdata_search to find files, "
+                         "earthdata_fetch to download them after the plan is agreed" + (", earthdata_nightlights for a box" if "black-marble" in entry_id else ""),
+                         gc.EXIT_USAGE, "MAP-SVC-001")
     if d.get("tool") in TOOLS and e.get("type") != "public-service":
         return fetch_by_tool(e, {"level": level, "state": variant}, refresh=refresh, http=http, store=store)
-    if d.get("mode") == "service" and d.get("protocol") == "rest-json":
+    req_host = (urllib.parse.urlsplit(str(d.get("request") or next(iter((d.get("requests") or {}).values()), "")).replace("{", "").replace("}", "")).hostname or "")
+    if d.get("mode") == "service" and d.get("protocol") == "rest-json" and req_host == "api.census.gov":
         return fetch_service(e, variant, level, refresh, http=http, store=store)
+    if d.get("mode") == "service" and (d.get("request") or d.get("requests")) and d.get("protocol") not in ("arcgis", "wms", "wmts", "wfs", "ogcapi", "stac", "overpass"):
+        # 3.2.0: every other service entry with a request of its own (weather, energy, transit, imagery, hazard): library_request
+        import library_request as lr
+        try:
+            return lr.run(entry_id, request=level or None, params={"variant": variant} if variant else None, refresh=refresh, http=http, store=store)
+        except lr.RequestError as ex:
+            raise FetchError(str(ex) + ("; library_request takes params= and bbox=" if ex.rule == "MAP-SVC-001" else ""), ex.code, ex.rule) from None
     if level:
         raise FetchError(f"{entry_id} takes no --level", gc.EXIT_USAGE)
     return fetch(e, variant, refresh, http=http, store=store)

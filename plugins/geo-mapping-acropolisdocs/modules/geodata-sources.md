@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 207 entries (205 active); basemap-provider 18, boundary 37, boundary-derived 2, context 16, crosswalk 1, gazetteer 8, infrastructure 16, map-type 12, palette 2, public-service 51, statistic 23, symbol-set 1, template 6, terrain 14.
+Library: 210 entries (208 active); basemap-provider 18, boundary 37, boundary-derived 2, context 16, crosswalk 1, gazetteer 8, infrastructure 16, map-type 12, palette 2, public-service 52, statistic 24, symbol-set 1, template 6, terrain 15.
 
 ### Usable now
 
@@ -131,6 +131,7 @@ Library: 207 entries (205 active); basemap-provider 18, boundary 37, boundary-de
 | `ref.public-service.us.weather.nws` | NOAA National Weather Service watches, warnings and advisories | NOAA, National Weather Service, live | web service | public-domain |  |
 | `ref.public-service.us.weather.nws-forecast` | NOAA National Weather Service forecast API (api.weather.gov) | NOAA, National Weather Service, live | web service | public-domain |  |
 | `ref.public-service.world.climate.copernicus-cds` | Copernicus Climate Data Store (ERA5 and other climate datasets) | ECMWF for the Copernicus Climate Change Service (C3S), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
+| `ref.public-service.world.earth-observation.nasa-earthdata` | NASA Earthdata (CMR search and every DAAC), one Earthdata Login token | NASA Earth Science Data and Information System (ESDIS), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | public-domain |  |
 | `ref.public-service.world.earthquake.usgs` | USGS earthquake catalog and ShakeMap services | US Geological Survey, Earthquake Hazards Program, live | you supply the file | public-domain |  |
 | `ref.public-service.world.geocoder.geoapify` | Geoapify geocoding, routing and isochrones | Geoapify GmbH, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
 | `ref.public-service.world.geocoder.nominatim` | Nominatim (OpenStreetMap geocoder) | OpenStreetMap Foundation, live | web service | share-alike |  |
@@ -165,6 +166,7 @@ Library: 207 entries (205 active); basemap-provider 18, boundary 37, boundary-de
 | `ref.statistic.us.storm-events.noaa` | NOAA Storm Events Database (bulk CSV) | NOAA National Centers for Environmental Information, 2025 events (details file created 2026-08-19); the 2026 file (created 2026-10-26) is partial | downloaded on first use | public-domain | STATE_FIPS,CZ_FIPS (string) |
 | `ref.statistic.world.climate.era5-land-monthly` | ERA5-Land monthly averaged data (CDS) | ECMWF for the Copernicus Climate Change Service (C3S), monthly, updated about five days after each month | web service | attribution | none (raster) |
 | `ref.statistic.world.climate.era5-monthly-single-levels` | ERA5 monthly averaged data on single levels (CDS) | ECMWF for the Copernicus Climate Change Service (C3S), monthly, updated about five days after each month | web service | attribution | none (raster) |
+| `ref.statistic.world.night-lights.black-marble` | NASA Black Marble annual night lights (VNP46A4, 15 arc seconds), with an Earthdata token | NASA Goddard Space Flight Center (Black Marble team), distributed by LAADS DAAC, annual composites from 2012 | downloaded on first use | public-domain | none (raster) |
 | `ref.statistic.world.population.ghsl` | GHSL population grid 2020, 100 m (GHS-POP R2023A) | European Commission, Joint Research Centre (JRC), R2023A, epoch 2020 | downloaded on first use | attribution | none (raster) |
 | `ref.statistic.world.population.hrsl` | Meta High Resolution Settlement Layer (HRSL), about 30 m | Meta (Data for Good) and CIESIN, Columbia University, hrsl_general latest | downloaded on first use | attribution | none (raster) |
 | `ref.statistic.world.population.kontur` | Kontur Population: people per H3 cell (resolution 8), by country | Kontur Inc., 2023-11-01 | downloaded on first use | attribution | h3 (string) |
@@ -182,6 +184,7 @@ Library: 207 entries (205 active); basemap-provider 18, boundary 37, boundary-de
 | `ref.terrain.us.dem.3dep` | USGS 3DEP bare-earth elevation (ImageServer) | US Geological Survey, National Geospatial Program, all 3DEP DEM data published as of October 26, 2026 (the service description states its date) | web service | public-domain |  |
 | `ref.terrain.world.bathymetry.gebco` | GEBCO 2026 grid (sea floor and land, 15 arc seconds) | GEBCO Compilation Group (IHO and IOC of UNESCO), GEBCO_2026 | downloaded on first use | public-domain |  |
 | `ref.terrain.world.dem.copernicus-glo30` | Copernicus DEM GLO-30 Public (with GLO-90), world elevation, keyless from AWS Open Data | European Space Agency and the Copernicus Programme, hosted by Sinergise on the Registry of Open Data on AWS, Copernicus DEM 2021 release | downloaded on first use | attribution |  |
+| `ref.terrain.world.dem.nasadem` | NASADEM (reprocessed SRTM, 1 arc second), 60 N to 56 S, with an Earthdata token | NASA JPL, distributed by the NASA Land Processes DAAC (LP DAAC), NASADEM 001 (2020), SRTM data of February 2000 | downloaded on first use | public-domain |  |
 | `ref.terrain.world.dem.opentopography` | OpenTopography global DEMs (SRTM, Copernicus, ALOS, NASADEM) | OpenTopography (San Diego Supercomputer Center, UC San Diego), per dataset | downloaded on first use | attribution |  |
 | `ref.terrain.world.dem.terrarium` | Terrain Tiles on AWS (Mapzen Terrarium), world elevation | Mapzen (Linux Foundation), hosted on the Registry of Open Data on AWS, joerd build of the tileset (sources listed in the attribution document; 3DEP and SRTM v3 for the US and the world between 60 N and 56 S) | downloaded on first use | attribution |  |
 

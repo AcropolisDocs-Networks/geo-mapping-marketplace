@@ -45,6 +45,9 @@ avoid_when:
 - 'Climate history: use NOAA Climate Data Online (ref.public-service.us.weather.noaa-cdo).'
 - 'Thousands of points: limits are not published; a request over them is refused for about 5 seconds.'
 delivery:
+  sample:
+    request: points
+    params: {lat: '33.45', lon: '-112.07'}
   mode: service
   protocol: rest-json
   request: https://api.weather.gov/points/{lat},{lon}

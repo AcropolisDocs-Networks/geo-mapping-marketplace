@@ -39,6 +39,9 @@ use_when:
 avoid_when:
 - 'Old observations: the station archive is large; ask for a datetime range.'
 delivery:
+  sample:
+    params: {datetime: '@yesterdayT00:00:00Z/@yesterdayT03:00:00Z', parameter: temp_dry}
+    bbox: 12.0,55.5,12.8,56.0
   mode: service
   protocol: rest-json
   request: https://opendataapi.dmi.dk/v2/metObs/collections/observation/items?bbox={bbox}&datetime={datetime}&parameterId={parameter}

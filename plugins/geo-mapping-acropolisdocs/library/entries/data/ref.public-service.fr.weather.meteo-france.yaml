@@ -40,6 +40,8 @@ avoid_when:
 - 'The token expires: the portal issues OAuth2 tokens of limited life (or an API key); a long batch may need a new one.'
 - The licence and quota were not read on 2026-11-20; check the portal before a client deliverable.
 delivery:
+  sample:
+    params: {}
   mode: service
   protocol: rest-json
   requires_credential:

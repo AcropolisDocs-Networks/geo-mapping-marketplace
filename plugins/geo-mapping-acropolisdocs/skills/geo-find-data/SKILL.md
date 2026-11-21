@@ -124,11 +124,20 @@ second step, not the first; a draft is never chosen for a map until the person a
 - **Elevation** anywhere: `ref.terrain.world.dem.copernicus-glo30` (keyless, the default relief outside the US); the national bare-earth
   models first in their country (3.1.0: Canada MRDEM, France RGE ALTI, Flanders DHMV and its lidar tiles, Sweden's Markhöjdmodell with a free
   login, Australia's 5 m LiDAR, Japan's GSI), ArcticDEM and REMA at the poles, GEBCO for the sea floor (`terrain-analysis`).
+- **NASA Earthdata** (3.2.0), with the person's ONE Earthdata token (`/geo-mapping-acropolisdocs:map-credentials add earthdata`): `earthdata_search` finds any NASA
+  product in CMR (keyless; land cover, vegetation, snow, precipitation, sea surface, night lights) and lists its files in a box and a date
+  range; `earthdata_fetch` shows the plan, then downloads from whichever DAAC holds them. Built in: NASADEM elevation
+  (`ref.terrain.world.dem.nasadem`, terrain.source nasadem) and Black Marble night lights (`ref.statistic.world.night-lights.black-marble`,
+  `earthdata_nightlights`). Daily global imagery as a picture stays NASA GIBS (keyless tiles).
 - **Population denominators** for a rate "per 1,000 people" outside the US: GHSL or WorldPop (`ref.statistic.world.population.ghsl`,
   `.worldpop`); Kontur on H3 (`.kontur`, the `kontur-population` adapter); Meta's 30 m HRSL for a site's surroundings (`.hrsl`, read by
   window). The ACS is US-only.
 - **Mobile coverage by country** (3.1.0): the regulators' data through the adapters and `coverage_fetch` (Germany, France, Australia,
   Canada, the UK by council), OpenCelliD towers and Ookla speeds (`h3-grids`).
+- **Services with a request of their own** (3.2.0): the MCP tool `library_request` sends the entry's request and returns a layer (points
+  where the answer has coordinates): `plan_only=true` names the values it needs, `use_sample=true` sends the entry's test request. Weather (NWS,
+  Open-Meteo, OpenWeatherMap, WeatherAPI, NOAA CDO, DMI, SMHI, FMI, DWD, CHMI, MET Frost, KNMI, Météo-France), energy (EIA), transit (TfL,
+  Entur, Digitransit, Transitland, Navitia; STM's GTFS file), Mapillary images, NASA FIRMS fires, CARTO SQL (one SELECT) and OpenTopography.
 - **National services** (3.1.0): weather from DMI, SMHI, FMI, CHMI and DWD (keyless), Météo-France and WeatherAPI (keyed); transit from Entur,
   opentransportdata.swiss and Navitia; maps from IGN (keyless basemaps and ADMIN EXPRESS boundaries), NLS Finland, Dataforsyningen and
   Lantmäteriet; basemaps from Jawg, HERE and TomTom with the person's key; US climate normals by station (`ref.statistic.us.climate.noaa-normals`,

@@ -153,3 +153,28 @@
   fetch: one COG on Source Cooperative (ausantarctic/gebco), overview range reads; used by terrain.bathymetry, not for land relief
 - {id: eu-dem, title: EEA EU-DEM v1.1, status: superseded, coverage: world, surface: surface, licence: withdrawn by the EEA; its successor for open use is the Copernicus DEM GLO-30 (above)}
 - {id: fabdem, title: FABDEM, status: excluded, coverage: world, surface: bare earth, licence: CC BY-NC-SA 4.0 (non-commercial; out by owner decision O6)}
+# 3.2.0: NASADEM with the person's one Earthdata token (earthdata.py): bare-ish ground for analysis between the national models and Terrarium.
+- id: nasadem
+  title: NASADEM (reprocessed SRTM, 1 arc second)
+  entry: ref.terrain.world.dem.nasadem
+  status: active
+  coverage: "bbox:-180,-56,180,60"
+  native_m: 30
+  surface: radar ground (SRTM; tall canopy and dense buildings partly in it)
+  licence: public domain (CC0, NASA)
+  credit: NASA JPL, LP DAAC (NASADEM)
+  credential: earthdata
+  fetch: CMR lists the 1-degree tiles in the window; each zipped HGT downloaded with the Earthdata token (signed S3 hand-off), at most 9 a map
+  byte_budget_mb: 250
+# 3.2.0: OpenTopography's Global DEM API with the person's key, by name only (terrain.source: opentopography): 50 calls a day on a free key.
+- id: opentopography
+  title: OpenTopography Global DEMs (Copernicus 30 m by default)
+  entry: ref.terrain.world.dem.opentopography
+  status: named
+  coverage: world
+  native_m: 30
+  surface: per dataset (COP30 is a surface model)
+  licence: attribution, per dataset
+  credit: OpenTopography and the dataset's source
+  credential: opentopography
+  fetch: one Global DEM API GetCoverage-style request (GeoTIFF) for the box with the person's key

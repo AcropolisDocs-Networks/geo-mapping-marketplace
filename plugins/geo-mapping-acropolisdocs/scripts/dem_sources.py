@@ -15,6 +15,9 @@ from its publisher's own service and returned as a GeoTIFF with the same fetch r
     lantmateriet   Lantmäteriet's Markhöjdmodell (1 m DTM, Sweden), STAC items of COGs read by range; CC BY 4.0, but the files need a free
                    Geotorget login (the person's own credential `lantmateriet`, HTTP Basic, sent only to dl1.lantmateriet.se). Without it
                    the chain goes on to Copernicus, with an INFO saying how to add the login.
+    nasadem        3.2.0: NASADEM (reprocessed SRTM, 1 arc second, 60 N to 56 S) from LP DAAC's cloud archive: CMR lists the 1-degree tiles in
+                   the window (keyless), each zipped HGT is downloaded with the person's ONE Earthdata token (`earthdata`, earthdata.py; the
+                   archive hands the file to a signed S3 address, which gets no token). Public domain (CC0), the dataset cited.
 
 Each fetch writes `<cache>/terrain/<source>/<key>.tif` and returns a record (entry, crs, res_m, bytes, sha256, requests, attribution, licence).
 Every request goes through ogc_http.SafeHTTP or GDAL's range reads of a fixed public address built here; nothing takes a URL from a spec.
@@ -81,6 +84,10 @@ INFO = {
                                       "Modellicentie Gratis Hergebruik (free reuse with credit)."},
     "lantmateriet": {"entry": "ref.terrain.se.dem.lantmateriet-mhm", "native_m": 1, "surface": "bare earth (DTM)", "license": "attribution",
                      "attribution": "Elevation: Markhöjdmodell, © Lantmäteriet, CC BY 4.0."},
+    "opentopography": {"entry": "ref.terrain.world.dem.opentopography", "native_m": 30, "surface": "per dataset (COP30: surface model; SRTMGL1, NASADEM: radar ground)",
+                       "license": "attribution", "attribution": "Elevation data via OpenTopography; dataset credit per the source (SRTM: NASA/USGS; Copernicus DEM: ESA)."},
+    "nasadem": {"entry": "ref.terrain.world.dem.nasadem", "native_m": 30, "surface": "radar ground (SRTM; tall canopy and dense buildings partly in it)", "license": "public-domain",
+                "attribution": "Elevation: NASA JPL (2020). NASADEM Merged DEM Global 1 arc second V001, NASA EOSDIS LP DAAC."},
 }
 FETCHERS = tuple(INFO)
 
@@ -384,6 +391,58 @@ def fetch_lantmateriet(bounds, res_m: float, out: Path, *, http, store=None) -> 
                    {"credential": "lantmateriet", "host": LM_HOST})
 
 
+def fetch_nasadem(bounds, res_m: float, out: Path, *, http, store=None) -> dict:
+    """3.2.0: NASADEM tiles found through CMR and downloaded with the person's Earthdata token, read from their zips into the window's grid."""
+    import earthdata as ed
+    try:
+        tiles = ed.dem_tiles("nasadem", bounds, http=http)
+        if not tiles:
+            raise DemSourceError("nasadem: CMR lists no NASADEM tile in this window (open sea, or outside 60 N to 56 S)")
+        got = ed.fetch(urls=[t["url"] for t in tiles], short_name=ed.NASADEM["short_name"], http=http, store=store, max_files=ed.DEM_MAX_TILES,
+                       max_mb=400)
+    except ed.EarthdataError as ex:
+        raise DemSourceError(f"nasadem: {ex}") from None
+    tr, shape, got_m = grid_4326(bounds, max(res_m, 30.0))
+    arr = np.full(shape, np.nan)
+    n = 0
+    reqs = []
+    for path in got["files"]:
+        member = ed.hgt_member(Path(path))
+        if not member:
+            continue
+        n += _warp_into(f"/vsizip/{Path(path).as_posix()}/{member}", arr, tr, "EPSG:4326", got_m)
+        reqs.append({"url": next((u for u in (t["url"] for t in tiles) if Path(u).name == Path(path).name), path), "bytes": Path(path).stat().st_size})
+    if not n:
+        raise DemSourceError("nasadem: the tiles were downloaded but none could be read")
+    return _finish("nasadem", arr, tr, "EPSG:4326", out, got_m, reqs, {"credential": "earthdata", "hosts": sorted({__import__("urllib.parse").parse.urlsplit(t["url"]).hostname for t in tiles}),
+                   "handoff": got.get("handoff"), "tiles": [Path(p).name for p in got["files"]]})
+
+
+OT_DEMTYPES = ("COP30", "SRTMGL1", "NASADEM", "AW3D30", "COP90", "SRTMGL3", "SRTM15Plus")
+
+
+def fetch_opentopography(bounds, res_m: float, out: Path, *, http, store=None, demtype: str = "COP30") -> dict:
+    """3.2.0: OpenTopography's Global DEM API with the person's key (cred:opentopography): one GeoTIFF for the box, read into the window's grid.
+    Named only (terrain.source: opentopography): a free key has 50 calls a day."""
+    import library_request as lr
+    if demtype not in OT_DEMTYPES:
+        raise DemSourceError(f"opentopography: demtype is one of {', '.join(OT_DEMTYPES)}")
+    W, S, E, N = bounds
+    try:
+        r = lr.run("ref.terrain.world.dem.opentopography", params={"demtype": demtype, "south": f"{S:.6f}", "north": f"{N:.6f}", "west": f"{W:.6f}",
+                                                                  "east": f"{E:.6f}"}, http=http, store=store)
+    except lr.RequestError as ex:
+        raise DemSourceError(f"opentopography: {ex}") from None
+    if r.get("answer") != "geotiff":
+        raise DemSourceError(f"opentopography: the API answered {r.get('answer')}, not a GeoTIFF")
+    tr, shape, got_m = grid_4326(bounds, max(res_m, 30.0 if demtype != "COP90" and demtype != "SRTMGL3" else 90.0))
+    arr = np.full(shape, np.nan)
+    if not _warp_into(r["path"], arr, tr, "EPSG:4326", got_m):
+        raise DemSourceError("opentopography: the GeoTIFF could not be read")
+    return _finish("opentopography", arr, tr, "EPSG:4326", out, got_m, [{"url": r["send"], "bytes": Path(r["path"]).stat().st_size}],
+                   {"credential": "opentopography", "demtype": demtype})
+
+
 def fetch(src: str, bounds, res_m: float, out: Path, *, http=None, opener=None) -> dict:
     """One of FETCHERS for the window, written to `out`. -> the fetch record."""
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -408,4 +467,8 @@ def fetch(src: str, bounds, res_m: float, out: Path, *, http=None, opener=None) 
         return fetch_flanders_lidar(bounds, res_m, out, http=http)
     if src == "lantmateriet":
         return fetch_lantmateriet(bounds, res_m, out, http=http)
+    if src == "nasadem":
+        return fetch_nasadem(bounds, res_m, out, http=http)
+    if src == "opentopography":
+        return fetch_opentopography(bounds, res_m, out, http=http)
     raise DemSourceError(f"no elevation source '{src}'")

@@ -1,6 +1,6 @@
 id: ref.public-service.ca-qc.transit.stm
 type: public-service
-rev: 1
+rev: 2
 status: active
 title: STM Montréal GTFS (bus and métro)
 summary: Montréal (Montreal) bus and métro (metro) schedules, routes and stops from the STM's keyless GTFS file (CC BY 4.0); real-time positions through
@@ -43,6 +43,13 @@ avoid_when:
 - 'Real-time vehicle positions: they need a developer portal account and key (portail.developpeurs.stm.info), whose delivery was not read.'
 - 'Suburban trains and buses (exo, RTL, STL): other agencies'' feeds.'
 delivery:
+  sample:
+    request: gtfs
+  requests:
+    gtfs: https://www.stm.info/sites/default/files/gtfs/gtfs_stm.zip
+  read:
+    format: file
+    suffix: .zip
   mode: fetch
   format: GTFS (zip, about 66 MB)
   note: Static GTFS from the STM developers page (French; read 2026-11-07), no key. Real-time GTFS-RT (API i3) through the developer portal, limit 10 requests
@@ -76,3 +83,6 @@ maintenance:
     date: '2026-11-07'
     note: 'Seed (reference library additions, P2): the French developers page read on 2026-11-07 (static GTFS link with no key, CC BY 4.0, attribution);
       the real-time portal not read.'
+  - rev: 2
+    date: '2026-11-21'
+    note: '3.2.0: the GTFS address (gtfs_stm.zip, redirected to the current file, 69 MB on 2026-11-21) is fetched by library_request and kept as the zip that map-create reads.'

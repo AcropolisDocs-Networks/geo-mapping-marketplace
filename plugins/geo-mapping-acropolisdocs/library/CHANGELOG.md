@@ -2,6 +2,17 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-21
+
+- `ref.public-service.ca-qc.transit.stm` rev 2: 3.2.0: the GTFS address (gtfs_stm.zip, redirected to the current file, 69 MB on 2026-11-21) is fetched by library_request and kept as the zip that map-create reads.
+- `ref.public-service.fi.transit.digitransit` rev 3: 3.2.0: the GraphQL routing endpoints /routing/v2/finland/gtfs/v1 and /routing/v2/hsl/gtfs/v1 answered 401 "missing subscription key" to a POST without a key on 2026-11-21 (so the path is right); stops by box through library_request.
+- `ref.public-service.nl.weather.knmi` rev 3: 3.2.0: the file list and a file's temporary download address through library_request (dataset Actuele10mindataKNMIstations version 2 by default); 401 Authorization field missing without a key on 2026-11-21.
+- `ref.public-service.no.transit.entur` rev 2: 3.2.0: stops in a box through library_request (a declared GraphQL POST with ET-Client-Name); 117 stop places answered over central Oslo on 2026-11-21.
+- `ref.public-service.world.earth-observation.nasa-earthdata` rev 1: Added (3.2.0): one Earthdata token for CMR and every DAAC (cred:earthdata, a family of hosts), the signed S3 hand-off followed without the token; CMR's 401 for a made-up token and LP DAAC's 302 to the sign-in page seen on 2026-11-21; LAADS's token page and the ESDIS data use guidance read.
+- `ref.public-service.world.platform.carto` rev 3: 3.2.0: the connections list and the SQL API query (a SELECT on one of the person's connections) are sent by library_request with the bearer token; without one the API answered 401 Authentication failed on 2026-11-21.
+- `ref.statistic.world.night-lights.black-marble` rev 1: Added (3.2.0): CMR lists VNP46A4 v2 granules by box and year (2026-11-21); the tile download goes with the Earthdata token from LAADS's cloud archive.
+- `ref.terrain.world.dem.nasadem` rev 1: Added (3.2.0): CMR lists the collection and its tiles keylessly; the tile download goes with the Earthdata token and hands off to a signed S3 address (2026-11-21).
+
 ## 2026-11-20
 
 - `ref.basemap-provider.geoportail-fr` rev 1: Added (3.1.0, library P3): one Plan IGN v2 tile answered 200 on 2026-11-20; Licence Ouverte 2.0.
