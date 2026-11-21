@@ -377,7 +377,8 @@ def nightlights_tiles(bounds) -> list[tuple[int, int]]:
 
 
 BLACK_MARBLE = {"short_name": "VNP46A4", "version": "2", "dataset": "HDFEOS/GRIDS/VIIRS_Grid_DNB_2d/Data_Fields/AllAngle_Composite_Snow_Free",
-                "fill": 65535, "scale": 0.1,                   # collection 1 (uint16) only: collection 2 is float32 in nW/cm²/sr "units": "nW/cm2/sr", "px": 2400,
+                "fill": 65535, "scale": 0.1, "units": "nW/cm2/sr", "px": 2400,     # fill and scale: collection 1 (uint16) only; collection 2 is
+                                                                                       # float32 already in nW/cm²/sr (bm_values)
                 "attribution": "Night lights: NASA Black Marble VNP46A4 (Román et al. 2018), NASA LAADS DAAC"}
 
 
