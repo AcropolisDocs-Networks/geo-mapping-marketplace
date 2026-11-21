@@ -481,7 +481,9 @@ def earthdata_subset(short_name: str = "", concept_id: str = "", version: str = 
     (START/END) and one variable, and writes output_format (geotiff, netcdf, png, zarr) for up to max_results granules (at most 50), so a
     long time series arrives already clipped. Without confirm: the plan (what Harmony can do with the collection, its variables, how many
     granules match, the request); show it to the person. confirm=true submits and returns a job_id. job_id= follows the job; with fetch=true
-    a finished job's results are downloaded into WORK_FOLDER/data/earthdata/harmony/<job>/ (each handed to a signed address without the token)."""
+    a finished job's results are downloaded into WORK_FOLDER/data/earthdata/harmony/<job>/ (each handed to a signed address without the token).
+    The plan names the service that makes the cut; a format no service cuts is refused (it would download whole granules), and a GeoTIFF
+    of a box is made here from the service's netCDF cut when the GeoTIFF service does not cut (convert_here, geotiffs)."""
     return st.in_work_folder(work_folder, st.earthdata_subset_tool, short_name, concept_id, version, bbox, temporal, variable, output_format,
                              max_results, confirm, job_id, fetch)
 

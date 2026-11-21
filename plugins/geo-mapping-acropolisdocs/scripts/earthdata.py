@@ -494,7 +494,23 @@ def harmony_capabilities(concept_id: str, http=None) -> dict:
     return {"concept_id": d.get("conceptId") or concept_id, "short_name": d.get("shortName"), "subsetting": summ.get("subsetting") or {},
             "formats": [f.get("mimeType") for f in summ.get("outputFormats") or [] if f.get("mimeType")],
             "variables": [v.get("name") for v in d.get("variables") or [] if v.get("name")][:200],
-            "services": [x.get("name") for x in d.get("services") or []]}
+            "services": [x.get("name") for x in d.get("services") or []],
+            "service_caps": [_service_caps(x) for x in d.get("services") or []]}
+
+
+def _service_caps(x: dict) -> dict:
+    """3.3.1: what one Harmony service does. A collection's summary joins its services, but each service cuts and writes on its own:
+    for MUR SST net2cog writes GeoTIFF without cutting, and HOSS cuts but writes netCDF only."""
+    c = x.get("capabilities") or {}
+    sub = c.get("subsetting") or {}
+    return {"name": x.get("name"), "bbox": bool(sub.get("bbox")), "temporal": bool(sub.get("temporal")), "variable": bool(sub.get("variable")),
+            "formats": [f.get("mimeType") for f in c.get("outputFormats") or [] if f.get("mimeType")]}
+
+
+def _cutters(cap: dict, mime: str | None, need: list[str]) -> list[str]:
+    """The services that make every cut asked for (need: bbox, temporal, variable) and write mime (any format when mime is None)."""
+    return [s["name"] for s in cap.get("service_caps") or []
+            if all(s.get(n) for n in need) and (mime is None or mime in s["formats"])]
 
 
 def harmony_url(concept_id: str, bbox=None, temporal: str | None = None, variable: str | None = None, fmt: str | None = None,
@@ -542,12 +558,40 @@ def harmony_plan(*, short_name=None, version=None, concept_id=None, bbox=None, t
             fmt = mime = alt
     if mime and cap["formats"] and mime not in cap["formats"]:
         problems.append(f"it does not write {fmt}; it writes {', '.join(cap['formats'])}")
+    # 3.3.1: a cut is only made by a service that both cuts and writes the format; otherwise Harmony answers the whole granule
+    # (live 2026-11-21: MUR SST as GeoTIFF for the Gulf of California came back global, 36000 x 17999, 622 MB, through net2cog).
+    # dates choose the granules through CMR whichever service runs, so only the box and the variable need a service that cuts them
+    need = [n for n, v in (("bbox", bbox), ("variable", variable)) if v]
+    convert, service = None, None
+    if not problems and need and cap.get("service_caps"):
+        ok = _cutters(cap, mime, need)
+        if ok:
+            service = ok[0]
+        else:
+            nc = next((m for m in cap["formats"] if "netcdf" in m and _cutters(cap, m, need)), None)
+            if mime == "image/tiff" and nc:
+                convert, service, fmt, mime = "geotiff", _cutters(cap, nc, need)[0], nc, nc
+            else:
+                cut = sorted({m for s in cap["service_caps"] if all(s.get(n) for n in need) for m in s["formats"]})
+                what = " and ".join({"bbox": "the box", "variable": "the variable"}[n] for n in need)
+                problems.append(f"no Harmony service for this collection cuts {what} and writes {fmt or 'its own format'}; "
+                                + (f"the cut comes as {', '.join(cut)}" if cut else "none of its services makes that cut")
+                                + " (asking anyway would download whole granules)")
     hits = search("granules", http=http, concept_id=cid, bbox=bbox, temporal=temporal, limit=1)["hits"]
     url = harmony_url(cid, bbox, temporal, variable, fmt, max_results)
-    return {"ok": not problems, "concept_id": cid, "short_name": cap.get("short_name") or short_name, "capabilities": cap, "granules_matching": hits,
-            "granules_processed": min(hits, max(1, min(int(max_results or 10), HARMONY_MAX_RESULTS))), "request": url, "problems": problems,
-            "credential": f"cred:{CRED}", "host": HARMONY_HOST,
-            "next": "show the person the plan; submit with confirm=true, then follow the job with job_id" if not problems else "change the request"}
+    out = {"ok": not problems, "concept_id": cid, "short_name": cap.get("short_name") or short_name, "capabilities": cap, "granules_matching": hits,
+           "granules_processed": min(hits, max(1, min(int(max_results or 10), HARMONY_MAX_RESULTS))), "request": url, "problems": problems,
+           "service": service, "credential": f"cred:{CRED}", "host": HARMONY_HOST,
+           "next": "show the person the plan; submit with confirm=true, then follow the job with job_id" if not problems else "change the request"}
+    if convert:
+        out["convert_here"] = convert
+        out["note"] = (f"Harmony's GeoTIFF service for this collection does not cut; {service} cuts it as netCDF and the plugin writes "
+                       "the GeoTIFF from that cut on this computer")
+    return out
+
+
+def _job_note(job_id: str) -> Path:
+    return cache_root("harmony") / job_id / "job.json"
 
 
 def _job_row(d: dict) -> dict:
@@ -575,8 +619,19 @@ def harmony_submit(*, http=None, store=None, **kw) -> dict:
     job = _job_row(json.loads(r.content))
     if not job["job_id"] or not JOB_RE.match(str(job["job_id"])):
         raise EarthdataError("Harmony did not answer with a job", gc.EXIT_SERVICE)
-    return {"ok": True, **job, "concept_id": p["concept_id"], "granules_matching": p["granules_matching"],
-            "next": "follow it with job_id; when status is successful, fetch=true downloads the results"}
+    note = {"job_id": job["job_id"], "concept_id": p["concept_id"], "variable": kw.get("variable"), "asked_format": kw.get("fmt"),
+            "service": p.get("service"), "convert_here": p.get("convert_here")}
+    try:
+        nf = _job_note(job["job_id"])
+        nf.parent.mkdir(parents=True, exist_ok=True)
+        nf.write_text(json.dumps(note, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+    out = {"ok": True, **job, "concept_id": p["concept_id"], "granules_matching": p["granules_matching"], "service": p.get("service"),
+           "next": "follow it with job_id; when status is successful, fetch=true downloads the results"}
+    if p.get("convert_here"):
+        out.update(convert_here=p["convert_here"], note=p["note"])
+    return out
 
 
 def harmony_job(job_id: str, *, http=None, store=None) -> dict:
@@ -601,9 +656,42 @@ def harmony_fetch(job_id: str, *, max_files: int = MAX_FILES, refresh: bool = Fa
         return {**job, "ok": False, "downloaded": 0, "next": f"the job is {job['status']} ({job.get('progress')}%): ask again later"}
     urls = [u for u in job["results"] if is_earthdata_host(urllib.parse.urlsplit(u).hostname or "")][:max_files]
     got = fetch(urls=urls, short_name=f"harmony/{job_id}", max_files=max_files, refresh=refresh, http=http, store=store) if urls else {"files": [], "downloaded": 0}
-    return {"ok": True, "job_id": job_id, "status": job["status"], "downloaded": got.get("downloaded", 0), "files": got.get("files", []),
-            "folder": got.get("folder"), "record": got.get("record"), "handoff": got.get("handoff"), "attribution": ATTRIBUTION,
-            "left_out": max(0, len(job["results"]) - len(urls))}
+    out = {"ok": True, "job_id": job_id, "status": job["status"], "downloaded": got.get("downloaded", 0), "files": got.get("files", []),
+           "folder": got.get("folder"), "record": got.get("record"), "handoff": got.get("handoff"), "attribution": ATTRIBUTION,
+           "left_out": max(0, len(job["results"]) - len(urls))}
+    try:
+        note = json.loads(_job_note(job_id).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        note = {}
+    if note.get("convert_here") == "geotiff":
+        made = [str(netcdf_to_geotiff(Path(f), note.get("variable"))) for f in out["files"] if str(f).lower().endswith((".nc", ".nc4", ".h5", ".netcdf"))]
+        out.update(geotiffs=made, converted_here=bool(made))
+    return out
+
+
+def netcdf_to_geotiff(src: Path, variable: str | None) -> Path:
+    """3.3.1: a Harmony netCDF cut written as a GeoTIFF beside it: the variable unpacked (scale and offset applied) to float32 in its own
+    units, nodata as NaN, EPSG:4326 when the grid is in degrees, units and long name kept as tags."""
+    import numpy as np
+    import rasterio
+    src = Path(src)
+    path = f'netcdf:"{src}":{variable}' if variable else str(src)
+    out = src.with_suffix(".tif")
+    with rasterio.open(path) as d:
+        a = d.read(1, masked=True).astype("float64")
+        scale, offset = (d.scales[0] or 1.0), (d.offsets[0] or 0.0)
+        v = (a * scale + offset).filled(np.nan).astype("float32")
+        tags = {k.split("#")[-1]: val for k, val in d.tags(1).items()}
+        crs = d.crs
+        if crs is None and -181 <= d.bounds.left <= 181 and -91 <= d.bounds.bottom <= d.bounds.top <= 91:
+            crs = "EPSG:4326"
+        prof = {"driver": "GTiff", "width": d.width, "height": d.height, "count": 1, "dtype": "float32", "crs": crs, "transform": d.transform,
+                "nodata": float("nan"), "compress": "deflate", "predictor": 3, "tiled": True}
+    with rasterio.open(out, "w", **prof) as w:
+        w.write(v, 1)
+        w.update_tags(1, **{k: tags[k] for k in ("units", "long_name", "standard_name") if k in tags})
+        w.update_tags(source=src.name, made_by="geo-mapping earthdata_subset (netCDF cut written as GeoTIFF)")
+    return out
 
 
 # ---------------------------------------------------------------------------------------------------------------- CLI
