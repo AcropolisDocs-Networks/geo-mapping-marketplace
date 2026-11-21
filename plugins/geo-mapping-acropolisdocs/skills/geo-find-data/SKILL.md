@@ -121,6 +121,15 @@ second step, not the first; a draft is never chosen for a map until the person a
   only a country whose licence (read from each API record) is CC BY 4.0 or more open; the record keeps the source, licence and year for the credit.
 - **Detailed land and water** for a city map anywhere: `ref.context.world.ground.overture` (read per window by `ground_detail.py prepare`), and the
   OSM simplified land for regional maps (`ref.context.world.land.osm-simplified`). Both ODbL.
-- **Elevation** anywhere: `ref.terrain.world.dem.copernicus-glo30` (keyless, the default relief outside the US).
+- **Elevation** anywhere: `ref.terrain.world.dem.copernicus-glo30` (keyless, the default relief outside the US); the national bare-earth
+  models first in their country (3.1.0: Canada MRDEM, France RGE ALTI, Flanders DHMV and its lidar tiles, Sweden's Markhöjdmodell with a free
+  login, Australia's 5 m LiDAR, Japan's GSI), ArcticDEM and REMA at the poles, GEBCO for the sea floor (`terrain-analysis`).
 - **Population denominators** for a rate "per 1,000 people" outside the US: GHSL or WorldPop (`ref.statistic.world.population.ghsl`,
-  `.worldpop`); the ACS is US-only.
+  `.worldpop`); Kontur on H3 (`.kontur`, the `kontur-population` adapter); Meta's 30 m HRSL for a site's surroundings (`.hrsl`, read by
+  window). The ACS is US-only.
+- **Mobile coverage by country** (3.1.0): the regulators' data through the adapters and `coverage_fetch` (Germany, France, Australia,
+  Canada, the UK by council), OpenCelliD towers and Ookla speeds (`h3-grids`).
+- **National services** (3.1.0): weather from DMI, SMHI, FMI, CHMI and DWD (keyless), Météo-France and WeatherAPI (keyed); transit from Entur,
+  opentransportdata.swiss and Navitia; maps from IGN (keyless basemaps and ADMIN EXPRESS boundaries), NLS Finland, Dataforsyningen and
+  Lantmäteriet; basemaps from Jawg, HERE and TomTom with the person's key; US climate normals by station (`ref.statistic.us.climate.noaa-normals`,
+  `ref_fetch` with `region=`), USFS national forests and OpenAddresses. `ref_library.py select --geo <country>` lists what fits.

@@ -1,0 +1,95 @@
+id: ref.terrain.se.dem.lantmateriet-mhm
+type: terrain
+rev: 1
+status: active
+title: Lantmäteriet Markhöjdmodell, 1 m (Sweden, bare earth)
+summary: Sweden's 1 m bare-earth model as Cloud-Optimized GeoTIFF tiles found through Lantmäteriet's keyless STAC search and read by range with the person's
+  free Geotorget login; terrain.source auto uses it in Sweden when the login is registered.
+tags:
+  geography:
+  - se
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  - parcel-level
+  - site-precision
+  scale:
+  - regional
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Relief, a profile or a line of sight in Sweden at 1 m, with the person's own Geotorget login.
+avoid_when:
+- 'No login is registered: the chain passes it over (an INFO says so) and uses the Copernicus DEM.'
+crs: EPSG:5845
+delivery:
+  mode: fetch
+  url_template: https://dl1.lantmateriet.se/hojd/data/grid/mhm/{folder}/m{tile}.tif
+  format: Cloud-Optimized GeoTIFF, EPSG:5845 (SWEREF99 TM + RH 2000)
+  requires_credential:
+    name: lantmateriet
+    kind: basic
+    class: secret
+    host: dl1.lantmateriet.se
+    inject:
+      basic: true
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://geotorget.lantmateriet.se/
+    free: true
+    limits: Free of charge (avgiftsfri) under CC BY 4.0; no quota stated on the pages read 2026-11-20.
+  note: Items from https://api.lantmateriet.se/stac-hojd/v1/collections/dtm-cog/items?bbox=... (keyless); a data asset answered 401 without a login on 2026-11-20.
+    At most 16 tiles a map.
+source:
+  publisher: Lantmäteriet
+  product: Markhöjdmodell (dtm-cog)
+  url: https://api.lantmateriet.se/stac-hojd/v1/collections/dtm-cog
+  terms_url: https://www.lantmateriet.se/globalassets/geodata/geodataprodukter/anvandningsvillkor_for_vardefulla_datamangder.pdf
+url_verified_on: '2026-11-20'
+vintage:
+  current: Markhöjdmodell (updated continuously)
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: Markhöjdmodell, © Lantmäteriet, CC BY 4.0.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://api.lantmateriet.se/stac-hojd/v1/collections/dtm-cog
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, a source the 2026-11-07 dive did not reach): the STAC collection and items read on 2026-11-20 (CC-BY-4.0); the files need the Geotorget
+      login.'

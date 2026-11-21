@@ -1,0 +1,82 @@
+id: ref.statistic.us.climate.noaa-normals
+type: statistic
+rev: 1
+status: active
+title: NOAA U.S. Climate Normals 1991-2020 (monthly, by station)
+summary: Thirty-year monthly normals (mean, maximum and minimum temperature, precipitation, snowfall) at NOAA's stations, read for a region as a point layer
+  by noaa_normals.py (ref_fetch with region=).
+tags:
+  geography:
+  - us
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - proportional-symbol
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- A climate map of a state or a metro (July highs, annual precipitation) from the official normals.
+avoid_when:
+- 'Today''s weather: these are 30-year averages.'
+- 'Outside the United States and its territories: use the ERA5 climatology entries.'
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  tool: noaa_normals
+  url_template: https://www.ncei.noaa.gov/data/normals-monthly/1991-2020/access/{station}.csv
+  format: CSV a station (MLY-TAVG-NORMAL, MLY-TMAX-NORMAL, MLY-TMIN-NORMAL in °F, MLY-PRCP-NORMAL in inches); the inventory doc/inventory_30yr.txt
+  note: noaa_normals.py takes the stations inside the region nearest its centre (60 a call) and writes one GeoParquet with a column a variable and month
+    and an annual column.
+source:
+  publisher: NOAA National Centers for Environmental Information
+  product: U.S. Climate Normals 1991-2020, monthly
+  url: https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals
+url_verified_on: '2026-11-20'
+vintage:
+  current: 1991-2020
+  cadence: static
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Climate: NOAA NCEI U.S. Climate Normals 1991-2020 (monthly), public domain.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://www.ncei.noaa.gov/data/normals-monthly/1991-2020/access/USW00024233.csv
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, gap analysis): the inventory and Seattle-Tacoma''s monthly CSV read on 2026-11-20.'
+join:
+  key: STATION
+  type: string
+  width: 11
+  note: GHCN-Daily station id

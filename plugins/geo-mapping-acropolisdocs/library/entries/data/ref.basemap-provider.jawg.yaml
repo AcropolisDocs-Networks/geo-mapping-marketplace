@@ -1,0 +1,110 @@
+id: ref.basemap-provider.jawg
+type: basemap-provider
+rev: 1
+status: active
+title: Jawg Maps basemaps (Streets, Sunny, Dark, Light, Terrain)
+summary: Jawg's vector-styled raster basemaps on OpenStreetMap, with the person's own access token; the free plan is 25,000 map views a month and not for
+  commercial use.
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - commercial
+use_when:
+- A styled OpenStreetMap basemap for an internal web page or a draft, with the person's own token (map-credentials add jawg).
+avoid_when:
+- 'A client deliverable on the free plan: commercial use is not part of Jawg''s free subscription (pricing comparison, 2026-11-20).'
+- No token is registered; the plugin never asks for a token in chat. Use the bundled basemap.
+url_template: https://tile.jawg.io/{style}/{z}/{x}/{y}.png?access-token={key}
+provider:
+  attribution_html: <a href="https://www.jawg.io/">© JawgMaps</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a>
+  max_zoom: 22
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: null
+  print_ok: null
+  production_ok: false
+  commercial_ok: false
+  styles:
+  - jawg-streets
+  - jawg-sunny
+  - jawg-terrain
+  - jawg-dark
+  - jawg-light
+  - jawg-matrix
+delivery:
+  mode: fetch
+  requires_credential:
+    name: jawg
+    kind: apikey
+    class: secret
+    class_allowed:
+    - secret
+    - browser
+    host: tile.jawg.io
+    inject:
+      query: access-token
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://www.jawg.io/lab/
+    probe: https://tile.jawg.io/jawg-streets/0/0/0.png
+    free: true
+    limits: 'Basic (free) plan: 25,000 map views a month, a map view being 15 raster tiles (pricing page, read 2026-11-20); commercial use is marked absent
+      for Basic.'
+  note: Tile address and the access-token parameter from xyzservices; without a valid token the tile host answers 403 with a placeholder PNG (2026-11-20).
+source:
+  publisher: Jawg Maps (JawgMaps SAS)
+  product: Jawg Maps tiles
+  url: https://www.jawg.io/en/pricing/
+  terms_url: https://www.jawg.io/en/terms/
+url_verified_on: '2026-11-20'
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: false
+  external_ok: false
+  attribution_text: © JawgMaps © OpenStreetMap
+  note: 'Jawg terms (read 2026-11-20): ''© JawgMaps'' linked to jawg.io on every map without exception, then ''© OpenStreetMap'' linked to its copyright
+    page; rights are for the client''s own internal purposes; the Basic plan has no commercial use.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://www.jawg.io/en/pricing/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): pricing and terms read on 2026-11-20 (25,000 map views a month, internal and non-commercial on Basic, attribution
+      always visible); the tile host answered 403 to a wrong token.'
+attribution:
+  corner: © JawgMaps © OpenStreetMap
+  links:
+  - text: © JawgMaps
+    href: https://www.jawg.io/
+  - text: © OpenStreetMap
+    href: https://www.openstreetmap.org/copyright
+  required_on_map: true
+  collapse: never
+  export:
+    text: © JawgMaps (jawg.io) © OpenStreetMap (openstreetmap.org/copyright)
+  terms_read: '2026-11-20'

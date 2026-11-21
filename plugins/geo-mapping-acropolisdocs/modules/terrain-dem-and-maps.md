@@ -24,7 +24,19 @@ python3 "$GMAP_ROOT/scripts/terrain.py" fetch --bounds -71.70,-33.10,-71.55,-33.
 python3 "$GMAP_ROOT/scripts/terrain.py" los --dem dem.tif --a=-71.627,-33.045 --b=-71.590,-33.030 --ha 25 --hb 30 --freq 18
 ```
 - The DEM is cached under the working folder by source, window and resolution; a second question on the same window reads nothing from the network, and the record says `cached: true`.
+- **National models first in their country** (3.1.0, bare earth): Canada `canada-mrdem` (NRCan MRDEM, 30 m COG), France `ign-rge-alti`
+  (IGN RGE ALTI, 1 m), Flanders `flanders-dhmv` (DHMV II DTM, 1 m WCS), Sweden `lantmateriet` (Markhöjdmodell, 1 m, only with the person's
+  free Geotorget login: `/geo-mapping-acropolisdocs:map-credentials add lantmateriet --kind basic --host dl1.lantmateriet.se`; without it the map says what the login
+  would add and uses the next source), Australia `ga-lidar-5m` (the populated coast; the rest from the next source), Japan `gsi-japan`
+  (10 m tiles). At the poles `arcticdem` and `rema` (32 m surface models). Each is credited for you; `auto` picks them by coverage.
+- **Bathymetry**: `terrain: {bathymetry: gebco}` fills the water cells from the GEBCO 2026 grid (450 m) so the sea floor is shaded; GEBCO is
+  never used for land.
 - **The person's own DEM** (a GeoTIFF from a propagation tool, a lidar tile): pass it as `--dem` and skip `fetch`. Any CRS works; `raster_io.open_info` says what it is. Nothing is fetched and the record says so.
+- **Lidar point clouds** (3.1.0): a `.las` or `.laz` file works wherever a DEM does (`--dem`, `terrain.source`, a raster layer's path). It is
+  gridded once by `lidar.py` to a 1 m bare-earth model (ground and water points, the lowest a cell; `surface: dsm` keeps everything but noise,
+  the highest a cell); give `terrain.crs` (or the layer's `crs`) when the header names none. `lidar.py info FILE` says what is in a file;
+  `lidar.py flanders --bbox W,S,E,N` fetches Flanders' own LAZ tiles keylessly (16 at most, about 4 km2) and grids them
+  (`terrain.source: flanders-lidar`). LAZ needs the raster profile (`doctor.py --fix --profile raster`).
 - Every request is logged in the record (URL, status, bytes, time, sha256), and the record goes into the map's provenance.
 
 ## Putting terrain on a map

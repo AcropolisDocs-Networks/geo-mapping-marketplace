@@ -77,9 +77,11 @@ def norm_options(opt: dict) -> dict:
         mx = int(o.get("max_maps") or DEFAULT_MAX)
     except (TypeError, ValueError):
         raise AtlasError("max_maps is a whole number")
-    by = str(o.get("by") or "field")
-    if by not in ("field", "time"):
-        raise AtlasError("by is field (one map per value) or time (one map per period of the layer's time_field)")
+    by = str(o.get("by") or "field").lower()
+    by = {"region": "regions", "region-list": "regions", "state": "admin1", "province": "admin1", "county": "admin2", "district": "admin2", "cells": "h3"}.get(by, by)
+    if by not in ("field", "time") + SPATIAL_BY:
+        raise AtlasError("by is field (one map per value), time (one map per period of the layer's time_field), admin1 or admin2 (one map per area of "
+                         "the region), regions (one map per named region in values=) or h3 (one map per H3 cell at resolution=)")
     cum = _flag(o.get("cumulative"), False)
     planned = _flag(o.get("planned"), cum)
     return {"layer": o.get("layer"), "field": o.get("field"), "values": vals, "mode": mode, "max_maps": min(mx, HARD_MAX),
@@ -89,7 +91,11 @@ def norm_options(opt: dict) -> dict:
             "tiles": _flag(o.get("tiles"), False),             # 1.12.0: keep the MapSpec's tile basemap, prepared per page extent
             "animate": _list(o.get("animate")), "animate_sizes": _list(o.get("animate_sizes")) or ["square", "slide"],
             "hold": float(o.get("hold") or 1.0), "last_hold": float(o.get("last_hold") or 3.0),
-            "contact_sheet": _flag(o.get("contact_sheet"), False)}
+            "contact_sheet": _flag(o.get("contact_sheet"), False),
+            "region": o.get("region"), "resolution": int(o.get("resolution") or 4)}
+
+
+SPATIAL_BY = ("admin1", "admin2", "regions", "h3")       # 3.1.0 (G-05): one map per area, whatever the country
 
 
 def _flag(v, default: bool) -> bool:
@@ -130,6 +136,8 @@ def discover(spec_path, opt: dict) -> dict:
     g = lay.gdf
     if o["by"] == "time":
         return _discover_time(plan, lay, o)
+    if o["by"] in SPATIAL_BY:
+        return _discover_units(plan, lay, o)
     if not o["field"] or o["field"] not in g.columns:
         cols = ", ".join(c for c in g.columns if c != g.geometry.name)
         raise AtlasError(f"say which column to iterate with field= (columns of '{lay.id}': {cols})")
@@ -159,6 +167,92 @@ def discover(spec_path, opt: dict) -> dict:
                           "tiles=true keeps it (one composite per page extent, inside the provider's tile caps)"))
     return {"options": o, "layer": lay.id, "role": lay.role, "field": o["field"], "values": values, "counts": counts, "shared": shared, "findings": fs, "tiles": tiles,
             "base_title": text_lint.title_text(plan.spec), "base_id": str(plan.spec["id"]), "gdf": g}
+
+
+def _atlas_region(plan, lay, o: dict):
+    """The region a spatial atlas divides: the atlas's region= option, else the MapSpec's region: block, else the countries the layer's data
+    lie in."""
+    import region as region_mod
+    import map_plan as mp
+    if o.get("region"):
+        blk = o["region"]
+        if isinstance(blk, str):
+            codes = [c.strip() for c in blk.split(",") if c.strip()]
+            blk = {"admin": codes if len(codes) > 1 else codes[0]} if all(region_mod.CODE.match(c.upper()) for c in codes) else {"place": blk}
+        return region_mod.resolve(blk)
+    if mp._BUILD.get("region") is not None:
+        return mp._BUILD["region"]
+    a0 = region_mod._basemap(region_mod.ADMIN1)
+    pts = lay.gdf.to_crs("EPSG:4326")
+    hit = a0[a0.geometry.intersects(pts.geometry.union_all().envelope)]
+    cs = sorted(set(hit["iso_a2"]))
+    if not cs:
+        raise AtlasError("the layer's data lie in no country of the admin-1 table; give region= (a place or admin codes)")
+    return region_mod.resolve({"admin": cs if len(cs) > 1 else cs[0]})
+
+
+def _discover_units(plan, lay, o: dict) -> dict:
+    """3.1.0 (G-05): by admin1, admin2, regions or h3. Each value is an area (its code); its count is the layer's features that touch it. Areas the
+    data never touch are left out unless named in values=."""
+    import geopandas as gpd
+    import region as region_mod
+    fs = []
+    g = lay.gdf.to_crs("EPSG:4326")
+    try:
+        if o["by"] == "regions":
+            names = o["values"] or []
+            if not names:
+                raise AtlasError("by: regions needs values= naming the regions (gazetteer names or admin codes)")
+            rows = []
+            for nm in names:
+                r = region_mod.resolve(nm)
+                rows.append({"code": nm, "name": r.name, "geometry": r.geometry})
+            units = gpd.GeoDataFrame(rows, crs="EPSG:4326")
+            reg = None
+        else:
+            reg = _atlas_region(plan, lay, o)
+            units = region_mod.units_in(reg, o["by"], resolution=o["resolution"])
+    except region_mod.RegionError as ex:
+        raise AtlasError(str(ex), ex.rule)
+    counts = {str(u.code): int(g.geometry.intersects(u.geometry).sum()) for u in units.itertuples()}
+    if o["values"] and o["by"] != "regions":
+        want = [str(v) for v in o["values"]]
+        missing = [v for v in want if v not in counts]
+        if missing:
+            fs.append(finding("MAP-ATL-003", "WARN", f"{len(missing)} area(s) are not in the region and were left out: {', '.join(missing[:10])}", missing))
+        values = [v for v in want if v in counts]
+    else:
+        values = [c for c in units["code"].astype(str) if counts.get(c, 0) > 0 or o["by"] == "regions"]
+        dropped = len(units) - len(values)
+        if dropped:
+            fs.append(finding("MAP-ATL-003", "INFO", f"{dropped} area(s) of the {o['by']} level hold no feature of '{lay.id}' and get no page"))
+    if not values:
+        raise AtlasError(f"no {o['by']} area of the region holds a feature of '{lay.id}'")
+    if len(values) > o["max_maps"]:
+        raise AtlasError(f"{len(values)} areas would make {len(values)} maps, more than max_maps={o['max_maps']}; name the areas with values= or raise max_maps", "MAP-ATL-002")
+    names = dict(zip(units["code"].astype(str), units["name"].astype(str), strict=False))
+    shared = _shared(o, lay, fs)
+    tiles = (plan.spec.get("basemap") or {}).get("provider") not in (None, "none", "bundled")
+    return {"options": o, "layer": lay.id, "role": lay.role, "field": None, "values": values, "counts": counts, "shared": shared, "findings": fs, "tiles": tiles,
+            "base_title": text_lint.title_text(plan.spec), "base_id": str(plan.spec["id"]), "gdf": g, "units": {"level": o["by"], "names": names,
+            "region": reg.name if reg is not None else None}}
+
+
+def _unit_block(level: str, code: str, names: dict) -> dict:
+    """The region: block of one page of a spatial atlas."""
+    if level == "admin1":
+        return {"admin": code}
+    if level == "h3":
+        return {"h3": [code]}
+    if level == "regions":
+        return code if isinstance(code, dict) else ({"admin": code} if __import__("region").CODE.match(str(code).upper()) else {"place": code})
+    if str(code).isdigit() and len(str(code)) == 5:                    # a US county GEOID: its state and its name
+        import region as region_mod
+        st = region_mod._basemap(region_mod.US_STATES)
+        stu = st.loc[st["STATEFP"] == str(code)[:2], "STUSPS"]
+        return {"admin2": {"in": f"US-{stu.iloc[0]}", "names": [names.get(code, code)]}}
+    parent = str(code).rsplit("-", 1)[0] if "-" in str(code) else None
+    return {"admin2": {"in": parent or str(code)[:2], "names": [names.get(code, code)]}}
 
 
 def _shared(o: dict, lay, fs: list):
@@ -278,6 +372,8 @@ def make_specs(spec_path, disc: dict, out_dir: Path) -> list[dict]:
     out_dir.mkdir(parents=True, exist_ok=True)
     if o.get("by") == "time":
         return _time_specs(base_spec, spec_path, disc, out_dir)
+    if o.get("by") in SPATIAL_BY:
+        return _unit_specs(base_spec, spec_path, disc, out_dir)
     seen: dict[str, int] = {}
     maps = []
     for v in disc["values"]:
@@ -318,6 +414,43 @@ def make_specs(spec_path, disc: dict, out_dir: Path) -> list[dict]:
         p = out_dir / f"{sl}.yaml"
         p.write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True), encoding="utf-8")
         maps.append({"value": v, "slug": sl, "id": s["id"], "spec": str(p), "title": title["text"], "features": disc["counts"][v]})
+    return maps
+
+
+def _unit_specs(base_spec: dict, spec_path: Path, disc: dict, out_dir: Path) -> list[dict]:
+    """3.1.0 (G-05): one MapSpec per area. Each page's region: block is the area, so the frame, the projection, the names and the units follow it;
+    mode filter clips the iterated layer to the area (`ops: [{op: clip, layer: region}]`), mode focus frames the area over all the data."""
+    import yaml
+    o, names = disc["options"], disc["units"]["names"]
+    maps, seen = [], {}
+    for v in disc["values"]:
+        s = copy.deepcopy(base_spec)
+        _abs_paths(s, spec_path.parent)
+        sl = slug(names.get(v, v))
+        seen[sl] = seen.get(sl, 0) + 1
+        if seen[sl] > 1:
+            sl = f"{sl}-{seen[sl]}"
+        s["id"] = f"{base_spec['id']}-{sl}"
+        s["region"] = _unit_block(disc["units"]["level"], v, names)
+        s["extent"] = {"mode": "region", **({"padding_pct": (base_spec.get("extent") or {}).get("padding_pct")} if (base_spec.get("extent") or {}).get("padding_pct") else {})}
+        ly = next(l for l in s["layers"] if l["id"] == disc["layer"])
+        if o["mode"] == "filter":
+            ops = list(ly.get("ops") or [])
+            if not any(isinstance(x, dict) and x.get("op") == "clip" and x.get("layer") == "region" for x in ops):
+                ops.append({"op": "clip", "layer": "region"})
+            ly["ops"] = ops
+        _apply_shared(ly, disc["shared"])
+        title = dict((s.get("elements") or {}).get("title") or {})
+        title["on"] = True
+        title["text"] = o["title"].format(title=disc["base_title"], value=names.get(v, v), field=disc["units"]["level"])
+        s.setdefault("elements", {})["title"] = title
+        if disc["tiles"] and not o.get("tiles"):
+            s["basemap"] = {"provider": "bundled"}
+        elif disc["tiles"]:
+            s["basemap"] = {**(s.get("basemap") or {}), "prepared_as": s["id"]}
+        p = out_dir / f"{sl}.yaml"
+        p.write_text(yaml.safe_dump(s, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        maps.append({"value": names.get(v, v), "code": v, "slug": sl, "id": s["id"], "spec": str(p), "title": title["text"], "features": disc["counts"].get(v, 0)})
     return maps
 
 
@@ -865,7 +998,10 @@ def main(argv=None) -> int:
     ap.add_argument("--formats", default="pdf")
     ap.add_argument("--no-shared-classes", action="store_true")
     ap.add_argument("--no-index", action="store_true")
-    ap.add_argument("--by", default="field", choices=["field", "time"], help="time: one map per period of the layer's time_field (M15)")
+    ap.add_argument("--by", default="field", choices=["field", "time", "admin1", "admin2", "regions", "h3"],
+                    help="time: one map per period of the layer's time_field (M15); admin1, admin2, regions, h3: one map per area (3.1.0)")
+    ap.add_argument("--region", help="by admin1|admin2|h3: the region to divide (a place or admin codes); default the MapSpec's region: block")
+    ap.add_argument("--resolution", type=int, default=4, help="by h3: the cell resolution of the pages")
     ap.add_argument("--unit", default="auto", help="by time: auto, year, quarter, month or day")
     ap.add_argument("--cumulative", action="store_true", help="by time: each map shows everything up to its period, the period's own features larger")
     ap.add_argument("--no-planned", action="store_true", help="by time, cumulative: leave out the features still planned")
@@ -873,7 +1009,8 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     opt = {"layer": a.layer, "field": a.field, "mode": a.mode, "values": a.values, "max_maps": a.max_maps,
            "shared_classes": False if a.no_shared_classes else True, "index_page": False if a.no_index else True,
-           "by": a.by, "unit": a.unit, "cumulative": a.cumulative, **({"planned": False} if a.no_planned else {}), **({"animate": a.animate} if a.animate else {})}
+           "by": a.by, "unit": a.unit, "cumulative": a.cumulative, **({"planned": False} if a.no_planned else {}), **({"animate": a.animate} if a.animate else {}),
+           **({"region": a.region} if a.region else {}), "resolution": a.resolution}
     try:
         d = discover(a.spec, opt)
     except AtlasError as ex:

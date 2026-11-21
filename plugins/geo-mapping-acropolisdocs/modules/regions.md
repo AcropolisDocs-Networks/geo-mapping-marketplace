@@ -37,19 +37,23 @@ Say which definition was used, in one phrase ("the ten northern counties"), when
 
 | | |
 |---|---|
-| Frame | `extent: {mode: region}` is the default with a region: the frame fits the region's outline, and the legend and locator stay off it (2 percent at most for an area-filling map) |
+| Frame | `extent: {mode: region}` is the default with a region: the frame fits the region's outline without its remote specks (3.1.0: Rockall off Scotland is drawn but not framed), and the legend and locator stay off it (2 percent at most for an area-filling map) |
 | Clip | `ops: [{op: clip, layer: region}]` clips any layer to it; `region` is a layer name for ops |
 | Projection | an equal-area projection centred on it for a thematic map: Albers between 30 and 65 degrees for a subject about as wide as tall or wider, Lambert azimuthal otherwise; the datum by the region (NAD83, ETRS89, GDA2020, SIRGAS 2000, WGS 84). National presets and `crs.prefer` still win |
 | Names | admin-1 names from one worldwide table (the US states are its US rows); places the message names are labelled at any scale |
-| Units | the scale bar in the region's own units (miles for a US region, km elsewhere) |
+| Units | the scale bar in the region's own units (miles for a US or UK region, km elsewhere); a region across both (Cascadia) gets a two-unit bar, km over miles (3.1.0) |
 | H3 | `h3: {complete: region}` makes every cell of the region (see `h3-grids`) |
-| Adapters | each adapter fetches by the region's partitions: `us_states` (FCC files per state), `countries`, `admin1` (ISO 3166-2) |
+| Adapters | each adapter fetches by the region's partitions: `us_states` (FCC files per state), `countries`, `admin1` (ISO 3166-2). 3.1.0: the regulators' coverage outside the US (bnetza-mobile-coverage, arcep-mon-reseau-mobile, accc-mobile-coverage, canada-wireless-coverage, ofcom-connected-nations), OpenCelliD, Ookla and kontur-population, each fetched for the region with a cost card first (the map server's `coverage_fetch`, or `adapters_cli.py fetch NAME --region ...`) |
+| Tools | the map server's `ref_fetch`, `census_query` and `fcc_bdc_list` take `region=` (a place or admin codes) instead of a state: one call per part, the parts outside the source listed (3.1.0) |
+| Series | `map-atlas` and `market-map` divide a region `by: admin1`, `admin2`, `regions` or `h3` (3.1.0) |
+| Names | towns the message names come from GeoNames (cities1000, 172,000 places) when Natural Earth has none, at any scale: Sandpoint, Moscow (Idaho) (3.1.0) |
 
 ## Where the shapes come from
 
 Countries and admin-1 areas worldwide from Natural Earth 1:10m (bundled, offline). US states and counties from the Census cartographic
 boundaries: the bundled ones, or the 1:500,000 counties when `ref.boundary.us.county.cb500k` is cached (the Day 20 counts need it).
 Admin-2 outside the United States comes from geoBoundaries ADM2 (CC BY 4.0), fetched once with the person's yes (MAP-REG-002 says so).
+France's 13 regions answer to their ISO codes (FR-ARA, FR-BRE, FR-IDF ...) as named regions of departments (3.1.0).
 
 ## Named regions
 

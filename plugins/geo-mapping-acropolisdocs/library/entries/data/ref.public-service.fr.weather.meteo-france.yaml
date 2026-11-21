@@ -1,0 +1,91 @@
+id: ref.public-service.fr.weather.meteo-france
+type: public-service
+rev: 1
+status: active
+title: Météo-France public API (observations, forecasts, climatology)
+summary: France's weather observations (SYNOP and the station network), forecasts and climatology from Météo-France's API portal, with the person's own
+  token.
+tags:
+  geography:
+  - fr
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- Observed weather at French stations (the DPObs API), with the person's own token (map-credentials add meteo-france).
+avoid_when:
+- 'The token expires: the portal issues OAuth2 tokens of limited life (or an API key); a long batch may need a new one.'
+- The licence and quota were not read on 2026-11-20; check the portal before a client deliverable.
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: meteo-france
+    kind: bearer
+    class: secret
+    host: public-api.meteofrance.fr
+    inject:
+      bearer: true
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://portail-api.meteofrance.fr/
+    probe: https://public-api.meteofrance.fr/public/DPObs/v1/liste-stations
+    free: true
+    limits: No quota stated on the pages read 2026-11-20 (the portal shows each API's quota after sign-up).
+    note: Without a token the gateway answers 401 'Missing Credentials' and asks for an OAuth2 token in the Authorization header with the Bearer scheme
+      (2026-11-20); the API documentation's examples use the Bearer form.
+  request: https://public-api.meteofrance.fr/public/DPObs/v1/liste-stations
+source:
+  publisher: Météo-France
+  product: Portail API Météo-France (DPObs and others)
+  url: https://portail-api.meteofrance.fr/
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Data: Météo-France'
+  note: Météo-France's public data are open data (Licence Ouverte / Etalab 2.0, its open data policy since 2024) with Météo-France named; the portal's own
+    conditions were not read on 2026-11-20.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_head
+    url: https://portail-api.meteofrance.fr/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, a source the 2026-11-07 dive did not reach): the gateway''s answer without a token read on 2026-11-20 (401, Bearer); the portal''s
+      quota not read.'

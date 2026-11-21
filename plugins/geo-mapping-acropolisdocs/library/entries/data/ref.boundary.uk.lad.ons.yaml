@@ -1,0 +1,81 @@
+id: ref.boundary.uk.lad.ons
+type: boundary
+rev: 1
+status: active
+title: ONS local authority districts, December 2024 (UK, ultra generalised)
+summary: The UK's local authority districts (LAD24CD, LAD24NM) from the ONS Open Geography Portal, ultra generalised (BUC), as a feature service; the Ofcom
+  councils join to it.
+tags:
+  geography:
+  - uk
+  level:
+  - admin2
+  domain:
+  - general
+  use_for:
+  - choropleth
+  - join-key
+  - locator-inset
+  avoid_for:
+  - legal-boundary
+  - parcel-level
+  scale:
+  - national
+  - regional
+  detail:
+  - generalized
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- Any UK map by council, joined on the ONS code (E06, S12, W06, N09).
+avoid_when:
+- 'A legal or survey boundary: it is ultra generalised.'
+join:
+  key: LAD24CD
+  type: string
+  width: 9
+  note: 'ONS code: E06/E07/E08/E09 England, S12 Scotland, W06 Wales, N09 Northern Ireland'
+crs: EPSG:4326
+delivery:
+  mode: service
+  url_template: https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_Authority_Districts_December_2024_Boundaries_UK_BUC/FeatureServer/0
+  format: ArcGIS FeatureServer, queried as GeoJSON in EPSG:4326
+source:
+  publisher: Office for National Statistics
+  product: Local Authority Districts (December 2024) Boundaries UK BUC
+  url: https://geoportal.statistics.gov.uk/
+  terms_url: https://www.ons.gov.uk/methodology/geography/licences
+url_verified_on: '2026-11-20'
+vintage:
+  current: December 2024
+  cadence: annual
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: Office for National Statistics licensed under the Open Government Licence v.3.0. Contains OS data © Crown copyright and database
+    right 2024.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_Authority_Districts_December_2024_Boundaries_UK_BUC/FeatureServer/0?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0): the layer read on 2026-11-20 (fields LAD24CD, LAD24NM); the ONS licence page''s wording.'

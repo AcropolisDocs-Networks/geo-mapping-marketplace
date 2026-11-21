@@ -11,7 +11,7 @@ description: >
 Each person uses their own keys. A key lives in one private file in the person's credential folder on their own computer
 (`%USERPROFILE%\.geo-mapping\credentials\` on Windows, `~/.geo-mapping/credentials/` elsewhere), with a registry `credentials.yaml` that holds
 names and metadata only. Maps and profiles name a key as `cred:NAME` (for example `cred:census`), never by value. Full rules: the
-`credential-broker` module; spec: `docs/specs/credentials-spec.md`.
+`credential-broker` module.
 
 ## The conversation rules (MAP-CRED-007)
 

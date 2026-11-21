@@ -1464,6 +1464,10 @@ SCALE_STYLES = ("alternating", "line", "ticks", "ladder")      # 0.15.0: element
 def draw_scale_bar(info: dict, x: float, y: float, t: dict, pt: float, show_ratio: bool, style: str = "alternating") -> tuple[str, float, float]:
     """The scale bar. `alternating` (the default): filled and open segments. `line`: one line with an end tick at each end. `ticks`: one line
     with a tick at every segment boundary. All three keep the same height and labels, so the layout does not change with the style."""
+    if info.get("bar2"):                           # 3.1.0 (G-10): miles and kilometres, the second bar under the first, the ratio last
+        top, w1, h1 = draw_scale_bar({**info, "bar2": None}, x, y, t, pt, False, style)
+        low, w2, h2 = draw_scale_bar({**info, "bar": info["bar2"], "bar2": None}, x, y + h1 - 0.4, t, pt, show_ratio, style)
+        return top + low, max(w1, w2), h1 + h2 - 0.4
     bar = info["bar"]
     L = bar["length_mm"]
     bh = SCALE_BAR_H_MM
@@ -2604,6 +2608,59 @@ def admin_names_layer(load):
     return _gpd.GeoDataFrame(_pd.concat([p.to_crs(crs) for p in parts], ignore_index=True), geometry="geometry", crs=crs)
 
 
+GEONAMES_TOWNS = ("ref.gazetteer.world.place.geonames-cities1000", "ref.gazetteer.world.place.geonames")
+
+
+def message_towns(message, have: set, window, crs, *, fetch: bool = True):
+    """3.1.0 (G-07, G-08): towns the message names that the bundled gazetteer lacks (Sandpoint, Moscow), from GeoNames (cities1000, else
+    cities15000) inside the map window, as rows shaped like the gazetteer's (name, pop_max, scalerank, featurecla) so select_places takes
+    them. Capitalised whole words of three letters or more only. -> (GeoDataFrame or None, the entry id used or None)."""
+    import re as _re
+    import geopandas as _gpd
+    msg = str(message or "")
+    words = {w for w in _re.findall(r"\b[A-Z][\w'’.-]{2,}(?:\s+[A-Z][\w'’.-]+)*", msg)}
+    words |= {p for w in list(words) for p in w.split()}
+    words -= set(have)
+    if not words:
+        return None, None
+    for eid in GEONAMES_TOWNS:
+        try:
+            import ref_fetch
+            e = ref_fetch.find_entry(eid)
+            if ref_fetch.cached_path(e) is None:
+                if not fetch or map_raster_offline():
+                    continue
+                ref_fetch.fetch_entry(eid)
+            g, _e = mp.load_ref_layer(eid)
+        except Exception:  # noqa: BLE001 - not cached and not fetchable here: the message's towns stay unlabelled, as before
+            continue
+        g = mp.window_reproject(g, window, crs)
+        if g is None or not len(g):
+            continue
+        hit = g[g["name"].astype(str).isin(words) | g.get("asciiname", g["name"]).astype(str).isin(words)]
+        if not len(hit):
+            return None, eid
+        import pandas as _pd
+        pop = _pd.to_numeric(hit.get("population", 0), errors="coerce").fillna(0)
+        hit = hit.assign(pop_max=pop, nameascii=hit.get("asciiname", hit["name"]), scalerank=10, featurecla="Populated place", adm0cap=0)
+        hit = hit.sort_values("pop_max", ascending=False).drop_duplicates("name")
+        return _gpd.GeoDataFrame(hit[["name", "nameascii", "pop_max", "scalerank", "featurecla", "adm0cap", hit.geometry.name]], geometry=hit.geometry.name, crs=hit.crs), eid
+    return None, None
+
+
+def map_raster_offline() -> bool:
+    try:
+        import map_raster
+        return bool(map_raster.offline())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# 3.1.0: names the bundled Natural Earth layers carry wrong (a letter lost in the source), corrected where they are drawn; the files keep
+# their published hash
+NAME_FIXES = {"rivers": {"Sane": "Saône"}}
+
+
 def message_places(gdf, message) -> set:
     """The gazetteer's place names the message names: whole words, capitalised as written (Sandpoint, Moscow), three letters or more."""
     import re as _re
@@ -2706,7 +2763,10 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
         except mp.PlanError as ex:
             plan.notes.append(f"names: {key} not drawn ({ex})")
             return None
-        return mp.window_reproject(gdf, window, plan.crs)
+        g = mp.window_reproject(gdf, window, plan.crs)
+        if g is not None and "name" in g.columns and NAME_FIXES.get(key):
+            g = g.assign(name=g["name"].replace(NAME_FIXES[key]))
+        return g
 
     # ---- places
     pstats = {"candidates": 0, "placed": 0, "dropped_collision": 0, "dropped_size": 0, "dropped_outside": 0, "under_symbol": 0, "tier1": 0, "tier1_dropped": 0}
@@ -2725,6 +2785,22 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
             fp = _gpd.GeoDataFrame(_pd.concat([fp, rest], ignore_index=True), geometry="geometry", crs=plan.crs)
         places = fp
         stats["places_from"] = vgr.get("file")
+    if cfg["places"] != "none" and cfg.get("message_places", True) and cfg.get("_message"):
+        # 3.1.0 (G-08): a town the message names that Natural Earth lacks comes from GeoNames, so "Sandpoint" is labelled on a Panhandle map
+        have = set(places["name"].astype(str)) if places is not None and len(places) else set()
+        towns, src_eid = message_towns(cfg["_message"], have, window, plan.crs)
+        if towns is not None and len(towns):
+            import pandas as _pd
+            import geopandas as _gpd
+            places = towns if places is None or not len(places) else _gpd.GeoDataFrame(_pd.concat([places, towns.to_crs(places.crs)], ignore_index=True),
+                                                                                      geometry=places.geometry.name, crs=places.crs)
+            stats["message_towns"] = {"entry": src_eid, "names": sorted(towns["name"].astype(str))}
+            plan.notes.append(f"names: {', '.join(sorted(towns['name'].astype(str)))} from GeoNames ({src_eid}), named by the message")
+            try:
+                ent = mp.library_entry(src_eid)
+                plan._name_entries = list(getattr(plan, "_name_entries", None) or []) + [ent]      # credited on the source line (CC BY 4.0)
+            except Exception:  # noqa: BLE001
+                pass
     if places is not None and len(places):
         sel = select_places(places, cfg, tier)
         sel_names, sel_alt, sel_left = mp.choose_place_names(sel, cfg) if len(sel) else ([], [], set())
@@ -3274,6 +3350,16 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
     factor = float(cfg.get("max_zoom_out", INSET_MAX_ZOOM_OUT))
     if factor < 1.5:
         factor = 1.5
+    if ctx == "world" and asked == "auto" and "max_zoom_out" not in cfg:
+        try:
+            import geo_locale as gl
+            iso = gl.plan_country(plan)
+        except Exception:  # noqa: BLE001
+            iso = None
+        span = max(wgs[2] - wgs[0], wgs[3] - wgs[1], 1e-6)
+        if iso and span < 2.0 and _frames_whole_country(iso, wgs):
+            # 3.1.0: a small country framed whole (Liechtenstein) is located among its neighbours, about 8 degrees across, not 5x its own size
+            factor = max(factor, min(60.0, 8.0 / span))
     w, h = tpl["inset_size"]["w"], tpl["inset_size"]["h"]
     pad_pct = float((plan.spec.get("extent") or {}).get("padding_pct", 5))
     main_vis = lo.Frame.fit(lo.rect_of(tpl["map"]), plan.extent, pad_pct).visible     # the window the main map frame will show
@@ -3322,6 +3408,9 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
         wpoly = wpoly if wpoly.is_valid else wpoly.buffer(0)
         st = _state_around(gdfs[0], wpoly, name_col)
         if st is not None:
+            import region as _region
+            st = st.copy()
+            st["geometry"] = _region.drop_specks(st.geometry)      # 3.1.0: the Western Cape's locator is not framed on the Prince Edward Islands
             sb_ = st.geometry.bounds
             if wpoly.area / max(st.geometry.area, 1e-9) < INSET_STATE_SHARE:
                 state = {"name": (mp.admin_unit_name(st, mp.names_config(plan.spec), name_col) if ctx == "admin1" else str(st.get(name_col, ""))),
@@ -3449,7 +3538,24 @@ def locator_context(plan, asked: str, wgs) -> str:
         return "us_states"
     if iso is None or (wgs[2] - wgs[0]) > 40 or (wgs[3] - wgs[1]) > 30:
         return "world"
+    if _frames_whole_country(iso, wgs):           # 3.1.0: a map of a whole country (Liechtenstein) shows where the country is, among its neighbours
+        return "world"
     return "admin1"
+
+
+def _frames_whole_country(iso: str, wgs) -> bool:
+    """Whether the map's window holds nearly all of the country (its admin-1 areas' box, 90 percent inside)."""
+    try:
+        import region as region_mod
+        a1 = region_mod._basemap(region_mod.ADMIN1)
+        mine = a1[a1["iso_a2"] == iso]
+        if not len(mine):
+            return False
+        W, S, E, N = (float(v) for v in mine.total_bounds)
+        ix = max(0.0, min(E, wgs[2]) - max(W, wgs[0])) * max(0.0, min(N, wgs[3]) - max(S, wgs[1]))
+        return ix >= 0.9 * max((E - W) * (N - S), 1e-12)
+    except Exception:  # noqa: BLE001 - without the table, the admin-1 locator as before
+        return False
 
 
 LOCATOR_SPAN = (30.0, 25.0)            # degrees of longitude and latitude either side of the map's centre a locator layer is cut to (main CRS)

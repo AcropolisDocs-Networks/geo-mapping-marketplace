@@ -1,4 +1,4 @@
-# `pip install -r requirements.txt` installs every row except the optional extras (mapclassify, contextily, cartopy, rasterio, contourpy, h3, duckdb, imageio-ffmpeg, scipy, playwright, psycopg, uharfbuzz, keyring, duckdb-spatial), which are in requirements-optional.txt.
+# `pip install -r requirements.txt` installs every row except the optional extras (mapclassify, contextily, cartopy, rasterio, contourpy, h3, duckdb, imageio-ffmpeg, scipy, playwright, psycopg, uharfbuzz, keyring, duckdb-spatial, laspy, py7zr), which are in requirements-optional.txt.
 # Not pip packages, so not rows: `qgis` (PyQGIS) is imported only by qgis_build_layout.py and qgis_project.py's optional check, which run inside
 # QGIS's own Python (qgis_process), never the plugin's; tests/test_dependencies.py lists it as provided by QGIS.
 # GTFS (0.10.0) needs no row of its own: gtfs.py uses the standard library with geopandas and shapely, and decodes GTFS-Realtime itself.
@@ -45,3 +45,5 @@
 - {name: uharfbuzz,  import: uharfbuzz,  pip: uharfbuzz,   profiles: [], level: SOFT, why: "outlined text shaped as the live text is (1.0.0): Inter's ligatures and contextual forms (\"->\" as an arrow); without it outlined text keeps kerning and tabular figures only"}
 - {name: psycopg,    import: psycopg,    pip: "psycopg[binary]", profiles: [db], level: SOFT, why: "live read-only connections to the person's own PostGIS database (postgis_client, 0.15.0); without it postgis_tables and postgis_fetch say how to install it"}
 - {name: duckdb-spatial, import: duckdb_extension_spatial, pip: duckdb-extension-spatial, profiles: [db], level: SOFT, why: "DuckDB's spatial extension as a pip wheel (2.4.0): point-in-polygon pairs and spatial SQL with no second download from DuckDB's extension host; its major.minor must match DuckDB's (constraints.txt pins the pair)"}
+- {name: laspy,      import: laspy,      pip: "laspy[lazrs]", profiles: [raster], level: SOFT, why: "LAS and LAZ point clouds as elevation grids (lidar.py, 3.1.0): a .laz file as a DEM, Flanders' openlidar tiles; the lazrs extra reads LAZ"}
+- {name: py7zr,      import: py7zr,      pip: py7zr,      profiles: [h3], level: SOFT, why: "Arcep's coverage files (France) come as 7z archives (arcep-mon-reseau-mobile, 3.1.0)"}

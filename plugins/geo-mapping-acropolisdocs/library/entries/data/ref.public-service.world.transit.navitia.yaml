@@ -1,0 +1,89 @@
+id: ref.public-service.world.transit.navitia
+type: public-service
+rev: 1
+status: active
+title: Navitia (journey planning on open transit data, France and beyond)
+summary: 'Hove''s Navitia API: journeys, isochrones, stops and lines over the open timetables of France and other coverages, with the person''s own token.'
+tags:
+  geography:
+  - fr
+  - europe
+  level:
+  - site
+  - line
+  domain:
+  - transport
+  - routing
+  use_for:
+  - site-map
+  - flow-line
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Transit journeys or isochrones in a French city from open timetables, with the person's own token (map-credentials add navitia).
+avoid_when:
+- The free quota was not stated in the documentation read on 2026-11-20; check the account before a batch.
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: navitia
+    kind: apikey
+    class: secret
+    host: api.navitia.io
+    inject:
+      header: Authorization
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://navitia.io/
+    probe: https://api.navitia.io/v1/coverage
+    note: 'Navitia''s documentation (read 2026-11-20): the token is the Authorization header''s value (or the Basic username with an empty password); without
+      one the API answers 401 ''no token''.'
+  request: https://api.navitia.io/v1/coverage
+source:
+  publisher: Hove (formerly Kisio Digital)
+  product: Navitia API
+  url: https://doc.navitia.io/
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Journeys: Navitia (Hove); street network © OpenStreetMap contributors'
+  note: Street network from OpenStreetMap (ODbL), timetables from open data (transport.data.gouv.fr); the CGU were not read on 2026-11-20.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_get
+    url: https://doc.navitia.io/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, a source the 2026-11-07 dive did not reach): the token methods read in the documentation and the 401 without one seen on 2026-11-20.'

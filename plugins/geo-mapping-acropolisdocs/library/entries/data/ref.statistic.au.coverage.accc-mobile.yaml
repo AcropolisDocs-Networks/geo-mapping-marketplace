@@ -1,0 +1,80 @@
+id: ref.statistic.au.coverage.accc-mobile
+type: statistic
+rev: 1
+status: active
+title: 'ACCC Mobile Infrastructure Report: coverage per operator (Australia)'
+summary: Australia's mobile coverage maps per operator (Telstra, Optus, TPG), technology (3G, 4G, 5G) and environment (outdoor, external antenna), one KML
+  or zip a year, from the ACCC data release; read for the region onto H3 by the accc-mobile-coverage adapter.
+tags:
+  geography:
+  - au
+  level:
+  - grid
+  domain:
+  - telecom
+  use_for:
+  - choropleth
+  - coverage-footprint
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- A carrier-choice map of an Australian state or region.
+avoid_when:
+- 'A map of indoor coverage: the release has outdoor and external-antenna maps only.'
+join:
+  key: h3
+  type: string
+  note: Polygons per operator; the adapter turns them into H3 cells (resolution 9) for the region
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  url_template: https://data.gov.au/data/dataset/4b472a18-d0fa-409c-994a-ab17162bcb90/resource/{resource}/download/coverage-map-{operator}-{tech}-{environment}-{year}.kml
+  format: KML or zipped KML, polygons with LEGEND and THRESHOLD (dBm)
+  note: 'Listed through the CKAN package_show API (read 2026-11-20): 2026 4G outdoor maps are 240 to 300 MB each.'
+source:
+  publisher: Australian Competition and Consumer Commission
+  product: ACCC Mobile Infrastructure Report - data release
+  url: https://data.gov.au/data/dataset/4b472a18-d0fa-409c-994a-ab17162bcb90
+  terms_url: https://creativecommons.org/licenses/by/2.5/au/
+url_verified_on: '2026-11-20'
+vintage:
+  current: '2026'
+  cadence: annual
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Mobile coverage: ACCC Mobile Infrastructure Report data release, CC BY 2.5 Australia.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://data.gov.au/data/api/3/action/package_show?id=4b472a18-d0fa-409c-994a-ab17162bcb90
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, G-12): the package listed and one KML read on 2026-11-20; CC BY 2.5 Australia from the record.'

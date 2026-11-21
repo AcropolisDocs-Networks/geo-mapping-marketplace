@@ -162,8 +162,12 @@ def us_shape():
 # ------------------------------------------------------------------------------------------- 2.5.0 (T-01, T-08): coverage, not boxes
 _SOURCES = None
 _COVER: dict = {}
-CHAINS = {"relief": ("3dep", "copernicus", "terrarium"),       # T-09: a picture may use a surface model
-          "analysis": ("3dep", "terrarium", "copernicus")}     # profiles, line of sight: bare earth first, a surface model last
+NATIONAL = ("canada-mrdem", "ign-rge-alti", "flanders-dhmv", "lantmateriet", "ga-lidar-5m", "gsi-japan")   # 3.1.0 (T-08): bare-earth national models
+POLAR_SOURCES = ("arcticdem", "rema")                                       # the polar authorities, their voids filled by the next source
+CHAINS = {"relief": ("3dep",) + NATIONAL + POLAR_SOURCES + ("copernicus", "terrarium"),       # T-09: a picture may use a surface model
+          "analysis": ("3dep",) + NATIONAL + ("terrarium",) + POLAR_SOURCES + ("copernicus",)}  # profiles, line of sight: bare earth first, a surface model last
+SOURCE_NAMES = ("auto", "3dep", "terrarium", "copernicus", "canada-mrdem", "gsi-japan", "ga-lidar-5m", "ign-rge-alti", "flanders-dhmv", "flanders-lidar",
+                "lantmateriet", "arcticdem", "rema", "gebco")
 FULL_SHARE = 0.995
 SEAM_PX = 2
 
@@ -190,7 +194,28 @@ def coverage_shape(sid: str):
         return _COVER[sid]
     info = source_info(sid)
     shape = None
-    if info.get("coverage") == "us+border":
+    cov = str(info.get("coverage") or "world")
+    if cov.startswith("country:"):                # 3.1.0: a national source's own country (Natural Earth 110 m, grown by buffer_deg)
+        from shapely.ops import unary_union
+        try:
+            import geopandas as gpd
+            g = gpd.read_parquet(gc.plugin_root() / "assets" / "basemaps" / "ne_110m_countries.parquet")
+            codes = [c.strip().upper() for c in cov.split(":", 1)[1].split(",")]
+            sel = g[g["ISO_A2_EH"].isin(codes)]
+            shape = unary_union(list(sel.geometry)).buffer(float(info.get("buffer_deg", 0.05))) if len(sel) else None
+        except Exception:  # noqa: BLE001
+            shape = None
+        if shape is None:
+            from shapely.geometry import Polygon
+            shape = Polygon()
+    elif cov.startswith("bbox:"):                 # 3.1.0: a regional source (Flanders) by its envelope; partial: true lets the next fill the rest
+        from shapely.geometry import box
+        W, S, E, N = (float(v) for v in cov.split(":", 1)[1].split(","))
+        shape = box(W, S, E, N)
+    elif cov in ("arctic", "antarctica"):
+        from shapely.geometry import box
+        shape = box(-180.0, 60.0, 180.0, 90.0) if cov == "arctic" else box(-180.0, -90.0, 180.0, -60.0)
+    elif info.get("coverage") == "us+border":
         from shapely.geometry import box
         from shapely.ops import unary_union
         try:
@@ -224,15 +249,35 @@ def chain_for(source: str | None, purpose: str) -> list[str]:
     return ([src] + [s for s in base if s != src]) if src != "auto" else base
 
 
-def plan_sources(bounds_wgs84, source: str | None, purpose: str) -> list[tuple[str, float]]:
-    """[(source, share of the window it covers)] in the order they fill the window, ending with the first that covers all of it."""
+def credential_missing(info: dict, store=None) -> str | None:
+    """3.1.0: the credential a source needs (Lantmäteriet's Geotorget login) when it is not registered on this computer, else None."""
+    name = info.get("credential")
+    if not name:
+        return None
+    try:
+        import credentials as cr
+        return None if (store or cr.Store()).get(name) else name
+    except Exception:  # noqa: BLE001 - no credential store: the source is not used
+        return name
+
+
+def plan_sources(bounds_wgs84, source: str | None, purpose: str, skipped: list | None = None, store=None) -> list[tuple[str, float]]:
+    """[(source, share of the window it covers)] in the order they fill the window, ending with the first that covers all of it. A source
+    whose credential is not registered is passed over and named in `skipped` (3.1.0), so the map says what a login would add."""
     out = []
     for s in chain_for(source, purpose):
+        info = source_info(s)
+        if str(info.get("status", "active")) != "active" and s != str(source or "").lower():      # GEBCO only when it is asked for by name
+            continue
+        if credential_missing(info, store) and s != str(source or "").lower():
+            if skipped is not None and coverage_share(s, bounds_wgs84) > 0:
+                skipped.append(s)
+            continue
         sh = coverage_share(s, bounds_wgs84)
         if sh <= 0.0:
             continue
         out.append((s, sh))
-        if sh >= FULL_SHARE:
+        if sh >= FULL_SHARE and not info.get("partial"):        # 3.1.0: a partial source (GA's LiDAR) is always followed by one that fills its gaps
             break
     return out
 
@@ -492,7 +537,7 @@ def fetch_3dep(bounds, target_m_per_px: float, out: Path, *, http=None, max_px: 
 
 def dem_for(bounds_wgs84, target_m_per_px: float = 30.0, source: str = "auto", cache_dir=None, *, terms_acknowledged: bool = False, dem_path=None,
             http=None, fetcher: TileFetcher | None = None, max_tiles: int = TERRARIUM_MAX_TILES, max_px: int = THREEDEP_MAX_PX,
-            surface_ok: bool = False, purpose: str | None = None) -> dict:
+            surface_ok: bool = False, purpose: str | None = None, lidar_crs: str | None = None) -> dict:
     """A local DEM for the window. -> {ok, findings, path, record}.
 
     2.5.0 (T-01, T-03, T-09): the sources come from the purpose's chain (relief: 3DEP, Copernicus, Terrarium; analysis: 3DEP, Terrarium,
@@ -502,6 +547,10 @@ def dem_for(bounds_wgs84, target_m_per_px: float = 30.0, source: str = "auto", c
     purpose relief. terms_acknowledged is kept for older callers and ignored (0.23.0)."""
     fs: list[dict] = []
     if dem_path:
+        import lidar
+        if lidar.is_lidar(dem_path):                 # 3.1.0: a LAS or LAZ file is gridded once (bare earth, 1 m) and read as the DEM
+            dem_path = lidar.as_raster(dem_path, cell=max(1.0, float(target_m_per_px or 1.0)) if bounds_wgs84 else 1.0, crs=lidar_crs)
+            fs.append(finding("MAP-TER-001", "INFO", f"the lidar file was gridded to a bare-earth DEM ({Path(dem_path).name}; ground and water points)"))
         info = rio.open_info(dem_path)
         rec = {"source": "user", "path": str(dem_path), "crs": info["crs"], "bounds": info["bounds"], "res": info["res"], "nodata": info["nodata"], "requests": [],
                "bytes": Path(dem_path).stat().st_size, "sha256": hashlib.sha256(Path(dem_path).read_bytes()).hexdigest(), "retrieved_at": today(),
@@ -512,10 +561,17 @@ def dem_for(bounds_wgs84, target_m_per_px: float = 30.0, source: str = "auto", c
     if res <= 0:
         raise rio.RasterError("target_m_per_px must be positive")
     src = (source or "auto").lower()
-    if src not in ("auto", "3dep", "terrarium", "copernicus"):
-        raise rio.RasterError("source is auto, 3dep, copernicus or terrarium")
+    import dem_sources as ds_
+    if src not in SOURCE_NAMES:
+        raise rio.RasterError("source is auto, 3dep, copernicus, terrarium or one of " + ", ".join(ds_.FETCHERS))
+
     purpose = purpose or ("relief" if surface_ok else "analysis")
-    plan = plan_sources(b, src, purpose)
+    skipped: list = []
+    plan = plan_sources(b, src, purpose, skipped)
+    for s in skipped:
+        si = source_info(s)
+        fs.append(finding("MAP-TER-001", "INFO", f"{si.get('title') or s} covers this window at {si.get('native_m')} m but needs your free login "
+                          f"(map-credentials add {si.get('credential')}); the next source is used"))
     kw = dict(http=http, fetcher=fetcher, max_tiles=max_tiles, max_px=max_px)
     if src != "auto" and (not plan or plan[0][0] != src):
         fs.append(finding("MAP-TER-001", "INFO", f"{source_info(src).get('title') or src} has no data for this window (its coverage does not reach it); "
@@ -572,6 +628,17 @@ def _single(src: str, b, res: float, root: Path, fs: list, *, named: bool, sourc
             fs.append(finding("MAP-TER-003", "INFO", f"{rec['tiles']} Copernicus tiles read as Cloud-Optimized GeoTIFF overviews at {rec['res_m']:g} m "
                               f"(range reads, about {rec.get('estimated_mb', 0):.0f} MB), not as whole tiles"))
         fs.append(finding("MAP-TER-001", "INFO", "the Copernicus DEM is a surface model: buildings and trees are in it (fine for relief, not a bare-earth profile)"))
+    elif src not in ("3dep", "terrarium"):                                  # 3.1.0 (T-08): national and polar sources, GEBCO
+        import dem_sources as ds_
+        try:
+            rec = ds_.fetch(src, b, res, out, http=http)
+        except ds_.DemSourceError as ex:
+            nxt = next((s for s in chain_for(None, "relief") if s not in (src, "3dep") and coverage_share(s, b) > 0), "terrarium")
+            fs.append(finding("MAP-TER-003", "INFO", f"{ex}; {nxt} is used for this window instead"))
+            return _single(nxt, b, res, root, fs, named=False, source_arg=nxt, cache_dir=cache_dir, target=target, http=http,
+                           fetcher=fetcher, max_tiles=max_tiles, max_px=max_px)
+        if rec.get("missing_share", 0) > 0.05:
+            fs.append(finding("MAP-TER-003", "INFO", f"{source_info(src).get('title') or src} has no elevation for {rec['missing_share']:.0%} of the window"))
     elif src == "terrarium":
         rec = fetch_terrarium(b, res, out, fetcher=fetcher, max_tiles=max_tiles, http=http, tile_cache=root / "terrarium-tiles")
         rec["attribution"] = terrarium_attribution(b)                       # 2.5.0 (T-05): only the regional sources this window uses

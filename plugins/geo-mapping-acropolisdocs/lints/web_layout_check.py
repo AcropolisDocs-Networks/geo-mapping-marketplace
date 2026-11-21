@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""web_layout_check: the web map page's frame checked in a headless browser (1.1.0; spec-webmap-frame-ux section 15.2).
+"""web_layout_check: the web map page's frame checked in a headless browser (1.1.0).
 
     python3 web_layout_check.py page.html [--out DIR] [--json]
 

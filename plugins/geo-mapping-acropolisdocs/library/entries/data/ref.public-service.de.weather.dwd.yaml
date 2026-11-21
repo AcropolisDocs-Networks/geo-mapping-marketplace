@@ -1,0 +1,74 @@
+id: ref.public-service.de.weather.dwd
+type: public-service
+rev: 1
+status: active
+title: DWD Open Data (Germany weather observations, Climate Data Center)
+summary: 'Weather observations from Deutscher Wetterdienst (DWD), keyless open data: zipped text files a station, with a station description file (Stations_id,
+  geoBreite, geoLaenge, Stationsname, Bundesland).'
+tags:
+  geography:
+  - de
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Observed weather across Germany (temperature, precipitation, wind at the national network's stations), keyless.
+avoid_when:
+- 'Forecasts: those are DWD''s ICON and MOSMIX products in other folders.'
+delivery:
+  mode: service
+  protocol: files
+  request: https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/hourly/air_temperature/recent/
+  format: zipped text files a station, with a station description file (Stations_id, geoBreite, geoLaenge, Stationsname, Bundesland)
+  note: Keyless; every request goes through the plugin's HTTP client (public host, GET, size and time caps).
+source:
+  publisher: Deutscher Wetterdienst (DWD)
+  product: DWD Climate Data Center (CDC) open data
+  url: https://opendata.dwd.de/climate_environment/CDC/
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Data: Deutscher Wetterdienst (DWD), CC BY 4.0'
+  note: 'DWD''s open data are CC BY 4.0 with the source named (DWD''s Nutzungsbedingungen); keyless (2026-11-20: 200).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_get
+    url: https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/hourly/air_temperature/recent/TU_Stundenwerte_Beschreibung_Stationen.txt
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): the endpoint answered 200 without a key from the person''s computer on 2026-11-20; DWD''s open data are CC BY 4.0
+      with the source named (DWD''s Nutzungsbedingungen).'

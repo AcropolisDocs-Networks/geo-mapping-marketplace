@@ -1,0 +1,81 @@
+id: ref.statistic.uk.coverage.ofcom-connected-nations
+type: statistic
+rev: 1
+status: active
+title: 'Ofcom Connected Nations: mobile coverage by local authority (UK)'
+summary: The share of each UK council's land, premises and roads with 2G, 3G, 4G and 5G coverage from 0 to 4 operators (Ofcom's laua CSV), on ONS local
+  authority boundaries; the ofcom-connected-nations adapter draws it by council.
+tags:
+  geography:
+  - uk
+  level:
+  - admin2
+  domain:
+  - telecom
+  use_for:
+  - choropleth
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T0
+  - T1
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- A carrier-choice map of Scotland, Wales or a UK region by council (share of land with 3 or 4 operators).
+avoid_when:
+- 'A grid or per-operator map: Ofcom publishes counts by council, and its 50 m predictions are not released.'
+join:
+  key: laua
+  type: string
+  width: 9
+  note: ONS local authority code; joins to ref.boundary.uk.lad.ons on LAD24CD
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: 'zip with *_mobile_coverage_laua_*.csv (164 columns: [service]_[coverage type]_[operators])'
+  note: Ofcom's site refuses scripted downloads (a browser check), so the person downloads the 'Mobile local and unitary authority' zip from the Connected
+    Nations data downloads page and puts it in data/ofcom-connected-nations/.
+source:
+  publisher: Ofcom
+  product: Connected Nations, mobile coverage by local and unitary authority
+  url: https://www.ofcom.org.uk/phones-and-broadband/coverage-and-speeds/connected-nations-20252/data-downloads-2025
+  terms_url: https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
+url_verified_on: '2026-11-20'
+vintage:
+  current: Connected Nations 2025
+  cadence: annual
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Mobile coverage: Ofcom Connected Nations, Open Government Licence v3.0; boundaries: Office for National Statistics, OGL v3.0, contains
+    OS data © Crown copyright and database right.'
+  note: 'Ofcom''s ''About this data'' (Spring 2025): the data are provided under the Open Government Licence.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_Authority_Districts_December_2024_Boundaries_UK_BUC/FeatureServer/0?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, G-12): the column scheme from Ofcom''s ''About this data'' notes; the ONS boundary service read 2026-11-20; Ofcom''s site answered
+      a browser check to a script, so the file is user-supplied.'

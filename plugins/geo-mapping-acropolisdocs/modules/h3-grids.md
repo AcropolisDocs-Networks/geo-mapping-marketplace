@@ -38,5 +38,13 @@ layers:
 - **Out.** `map_export.py --h3-cells map.yaml --layer carriers --out cells.parquet` (ids only, a few hundred KB) or `.gpkg` / `.fgb`.
 - **Recipe.** `recipe.py make carrier-choice-h3 --region "<region>" --out map.yaml` writes the whole carrier-choice map; offer the share map
   of one carrier as the second panel, so a carrier at 49 percent of a cell is not read as absent.
+- **Outside the US** (3.1.0). The same layer with `adapter:` set to the country's regulator: `bnetza-mobile-coverage` (Germany, operators per
+  100 m cell, `technology: 5G|4G|2G|5G-SA`), `arcep-mon-reseau-mobile` (France, `technology`, `use: data|voix`, `level: good|very-good|any`),
+  `accc-mobile-coverage` (Australia, per carrier, `environment`), `canada-wireless-coverage` (Canada: LTE and 5G availability, not by
+  carrier), `opencellid` (towers by network, with the person's token; share-alike), `ookla-open-data` (speeds; internal maps only) and
+  `kontur-population` (people per resolution-8 cell, CC BY 4.0). Each adapter sets how its cells roll up (operators: max; people: sum).
+  The UK publishes by council, not on a grid: `source: {type: adapter, adapter: ofcom-connected-nations}` on a polygon layer. The
+  carrier-choice recipe picks the country's variant from the region (`--region GB-SCT`, `DE-BY`, `FR-BRE`, `AU-NSW`) and refuses Canada,
+  whose data are not by carrier.
 - **FCC files.** On the person's computer the map server's `fcc_bdc_coverage(region=...)` lists every state's hexagon files with their
   size, then fetches them into `data/fcc-bdc/`; `map-run move-data` brings them to the cloud workspace in one step.

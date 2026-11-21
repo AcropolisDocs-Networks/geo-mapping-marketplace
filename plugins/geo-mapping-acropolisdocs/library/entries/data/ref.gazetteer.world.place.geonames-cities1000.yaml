@@ -1,0 +1,112 @@
+id: ref.gazetteer.world.place.geonames-cities1000
+type: gazetteer
+rev: 1
+status: active
+title: GeoNames populated places (cities1000)
+summary: 'Worldwide populated places with population 1,000 or more (about 172,000 rows) from the GeoNames dump: the towns the bundled Natural Earth places
+  lack (Sandpoint and Moscow, Idaho), read by the build when a map''s message names a place (3.1.0, G-08).'
+tags:
+  geography:
+  - world
+  level:
+  - place
+  domain:
+  - general
+  use_for:
+  - label-reference
+  - context-basemap
+  - locator-inset
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - world
+  - national
+  - regional
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - community
+use_when:
+- A map's message names a town that Natural Earth does not hold (the build looks it up here and labels it).
+- Town labels on a regional map anywhere.
+avoid_when:
+- 'The map is of the United States and needs official names: Census places (ref.boundary.us.place.cb500k) carry the legal names and codes.'
+- 'The product is redistributed without credit: the CC BY 4.0 licence requires attribution.'
+delivery:
+  mode: fetch
+  format: zip holding cities1000.txt (tab-delimited, UTF-8, no header; 19 columns per the dump readme)
+  member: cities1000.txt
+  header: false
+  delimiter: \t
+  geometry_columns:
+    lon: longitude
+    lat: latitude
+  rolling: true
+  features: 172046
+  features_tolerance_pct: 5
+  note: 'ref_fetch.py fetch ref.gazetteer.world.place.geonames-cities1000 downloads https://download.geonames.org/export/dump/cities1000.zip (11.1 MB),
+    reads the header-less tab file by the 19 declared columns and caches the places as points. Rolling: the copy verified on 2026-11-20 had 172,046 places;
+    a later copy that differs is used and reported, the count held within 5 percent. The build reads it only for the names a message makes.'
+  columns:
+  - geonameid
+  - name
+  - asciiname
+  - alternatenames
+  - latitude
+  - longitude
+  - feature_class
+  - feature_code
+  - country_code
+  - cc2
+  - admin1_code
+  - admin2_code
+  - admin3_code
+  - admin4_code
+  - population
+  - elevation
+  - dem
+  - timezone
+  - modification_date
+  size_mb: 11.1
+source:
+  publisher: GeoNames
+  product: GeoNames dump, cities1000
+  url: https://download.geonames.org/export/dump/cities1000.zip
+  file_sha256: 0770230481be281550b5dbea5da5bb1d090e56320eceef3643ea047f7cadf62f
+url_verified_on: '2026-11-20'
+vintage:
+  current: daily dump (downloaded 2026-11-20)
+  cadence: monthly
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Data from GeoNames (geonames.org), CC BY 4.0.
+  note: The dump readme (download.geonames.org/export/dump/readme.txt, read 2026-11-04) states the Creative Commons Attribution 4.0 licence.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://download.geonames.org/export/dump/cities1000.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, G-08): cities1000.zip downloaded from the person''s computer (11,101,525 bytes, 172,046 places, SHA-256 recorded); Sandpoint (7,835)
+      and Moscow, Idaho (25,060) are in it. CC BY 4.0 as for cities15000.'
+distinct_from:
+- id: ref.gazetteer.world.place.geonames
+  why: 'cities15000: 34,000 places, 3 MB; the bigger towns only'

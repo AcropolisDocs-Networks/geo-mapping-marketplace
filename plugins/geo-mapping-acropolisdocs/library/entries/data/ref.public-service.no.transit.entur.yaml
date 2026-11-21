@@ -1,0 +1,76 @@
+id: ref.public-service.no.transit.entur
+type: public-service
+rev: 1
+status: active
+title: Entur (Norway) national journey planner and GTFS
+summary: 'All of Norway''s public transport from Entur: the national GTFS (keyless) and the JourneyPlanner GraphQL API, which needs only an ET-Client-Name
+  header naming the application.'
+tags:
+  geography:
+  - 'no'
+  level:
+  - site
+  - line
+  domain:
+  - transport
+  use_for:
+  - site-map
+  - flow-line
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- Stops, routes and frequencies anywhere in Norway (the national GTFS through gtfs.py), or a journey or a stop's departures (JourneyPlanner).
+avoid_when:
+- 'The national GTFS is 556 MB: a city map reads the stops and routes of its own operators after the download, not the whole file on every build.'
+delivery:
+  mode: service
+  protocol: graphql
+  request: https://api.entur.io/journey-planner/v3/graphql
+  gtfs: https://storage.googleapis.com/marduk-production/outbound/gtfs/rb_norway-aggregated-gtfs.zip
+  note: 'Keyless: requests carry ET-Client-Name: <company>-<application> (the plugin sends acropolisdocs-geo-mapping); a stopPlace query answered ''Oslo
+    S'' on 2026-11-20. The GTFS zip answered HEAD 200.'
+source:
+  publisher: Entur AS
+  product: Entur JourneyPlanner v3 and national GTFS
+  url: https://developer.entur.org/
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Public transport data: Entur, Norwegian Licence for Open Government Data (NLOD)'
+  note: Entur's timetable data are published under the NLOD (developer.entur.org); the ET-Client-Name header is required for the APIs.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_head
+    url: https://storage.googleapis.com/marduk-production/outbound/gtfs/rb_norway-aggregated-gtfs.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): a GraphQL query and the GTFS HEAD answered on 2026-11-20 without a key.'

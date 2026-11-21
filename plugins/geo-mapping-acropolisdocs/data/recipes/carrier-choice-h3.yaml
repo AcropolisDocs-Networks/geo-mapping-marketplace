@@ -12,6 +12,7 @@ mapspec:
   mapspec_version: 1
   id: "{id}"
   message: "How many carriers report {technology_label} at {speed} Mbps outdoors across {region_name}"
+  elements: {title: {on: true, text: "Carriers with {technology_label} at {speed} Mbps, {region_name}"}}
   template: "{template}"
   region: "{region_block}"
   terrain: {on: true}
@@ -27,3 +28,63 @@ mapspec:
     legend:
       note: "A carrier counts in a hexagon when it covers at least half of it (outdoor stationary)"
   names: {on: true, ink: uniform}
+# 3.1.0 (G-12): the same map outside the United States. recipe.py picks the variant of the region's country (one country only) and lays its
+# keys over the mapspec above: the regulator's own data, its own grid or units, and a message that says what that data can show.
+variants:
+  DE:
+    elements: {title: {on: true, text: "Operators with {technology_label}, {region_name}"}}
+    message: "How many operators offer {technology_label} across {region_name}"
+    layers:
+    - id: carriers
+      title: "Operators with {technology_label}"
+      source: {type: h3, adapter: bnetza-mobile-coverage, technology: "{technology_de}"}
+      h3: {resolution: auto, complete: region, mode: centre}
+      role: choropleth
+      value_field: carriers
+      classification: {method: discrete}
+      empty: outline
+      legend:
+        note: "Operators per 100 m cell (Bundesnetzagentur Mobilfunk-Monitoring), the most in each hexagon"
+  FR:
+    elements: {title: {on: true, text: "Operators with Good {technology_label} Data, {region_name}"}}
+    message: "How many operators give good {technology_label} data coverage across {region_name}"
+    layers:
+    - id: carriers
+      title: "Operators with good {technology_label} data coverage"
+      source: {type: h3, adapter: arcep-mon-reseau-mobile, technology: "{technology_fr}", use: data, level: good}
+      h3: {resolution: auto, by: provider, share_min: 0.5, agg: count_groups, complete: region, mode: centre}
+      role: choropleth
+      value_field: carriers
+      classification: {method: discrete}
+      empty: outline
+      legend:
+        note: "An operator counts in a hexagon when its good or very good theoretical coverage reaches half of it (Arcep)"
+  AU:
+    elements: {title: {on: true, text: "Carriers with {technology_label} Outdoors, {region_name}"}}
+    message: "How many carriers report {technology_label} outdoors across {region_name}"
+    layers:
+    - id: carriers
+      title: "Carriers with {technology_label} outdoors"
+      source: {type: h3, adapter: accc-mobile-coverage, technology: "{technology_au}", environment: outdoor}
+      h3: {resolution: auto, by: provider, share_min: 0.5, agg: count_groups, complete: region, mode: centre}
+      role: choropleth
+      value_field: carriers
+      classification: {method: discrete}
+      empty: outline
+      legend:
+        note: "A carrier counts in a hexagon when its outdoor coverage reaches half of it (ACCC data release)"
+  GB:
+    elements: {title: {on: true, text: "{technology_label} from All Four Operators, {region_name}"}}
+    message: "Where all four operators cover the land with {technology_label} across {region_name}"
+    layers:
+    - id: carriers
+      title: "Share of land with {technology_label} from all four operators"
+      source: {type: adapter, adapter: ofcom-connected-nations, service: "{technology_gb}", coverage: geo_out, min_operators: 4}
+      role: choropleth
+      value_field: value
+      classification: {method: pretty}
+      legend:
+        title: "Share of land (%)"
+        note: "Ofcom Connected Nations, by council: Ofcom publishes shares by local authority, not a grid"
+  CA:
+    refuse: "Canada's open coverage data (the CRTC's, in the Atlas of Canada) say where LTE and 5G are available, not which carrier: a carrier-choice map cannot be drawn from it. Map availability instead: source {type: h3, adapter: canada-wireless-coverage}"

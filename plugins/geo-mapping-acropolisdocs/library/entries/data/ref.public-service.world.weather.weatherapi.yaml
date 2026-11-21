@@ -1,0 +1,92 @@
+id: ref.public-service.world.weather.weatherapi
+type: public-service
+rev: 1
+status: active
+title: WeatherAPI.com (current, forecast and history, worldwide)
+summary: Current conditions, forecasts and history for any place from WeatherAPI.com, with the person's own key; the free plan allows commercial use with
+  the source credited.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - rag-status
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  - site
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Current weather or a short forecast at a few sites (a site list's status map), with the person's own key (map-credentials add weatherapi).
+avoid_when:
+- 'Storing the data: current conditions may be cached 60 minutes and forecasts 24 hours, and nothing beyond the subscription term.'
+- 'A national weather service covers the country (DMI, SMHI, FMI, DWD, the NWS): an authority is better for a regulated deliverable.'
+delivery:
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: weatherapi
+    kind: apikey
+    class: secret
+    host: api.weatherapi.com
+    inject:
+      query: key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://www.weatherapi.com/signup.aspx
+    probe: https://api.weatherapi.com/v1/current.json?q=London
+    free: true
+    limits: 'Free plan: 100,000 calls a month, free for commercial use (pricing page, read 2026-11-20); one key for one application.'
+  request: https://api.weatherapi.com/v1/current.json?q={place}
+  note: A wrong key answers 401 with error code 2006 'API key is invalid.' (2026-11-20).
+source:
+  publisher: WeatherAPI.com (Apilayer)
+  product: WeatherAPI.com
+  url: https://www.weatherapi.com/pricing.aspx
+  terms_url: https://www.weatherapi.com/terms.aspx
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Weather: WeatherAPI.com'
+  note: 'Terms (read 2026-11-20): ''you will credit WeatherAPI.com by name or brand logo as the source of the data''; personal or commercial use; cache
+    current data 60 minutes, forecasts 24 hours; no resale; the key is not shared.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_head
+    url: https://www.weatherapi.com/terms.aspx
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): terms and pricing read on 2026-11-20; a wrong key answered 401.'

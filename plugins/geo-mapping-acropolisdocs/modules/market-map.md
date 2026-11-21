@@ -31,6 +31,7 @@ The package also holds `mapspec.yaml` (the generated MapSpec, editable and re-bu
 ## Rules
 
 - A raw count as a choropleth stops the build (MAP-CART-001): big places look high because they are big. Give `denominator`, choose `style=proportional`, or have the person state in `rate_justification` why the value is already a rate. Do not write the justification for them.
+- **Areas outside the US** (3.1.0): `--option by=admin1` joins ISO 3166-2 codes (DE-BY, FR-IDF) to the worldwide admin-1 table; `by=admin2 --option region=...` the admin-2 areas of a region (geoBoundaries, or US counties); `by=regions` the named regions; `by=h3` H3 cell ids. Without `by` the keys decide.
 - **Areas** (1.0.0): 2-digit keys are states, 5-digit counties, 11-digit census tracts (the national tract file is fetched once into the library cache). Other areas come from a file: `--option boundary=FILE --option geography=cma` (the FCC CMA layer captured with `service_query.py`, key `CMA`), or any polygons with `boundary_key=COLUMN`.
 - The legend and title name the denominator in words: a column called `pop`, `population` or `pop_2020_est` reads "per 1,000 people", `hh` reads "households", `housing_units` "housing units". Any other column name is shown with its underscores as spaces.
 - Keys: a county table needs 5-digit FIPS (GEOID); a state table takes FIPS or postal codes. Dropped leading zeros are repaired and reported (MAP-JOIN-005). Duplicate keys stop the build (MAP-JOIN-002); counties missing from the table are drawn as No data (MAP-JOIN-004).

@@ -1,6 +1,5 @@
-"""The adapters beyond the FCC (3.0.0, spec global-regions G-12, G-13), each with its grid, licence class and coverage declared. Their terms and
-access are verified one by one before they fetch: until then `status: candidate` and fetch() says what is left to verify. The interface and the
-ranking (`catalog_search`, `geo-find-data`) already see them, so a UK region is offered Ofcom like a US region is offered the FCC."""
+"""Adapters that point at a tool rather than files (3.0.0, G-13): the Census tables (census_query) and the population grids (GHSL, WorldPop).
+The coverage adapters outside the US fetch their own files since 3.1.0 (adapters/coverage.py)."""
 from __future__ import annotations
 
 import sys
@@ -33,18 +32,6 @@ class Candidate(Adapter):
 
 CENSUS_ACS = Candidate("census-acs", "ref.statistic.us.demographics.acs5", ("US", "PR"), "polygons", "public-domain", credential="census", status="active",
                        note="US data: the census_query tool per county or tract; the region's us_states are its partitions")
-OPENCELLID = Candidate("opencellid", None, None, "points", "share-alike", credential="opencellid",
-                       to_verify="the CC BY-SA 4.0 attribution text and the bulk-download terms for a key holder",
-                       note="cell locations, worldwide; points go on H3 with hexbin")
-OOKLA = Candidate("ookla-open-data", None, None, "quadkey", "non-commercial",
-                  to_verify="CC BY-NC-SA 4.0: internal maps only (owner decision O5); the quadkey to H3 roll-up by area share",
-                  note="performance tiles (zoom 16 quadkeys), quarterly")
-OFCOM = Candidate("ofcom-connected-nations", None, ("GB",), "squares", "open", to_verify="the Open Government Licence wording and the 100 m grid files",
-                  note="UK mobile coverage by operator on 100 m squares; squares go on H3 by area share")
-ARCEP = Candidate("arcep-mon-reseau-mobile", None, ("FR",), "polygons", "open", to_verify="Licence Ouverte 2.0 and the coverage polygons per operator")
-BNETZA = Candidate("bnetza-mobile-coverage", None, ("DE",), "squares", "open", to_verify="the dl-de licence and the 100 m grid download")
-ISED = Candidate("ised-mobile-coverage", None, ("CA",), "polygons", "open", to_verify="the Open Government Licence - Canada and the provider footprints")
-ACCC = Candidate("accc-mobile-coverage", None, ("AU",), "polygons", "open", to_verify="the ACCC/ACMA terms for the published coverage")
 POPULATION = Candidate("population-grid", "ref.statistic.world.population.ghsl", None, "raster", "attribution", status="active",
                        note="G-13: GHSL (CC BY 4.0) outside the United States for population covered and per-capita classes; the Census stays for the US; "
                             "WorldPop as the 100 m alternative")

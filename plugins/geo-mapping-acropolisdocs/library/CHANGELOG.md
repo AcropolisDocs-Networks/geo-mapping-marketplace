@@ -4,8 +4,52 @@ GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
 ## 2026-11-20
 
+- `ref.basemap-provider.geoportail-fr` rev 1: Added (3.1.0, library P3): one Plan IGN v2 tile answered 200 on 2026-11-20; Licence Ouverte 2.0.
+- `ref.basemap-provider.here` rev 1: Added (3.1.0, library P3): the plans page and the required copyright notice read on 2026-11-20; a wrong key answered 401.
+- `ref.basemap-provider.jawg` rev 1: Added (3.1.0, library P3): pricing and terms read on 2026-11-20 (25,000 map views a month, internal and non-commercial on Basic, attribution always visible); the tile host answered 403 to a wrong token.
+- `ref.basemap-provider.tomtom` rev 1: Added (3.1.0, library P3): pricing and the tile documentation read on 2026-11-20; a wrong key answered 401. The copyrights page did not load: '© TomTom' is the recorded minimum.
+- `ref.boundary.fr.department.ign-adminexpress` rev 1: Added (3.1.0, IGN, a source the 2026-11-07 dive did not reach): the WFS answered 101 departments as GeoJSON on 2026-11-20.
+- `ref.boundary.fr.region.ign-adminexpress` rev 1: Added (3.1.0, IGN, a source the 2026-11-07 dive did not reach): the WFS answered 18 regions as GeoJSON on 2026-11-20.
+- `ref.boundary.uk.lad.ons` rev 1: Added (3.1.0): the layer read on 2026-11-20 (fields LAD24CD, LAD24NM); the ONS licence page's wording.
+- `ref.boundary.us.protected.usfs-forests` rev 1: Added (3.1.0, gap analysis): the layer and a full GeoJSON query read on 2026-11-20 (112 forests).
+- `ref.gazetteer.world.address.openaddresses` rev 1: Added (3.1.0, gap analysis): the keyless listing and the 403 on a download without a login seen on 2026-11-20.
+- `ref.gazetteer.world.place.geonames-cities1000` rev 1: Added (3.1.0, G-08): cities1000.zip downloaded from the person's computer (11,101,525 bytes, 172,046 places, SHA-256 recorded); Sandpoint (7,835) and Moscow, Idaho (25,060) are in it. CC BY 4.0 as for cities15000.
+- `ref.infrastructure.world.cell.opencellid` rev 2: Fetched by the opencellid adapter (3.1.0) with the person's token: per-MCC files, two downloads a token a day.
 - `ref.map-type.carrier-choice-h3` rev 1: Active (2.6.0, H-13): the Day 20 hexagon map as a recipe; the Washington roll-up matches day20-notes.md (24,923 / 8,071 / 4,197 / 461).
+- `ref.public-service.ch.transit.opentransportdata` rev 1: Added (3.1.0, a source the 2026-11-07 dive did not reach): the GTFS permalink and OJP's answer without a token read on 2026-11-20; terms from the opendata.swiss record.
+- `ref.public-service.cz.weather.chmi` rev 1: Added (3.1.0, library P3): the endpoint answered 200 without a key from the person's computer on 2026-11-20; ČHMÚ publishes its open data under CC BY 4.0 (open data portal, 2026-11-20).
+- `ref.public-service.de.weather.dwd` rev 1: Added (3.1.0, library P3): the endpoint answered 200 without a key from the person's computer on 2026-11-20; DWD's open data are CC BY 4.0 with the source named (DWD's Nutzungsbedingungen).
+- `ref.public-service.dk.mapping.dataforsyningen` rev 1: Added (3.1.0, a source the 2026-11-07 dive did not reach): the token behaviour and DAWA's 410 seen on 2026-11-20; the free-data terms read.
+- `ref.public-service.dk.weather.dmi` rev 1: Added (3.1.0, library P3): the endpoint answered 200 without a key from the person's computer on 2026-11-20; DMI's open data are CC BY 4.0 with DMI named as the source.
+- `ref.public-service.fi.mapping.nls` rev 1: Added (3.1.0, a source the 2026-11-07 dive did not reach): base URL, key methods and the CC BY 4.0 wording read on 2026-11-20; 401 without a key, 403 with a wrong one.
+- `ref.public-service.fi.weather.fmi` rev 1: Added (3.1.0, library P3): the endpoint answered 200 without a key from the person's computer on 2026-11-20; FMI's open data are CC BY 4.0.
+- `ref.public-service.fr.weather.meteo-france` rev 1: Added (3.1.0, a source the 2026-11-07 dive did not reach): the gateway's answer without a token read on 2026-11-20 (401, Bearer); the portal's quota not read.
+- `ref.public-service.no.transit.entur` rev 1: Added (3.1.0, library P3): a GraphQL query and the GTFS HEAD answered on 2026-11-20 without a key.
+- `ref.public-service.se.mapping.lantmateriet` rev 1: Added (3.1.0, a source the 2026-11-07 dive did not reach): the STAC catalogue, its collections and a 401 on a data asset seen on 2026-11-20.
+- `ref.public-service.se.weather.smhi` rev 1: Added (3.1.0, library P3): the endpoint answered 200 without a key from the person's computer on 2026-11-20; SMHI's open data are CC BY 4.0 (since 2021, SMHI's open data terms).
+- `ref.public-service.uk.coverage.ofcom-api` rev 1: Added (3.1.0): endpoint, header and plans from the API documentation and Ofcom's FOI answer, read 2026-11-20.
+- `ref.public-service.world.transit.navitia` rev 1: Added (3.1.0, a source the 2026-11-07 dive did not reach): the token methods read in the documentation and the 401 without one seen on 2026-11-20.
+- `ref.public-service.world.weather.weatherapi` rev 1: Added (3.1.0, library P3): terms and pricing read on 2026-11-20; a wrong key answered 401.
+- `ref.statistic.au.coverage.accc-mobile` rev 1: Added (3.1.0, G-12): the package listed and one KML read on 2026-11-20; CC BY 2.5 Australia from the record.
+- `ref.statistic.ca.coverage.wireless-data-network` rev 1: Added (3.1.0, G-12): the service layer read on 2026-11-20 (fields Speed, Year); OGL-Canada from the open.canada.ca record.
+- `ref.statistic.de.coverage.bnetza-mobile` rev 1: Added (3.1.0, G-12): the June 2026 zip downloaded and read from the person's computer on 2026-11-20 (106,439,749 bytes); columns and grid from its readme.
+- `ref.statistic.fr.coverage.arcep-mobile` rev 1: Added (3.1.0, G-12): the bucket listed and one file (974, Orange, 4G data) read on 2026-11-20; licence from the data.gouv.fr record.
+- `ref.statistic.uk.coverage.ofcom-connected-nations` rev 1: Added (3.1.0, G-12): the column scheme from Ofcom's 'About this data' notes; the ONS boundary service read 2026-11-20; Ofcom's site answered a browser check to a script, so the file is user-supplied.
+- `ref.statistic.us.climate.noaa-normals` rev 1: Added (3.1.0, gap analysis): the inventory and Seattle-Tacoma's monthly CSV read on 2026-11-20.
 - `ref.statistic.us.coverage.fcc-bdc-mobile-h3` rev 1: Active (2.6.0, H-11): the Day 20 Washington and Idaho files read through the fcc-bdc-mobile adapter; columns confirmed against the 2026-06-30 filing (bdc_53_*_5GNR_35_3_mobile_broadband_h3_*.gpkg).
+- `ref.statistic.world.population.hrsl` rev 1: Added (3.1.0, gap analysis): the VRT read on 2026-11-20; raster_fetch.py reads its window.
+- `ref.statistic.world.population.kontur` rev 1: Added (3.1.0, gap analysis): the HDX records (cc-by) and two country files read on 2026-11-20; the Liechtenstein file read whole (207 cells, 45,500 people).
+- `ref.statistic.world.speed.ookla` rev 3: Fetched by the ookla-open-data adapter (3.1.0); 2025 Q4 is the newest quarter listed on 2026-11-20. Still internal use only.
+- `ref.terrain.antarctica.dem.rema` rev 1: Added (3.1.0, T-08): the bucket listing and one STAC item read on 2026-11-20 (licence CC-BY-4.0 in the item); the tile grid worked out from it.
+- `ref.terrain.arctic.dem.arcticdem` rev 1: Added (3.1.0, T-08): the bucket listing and one STAC item read on 2026-11-20 (licence CC-BY-4.0 in the item); the tile grid worked out from it.
+- `ref.terrain.au.dem.ga-lidar-5m` rev 1: Added (3.1.0, T-08): GetCapabilities and one GetCoverage answered on 2026-11-20; CC BY 4.0 from the GA catalogue record.
+- `ref.terrain.be-vlg.dem.dhmv` rev 1: Added (3.1.0, library P3): GetCapabilities and a WCS 1.0.0 GetCoverage answered on 2026-11-20; compared with the lidar tile gridded by lidar.py, the median difference was 4 cm.
+- `ref.terrain.be-vlg.lidar.dhmv-openlidar` rev 1: Added (3.1.0, library P3, with the LAS/LAZ reader lidar.py): the WFS tile index and one tile download read on 2026-11-20.
+- `ref.terrain.ca.dem.mrdem` rev 1: Added (3.1.0, T-08): the COG answered HEAD 200 from the person's computer on 2026-11-20 (83,854,027,098 bytes); licence from the open.canada.ca record.
+- `ref.terrain.fr.dem.rge-alti` rev 1: Added (3.1.0, T-08): one GetMap as raw floats answered on 2026-11-20; Licence Ouverte 2.0 since IGN's open data of 2021.
+- `ref.terrain.jp.dem.gsi` rev 1: Added (3.1.0, T-08): one tile answered 200 on 2026-11-20; the decoding rule from GSI's tile documentation.
+- `ref.terrain.se.dem.lantmateriet-mhm` rev 1: Added (3.1.0, a source the 2026-11-07 dive did not reach): the STAC collection and items read on 2026-11-20 (CC-BY-4.0); the files need the Geotorget login.
+- `ref.terrain.world.bathymetry.gebco` rev 1: Added (3.1.0, T-08): the COG listed on Source Cooperative (3.06 GB) on 2026-11-20.
 
 ## 2026-11-19
 

@@ -48,6 +48,23 @@ class RegionError(Exception):
         self.rule = rule
 
 
+def drop_specks(geom, share: float = 0.005, reach: float = 0.2):
+    """3.1.0: a (multi)polygon without its remote specks: parts under `share` of the area that lie farther from the rest than `reach` times the
+    rest's size (Rockall off Scotland, the Prince Edward Islands of the Western Cape). Any CRS; the geometry itself when nothing is dropped."""
+    parts = sorted(getattr(geom, "geoms", [geom]), key=lambda g: g.area, reverse=True)
+    if len(parts) < 2:
+        return geom
+    total = sum(g.area for g in parts) or 1.0
+    from shapely.ops import unary_union
+    keep = [g for g in parts if g.area >= share * total]
+    core = unary_union(keep)
+    W, S, E, N = core.bounds
+    far = reach * max(E - W, N - S)
+    small = [g for g in parts if g.area < share * total]
+    near = [g for g in small if g.distance(core) <= far]
+    return geom if len(near) == len(small) else unary_union(keep + near)
+
+
 @dataclass
 class Region:
     geometry: object
@@ -63,6 +80,22 @@ class Region:
     @property
     def bounds(self) -> tuple:
         return tuple(float(v) for v in self.geometry.bounds)
+
+    @property
+    def frame_geometry(self):
+        """3.1.0: the region without its remote specks (Rockall off Scotland), so the frame fits the land people mean. The data and the
+        outline keep every part."""
+        return drop_specks(self.geometry)
+
+    @property
+    def frame_bounds(self) -> tuple:
+        return tuple(float(v) for v in self.frame_geometry.bounds)
+
+    @property
+    def id(self) -> str:
+        """3.1.0: a file-name-safe slug of the region's name (adapters name their cached files by it)."""
+        import re as _re
+        return _re.sub(r"[^a-z0-9]+", "-", str(self.name).lower()).strip("-")[:60] or "region"
 
     def gdf(self):
         import geopandas as gpd
@@ -205,6 +238,83 @@ def admin2_shape(block: dict, base: Path | None = None, fetch=None):
     if not len(hit):
         raise RegionError(f"region admin2: none of {', '.join(names)} found in {parent}")
     return hit.to_crs("EPSG:4326").geometry.union_all(), src, hit
+
+
+GEOBOUNDARIES = "ref.boundary.world.country.geoboundaries"
+
+
+def iso3_of(iso2: str) -> str | None:
+    """3.1.0: ISO alpha-3 (lower case) of an alpha-2 code, from data/countries.yaml; None when unknown."""
+    try:
+        cs = gc.load_yaml(gc.plugin_root() / "data" / "countries.yaml")["countries"]
+        return str(cs[str(iso2).upper()]["iso3"]).lower()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def geoboundaries_admin2(parent: str):
+    """3.1.0 (G-05): admin-2 areas of any country from geoBoundaries (gbOpen, CC BY 4.0 or more open), fetched through the library and cached;
+    for an admin-1 parent (DE-BY) only the areas inside it. -> (GeoDataFrame, source text). RegionError MAP-REG-002 when it cannot be read."""
+    import geopandas as gpd
+    import ref_fetch
+    iso2 = str(parent).upper().split("-")[0]
+    try:
+        cs = gc.load_yaml(gc.plugin_root() / "data" / "countries.yaml")["countries"]
+        iso3 = str(cs[iso2]["iso3"]).lower()
+    except Exception:  # noqa: BLE001
+        raise RegionError(f"no ISO alpha-3 code is known for {iso2}", gc.EXIT_USAGE, "MAP-REG-002") from None
+    try:
+        r = ref_fetch.fetch_entry(GEOBOUNDARIES, variant=iso3, level="adm2")
+    except Exception as ex:  # noqa: BLE001 - offline, or the country's licence is not open enough
+        raise RegionError(f"admin-2 areas of {iso2} come from geoBoundaries ADM2, which could not be read here ({str(ex).splitlines()[0][:160]}); fetch it on a "
+                          f"computer with network: ref_fetch.py fetch {GEOBOUNDARIES} --variant {iso3} --level adm2", gc.EXIT_REFUSED, "MAP-REG-002") from None
+    path = Path(r["path"])
+    g = gpd.read_parquet(path) if path.suffix == ".parquet" else gpd.read_file(path)
+    g = g.to_crs("EPSG:4326")
+    if "-" in str(parent):
+        a1 = _basemap(ADMIN1)
+        sh = a1[a1["iso_3166_2"] == str(parent).upper()]
+        if len(sh):
+            pts = g.geometry.representative_point()
+            g = g[pts.within(sh.geometry.union_all().buffer(0.01))]
+    return g, f"geoBoundaries ADM2 ({iso2}, gbOpen)"
+
+
+def units_in(region: "Region", level: str, *, resolution: int = 5, base: Path | None = None):
+    """3.1.0 (G-05): the areas of one level inside a region, for a series (map-atlas by:, market-map): a GeoDataFrame with code, name and
+    geometry (EPSG:4326). level admin1 (ISO 3166-2 areas), admin2 (US counties; elsewhere geoBoundaries ADM2) or h3 (cells at `resolution`)."""
+    import geopandas as gpd
+    lvl = str(level).lower()
+    geom = region.geometry
+    if lvl in ("admin1", "state", "province"):
+        a1 = _basemap(ADMIN1)
+        sel = a1[a1["iso_3166_2"].isin(region.admin1)] if region.admin1 else a1[a1["iso_a2"].isin(region.countries)]
+        sel = sel[sel.geometry.intersects(geom)]
+        return gpd.GeoDataFrame({"code": sel["iso_3166_2"].to_numpy(), "name": sel["name"].to_numpy()}, geometry=sel.geometry.to_numpy(), crs="EPSG:4326")
+    if lvl in ("admin2", "county", "district"):
+        parents = list(region.admin1) or list(units_in(region, "admin1")["code"])
+        frames = []
+        for par in parents:
+            if par.startswith("US-"):
+                cn, _src = _finer_us_counties()
+                pool = cn[cn["STUSPS"] == par[3:]].to_crs("EPSG:4326")
+                code = pool["GEOID"] if "GEOID" in pool.columns else pool["NAME"]
+                frames.append(gpd.GeoDataFrame({"code": code.to_numpy(), "name": pool["NAME"].to_numpy()}, geometry=pool.geometry.to_numpy(), crs="EPSG:4326"))
+            else:
+                g, _src = geoboundaries_admin2(par)
+                cc = next((c for c in ("shapeISO", "shapeID") if c in g.columns), None)
+                nc = next((c for c in ("shapeName", "name", "NAME") if c in g.columns), None)
+                frames.append(gpd.GeoDataFrame({"code": (g[cc] if cc else g.index.astype(str)).astype(str).to_numpy(), "name": (g[nc] if nc else g.index.astype(str)).to_numpy()},
+                                               geometry=g.geometry.to_numpy(), crs="EPSG:4326"))
+        import pandas as pd
+        out = gpd.GeoDataFrame(pd.concat(frames, ignore_index=True), crs="EPSG:4326") if frames else gpd.GeoDataFrame({"code": [], "name": []}, geometry=[], crs="EPSG:4326")
+        return out[out.geometry.intersects(geom)].reset_index(drop=True)
+    if lvl == "h3":
+        import h3_source as hs
+        cells, _sh = hs.complete_grid(geom, int(resolution), "centre")
+        g = hs.cells_gdf(__import__("pandas").DataFrame(index=__import__("pandas").Index(cells, name="h3")), int(resolution))
+        return gpd.GeoDataFrame({"code": list(cells), "name": list(cells)}, geometry=g.geometry.to_numpy(), crs="EPSG:4326")
+    raise RegionError(f"units: level is admin1, admin2 or h3, not '{level}'")
 
 
 def _buffer(geom, km: float):

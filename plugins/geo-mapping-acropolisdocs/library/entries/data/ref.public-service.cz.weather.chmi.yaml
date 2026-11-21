@@ -1,0 +1,74 @@
+id: ref.public-service.cz.weather.chmi
+type: public-service
+rev: 1
+status: active
+title: CHMI Open Data (Czechia weather observations)
+summary: 'Weather observations from Czech Hydrometeorological Institute (CHMI / ČHMÚ), keyless open data: a directory of JSON files, one a station and day
+  (10-minute values), with a station list under meteorology/climate/now/metadata/.'
+tags:
+  geography:
+  - cz
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Observed weather across Czechia (temperature, precipitation, wind at the national network's stations), keyless.
+avoid_when:
+- 'A live layer: the files are per station and day, so a map reads a day''s set, not a stream.'
+delivery:
+  mode: service
+  protocol: rest-json
+  request: https://opendata.chmi.cz/meteorology/climate/now/data/
+  format: a directory of JSON files, one a station and day (10-minute values), with a station list under meteorology/climate/now/metadata/
+  note: Keyless; every request goes through the plugin's HTTP client (public host, GET, size and time caps).
+source:
+  publisher: Czech Hydrometeorological Institute (CHMI / ČHMÚ)
+  product: ČHMÚ open data
+  url: https://opendata.chmi.cz/
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Data: Czech Hydrometeorological Institute (ČHMÚ), CC BY 4.0'
+  note: ČHMÚ publishes its open data under CC BY 4.0 (open data portal, 2026-11-20); keyless directory listing (200).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_get
+    url: https://opendata.chmi.cz/meteorology/climate/now/data/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): the endpoint answered 200 without a key from the person''s computer on 2026-11-20; ČHMÚ publishes its open data under
+      CC BY 4.0 (open data portal, 2026-11-20).'

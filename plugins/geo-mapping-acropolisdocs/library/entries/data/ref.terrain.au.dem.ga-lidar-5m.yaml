@@ -1,0 +1,80 @@
+id: ref.terrain.au.dem.ga-lidar-5m
+type: terrain
+rev: 1
+status: active
+title: Geoscience Australia 5 m LiDAR DEM (bare earth)
+summary: Australia's 5 m bare-earth DEM from 236 LiDAR surveys (the populated coast and the Murray-Darling floodplains), one WCS 1.0.0 GetCoverage as GeoTIFF;
+  where it has no data the next source fills the window.
+tags:
+  geography:
+  - au
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  - parcel-level
+  - site-precision
+  scale:
+  - regional
+  - state
+  - metro
+  - local
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Relief, a profile or a line of sight in coastal Australia (terrain.source auto).
+avoid_when:
+- 'The interior outside the LiDAR surveys: Copernicus or Terrarium fills it.'
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  url_template: https://services.ga.gov.au/gis/services/DEM_LiDAR_5m_2025/MapServer/WCSServer
+  format: WCS 1.0.0 GetCoverage, coverage 1, GeoTIFF, CRS EPSG:4283
+  note: A Sydney window answered 200 image/tiff on 2026-11-20 (CRS=EPSG:4283; EPSG:4326 is refused as the request CRS).
+source:
+  publisher: Geoscience Australia
+  product: Digital Elevation Model (DEM) of Australia derived from LiDAR 5 Metre Grid
+  url: https://ecat.ga.gov.au/geonetwork/srv/api/records/22be4b55-2468-4320-e053-10a3070a5236
+  terms_url: https://creativecommons.org/licenses/by/4.0/
+url_verified_on: '2026-11-20'
+vintage:
+  current: DEM_LiDAR_5m_2025
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: Digital Elevation Model of Australia derived from LiDAR 5 Metre Grid, (c) Commonwealth of Australia (Geoscience Australia),
+    CC BY 4.0.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://services.ga.gov.au/gis/services/DEM_LiDAR_5m_2025/MapServer/WCSServer?service=WCS&request=GetCapabilities&version=1.0.0
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, T-08): GetCapabilities and one GetCoverage answered on 2026-11-20; CC BY 4.0 from the GA catalogue record.'

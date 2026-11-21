@@ -1,0 +1,81 @@
+id: ref.statistic.fr.coverage.arcep-mobile
+type: statistic
+rev: 1
+status: active
+title: 'Arcep Mon réseau mobile: theoretical coverage per operator (France)'
+summary: France's theoretical mobile coverage, one GeoPackage (7z) per operator, technology (2G, 3G, 4G) and use (voice, data), polygons by level (very
+  good, good, limited), quarterly; read for the region onto H3 by the arcep-mon-reseau-mobile adapter.
+tags:
+  geography:
+  - fr
+  level:
+  - grid
+  domain:
+  - telecom
+  use_for:
+  - choropleth
+  - coverage-footprint
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - quarterly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- A carrier-choice map of a French region or department (operators with good 4G data coverage).
+avoid_when:
+- 'Measured quality: these are the operators'' predictions (Arcep''s measurements are a separate set).'
+join:
+  key: h3
+  type: string
+  note: Polygons per operator and level; the adapter turns them into H3 cells (resolution 9)
+crs: EPSG:2154
+delivery:
+  mode: fetch
+  url_template: https://arcep.s3.rbx.io.cloud.ovh.net/mobile/couvertures_theoriques/{quarter}/Metropole/00_Metropole/{quarter}_couv_Metropole_{operator}_{techno}_{usage}.gpkg.7z
+  format: 7z holding one GeoPackage, Lambert-93 (the overseas territories in their UTM zones)
+  note: Fields operateur, operateur_commercial, operateur_infra, date, techno, usage, niveau (TBC, BC, CL), dept; the documentation_couverture.md read 2026-11-20.
+    Metropolitan 4G data files are 130 to 390 MB each (2026_T2).
+source:
+  publisher: Arcep
+  product: Mon réseau mobile, couvertures théoriques
+  url: https://www.data.gouv.fr/datasets/mon-reseau-mobile/
+  terms_url: https://www.etalab.gouv.fr/licence-ouverte-open-licence/
+url_verified_on: '2026-11-20'
+vintage:
+  current: 2026 T2
+  cadence: quarterly
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Mobile coverage: Arcep, Mon réseau mobile (couvertures théoriques des opérateurs), Licence Ouverte 2.0.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://arcep.s3.rbx.io.cloud.ovh.net/?list-type=2&prefix=mobile/couvertures_theoriques/&delimiter=/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, G-12): the bucket listed and one file (974, Orange, 4G data) read on 2026-11-20; licence from the data.gouv.fr record.'

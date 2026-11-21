@@ -1,0 +1,81 @@
+id: ref.boundary.us.protected.usfs-forests
+type: boundary
+rev: 1
+status: active
+title: USFS administrative forest boundaries (National Forests)
+summary: The 112 administrative national forest boundaries of the U.S. Forest Service (EDW), fetched once as GeoJSON in EPSG:4326 (generalised to 0.01 degree
+  for the fetch).
+tags:
+  geography:
+  - us
+  level:
+  - admin2
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - choropleth
+  - locator-inset
+  avoid_for:
+  - legal-boundary
+  - parcel-level
+  scale:
+  - national
+  - regional
+  - state
+  detail:
+  - generalized
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- National forests behind a western state's map (siting, fire, coverage on federal land).
+avoid_when:
+- 'Ownership inside a forest''s boundary: it includes private inholdings; the surface management entry says who manages the land.'
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: GeoJSON
+  rolling: true
+  note: ArcGIS query of EDW_ForestSystemBoundaries_01 layer 0 (maxRecordCount 2,000, 112 features), outFields FORESTNAME, REGION, FORESTNUMBER, GIS_ACRES;
+    4.0 MB on 2026-11-20.
+source:
+  publisher: USDA Forest Service
+  product: Administrative Forest Boundaries - National Extent (EDW)
+  url: https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer/0/query?where=1%3D1&outFields=FORESTNAME,REGION,FORESTNUMBER,GIS_ACRES&maxAllowableOffset=0.01&outSR=4326&f=geojson
+url_verified_on: '2026-11-20'
+vintage:
+  current: EDW (live)
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Boundaries: USDA Forest Service (EDW).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer/0?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, gap analysis): the layer and a full GeoJSON query read on 2026-11-20 (112 forests).'
+join:
+  key: forestname
+  type: string
+  note: the forest's name; region and forestnumber together are the USFS code

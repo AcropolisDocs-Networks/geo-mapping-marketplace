@@ -242,7 +242,10 @@ def prepare_coverage(inp: dict, opt: dict, out: Path) -> dict:
 
 
 # ---------------------------------------------------------------------------------------------------------------- market-map
-MARKET_REFS = {"state": "ref.boundary.us.state.cb20m", "county": "ref.boundary.us.county.cb", "tract": "ref.boundary.us.tract.cb500k"}
+MARKET_REFS = {"state": "ref.boundary.us.state.cb20m", "county": "ref.boundary.us.county.cb", "tract": "ref.boundary.us.tract.cb500k",
+               "admin1": "ref.boundary.world.state.ne10-locator"}       # 3.1.0 (G-05): admin-1 of any country, by ISO 3166-2 code
+MARKET_BY = {"admin1": "admin1", "province": "admin1", "admin2": "admin2", "district": "admin2", "region": "regions", "regions": "regions", "h3": "h3", "cells": "h3",
+             "state": "state", "county": "county", "tract": "tract", "field": "field"}
 MARKET_FILE_KEYS = {"cma": "CMA"}                   # the key column of a boundary file of these areas, when the person gives none
 
 
@@ -259,7 +262,43 @@ def _infer_geography(keys) -> tuple[str, str]:
         return ("state", "GEOID") if m <= 2 else ("county", "GEOID")
     if all(re.fullmatch(r"[A-Za-z]{2}", k) for k in ks):
         return "state", "STUSPS"
+    if all(re.fullmatch(r"[A-Za-z]{2}-[A-Za-z0-9]{1,3}", k) for k in ks):        # 3.1.0: ISO 3166-2 codes (DE-BY, FR-75, US-WA)
+        return "admin1", "iso_3166_2"
+    if all(re.fullmatch(r"8[0-9a-fA-F]{14}", k) for k in ks):                     # 3.1.0: H3 cell ids
+        return "h3", "h3"
     return "state", "NAME"
+
+
+def _market_areas(geography: str, keys, opt: dict, out: Path) -> tuple[Path, str]:
+    """3.1.0 (G-05): the areas of a non-US market map as a GeoPackage beside the table: admin2 of the region (US counties or geoBoundaries
+    ADM2, joined on code or name) or named regions (one row a gazetteer region or admin code, joined on the table's key)."""
+    import geopandas as gpd
+    import region as region_mod
+    if geography == "regions":
+        rows = []
+        for k in dict.fromkeys(str(x).strip() for x in keys if str(x).strip()):
+            try:
+                r = region_mod.resolve(k)
+            except region_mod.RegionError as ex:
+                raise PrepError(f"region '{k}': {ex}") from None
+            rows.append({"key_area": k, "name": r.name, "geometry": r.geometry})
+        g = gpd.GeoDataFrame(rows, crs="EPSG:4326")
+        col = "key_area"
+    else:
+        blk = opt.get("region")
+        if not blk:
+            raise PrepError("geography admin2 needs region= (the place or admin codes whose admin-2 areas the table names)")
+        codes = [c.strip() for c in str(blk).split(",") if c.strip()]
+        reg = region_mod.resolve({"admin": codes if len(codes) > 1 else codes[0]} if all(region_mod.CODE.match(c.upper()) for c in codes) else {"place": str(blk)})
+        try:
+            g = region_mod.units_in(reg, "admin2")
+        except region_mod.RegionError as ex:
+            raise PrepError(str(ex)) from None
+        ks = {tj.norm_key(k) for k in keys}
+        col = "code" if len(ks & {tj.norm_key(c) for c in g["code"]}) >= len(ks & {tj.norm_key(n) for n in g["name"]}) else "name"
+    path = out / f"market_areas_{geography}.gpkg"
+    g.to_file(path, driver="GPKG")
+    return path, col
 
 
 def prepare_market(inp: dict, opt: dict, out: Path) -> dict:
@@ -277,8 +316,14 @@ def prepare_market(inp: dict, opt: dict, out: Path) -> dict:
         else:
             raise PrepError(f"say which column to map with value= (numeric columns: {', '.join(nums) or 'none'})")
     den = pick_column(table.columns, opt.get("denominator"), (), "denominator column") if opt.get("denominator") else None
-    geography = opt.get("geography") or _infer_geography(table[key])[0]
-    left = opt.get("boundary_key") or _infer_geography(table[key])[1]
+    asked = str(opt.get("by") or opt.get("geography") or "").lower()
+    geography = MARKET_BY.get(asked) or asked or _infer_geography(table[key])[0]      # an area kind of the person's own file (cma) stays as named
+    left = opt.get("boundary_key") or ({"admin1": "iso_3166_2", "h3": "h3"}.get(geography) if (opt.get("by") or opt.get("geography")) else None) or _infer_geography(table[key])[1]
+    if geography in ("admin2", "regions") and not opt.get("boundary"):          # 3.1.0 (G-05): the areas are written beside the table
+        bpath, left = _market_areas(geography, table[key], opt, out)
+        opt = {**opt, "boundary": str(bpath), "boundary_key": left}
+    if geography == "h3":
+        return _market_h3(inp, opt, out, table, key)
     if geography in ("county", "tract") and left != "GEOID" and not opt.get("boundary"):
         raise PrepError(f"a {geography} table needs {'5' if geography == 'county' else '11'}-digit FIPS codes (GEOID); names alone are ambiguous across states")
     ref = MARKET_REFS.get(geography)
@@ -323,14 +368,15 @@ def prepare_market(inp: dict, opt: dict, out: Path) -> dict:
     cleaned = out / "market_table.csv"
     clean.to_csv(cleaned, index=False)
     states = opt.get("states")
-    flt = {"column": "STUSPS", "in": list(states)} if states else None
+    flt = {"column": "STUSPS", "in": list(states)} if states and (geography in ("state", "county", "tract") or bfile is not None) else None
     conf = "client-confidential" if _confidential(opt) else "public"
     if "confidential" not in opt:                # 0.24.0 (sample-map showcase): the default is said, so a public or sample table is not marked by mistake
         fs.append(finding("MAP-TEL-019", "INFO", "the table is treated as client-confidential (banner on, credited as a client table); for a public or "
                           "sample table pass confidential=false and credit= with its source"))
     n_rows = int(clean["value"].notna().sum())
-    title = opt.get("title") or (f"{_nice(val)} by {geography}" if not den else f"{_nice(val)} per {per_s} {_per_word(den)}, by {geography}")
-    message = opt.get("message") or (f"{val} varies across {n_rows} {geography[:-1] + 'ies' if geography.endswith('y') and n_rows != 1 else geography + ('s' if n_rows != 1 else '')}"
+    word = {"admin1": "region", "admin2": "district", "regions": "region"}.get(geography, geography)     # 3.1.0: no admin jargon in a title
+    title = opt.get("title") or (f"{_nice(val)} by {word}" if not den else f"{_nice(val)} per {per_s} {_per_word(den)}, by {word}")
+    message = opt.get("message") or (f"{val} varies across {n_rows} {word[:-1] + 'ies' if word.endswith('y') and n_rows != 1 else word + ('s' if n_rows != 1 else '')}"
                                      + (f" in {', '.join(states)}" if states else "") + (f", shown per {per_s} {den}." if den else "."))
     spec = base_spec(opt.get("id") or _slug(title), message, title, opt.get("subtitle"), opt)
     join = {"table": cleaned.name, "left": left, "right": "key", "columns": [field_] + (["value"] if den and style == "proportional" else []) + extra,
@@ -362,6 +408,34 @@ def prepare_market(inp: dict, opt: dict, out: Path) -> dict:
     return {"spec": str(p), "findings": fs, "report": {"geography": geography, "key": key, "value": val, "denominator": den, "style": style, "rows": int(len(clean)),
                                                         "boundary": str(bfile.name) if bfile is not None else ref},
             "files": [str(cleaned)]}
+
+
+def _market_h3(inp: dict, opt: dict, out: Path, table, key: str) -> dict:
+    """3.1.0 (G-05): a market table keyed by H3 cell ids drawn as its cells (source type h3), the value rolled up to the page (sum for counts,
+    mean for a rate: agg=)."""
+    val = pick_column(table.columns, opt.get("value"), (), "value column")
+    if not val:
+        raise PrepError("say which column to map with value=")
+    t = table[[key, val]].copy()
+    t.columns = ["h3", "value"]
+    t["value"] = tj._to_number(t["value"])
+    cleaned = out / "market_table.csv"
+    t.to_csv(cleaned, index=False)
+    title = opt.get("title") or f"{_nice(val)} by H3 cell"
+    spec = base_spec(opt.get("id") or _slug(title), opt.get("message") or f"{val} across {int(t['value'].notna().sum())} H3 cells.", title, opt.get("subtitle"), opt)
+    if opt.get("region"):
+        codes = [c.strip() for c in str(opt["region"]).split(",") if c.strip()]
+        import region as region_mod
+        spec["region"] = {"admin": codes if len(codes) > 1 else codes[0]} if all(region_mod.CODE.match(c.upper()) for c in codes) else {"place": str(opt["region"])}
+    agg = str(opt.get("agg") or ("mean" if opt.get("rate_justification") else "sum"))
+    spec["layers"].append({"id": "market", "role": "choropleth", "source": {"type": "h3", "path": cleaned.name, "id_field": "h3"},
+                           "h3": {"agg": agg, "value_field": "value"}, "value_field": "value",
+                           "classification": {"method": opt.get("method") or "quantile", "classes": int(opt.get("classes") or 5)},
+                           "legend": {"title": opt.get("legend") or _nice(val)}, "palette": {"name": "brand_sequential"},
+                           "confidentiality": "client-confidential" if _confidential(opt) else "public",
+                           "provenance": {"attribution": opt.get("credit") or f"Data: client table {Path(inp['table']).name}"}})
+    p = write_spec(spec, out)
+    return {"spec": str(p), "findings": [], "report": {"geography": "h3", "key": key, "value": val, "rows": int(len(t)), "agg": agg}, "files": [str(cleaned)]}
 
 
 # ---------------------------------------------------------------------------------------------------------------- program-map

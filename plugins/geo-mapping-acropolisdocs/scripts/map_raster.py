@@ -140,7 +140,7 @@ def terrain_config(spec: dict) -> dict:
             "exaggeration": t.get("exaggeration", "auto"), "resolution_m": t.get("resolution_m"),
             # 2.5.0 (T-07): the sun keys of role: hillshade, here too
             "sun": {k: t[k] for k in ("azimuth", "altitude", "cast_shadows", "multidirectional", "max_px") if k in t},
-            "bathymetry": bool(t.get("bathymetry", False)),
+            "bathymetry": bathy_mode(t.get("bathymetry", False)), "crs": t.get("crs"),
             "contours": {"on": bool(c.get("on", False)), "interval": c.get("interval", "auto"), "index_every": c.get("index_every"),
                          "labels": c.get("labels", True) is not False}}
 
@@ -224,6 +224,13 @@ def load_layer(ly: dict, base: Path):
         p = p if p.is_absolute() else base / p
         if not p.is_file():
             raise RasterLayerError(f"layer '{lid}': file not found: {src['path']}")
+        import lidar
+        if lidar.is_lidar(p):                       # 3.1.0: a LAS or LAZ point cloud is gridded once (lidar.py) and drawn as its GeoTIFF
+            try:
+                p = lidar.as_raster(p, cell=src.get("cell_m"), surface=src.get("surface", "dtm"), crs=src.get("crs"))
+            except lidar.LidarError as ex:
+                raise RasterLayerError(f"layer '{lid}': {ex}", ex.code)
+            src["path"] = str(p)
         rio = _rio()
         try:
             info = rio.open_info(p)
@@ -909,13 +916,13 @@ def dem_from_config(plan, win, shape, cfg: dict, explicit: bool) -> tuple[dict |
     import terrain_fetch as tf
     src = cfg["source"]
     sev = "WARN" if explicit else "INFO"
-    if src not in ("auto", "3dep", "terrarium", "copernicus"):
+    if src not in tf.SOURCE_NAMES:
         p = Path(src)
         p = p if p.is_absolute() else plan.spec_path.parent / p
         if not p.is_file():
             return None, [finding("MAP-TER-004", sev, f"terrain.source {src} is not a file; the map was built without relief")]
         try:
-            return tf.dem_for(None, dem_path=str(p)), []
+            return tf.dem_for(None, dem_path=str(p), lidar_crs=cfg.get("crs")), []
         except Exception as ex:  # noqa: BLE001
             return None, [finding("MAP-TER-004", sev, f"terrain.source {p.name} could not be read ({ex}); the map was built without relief")]
     try:
@@ -960,6 +967,7 @@ def apply_dem_provenance(item: dict, prov: dict) -> None:
     item["entry"] = ent
 
 
+DEM_FETCHED = ("canada-mrdem", "gsi-japan", "ga-lidar-5m", "ign-rge-alti", "arcticdem", "rema", "gebco")    # 3.1.0: the plugin fetched these too
 RELIEF_MAX_PX_LIMIT = 4096                # 1.19.0: hillshade.max_px may raise the relief picture to this
 CAST_SHADOW_DEPTH = 0.75                  # 1.19.0: a cast shadow takes this share of the light off the cells it falls on
 
@@ -972,8 +980,42 @@ def sun_config(hs: dict | None) -> dict:
     one = "azimuth" in hs or "altitude" in hs
     multi = bool(hs.get("multidirectional", not one))
     return {"azimuth": float(hs.get("azimuth", 315.0)), "altitude": float(hs.get("altitude", 45.0)), "multidirectional": multi,
-            "cast_shadows": bool(hs.get("cast_shadows", False)) and not multi, "bathymetry": bool(hs.get("bathymetry", False)),
+            "cast_shadows": bool(hs.get("cast_shadows", False)) and not multi, "bathymetry": bathy_mode(hs.get("bathymetry", False)),
             "max_px": int(min(RELIEF_MAX_PX_LIMIT, max(256, int(hs.get("max_px", RELIEF_MAX_PX))))), "custom": one or "multidirectional" in hs}
+
+
+def bathy_mode(v):
+    """terrain.bathymetry: false (water masked), true (the DEM's own sea floor, Terrarium's) or "gebco" (3.1.0: the GEBCO grid under the water)."""
+    if isinstance(v, str) and v.strip().lower() == "gebco":
+        return "gebco"
+    return bool(v)
+
+
+def gebco_floor(plan, dem, g, rec: dict):
+    """3.1.0 (T-08): the sea floor from GEBCO under the water cells of the relief grid (the map's ocean and lakes, and flat sea level). Returns
+    (dem, gebco record or None). Land keeps the DEM it was fetched from."""
+    import terrain_fetch as tf
+    from rasterio.transform import array_bounds
+    from rasterio.warp import transform_bounds, reproject, Resampling
+    import rasterio
+    wm = water_mask(plan, dem, g)
+    if wm is None or not wm.any():
+        return dem, None
+    h, w = np.ma.asarray(dem).shape
+    b = transform_bounds(g.crs, "EPSG:4326", *array_bounds(h, w, g.transform))
+    r = tf.dem_for(b, 450.0, "gebco", gc.workdir(create=True), purpose="relief")
+    if not r.get("ok") or (r.get("record") or {}).get("source") != "gebco":
+        return dem, None
+    with rasterio.open(r["path"]) as ds:
+        floor = np.full((h, w), np.nan)
+        reproject(rasterio.band(ds, 1), floor, src_transform=ds.transform, src_crs=ds.crs, dst_transform=g.transform, dst_crs=g.crs,
+                  src_nodata=ds.nodata, dst_nodata=np.nan, resampling=Resampling.bilinear)
+    put = wm & np.isfinite(floor)
+    arr = np.ma.filled(np.ma.asarray(dem, dtype=float), np.nan)
+    arr[put] = np.minimum(floor[put], 0.0)
+    if hasattr(plan, "notes"):
+        plan.notes.append(f"relief: the sea floor of {put.mean():.0%} of the window from the GEBCO grid (terrain.bathymetry: gebco)")
+    return np.ma.masked_invalid(arr), r["record"]
 
 
 def water_mask(plan, dem, g):
@@ -1013,6 +1055,13 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
     dem = np.ma.masked_where(np.ma.filled(dem, np.nan) <= tf.NODATA + 1, dem)
     if dem.count() == 0:
         raise RasterLayerError("the DEM holds no elevation inside the map window")
+    bathy_rec = None
+    if sun.get("bathymetry") == "gebco":
+        try:
+            dem, bathy_rec = gebco_floor(plan, dem, g, rec)
+        except Exception as ex:  # noqa: BLE001 - no sea floor is not a failed map: the water stays masked
+            if hasattr(plan, "notes"):
+                plan.notes.append(f"relief: the GEBCO sea floor could not be read ({str(ex)[:120]}); the water is drawn without relief")
     if sun["multidirectional"]:
         hs = rio.hillshade(dem, g.transform, z_factor=z, multidirectional=True, crs=g.crs)
     else:
@@ -1034,7 +1083,7 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
     valid = ~np.ma.getmaskarray(dem)
     # a DEM the plugin fetched for the window can be fetched again for a wider one (the build's second pass): only a file the person
     # supplied has an end the frame must respect
-    limits = None if rec.get("source") in ("3dep", "terrarium", "copernicus", "mosaic") else drop_empty_sides(file_limits(dem_path, plan.crs, win),
+    limits = None if rec.get("source") in ("3dep", "terrarium", "copernicus", "mosaic") + DEM_FETCHED else drop_empty_sides(file_limits(dem_path, plan.crs, win),
                                                                                                     ~np.ma.getmaskarray(dem), g.transform)
     if not valid.all() and valid.any():               # 0.26.0 (TODO M16): a DEM that ends inside the map fades out instead of stopping in a straight edge
         # 1.21.0 (Day 18): not toward an edge the fit will keep the frame inside of; there the fade only drew a pale band along the frame
@@ -1049,9 +1098,10 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
     png = png_bytes(rgba)
     attribution = rec.get("attribution")
     src_name = {"3dep": "USGS 3D Elevation Program (3DEP) bare-earth DEM", "terrarium": "Terrain Tiles on AWS (Mapzen Terrarium)",
-                "copernicus": "Copernicus DEM GLO-30 (surface model)"}.get(rec.get("source"), f"DEM supplied by the person ({Path(dem_path).name})")
+                "copernicus": "Copernicus DEM GLO-30 (surface model)", **{k: tf.source_info(k).get("title") or k for k in DEM_FETCHED}}.get(
+                    rec.get("source"), f"DEM supplied by the person ({Path(dem_path).name})")
     if rec.get("source") == "mosaic":                                  # 2.5.0 (T-03): every source the window used, by its share
-        nm = {"3dep": "USGS 3DEP", "copernicus": "Copernicus DEM GLO-30", "terrarium": "Terrain Tiles on AWS"}
+        nm = {"3dep": "USGS 3DEP", "copernicus": "Copernicus DEM GLO-30", "terrarium": "Terrain Tiles on AWS", **{k: tf.source_info(k).get("credit") or k for k in DEM_FETCHED}}
         src_name = "DEM mosaic of " + " and ".join(f"{nm.get(x['source'], x['source'])} ({x['share']:.0%})" for x in rec.get("sources") or [])
     how = ("multidirectional hillshade (225, 270, 315 and 360 degrees, Horn method)" if sun["multidirectional"] else
            f"hillshade with one sun at azimuth {sun['azimuth']:g} and {sun['altitude']:g} degrees above the horizon (Horn method, relative to flat ground)"
@@ -1067,11 +1117,18 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
               "retrieved_at": str(rec.get("retrieved_at") or "unknown"), "license": str((entry_rec.get("license") or {}).get("class") or rec.get("license") or "unknown"),
               "attribution_text": attribution, "crs_original": str(rec.get("crs") or "unknown"), "crs_used": plan.crs,
               "transformations": [step] + ([f"DEM fetched {rec.get('retrieved_at')}: {pub.get('request_count', 0)} request(s), {pub.get('request_bytes', 0) / 1e6:.1f} MB"
-                                            + (" (from the cache)" if rec.get("cached") else "")] if rec.get("source") in ("3dep", "terrarium", "copernicus", "mosaic") else
+                                            + (" (from the cache)" if rec.get("cached") else "")] if rec.get("source") in ("3dep", "terrarium", "copernicus", "mosaic") + DEM_FETCHED else
                                            [f"a DEM supplied by the person ({Path(dem_path).name}); nothing was fetched"]),
               "row_count": 0, "library_ref": entry_rec.get("id") if entry else None, "library_rev": entry_rec.get("rev") if entry else None,
               "sha256": rec.get("sha256") or _sha(dem_path), "terrain": pub}
     extra = []
+    if bathy_rec is not None:                              # 3.1.0: GEBCO under the water is credited beside the land's DEM
+        import map_plan as mp
+        try:
+            ge = mp.library_entry(bathy_rec.get("entry"))
+            extra.append(dict(ge, license=dict(ge.get("license") or {}, attribution_text=bathy_rec.get("attribution"))))
+        except Exception:  # noqa: BLE001
+            pass
     if rec.get("source") == "mosaic":                      # 2.5.0: the other sources of a mosaic, credited beside the first
         import map_plan as mp
         for s in (rec.get("sources") or [])[1:]:

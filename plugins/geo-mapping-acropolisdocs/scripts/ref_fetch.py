@@ -287,7 +287,7 @@ def find_entry(entry_id: str) -> dict:
     return hits[-1] if len(hits) > 1 and hits[-1].get("_scope") == "local" else hits[0]
 
 
-TOOLS = ("census_query", "fcc_bdc", "hist_fetch", "cds_retrieve", "overture_io", "geoboundaries")
+TOOLS = ("census_query", "fcc_bdc", "hist_fetch", "cds_retrieve", "overture_io", "geoboundaries", "noaa_normals")
 
 
 def fetch_by_tool(entry: dict, params: dict, *, refresh: bool = False, http=None, store=None) -> dict:
@@ -307,6 +307,9 @@ def fetch_by_tool(entry: dict, params: dict, *, refresh: bool = False, http=None
         if t == "geoboundaries":                    # 1.5.0: gbOpen ADM1 or ADM2 for one country, CC BY 4.0 or more open only
             import geoboundaries as gb
             return gb.from_library(entry, p, refresh=refresh, http=http, store=store)
+        if t == "noaa_normals":                     # 3.1.0: the monthly normals of the stations in a region, as a point layer
+            import noaa_normals as nn
+            return nn.from_library(entry, p, refresh=refresh, http=http, store=store)
         if t == "overture_io":                      # 1.5.0: one z8 tile of detailed ground a variant (ground_detail.py prepare names them)
             import overture_io as ov
             return ov.from_library(entry, p, refresh=refresh, http=http, store=store)

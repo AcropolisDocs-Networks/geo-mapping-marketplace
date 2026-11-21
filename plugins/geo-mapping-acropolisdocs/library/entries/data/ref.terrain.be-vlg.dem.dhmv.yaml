@@ -1,0 +1,82 @@
+id: ref.terrain.be-vlg.dem.dhmv
+type: terrain
+rev: 1
+status: active
+title: Digitaal Hoogtemodel Vlaanderen II, DTM 1 m (Flanders)
+summary: 'Flanders'' 1 m bare-earth elevation model from the DHMV II lidar survey, one WCS GetCoverage in Belgian Lambert 72: the relief and analysis source
+  in Flanders from 3.1.0 (terrain.source auto picks it there).'
+tags:
+  geography:
+  - be-vlg
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  - parcel-level
+  - site-precision
+  scale:
+  - regional
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Relief, a profile or a line of sight in Flanders.
+avoid_when:
+- 'Wallonia or Brussels'' surroundings beyond Flanders: the next source fills them.'
+crs: EPSG:31370
+delivery:
+  mode: fetch
+  url_template: https://geo.api.vlaanderen.be/el-dtm/wcs?service=WCS&version=1.0.0&request=GetCoverage&coverage=EL.GridCoverage.DTM&crs=EPSG:31370&bbox={bbox}&width={w}&height={h}&format=GeoTIFF
+  format: GeoTIFF float32, nodata -9999, EPSG:31370
+  note: WCS 2.0 subsets are refused by the gateway; WCS 1.0.0 answered 200 image/tiff on 2026-11-20 (a 500 m window at 5 m).
+source:
+  publisher: Digitaal Vlaanderen
+  product: Digitaal Hoogtemodel Vlaanderen II, DTM, raster, 1 m
+  url: https://www.vlaanderen.be/datavindplaats/catalogus/digitaal-hoogtemodel-vlaanderen-ii-dtm-raster-1-m
+  terms_url: https://www.vlaanderen.be/digitaal-vlaanderen/onze-oplossingen/geografische-webdiensten/gebruiksrecht-en-privacyverklaring-geografische-webdiensten
+url_verified_on: '2026-11-20'
+vintage:
+  current: DHMV II (2013-2015)
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: Digitaal Hoogtemodel Vlaanderen II, DTM, 1 m, Digitaal Vlaanderen, Modellicentie Gratis Hergebruik.'
+  note: The service is free ('Het gebruik van de service is kosteloos', GetCapabilities); the data under the Modellicentie Gratis Hergebruik (free reuse
+    with the source named), linked from the openlidar page.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://geo.api.vlaanderen.be/el-dtm/wcs?service=WCS&request=GetCapabilities&version=2.0.1
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): GetCapabilities and a WCS 1.0.0 GetCoverage answered on 2026-11-20; compared with the lidar tile gridded by lidar.py,
+      the median difference was 4 cm.'

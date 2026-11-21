@@ -1,0 +1,81 @@
+id: ref.terrain.fr.dem.rge-alti
+type: terrain
+rev: 1
+status: active
+title: IGN RGE ALTI, France's 1 m elevation model (bare earth)
+summary: 'The IGN''s RGE ALTI from the Geoplateforme WMS-R as 32-bit floats in Lambert-93, read in 2,048 px tiles: the relief and analysis source in metropolitan
+  France from 3.1.0.'
+tags:
+  geography:
+  - fr
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  - parcel-level
+  - site-precision
+  scale:
+  - regional
+  - state
+  - metro
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- Relief, a profile or a line of sight in France (terrain.source auto).
+avoid_when:
+- 'A window outside France: the next source in the chain is used.'
+crs: EPSG:2154
+delivery:
+  mode: fetch
+  url_template: https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES&STYLES=&CRS=EPSG:2154&BBOX={bbox}&WIDTH={w}&HEIGHT={h}&FORMAT=image/x-bil;bits=32
+  format: raw little-endian float32 (image/x-bil;bits=32), Lambert-93
+  cap: 2,048 px a request, 4,096 px a side a map
+  note: A 2 km window near Paris answered 160,000 bytes (200 x 200 floats, 138 to 141 m) on 2026-11-20.
+source:
+  publisher: Institut national de l'information géographique et forestière (IGN)
+  product: RGE ALTI
+  url: https://geoservices.ign.fr/rgealti
+  terms_url: https://www.etalab.gouv.fr/licence-ouverte-open-licence/
+url_verified_on: '2026-11-20'
+vintage:
+  current: RGE ALTI 1 m (Geoplateforme)
+  cadence: irregular
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: IGN RGE ALTI, Institut national de l''information géographique et forestière, Licence Ouverte 2.0.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://data.geopf.fr/wms-r/wms?SERVICE=WMS&REQUEST=GetCapabilities
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, T-08): one GetMap as raw floats answered on 2026-11-20; Licence Ouverte 2.0 since IGN''s open data of 2021.'

@@ -1,6 +1,6 @@
 id: ref.infrastructure.world.cell.opencellid
 type: infrastructure
-rev: 1
+rev: 2
 status: active
 title: OpenCelliD cell tower database (crowd-sourced)
 summary: Crowd-sourced cell identities (MCC, MNC, LAC/TAC, cell id) with estimated positions and ranges, worldwide, downloaded with a free API key under
@@ -50,11 +50,11 @@ join:
     samples the observation count.
 crs: EPSG:4326
 delivery:
-  mode: user-supplied
+  mode: fetch
   format: CSV (gzip) per MCC or the full database, downloaded with a free API key from the OpenCelliD downloads page
-  note: 'Register at opencellid.org, download cell_towers.csv.gz (full) or the per-MCC file (310 to 316 for the United States, 302 Canada, 334 Mexico) from
-    https://opencellid.org/downloads.php (verified 2026-11-04), gunzip and supply the CSV. The key is never typed into chat or stored by the plugin. Columns:
-    radio, mcc, net, area, cell, unit, lon, lat, range, samples, changeable, created, updated, averageSignal.'
+  note: '3.1.0: the opencellid adapter fetches the per-MCC files for a region''s countries (data/mcc-mnc.csv names them) with the person''s opencellid token,
+    into data/opencellid/ after a cost card; the CSV columns are radio, mcc, net, area, cell, unit, lon, lat, range, samples, changeable, created, updated,
+    averageSignal.'
   columns:
   - radio
   - mcc
@@ -70,6 +70,22 @@ delivery:
   - created
   - updated
   - averageSignal
+  url_template: https://opencellid.org/downloads.php?type=mcc&file={mcc}.csv.gz
+  requires_credential:
+    name: opencellid
+    kind: apikey
+    class: secret
+    host: opencellid.org
+    inject:
+      query: token
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://opencellid.org/register.php
+    free: true
+    limits: '"Each token will be able to download only twice per day" (OpenCelliD wiki, read 2026-11-20)'
+    note: The token is added at send time and never written to a record
 source:
   publisher: Unwired Labs (OpenCelliD project)
   product: OpenCelliD database export
@@ -89,7 +105,7 @@ license:
     and restricted-license because a published map derived from it carries the same licence.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
+  reviewed_on: '2026-11-20'
   verify_by: '2027-05-04'
   check:
     kind: http_head
@@ -100,3 +116,6 @@ maintenance:
     date: '2026-11-04'
     note: 'Verified the downloads page (HTTP 200, 2026-11-04) and recorded the licence (CC BY-SA 4.0), the key requirement and the export columns. User-supplied:
       the plugin never holds the key or the file.'
+  - rev: 2
+    date: '2026-11-20'
+    note: 'Fetched by the opencellid adapter (3.1.0) with the person''s token: per-MCC files, two downloads a token a day.'

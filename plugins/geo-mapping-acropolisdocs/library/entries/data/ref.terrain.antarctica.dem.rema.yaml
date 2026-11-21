@@ -1,0 +1,80 @@
+id: ref.terrain.antarctica.dem.rema
+type: terrain
+rev: 1
+status: active
+title: REMA mosaic v2.0 (32 m), Antarctica
+summary: 'The Polar Geospatial Center''s Reference Elevation Model of Antarctica (REMA) Mosaic v2.0, 32 m tiles on AWS read by range: the relief source
+  at the pole from 3.1.0, its voids filled by the next source.'
+tags:
+  geography:
+  - aq
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  - parcel-level
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Relief in the polar region (terrain.source auto).
+avoid_when:
+- 'A bare-earth analysis: it is a surface model (ice and snow surface).'
+crs: EPSG:3031
+delivery:
+  mode: fetch
+  url_template: https://pgc-opendata-dems.s3.us-west-2.amazonaws.com/rema/mosaics/v2.0/32m/{tile}/{tile}_32m_v2.0_dem.tif
+  format: Cloud-Optimized GeoTIFF, EPSG:3031
+  cap: 64 tiles a map
+  note: 100 km tiles row_col from (-3,000,000, -3,000,000) in EPSG:3031 (06_37 covers x 600 to 700 km, checked against its STAC item)
+source:
+  publisher: Polar Geospatial Center, University of Minnesota
+  product: Reference Elevation Model of Antarctica (REMA) Mosaic v2.0
+  url: https://registry.opendata.aws/pgc-rema/
+  terms_url: https://creativecommons.org/licenses/by/4.0/
+url_verified_on: '2026-11-20'
+vintage:
+  current: Reference Elevation Model of Antarctica (REMA) Mosaic v2.0
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: Reference Elevation Model of Antarctica (REMA) v2.0 mosaic, Polar Geospatial Center (University of Minnesota), CC BY 4.0.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://pgc-opendata-dems.s3.us-west-2.amazonaws.com/rema/mosaics/v2.0/32m/06_37/06_37_32m_v2.0.json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, T-08): the bucket listing and one STAC item read on 2026-11-20 (licence CC-BY-4.0 in the item); the tile grid worked out from it.'

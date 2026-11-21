@@ -20,10 +20,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-REGISTRY = {"fcc-bdc-mobile": "adapters.fcc_bdc_mobile:ADAPTER", "census-acs": "adapters.catalog:CENSUS_ACS", "opencellid": "adapters.catalog:OPENCELLID",
-            "ookla-open-data": "adapters.catalog:OOKLA", "ofcom-connected-nations": "adapters.catalog:OFCOM", "arcep-mon-reseau-mobile": "adapters.catalog:ARCEP",
-            "bnetza-mobile-coverage": "adapters.catalog:BNETZA", "ised-mobile-coverage": "adapters.catalog:ISED", "accc-mobile-coverage": "adapters.catalog:ACCC",
-            "population-grid": "adapters.catalog:POPULATION"}
+REGISTRY = {"fcc-bdc-mobile": "adapters.fcc_bdc_mobile:ADAPTER", "census-acs": "adapters.catalog:CENSUS_ACS", "opencellid": "adapters.coverage:OPENCELLID",
+            "ookla-open-data": "adapters.coverage:OOKLA", "ofcom-connected-nations": "adapters.coverage:OFCOM", "arcep-mon-reseau-mobile": "adapters.coverage:ARCEP",
+            "bnetza-mobile-coverage": "adapters.coverage:BNETZA", "canada-wireless-coverage": "adapters.coverage:CANADA", "accc-mobile-coverage": "adapters.coverage:ACCC",
+            "population-grid": "adapters.catalog:POPULATION", "kontur-population": "adapters.population:KONTUR"}
+ALIASES = {"ised-mobile-coverage": "canada-wireless-coverage"}          # 3.0.0's candidate name
 
 
 class AdapterError(Exception):
@@ -90,7 +91,7 @@ class Adapter:
 
 
 def get(name: str) -> Adapter:
-    mod = REGISTRY.get(str(name))
+    mod = REGISTRY.get(ALIASES.get(str(name), str(name)))
     if mod is None:
         raise AdapterError(f"no adapter '{name}' (adapters: {', '.join(REGISTRY)})", 2)
     m, _, attr = mod.partition(":")

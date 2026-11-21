@@ -99,7 +99,7 @@ def voice_findings(plan: mp.Plan, rendered: mr.Rendered) -> list[dict]:
 
 
 def text_findings(plan: mp.Plan, rendered: mr.Rendered) -> list[dict]:
-    """MAP-TEXT-001 to 012 (0.21.0, docs/specs/map-text-spec.md): the title and subtitle against the elements that own the other facts.
+    """MAP-TEXT-001 to 012 (0.21.0, the map-text module): the title and subtitle against the elements that own the other facts.
     WARN or INFO only, never BLOCK (D3)."""
     els = plan.spec.get("elements") or {}
     el = els.get("title") or {}

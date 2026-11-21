@@ -1,0 +1,78 @@
+id: ref.terrain.world.bathymetry.gebco
+type: terrain
+rev: 1
+status: active
+title: GEBCO 2026 grid (sea floor and land, 15 arc seconds)
+summary: 'The General Bathymetric Chart of the Oceans grid, one COG on Source Cooperative read by range: the sea floor under the water when terrain.bathymetry
+  is gebco (3.1.0).'
+tags:
+  geography:
+  - world
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  - parcel-level
+  - site-precision
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  detail:
+  - generalized
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- 'A map with water whose sea floor is part of the picture (terrain.bathymetry: gebco).'
+avoid_when:
+- 'Land relief: the land keeps its own DEM; GEBCO''s land is coarse.'
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  url_template: https://data.source.coop/ausantarctic/gebco/GEBCO_2026.tif
+  format: Cloud-Optimized GeoTIFF, 15 arc seconds, int16 metres
+source:
+  publisher: GEBCO Compilation Group (IHO and IOC of UNESCO)
+  product: GEBCO 2026 Grid
+  url: https://source.coop/ausantarctic/gebco
+  terms_url: https://www.gebco.net/data-products/gridded-bathymetry-data
+url_verified_on: '2026-11-20'
+vintage:
+  current: GEBCO_2026
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Bathymetry: GEBCO Compilation Group (2026) GEBCO 2026 Grid.'
+  note: The GEBCO grid is in the public domain; GEBCO asks that it be credited as above.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://data.source.coop/ausantarctic/gebco/GEBCO_2026.tif
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, T-08): the COG listed on Source Cooperative (3.06 GB) on 2026-11-20.'

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""webmap_frame: the frame around a web map page (1.1.0; project spec spec-webmap-frame-ux-2026-11-09).
+"""webmap_frame: the frame around a web map page (1.1.0).
 
 One panel (title, story, legend, layers, details, about), one control rail on the map, one playback dock, the brand chip in the map's
 bottom-left corner and the required credits in its bottom-right corner. Every element can be switched on or off under `webmap.frame`;

@@ -50,6 +50,17 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-atlas-run        # any module i
 | `classify-and-color` | for classes shared by every page |
 | `map-text`           | for the series title and each page's subtitle |
 
+## One map per area: `by: admin1 | admin2 | regions | h3`
+
+"One map per state", "per département", "per district of Bavaria" or "per hexagon": the pages are the areas of a region, each clipped and
+framed to its own area, on classes the whole series shares. `--region` names the region divided (default the MapSpec's `region:`):
+
+```bash
+python3 "$GMAP_ROOT/scripts/atlas.py" plan MAP.yaml --layer sites --by admin1 --region "DACH"
+python3 "$GMAP_ROOT/scripts/atlas.py" plan MAP.yaml --layer sites --by admin2 --region DE-BY      # geoBoundaries outside the US, counties inside
+python3 "$GMAP_ROOT/scripts/atlas.py" plan MAP.yaml --layer sites --by h3 --resolution 4 --region "Cascadia"
+```
+
 ## One map per period: `by: time`
 
 When the person asks for the map "month by month", "per quarter", "how the rollout grew" or "an animation", the pages are periods, not values.

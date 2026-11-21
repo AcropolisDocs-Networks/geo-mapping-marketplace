@@ -1,0 +1,84 @@
+id: ref.statistic.de.coverage.bnetza-mobile
+type: statistic
+rev: 1
+status: active
+title: 'Bundesnetzagentur Mobilfunk-Monitoring: operators per 100 m cell (Germany)'
+summary: Germany's mobile coverage as the number of operators (Telekom, Vodafone, Telefónica, 1&1) offering 2G, 4G, 5G and 5G SA in each 100 m grid cell,
+  quarterly; read for the region onto H3 by the bnetza-mobile-coverage adapter.
+tags:
+  geography:
+  - de
+  level:
+  - grid
+  domain:
+  - telecom
+  use_for:
+  - choropleth
+  - coverage-footprint
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - quarterly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- A carrier-choice map of a German state or district (number of operators with 5G or 4G).
+avoid_when:
+- 'Per-operator coverage: the file gives counts, not names (the 1.3 GB GeoPackage has them).'
+join:
+  key: id
+  type: string
+  note: BKG 100 m grid cell, 100mN{northing/100}E{easting/100} (EPSG:25832); the adapter places each cell on H3 resolution 10 by its centre
+crs: EPSG:25832
+delivery:
+  mode: fetch
+  url_template: https://data.bundesnetzagentur.de/Bundesnetzagentur/GIGA/DE/MobilfunkMonitoring/{quarter}/{yyyymm}_MobilfunkMonitoring.zip
+  format: zip with one CSV (id, gsm_out, lte, nr_sa, nr_gesamt), about 900 MB unzipped
+  note: id is the BKG grid cell, 100mN{northing/100}E{easting/100} in ETRS89 / UTM 32N (EPSG:25832); the readme in the zip, read 2026-11-20. The file is
+    found on the Gigabit-Grundbuch download page.
+source:
+  publisher: Bundesnetzagentur
+  product: Mobilfunk-Monitoring (Gigabit-Grundbuch)
+  url: https://gigabitgrundbuch.bund.de/GIGA/DE/Downloads_Suche/start.html
+  terms_url: https://gigabitgrundbuch.bund.de/GIGA/DE/Impressum/start.html
+url_verified_on: '2026-11-20'
+vintage:
+  current: June 2026
+  cadence: quarterly
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Mobile coverage: © Bundesnetzagentur (Mobilfunk-Monitoring), Datenlizenz Deutschland - Namensnennung 2.0; grid © GeoBasis-DE / BKG.'
+  note: 'The Gigabit-Grundbuch Impressum (read 2026-11-20): .csv and .gpkg data are under the Datenlizenz Deutschland - Namensnennung 2.0; the readme asks
+    for the credit © Bundesnetzagentur.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://data.bundesnetzagentur.de/Bundesnetzagentur/GIGA/DE/MobilfunkMonitoring/2606/202607_MobilfunkMonitoring.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, G-12): the June 2026 zip downloaded and read from the person''s computer on 2026-11-20 (106,439,749 bytes); columns and grid from
+      its readme.'

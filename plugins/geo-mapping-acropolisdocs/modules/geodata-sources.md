@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 165 entries (163 active); basemap-provider 14, boundary 33, boundary-derived 2, context 16, crosswalk 1, gazetteer 6, infrastructure 16, map-type 12, palette 2, public-service 37, statistic 15, symbol-set 1, template 6, terrain 4.
+Library: 207 entries (205 active); basemap-provider 18, boundary 37, boundary-derived 2, context 16, crosswalk 1, gazetteer 8, infrastructure 16, map-type 12, palette 2, public-service 51, statistic 23, symbol-set 1, template 6, terrain 14.
 
 ### Usable now
 
@@ -22,8 +22,11 @@ Library: 165 entries (163 active); basemap-provider 14, boundary 33, boundary-de
 | `ref.boundary.ca.csd.statcan2021` | Canadian census subdivisions (StatCan 2021 cartographic boundary file) | Statistics Canada, 2021 Census | web service | attribution | CSDUID (string, 7 chars) |
 | `ref.boundary.ca.province.statcan2021` | Canadian provinces and territories (StatCan 2021 cartographic boundary file) | Statistics Canada, 2021 Census | web service | attribution | PRUID (string, 2 chars) |
 | `ref.boundary.europe.nuts.gisco2024` | European NUTS regions 2024 (Eurostat GISCO) | Eurostat GISCO; administrative boundaries © EuroGeographics, NUTS 2024 | downloaded on first use | restricted | NUTS_ID (string) |
+| `ref.boundary.fr.department.ign-adminexpress` | IGN ADMIN EXPRESS COG, small scale: French departments | Institut national de l'information géographique et forestière (IGN), COG 2026 | downloaded on first use | open | code_insee (string) |
+| `ref.boundary.fr.region.ign-adminexpress` | IGN ADMIN EXPRESS COG, small scale: French regions | Institut national de l'information géographique et forestière (IGN), COG 2026 | downloaded on first use | open | code_insee (string) |
 | `ref.boundary.mx.municipio.inegi2023` | Mexican municipalities (INEGI Marco Geoestadístico 2023) | Instituto Nacional de Estadística y Geografía (INEGI), December 2023 | downloaded on first use | attribution | CVEGEO (string, 5 chars) |
 | `ref.boundary.mx.state.inegi2023` | Mexican states (INEGI Marco Geoestadístico 2023) | Instituto Nacional de Estadística y Geografía (INEGI), December 2023 | downloaded on first use | attribution | CVE_ENT (string, 2 chars) |
+| `ref.boundary.uk.lad.ons` | ONS local authority districts, December 2024 (UK, ultra generalised) | Office for National Statistics, December 2024 | web service | open | LAD24CD (string, 9 chars) |
 | `ref.boundary.us.aiannh.cb500k` | US American Indian, Alaska Native and Native Hawaiian areas, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 4 chars) |
 | `ref.boundary.us.block-group.cb500k` | US block groups, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 12 chars) |
 | `ref.boundary.us.cbsa.cb500k` | US metropolitan and micropolitan areas, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 5 chars) |
@@ -35,6 +38,7 @@ Library: 165 entries (163 active); basemap-provider 14, boundary 33, boundary-de
 | `ref.boundary.us.military.tiger` | US military installations (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain | AREAID (string) |
 | `ref.boundary.us.place.cb500k` | US incorporated places and CDPs, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 7 chars) |
 | `ref.boundary.us.protected.pad-us` | Protected Areas Database of the United States (PAD-US 4.1) | US Geological Survey, Gap Analysis Project, 4.1 (2024) | web service | public-domain | Unit_Nm (string) |
+| `ref.boundary.us.protected.usfs-forests` | USFS administrative forest boundaries (National Forests) | USDA Forest Service, EDW (live) | downloaded on first use | public-domain | forestname (string) |
 | `ref.boundary.us.state.cb20m` | US states, generalized (Census cartographic boundary) | US Census Bureau, 2025 | bundled (0.15 MB) | public-domain | GEOID (string, 2 chars) |
 | `ref.boundary.us.state.cb5m` | US states, moderately generalized (Census cartographic boundary, 1:5,000,000) | US Census Bureau, 2025 | bundled (0.69 MB) | public-domain | GEOID (string, 2 chars) |
 | `ref.boundary.us.surface-management.blm` | BLM National Surface Management Agency (federal and state land ownership) | Bureau of Land Management, current BLM service | web service | public-domain | ADMIN_AGENCY_CODE (string) |
@@ -69,7 +73,9 @@ Library: 165 entries (163 active); basemap-provider 14, boundary 33, boundary-de
 | `ref.context.world.urban.ne10` | World urban areas, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (2.54 MB) | public-domain |  |
 | `ref.crosswalk.us.county-cbsa.omb2023` | US county to metro/micro area crosswalk (OMB July 2023 delineations) | US Census Bureau, Population Division, from OMB Bulletin 23-01, OMB July 2023 | bundled (0.2 MB) | public-domain | county_geoid (string, 5 chars) |
 | `ref.gazetteer.us.landform.gnis` | USGS GNIS named landforms (summits, buttes, canyons, ridges, valleys) | U.S. Geological Survey, refreshed October 2026 (the service's copyright text) | web service | public-domain | gaz_id (integer) |
+| `ref.gazetteer.world.address.openaddresses` | OpenAddresses (open address points, by source) | OpenAddresses (Batch), rolling | you supply the file | attribution |  |
 | `ref.gazetteer.world.place.geonames` | GeoNames populated places (cities15000) | GeoNames, daily dump (downloaded 2026-11-05) | downloaded on first use | attribution |  |
+| `ref.gazetteer.world.place.geonames-cities1000` | GeoNames populated places (cities1000) | GeoNames, daily dump (downloaded 2026-11-20) | downloaded on first use | attribution |  |
 | `ref.gazetteer.world.place.ne10` | World populated places, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (0.33 MB) | public-domain |  |
 | `ref.gazetteer.world.place.ne110` | World populated places, 110m (Natural Earth) | Natural Earth 5.1.2 | bundled (0.03 MB) | public-domain |  |
 | `ref.gazetteer.world.place.overture` | Overture Maps places (points of interest) | Overture Maps Foundation, 2026-10-21.0 | you supply the file | attribution | id (string) |
@@ -86,7 +92,7 @@ Library: 165 entries (163 active); basemap-provider 14, boundary 33, boundary-de
 | `ref.infrastructure.us.tower.fcc-asr` | FCC Antenna Structure Registration (towers) | FCC, weekly complete file | you supply the file | public-domain |  |
 | `ref.infrastructure.us.tower.land-mobile` | Land mobile commercial transmission towers (FCC ULS) | FCC Universal Licensing System, weekly ULS complete file | you supply the file | public-domain |  |
 | `ref.infrastructure.us.tower.microwave` | Microwave service towers (FCC ULS microwave licences) | FCC Universal Licensing System, weekly ULS complete file | you supply the file | public-domain |  |
-| `ref.infrastructure.world.cell.opencellid` | OpenCelliD cell tower database (crowd-sourced) | Unwired Labs (OpenCelliD project), daily export (per-MCC files refreshed daily) | you supply the file | share-alike | mcc,mnc,lac,cell (string) |
+| `ref.infrastructure.world.cell.opencellid` | OpenCelliD cell tower database (crowd-sourced) | Unwired Labs (OpenCelliD project), daily export (per-MCC files refreshed daily) | downloaded on first use | share-alike | mcc,mnc,lac,cell (string) |
 | `ref.infrastructure.world.osm.geofabrik` | OpenStreetMap extracts by state or country (Geofabrik) | Geofabrik GmbH (OpenStreetMap data), daily extracts | you supply the file | share-alike |  |
 | `ref.infrastructure.world.road.ne10` | Roads worldwide, 1:10,000,000 (Natural Earth) | Natural Earth, 5.1.x (naciscdn.org current file, downloaded 2026-11-04) | downloaded on first use | public-domain |  |
 | `ref.infrastructure.world.submarine-cable.telegeography` | Submarine cable systems and landing points (TeleGeography Submarine Cable Map) | TeleGeography | you supply the file | licensed |  |
@@ -94,10 +100,22 @@ Library: 165 entries (163 active); basemap-provider 14, boundary 33, boundary-de
 | `ref.public-service.ca-on.transit.octranspo` | OC Transpo (Ottawa) GTFS and GTFS-realtime | City of Ottawa, OC Transpo, current GTFS | you supply the file | restricted |  |
 | `ref.public-service.ca-qc.transit.stm` | STM Montréal GTFS (bus and métro) | Société de transport de Montréal, current GTFS | downloaded on first use | attribution |  |
 | `ref.public-service.ca.weather.eccc-geomet` | Environment and Climate Change Canada weather, climate and water (MSC GeoMet) | Environment and Climate Change Canada, Meteorological Service of Canada, live | web service | attribution |  |
+| `ref.public-service.ch.transit.opentransportdata` | opentransportdata.swiss (Switzerland public transport) | SKI+ (Systemaufgaben Kundeninformation, on behalf of the Federal Office of Transport), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
+| `ref.public-service.cz.weather.chmi` | CHMI Open Data (Czechia weather observations) | Czech Hydrometeorological Institute (CHMI / ČHMÚ), live | web service | attribution |  |
+| `ref.public-service.de.weather.dwd` | DWD Open Data (Germany weather observations, Climate Data Center) | Deutscher Wetterdienst (DWD), live | web service | attribution |  |
+| `ref.public-service.dk.mapping.dataforsyningen` | Dataforsyningen (Denmark's national map services: WMS, WMTS, WFS) | Klimadatastyrelsen (formerly SDFI / SDFE), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
+| `ref.public-service.dk.weather.dmi` | DMI Open Data (Denmark weather observations) | Danish Meteorological Institute (DMI), live | web service | attribution |  |
 | `ref.public-service.es.weather.aemet` | AEMET OpenData (Spain weather and climate) | Agencia Estatal de Meteorología (AEMET), live | you supply the file | attribution |  |
+| `ref.public-service.fi.mapping.nls` | National Land Survey of Finland open interfaces (Topographic Database, OGC API Features) | National Land Survey of Finland (Maanmittauslaitos), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
 | `ref.public-service.fi.transit.digitransit` | Digitransit (Finland) routing and transit APIs | Digitransit (HSL, Fintraffic, Waltti), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
+| `ref.public-service.fi.weather.fmi` | FMI Open Data (Finland weather observations) | Finnish Meteorological Institute (FMI), live | web service | attribution |  |
+| `ref.public-service.fr.weather.meteo-france` | Météo-France public API (observations, forecasts, climatology) | Météo-France, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | open |  |
 | `ref.public-service.nl.weather.knmi` | KNMI Data Platform (Netherlands weather and climate) | Royal Netherlands Meteorological Institute (KNMI), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
+| `ref.public-service.no.transit.entur` | Entur (Norway) national journey planner and GTFS | Entur AS, live | web service | open |  |
 | `ref.public-service.no.weather.met-frost` | MET Norway Frost (observations and climate data) | Norwegian Meteorological Institute (MET Norway), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
+| `ref.public-service.se.mapping.lantmateriet` | Lantmäteriet open geodata (Sweden: elevation, laser data, maps) | Lantmäteriet, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
+| `ref.public-service.se.weather.smhi` | SMHI Open Data (Sweden weather observations) | Swedish Meteorological and Hydrological Institute (SMHI), live | web service | attribution |  |
+| `ref.public-service.uk.coverage.ofcom-api` | Ofcom mobile coverage API (UK, by postcode) | Ofcom, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.uk.transit.tfl` | Transport for London Unified API | Transport for London, live | web service | attribution |  |
 | `ref.public-service.uk.weather.metoffice-datahub` | Met Office Weather DataHub | Met Office, live | you supply the file | restricted |  |
 | `ref.public-service.us-az.gis.azgeo` | AZGeo Data Hub and ArcGIS Server (Arizona) | AZGeo Data Hub and ArcGIS Server, live portal | web service | open |  |
@@ -122,11 +140,18 @@ Library: 165 entries (163 active); basemap-provider 14, boundary 33, boundary-de
 | `ref.public-service.world.router.ors` | openrouteservice (HeiGIT) routing and isochrones | Heidelberg Institute for Geoinformation Technology (HeiGIT), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | share-alike |  |
 | `ref.public-service.world.router.valhalla-fossgis` | FOSSGIS public Valhalla server (routing and isochrones) | FOSSGIS e.V., live | web service | share-alike |  |
 | `ref.public-service.world.street-imagery.mapillary` | Mapillary street-level imagery (Graph API) | Mapillary (Meta), rolling | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | share-alike |  |
+| `ref.public-service.world.transit.navitia` | Navitia (journey planning on open transit data, France and beyond) | Hove (formerly Kisio Digital), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
 | `ref.public-service.world.transit.transitland` | Transitland (GTFS feed catalogue and API) | Interline Technologies (Transitland), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.world.weather.open-meteo` | Open-Meteo weather forecast and history API | Open-Meteo, live | web service | restricted |  |
 | `ref.public-service.world.weather.openweathermap` | OpenWeatherMap (current weather and forecast) | OpenWeather Ltd, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.world.weather.visual-crossing` | Visual Crossing Weather (history and forecast) | Visual Crossing Corporation | you supply the file | restricted |  |
+| `ref.public-service.world.weather.weatherapi` | WeatherAPI.com (current, forecast and history, worldwide) | WeatherAPI.com (Apilayer), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
 | `ref.public-service.world.wikidata` | Wikidata SPARQL query service | Wikimedia Foundation (Wikidata), live | you supply the file | public-domain |  |
+| `ref.statistic.au.coverage.accc-mobile` | ACCC Mobile Infrastructure Report: coverage per operator (Australia) | Australian Competition and Consumer Commission, 2026 | downloaded on first use | attribution | h3 (string) |
+| `ref.statistic.ca.coverage.wireless-data-network` | Atlas of Canada Wireless Data Network: LTE and 5G availability (Canada) | Natural Resources Canada (Atlas of Canada), data from the CRTC, 2024 | web service | open | h3 (string) |
+| `ref.statistic.de.coverage.bnetza-mobile` | Bundesnetzagentur Mobilfunk-Monitoring: operators per 100 m cell (Germany) | Bundesnetzagentur, June 2026 | downloaded on first use | attribution | id (string) |
+| `ref.statistic.fr.coverage.arcep-mobile` | Arcep Mon réseau mobile: theoretical coverage per operator (France) | Arcep, 2026 T2 | downloaded on first use | open | h3 (string) |
+| `ref.statistic.uk.coverage.ofcom-connected-nations` | Ofcom Connected Nations: mobile coverage by local authority (UK) | Ofcom, Connected Nations 2025 | you supply the file | open | laua (string, 9 chars) |
 | `ref.statistic.us.acs5.broadband` | ACS 5-year estimates, internet subscriptions (table B28002) | US Census Bureau, 2020-2024 | web service | public-domain | GEO_ID parts (string, 5 chars) |
 | `ref.statistic.us.acs5.computers` | ACS 5-year estimates, computers in the household (table B28001) | US Census Bureau, 2020-2024 | web service | public-domain | GEO_ID parts (string, 5 chars) |
 | `ref.statistic.us.acs5.median-income` | ACS 5-year estimates, median household income (table B19013) | US Census Bureau, 2020-2024 | web service | public-domain | GEO_ID parts (string, 5 chars) |
@@ -134,15 +159,28 @@ Library: 165 entries (163 active); basemap-provider 14, boundary 33, boundary-de
 | `ref.statistic.us.acs5.table` | ACS 5-year estimates, any table by variable (Census Data API or Summary File) | US Census Bureau, 2020-2024 | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | public-domain | GEO_ID parts (string, 5 chars) |
 | `ref.statistic.us.broadband.bead-ntia` | NTIA BEAD final proposal locations (Section 106 public layer) | NTIA (National Broadband Availability Map organization, owner NBAM_Admin), 2026-09 (service last edited 2026-09-22) | web service | public-domain | County_GEOID (string, 5 chars) |
 | `ref.statistic.us.broadband.fcc-bdc-summary` | FCC Broadband Data Collection: availability summary by geography | FCC, latest filing date on the download page (semiannual filings, June and December) | web service | public-domain | geography_id (string) |
+| `ref.statistic.us.climate.noaa-normals` | NOAA U.S. Climate Normals 1991-2020 (monthly, by station) | NOAA National Centers for Environmental Information, 1991-2020 | downloaded on first use | public-domain | STATION (string, 11 chars) |
 | `ref.statistic.us.coverage.fcc-bdc-mobile-h3` | FCC Broadband Data Collection: mobile coverage hexagons (H3) | FCC, latest filing date on the download page (semiannual filings, June and December) | web service | public-domain | h3_res9_id (string) |
 | `ref.statistic.us.lodes.lehd` | LEHD Origin-Destination Employment Statistics (LODES) workplace counts | US Census Bureau, Center for Economic Studies (LEHD), 2022 (LODES8 on 2020 blocks) | downloaded on first use | public-domain | w_geocode (string, 15 chars) |
 | `ref.statistic.us.storm-events.noaa` | NOAA Storm Events Database (bulk CSV) | NOAA National Centers for Environmental Information, 2025 events (details file created 2026-08-19); the 2026 file (created 2026-10-26) is partial | downloaded on first use | public-domain | STATE_FIPS,CZ_FIPS (string) |
 | `ref.statistic.world.climate.era5-land-monthly` | ERA5-Land monthly averaged data (CDS) | ECMWF for the Copernicus Climate Change Service (C3S), monthly, updated about five days after each month | web service | attribution | none (raster) |
 | `ref.statistic.world.climate.era5-monthly-single-levels` | ERA5 monthly averaged data on single levels (CDS) | ECMWF for the Copernicus Climate Change Service (C3S), monthly, updated about five days after each month | web service | attribution | none (raster) |
 | `ref.statistic.world.population.ghsl` | GHSL population grid 2020, 100 m (GHS-POP R2023A) | European Commission, Joint Research Centre (JRC), R2023A, epoch 2020 | downloaded on first use | attribution | none (raster) |
+| `ref.statistic.world.population.hrsl` | Meta High Resolution Settlement Layer (HRSL), about 30 m | Meta (Data for Good) and CIESIN, Columbia University, hrsl_general latest | downloaded on first use | attribution | none (raster) |
+| `ref.statistic.world.population.kontur` | Kontur Population: people per H3 cell (resolution 8), by country | Kontur Inc., 2023-11-01 | downloaded on first use | attribution | h3 (string) |
 | `ref.statistic.world.population.worldpop` | WorldPop constrained population 2020, 100 m, by country | WorldPop, University of Southampton, 2020 (the constrained series ends at 2020) | downloaded on first use | attribution | none (raster) |
-| `ref.statistic.world.speed.ookla` | Ookla Speedtest open data (mobile and fixed performance tiles) | Ookla, 2025 Q3 (2025 Q4 file also listed) | you supply the file | restricted | quadkey (string, 16 chars) |
+| `ref.statistic.world.speed.ookla` | Ookla Speedtest open data (mobile and fixed performance tiles) | Ookla, 2025 Q3 (2025 Q4 file also listed) | downloaded on first use | restricted | quadkey (string, 16 chars) |
+| `ref.terrain.antarctica.dem.rema` | REMA mosaic v2.0 (32 m), Antarctica | Polar Geospatial Center, University of Minnesota, Reference Elevation Model of Antarctica (REMA) Mosaic v2.0 | downloaded on first use | attribution |  |
+| `ref.terrain.arctic.dem.arcticdem` | ArcticDEM mosaic v4.1 (32 m), the Arctic above 60 N | Polar Geospatial Center, University of Minnesota, ArcticDEM Mosaic v4.1 | downloaded on first use | attribution |  |
+| `ref.terrain.au.dem.ga-lidar-5m` | Geoscience Australia 5 m LiDAR DEM (bare earth) | Geoscience Australia, DEM_LiDAR_5m_2025 | downloaded on first use | attribution |  |
+| `ref.terrain.be-vlg.dem.dhmv` | Digitaal Hoogtemodel Vlaanderen II, DTM 1 m (Flanders) | Digitaal Vlaanderen, DHMV II (2013-2015) | downloaded on first use | attribution |  |
+| `ref.terrain.be-vlg.lidar.dhmv-openlidar` | DHMV II LiDAR point cloud (Flanders, openlidar LAZ tiles) | Digitaal Vlaanderen (EODaS), DHMV II (2013-2015) | downloaded on first use | attribution |  |
+| `ref.terrain.ca.dem.mrdem` | NRCan CanElevation MRDEM-30, Canada's 30 m elevation model (DTM) | Natural Resources Canada, MRDEM-30 (2026 update) | downloaded on first use | open |  |
+| `ref.terrain.fr.dem.rge-alti` | IGN RGE ALTI, France's 1 m elevation model (bare earth) | Institut national de l'information géographique et forestière (IGN), RGE ALTI 1 m (Geoplateforme) | downloaded on first use | open |  |
+| `ref.terrain.jp.dem.gsi` | GSI Japan elevation tiles (dem_png, about 10 m) | Geospatial Information Authority of Japan, dem_png (DEM10B) | downloaded on first use | attribution |  |
+| `ref.terrain.se.dem.lantmateriet-mhm` | Lantmäteriet Markhöjdmodell, 1 m (Sweden, bare earth) | Lantmäteriet, Markhöjdmodell (updated continuously) | downloaded on first use | attribution |  |
 | `ref.terrain.us.dem.3dep` | USGS 3DEP bare-earth elevation (ImageServer) | US Geological Survey, National Geospatial Program, all 3DEP DEM data published as of October 26, 2026 (the service description states its date) | web service | public-domain |  |
+| `ref.terrain.world.bathymetry.gebco` | GEBCO 2026 grid (sea floor and land, 15 arc seconds) | GEBCO Compilation Group (IHO and IOC of UNESCO), GEBCO_2026 | downloaded on first use | public-domain |  |
 | `ref.terrain.world.dem.copernicus-glo30` | Copernicus DEM GLO-30 Public (with GLO-90), world elevation, keyless from AWS Open Data | European Space Agency and the Copernicus Programme, hosted by Sinergise on the Registry of Open Data on AWS, Copernicus DEM 2021 release | downloaded on first use | attribution |  |
 | `ref.terrain.world.dem.opentopography` | OpenTopography global DEMs (SRTM, Copernicus, ALOS, NASADEM) | OpenTopography (San Diego Supercomputer Center, UC San Diego), per dataset | downloaded on first use | attribution |  |
 | `ref.terrain.world.dem.terrarium` | Terrain Tiles on AWS (Mapzen Terrarium), world elevation | Mapzen (Linux Foundation), hosted on the Registry of Open Data on AWS, joerd build of the tileset (sources listed in the attribution document; 3DEP and SRTM v3 for the US and the world between 60 N and 56 S) | downloaded on first use | attribution |  |

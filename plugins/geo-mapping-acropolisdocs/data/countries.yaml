@@ -5,7 +5,7 @@ generated_on: '2026-11-10'
 sources:
 - 'ISO 3166-1 and UN M49: https://github.com/lukes/ISO-3166-Countries-with-Regional-Codes (all/all.csv), read 2026-11-10'
 - 'admin-1 words: Natural Earth 10m admin-1 type_en (bundled ne_10m_admin1_loc.parquet)'
-- 'units, date style and paper: the rules in spec-1.3-to-1.6 section 5.4'
+- 'units, date style and paper: the rules in tools/make_countries.py'
 - 'lang: the language of local place names where Natural Earth has a name column in it (hand table in this tool)'
 countries:
   AD:

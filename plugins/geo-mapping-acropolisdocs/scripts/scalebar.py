@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """scalebar-northarrow: map scale, scale bar and north arrow math for the display projection (spec 7.3, 10, 12.3 MAP-CRS-003).
 
-    scalebar.py info --crs EPSG:5070 --bbox xmin ymin xmax ymax --frame-mm 250 [--units auto|mi|km] [--rotation 0]
+    scalebar.py info --crs EPSG:5070 --bbox xmin ymin xmax ymax --frame-mm 250 [--units auto|mi|km|both] [--rotation 0]
 
 A scale bar is true only where the projection's local scale factor is 1. This module measures the factor with PROJ at the
 center and the corners of the extent, corrects the bar for it, and reports how much the scale varies across the map so the
@@ -84,15 +84,25 @@ def scale_info(crs, bbox, frame_mm: float, *, units: str = "auto", rotation: flo
                  "variation": round(variation, 4), "center_factor": round(kc, 5), "frame_mm": frame_mm}
     # ---- scale bar
     unit = units
+    second = None
     if unit == "auto":
         unit, out["units_reason"], out["units_mixed"] = units_auto(crs, (xmin, ymin, xmax, ymax))
+        if REGION_COUNTRIES.get() and out["units_mixed"]:          # 3.1.0 (G-10): a region of miles and km countries gets a bar in both
+            second = "km" if unit == "mi" else "mi"
+            out["units_reason"] += f"; a second bar in {'kilometres' if second == 'km' else 'miles'} for {', '.join(out['units_mixed'])}"
+    elif unit == "both":                                               # 3.1.0: asked for, whatever the place
+        unit, second = ("mi", "km")
     out["units"] = unit
+    out["units_second"] = second
     sev = "ok"
     if denom >= HIDE_BELOW_SCALE:
         out["bar"] = None
         out["bar_hidden"] = f"1:{denom / 1e6:.0f}M is smaller than 1:50M; a scale bar would mislead"
     else:
         out["bar"] = bar_model(ground_m_per_mm, frame_mm, unit, segments)
+        out["bar2"] = bar_model(ground_m_per_mm, frame_mm, second, segments) if second else None
+        if out["bar2"] is not None and not out["bar2"].get("ticks"):
+            out["bar2"] = None
         out["bar_hidden"] = None
         if not out["bar"].get("ticks"):                # 1.13.0: a frame too small for any round length (a fit candidate squeezed to nothing) has no bar
             out["bar"] = None
@@ -246,7 +256,7 @@ def main(argv=None) -> int:
     i.add_argument("--crs", required=True)
     i.add_argument("--bbox", nargs=4, type=float, required=True)
     i.add_argument("--frame-mm", type=float, required=True)
-    i.add_argument("--units", default="auto", choices=["auto", "mi", "km", "m"])
+    i.add_argument("--units", default="auto", choices=["auto", "mi", "km", "m", "both"])
     i.add_argument("--rotation", type=float, default=0.0)
     a = ap.parse_args(argv)
     print(json.dumps(scale_info(a.crs, a.bbox, a.frame_mm, units=a.units, rotation=a.rotation), indent=2))

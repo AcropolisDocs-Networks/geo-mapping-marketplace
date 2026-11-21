@@ -674,6 +674,16 @@ def load_source(layer: dict, base: Path, window=None):
             import adapters
             ent = adapters.get(src["adapter"]).entry()
         return gdf, ent, False, [{"message": n} for n in notes] + [{"step": s} for s in steps], None
+    if t == "adapter":                       # 3.1.0: a data adapter that gives polygons (Ofcom's councils): `source: {type: adapter, adapter: NAME, ...}`
+        import adapters
+        try:
+            a = adapters.get(src.get("adapter"))
+            if not hasattr(a, "fetch_layer"):
+                raise adapters.AdapterError(f"adapter '{src.get('adapter')}' gives an H3 table: use `source: {{type: h3, adapter: {src.get('adapter')}}}`", 2)
+            gdf, steps = a.fetch_layer(src, base)
+        except adapters.AdapterError as ex:
+            raise PlanError(f"{ex.rule}: layer '{layer['id']}': {ex}", ex.code) from None
+        return gdf, a.entry(), False, [{"step": s_} for s_ in steps], None
     if t in ("ref", "geocode"):
         import map_sources                    # M13: a library entry served by a data service, and a table geocoded into points
         if t == "geocode":
@@ -1023,10 +1033,10 @@ def ops_dem_resolver(spec: dict, base: Path):
         import terrain_fetch as tf
         cfg = map_raster.terrain_config(spec)
         src = cfg["source"]
-        if src not in ("auto", "3dep", "terrarium", "copernicus"):
+        if src not in tf.SOURCE_NAMES:
             p = Path(src)
             p = p if p.is_absolute() else base / p
-            r = tf.dem_for(None, dem_path=str(p))
+            r = tf.dem_for(None, dem_path=str(p), lidar_crs=cfg.get("crs"))
             return r["path"], r["record"]
         if map_raster.offline():
             raise PlanError("offline (GMAP_OFFLINE=1): the op needs a DEM; give `dem: <file>` on the op or terrain.source", gc.EXIT_REFUSED)
@@ -1563,7 +1573,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     if mode_e == "region":
         if _BUILD.get("region") is None:
             raise PlanError("extent: {mode: region} needs a region: block (admin, place, admin2, file, bbox or h3)", gc.EXIT_USAGE)
-        wgs = _BUILD["region"].bounds
+        wgs = _BUILD["region"].frame_bounds
     elif mode_e == "bbox" and ext.get("bbox"):
         wgs = tuple(float(v) for v in ext["bbox"])
     elif mode_e == "place":
@@ -1650,7 +1660,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         extent = _bounds_of(data_layers)
     elif mode_e == "region":                  # the region's own outline in the display CRS, not its lon/lat box
         import geopandas as _gpd
-        extent = tuple(float(v) for v in _gpd.GeoSeries([_BUILD["region"].geometry], crs="EPSG:4326").to_crs(display).total_bounds)
+        extent = tuple(float(v) for v in _gpd.GeoSeries([_BUILD["region"].frame_geometry], crs="EPSG:4326").to_crs(display).total_bounds)
     else:
         extent = project_bbox(wgs, display)
     plan = Plan(spec=spec, spec_path=spec_path, manifest=manifest, brand=slug, brand_name=bl.brand_name(slug), pack=pack, tokens=tokens, mode=mode,

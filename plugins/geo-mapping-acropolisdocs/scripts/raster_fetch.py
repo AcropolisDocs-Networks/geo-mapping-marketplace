@@ -13,6 +13,10 @@ Two entries are known (their download patterns are in the library entries):
                                             A window over two to four tiles is merged into one GeoTIFF; more than four is refused (use a smaller window).
   ref.statistic.world.population.worldpop   WorldPop constrained 2020, 100 m, EPSG:4326, one file per country (ISO3 from the bundled Natural Earth countries
                                             at the window's centre). A window over two countries takes the centre's country and says so (GHSL is the one grid).
+  ref.statistic.world.population.hrsl       3.1.0: Meta's High Resolution Settlement Layer (Data for Good), about 30 m (1 arc second), EPSG:4326: one VRT
+                                            of Cloud-Optimized GeoTIFFs on AWS, so only the window is read, by GDAL range reads. People a cell, 2020
+                                            estimates on buildings seen from satellite imagery. At most HRSL_MAX_PX pixels a side (about 1.1 degrees);
+                                            a larger window is refused with GHSL (100 m) named. CC BY 4.0.
 
 Rules: every request goes through ogc_http.SafeHTTP (public hosts, GET, the plugin's User-Agent, at most 200 MB a file: the client's ceiling, so the
 WorldPop file for the United States, 494 MB, is not fetched whole: since 1.11.0 the map's window is read from it by HTTP byte range, through
@@ -39,7 +43,10 @@ import raster_io as rio  # noqa: E402
 
 GHSL = "ref.statistic.world.population.ghsl"
 WORLDPOP = "ref.statistic.world.population.worldpop"
-ENTRIES = (GHSL, WORLDPOP)
+HRSL = "ref.statistic.world.population.hrsl"
+HRSL_VRT = "https://dataforgood-fb-data.s3.amazonaws.com/hrsl-cogs/hrsl_general/hrsl_general-latest.vrt"
+HRSL_MAX_PX = 4096
+ENTRIES = (GHSL, WORLDPOP, HRSL)
 GHSL_X0, GHSL_Y0, GHSL_TILE_M = -18_041_000.0, 9_000_000.0, 1_000_000.0
 GHSL_MAX_TILES = 4
 MAX_BYTES = 200_000_000                  # SafeHTTP's ceiling (CEILING["max_bytes"])
@@ -379,7 +386,11 @@ def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, varian
     lic = e.get("license") or {}
     findings: list[dict] = []
     fetched_from_cache = []
-    if entry_id == GHSL:
+    if entry_id == HRSL:
+        path, r, cached = hrsl_window(bounds_wgs84, root)
+        fetched_from_cache.append(cached)
+        rec = {"entry": entry_id, "files": [{**r, "cached": cached}]}
+    elif entry_id == GHSL:
         tiles = ghsl_tiles(bounds_wgs84)
         if len(tiles) > GHSL_MAX_TILES:
             raise RasterFetchError(f"the window touches {len(tiles)} GHSL tiles (1,000 km each); at most {GHSL_MAX_TILES} are fetched for one map. Use a smaller window")
@@ -436,6 +447,45 @@ def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, varian
                 "request_count": sum(0 if f.get("cached") else int(f.get("requests") or 1) for f in rec["files"]), "request_bytes": sum(0 if f.get("cached") else int(f.get("bytes", 0)) for f in rec["files"]),
                 "sha256": _sha(path), "path": str(path), "bounds_wgs84": [float(v) for v in bounds_wgs84]})
     return {"path": str(path), "record": rec, "findings": findings, "entry": e}
+
+
+def hrsl_window(bounds_wgs84, root: Path, opener=None) -> tuple[Path, dict, bool]:
+    """3.1.0: the window of Meta's HRSL (people a 1-arc-second cell) read from its public VRT of COGs, kept as a GeoTIFF. -> (path, record, cached)."""
+    import math
+    import numpy as np
+    W, S, E, N = (float(v) for v in bounds_wgs84)
+    W, S, E, N = (math.floor(W * 3600) / 3600, math.floor(S * 3600) / 3600, math.ceil(E * 3600) / 3600, math.ceil(N * 3600) / 3600)
+    px_w, px_h = int(round((E - W) * 3600)), int(round((N - S) * 3600))
+    if max(px_w, px_h) > HRSL_MAX_PX:
+        raise RasterFetchError(f"the window is {px_w} x {px_h} HRSL cells (1 arc second); at most {HRSL_MAX_PX} a side are read for one map "
+                               f"(about 1.1 degrees). Use a smaller window, or GHSL ({GHSL}, 100 m) for a region")
+    stem = f"hrsl_{W:.4f}_{S:.4f}_{E:.4f}_{N:.4f}".replace("-", "m")
+    out = root / f"{stem}.tif"
+    hit = _cached(out)
+    if hit:
+        return out, hit, True
+    if offline():
+        raise RasterFetchError("offline (GMAP_OFFLINE=1): the HRSL window is not cached")
+    import rasterio
+    from rasterio.windows import from_bounds
+    import terrain_fetch as tf
+    op = opener or (lambda u: rasterio.open("/vsicurl/" + u))
+    try:
+        with rasterio.Env(**{**tf._gdal_http_env(), "CPL_VSIL_CURL_ALLOWED_EXTENSIONS": ".vrt,.tif"}):
+            with op(HRSL_VRT) as ds:
+                win = from_bounds(W, S, E, N, ds.transform).round_offsets().round_lengths()
+                a = ds.read(1, window=win, boundless=True, fill_value=np.nan).astype("float32")
+                tr = ds.window_transform(win)
+                nd = ds.nodata
+    except rasterio.errors.RasterioIOError as ex:
+        raise RasterFetchError(f"the HRSL layer could not be read ({str(ex)[:160]})") from None
+    if nd is not None:
+        a[a == nd] = np.nan
+    w = rio.write_geotiff(out, np.ma.masked_invalid(a), tr, "EPSG:4326", nodata=-9999.0)
+    rec = {"url": HRSL_VRT, "bytes": 0, "range_reads": True, "sha256": w["sha256"], "retrieved_at": today(), "pixels": [int(a.shape[1]), int(a.shape[0])],
+           "people": float(np.nansum(a))}
+    out.with_suffix(".json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    return out, rec, False
 
 
 def _mosaic(paths: list[Path], out: Path) -> None:

@@ -1,4 +1,4 @@
-# The map evaluator's rubric (spec: docs/specs/map-evaluator-spec.md, sections 5, 7.4 and 8).
+# The map evaluator's rubric (2.2.0; the map-evaluate module and docs/geo-mapping-plugin-spec.md describe it).
 #
 # Observe only: nothing that makes a map reads this file (release-gate test test_evaluator_isolation). It is read by scripts/map_evaluate.py
 # alone, and is meant to change (owner decision D3). Version rules (spec 9.1):

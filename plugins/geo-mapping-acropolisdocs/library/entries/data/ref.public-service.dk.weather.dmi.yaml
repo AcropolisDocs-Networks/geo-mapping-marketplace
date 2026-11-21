@@ -1,0 +1,74 @@
+id: ref.public-service.dk.weather.dmi
+type: public-service
+rev: 1
+status: active
+title: DMI Open Data (Denmark weather observations)
+summary: 'Weather observations from Danish Meteorological Institute (DMI), keyless open data: OGC API Features, GeoJSON points (parameterId, value, observed,
+  stationId).'
+tags:
+  geography:
+  - dk
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Observed weather across Denmark (temperature, precipitation, wind at the national network's stations), keyless.
+avoid_when:
+- 'Old observations: the station archive is large; ask for a datetime range.'
+delivery:
+  mode: service
+  protocol: rest-json
+  request: https://opendataapi.dmi.dk/v2/metObs/collections/observation/items?bbox={bbox}&datetime={datetime}&parameterId={parameter}
+  format: OGC API Features, GeoJSON points (parameterId, value, observed, stationId)
+  note: Keyless; every request goes through the plugin's HTTP client (public host, GET, size and time caps).
+source:
+  publisher: Danish Meteorological Institute (DMI)
+  product: DMI Open Data API, metObs
+  url: https://opendatadocs.dmi.govcloud.dk/
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Data: Danish Meteorological Institute (DMI), CC BY 4.0'
+  note: 'DMI''s open data are CC BY 4.0 with DMI named as the source; keyless since the API moved to opendataapi.dmi.dk (2026-11-20: 200 without a key).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_get
+    url: https://opendataapi.dmi.dk/v2/metObs/collections/observation/items?limit=1
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): the endpoint answered 200 without a key from the person''s computer on 2026-11-20; DMI''s open data are CC BY 4.0
+      with DMI named as the source.'

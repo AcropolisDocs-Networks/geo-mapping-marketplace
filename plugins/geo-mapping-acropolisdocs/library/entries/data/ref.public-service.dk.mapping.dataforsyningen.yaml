@@ -1,0 +1,91 @@
+id: ref.public-service.dk.mapping.dataforsyningen
+type: public-service
+rev: 1
+status: active
+title: 'Dataforsyningen (Denmark''s national map services: WMS, WMTS, WFS)'
+summary: Denmark's national maps and geodata services (topographic screen maps, orthophotos, DAGI boundaries) from Klimadatastyrelsen's Dataforsyningen,
+  with the person's own free token.
+tags:
+  geography:
+  - dk
+  level:
+  - site
+  - admin1
+  - admin2
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- A Danish map on the national topographic screen map or orthophotos, with the person's own token (map-credentials add dataforsyningen).
+avoid_when:
+- 'The address API (DAWA, api.dataforsyningen.dk/kommuner) is gone: it answered 410 Gone on 2026-11-20. Boundaries come from the DAGI WFS instead.'
+delivery:
+  mode: service
+  protocol: wms
+  requires_credential:
+    name: dataforsyningen
+    kind: apikey
+    class: secret
+    host: api.dataforsyningen.dk
+    inject:
+      query: token
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://dataforsyningen.dk/
+    free: true
+    limits: Free geographic data; no quota stated on the pages read 2026-11-20.
+    note: 'Every service takes the token as a token= URL parameter: GetCapabilities answers with any value, a GetMap with a wrong token answers 403 (2026-11-20).
+      A free user is made on dataforsyningen.dk.'
+  request: https://api.dataforsyningen.dk/topo_skaermkort_DAF?service=WMS&request=GetCapabilities
+source:
+  publisher: Klimadatastyrelsen (formerly SDFI / SDFE)
+  product: Dataforsyningen
+  url: https://dataforsyningen.dk/
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Indeholder data fra Styrelsen for Dataforsyning og Effektivisering (Klimadatastyrelsen), <dataset>, <date>
+  note: 'The terms for free geographic data (Vilkår for brug af frie geografiske data, read 2026-11-20): free, worldwide, commercial included; credit ''Indeholder
+    data fra Styrelsen for Dataforsyning og Effektivisering'' with the dataset and the date.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_head
+    url: https://dataforsyningen.dk/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, a source the 2026-11-07 dive did not reach): the token behaviour and DAWA''s 410 seen on 2026-11-20; the free-data terms read.'

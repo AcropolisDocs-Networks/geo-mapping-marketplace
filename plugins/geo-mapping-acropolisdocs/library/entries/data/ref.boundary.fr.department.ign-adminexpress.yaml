@@ -1,0 +1,80 @@
+id: ref.boundary.fr.department.ign-adminexpress
+type: boundary
+rev: 1
+status: active
+title: 'IGN ADMIN EXPRESS COG, small scale: French departments'
+summary: France's 101 departments (overseas included) from IGN's ADMIN EXPRESS COG CARTO PE (small scale) through the Géoplateforme WFS, keyless, joined
+  on the INSEE code.
+tags:
+  geography:
+  - fr
+  level:
+  - admin2
+  domain:
+  - general
+  use_for:
+  - choropleth
+  - join-key
+  - locator-inset
+  avoid_for:
+  - legal-boundary
+  - parcel-level
+  scale:
+  - national
+  - regional
+  detail:
+  - generalized
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- A French map by department, joined to INSEE statistics on code_insee.
+avoid_when:
+- 'A cadastral or legal boundary: this is the small-scale cartographic edition.'
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: GeoJSON
+  rolling: true
+  note: WFS 2.0 GetFeature as application/json, 101 features, 1.8 MB on 2026-11-20; the layer is the yearly COG edition (LATEST).
+source:
+  publisher: Institut national de l'information géographique et forestière (IGN)
+  product: ADMIN EXPRESS COG CARTO PE
+  url: https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=ADMINEXPRESS-COG-CARTO-PE.LATEST:departement&OUTPUTFORMAT=application/json
+  terms_url: https://www.etalab.gouv.fr/licence-ouverte-open-licence/
+url_verified_on: '2026-11-20'
+vintage:
+  current: COG 2026
+  cadence: annual
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Boundaries: IGN ADMIN EXPRESS COG, Licence Ouverte 2.0.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://data.geopf.fr/wfs/ows?SERVICE=WFS&REQUEST=GetCapabilities
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, IGN, a source the 2026-11-07 dive did not reach): the WFS answered 101 departments as GeoJSON on 2026-11-20.'
+join:
+  key: code_insee
+  type: string
+  note: INSEE code (2 or 3 characters)

@@ -1,0 +1,87 @@
+id: ref.public-service.uk.coverage.ofcom-api
+type: public-service
+rev: 1
+status: active
+title: Ofcom mobile coverage API (UK, by postcode)
+summary: Ofcom's mobile coverage for every address in a postcode, per operator (EE, Three, O2, Vodafone), data and voice, outdoor and indoor, with the person's
+  free key; the ofcom_postcodes tool reads up to 500 postcodes a call.
+tags:
+  geography:
+  - uk
+  level:
+  - site
+  domain:
+  - telecom
+  use_for:
+  - site-map
+  - rag-status
+  avoid_for:
+  - engineering-grade
+  scale:
+  - metro
+  - local
+  - site
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - authoritative
+use_when:
+- A site list's coverage check by postcode (which operators are likely indoors at each site).
+avoid_when:
+- 'A national map: the basic plan allows 50,000 calls a month.'
+crs: EPSG:4326
+delivery:
+  mode: service
+  requires_credential:
+    name: ofcom-mobile
+    kind: apikey
+    class: secret
+    host: api-proxy.ofcom.org.uk
+    inject:
+      header: Ocp-Apim-Subscription-Key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://api.ofcom.org.uk/
+    free: true
+    limits: '"Basic: 100 calls/minute, 50,000 requests/month" (Ofcom API product page, read 2026-11-20)'
+    note: The mobile coverage key is separate from the broadband key and needs Ofcom's approval
+  request: https://api-proxy.ofcom.org.uk/mobile/coverage/{postcode}
+source:
+  publisher: Ofcom
+  product: Ofcom API, mobile coverage
+  url: https://api.ofcom.org.uk/
+  terms_url: https://api.ofcom.org.uk/
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: monthly
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Mobile coverage: Ofcom, through its API, used under its API terms.'
+  note: 'Ofcom''s FOI answer of August 2026: the API terms permit use in a commercial client-facing deliverable; bulk extraction is limited.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_head
+    url: https://api.ofcom.org.uk/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0): endpoint, header and plans from the API documentation and Ofcom''s FOI answer, read 2026-11-20.'

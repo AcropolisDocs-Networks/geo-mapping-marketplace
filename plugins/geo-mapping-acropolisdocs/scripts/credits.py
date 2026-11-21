@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""credits: one consolidated "Sources:" line for the map footer (0.19.0; project spec spec-consolidated-source-credits-2026-11-07).
+"""credits: one consolidated "Sources:" line for the map footer (0.19.0).
 
     elements:
       source_note:
@@ -151,6 +151,7 @@ def items(plan) -> list[Item]:
     # 2.5.0 (T-03, T-05): a relief mosaicked from several DEMs credits every source the window used
     out += [basemap_item({"entry": e, "kind": "hillshade"}) for b in plan.basemap if b.get("kind") == "hillshade" for e in b.get("extra_entries") or []]
     out += [layer_item(l, "context") for l in layers if l.role == "context"]
+    out += [basemap_item({"entry": e, "kind": "names"}) for e in getattr(plan, "_name_entries", None) or []]     # 3.1.0: GeoNames towns a message named
     return [i for i in out if i]
 
 

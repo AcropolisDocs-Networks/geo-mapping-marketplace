@@ -21,6 +21,13 @@ entries:
   rev: 6
   tags_digest: 6a23df88923d
   entry_digest: 9630ca40147a
+- id: ref.basemap-provider.geoportail-fr
+  file: entries/data/ref.basemap-provider.geoportail-fr.yaml
+  type: basemap-provider
+  status: active
+  rev: 1
+  tags_digest: 41ed646f3212
+  entry_digest: 1f4dc949332c
 - id: ref.basemap-provider.google-maps
   file: entries/data/ref.basemap-provider.google-maps.yaml
   type: basemap-provider
@@ -28,6 +35,20 @@ entries:
   rev: 1
   tags_digest: d4c20a447479
   entry_digest: 1f0b924f774d
+- id: ref.basemap-provider.here
+  file: entries/data/ref.basemap-provider.here.yaml
+  type: basemap-provider
+  status: active
+  rev: 1
+  tags_digest: 0848fd1b062c
+  entry_digest: 2b04fe591087
+- id: ref.basemap-provider.jawg
+  file: entries/data/ref.basemap-provider.jawg.yaml
+  type: basemap-provider
+  status: active
+  rev: 1
+  tags_digest: e988720770c5
+  entry_digest: 1ac21b5826e5
 - id: ref.basemap-provider.mapbox
   file: entries/data/ref.basemap-provider.mapbox.yaml
   type: basemap-provider
@@ -91,6 +112,13 @@ entries:
   rev: 4
   tags_digest: e988720770c5
   entry_digest: b48cf56ff82f
+- id: ref.basemap-provider.tomtom
+  file: entries/data/ref.basemap-provider.tomtom.yaml
+  type: basemap-provider
+  status: active
+  rev: 1
+  tags_digest: 0848fd1b062c
+  entry_digest: d0bd5d6e5b5a
 - id: ref.basemap-provider.usgs-topo
   file: entries/data/ref.basemap-provider.usgs-topo.yaml
   type: basemap-provider
@@ -140,6 +168,20 @@ entries:
   rev: 1
   tags_digest: ec0c4d059f3d
   entry_digest: 7d608b7b24c2
+- id: ref.boundary.fr.department.ign-adminexpress
+  file: entries/data/ref.boundary.fr.department.ign-adminexpress.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 86e0a8b3cdcd
+  entry_digest: 7ce60794ab68
+- id: ref.boundary.fr.region.ign-adminexpress
+  file: entries/data/ref.boundary.fr.region.ign-adminexpress.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 52d7128ee9a6
+  entry_digest: f83c5263a43d
 - id: ref.boundary.mx.municipio.inegi2023
   file: entries/data/ref.boundary.mx.municipio.inegi2023.yaml
   type: boundary
@@ -154,6 +196,13 @@ entries:
   rev: 2
   tags_digest: 30c858531488
   entry_digest: 1b6241179a2a
+- id: ref.boundary.uk.lad.ons
+  file: entries/data/ref.boundary.uk.lad.ons.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: e816596f85dd
+  entry_digest: 5b1950dc75d2
 - id: ref.boundary.us.aiannh.cb500k
   file: entries/data/ref.boundary.us.aiannh.cb500k.yaml
   type: boundary
@@ -231,6 +280,13 @@ entries:
   rev: 2
   tags_digest: d9cc2c34accd
   entry_digest: ffc99cc84576
+- id: ref.boundary.us.protected.usfs-forests
+  file: entries/data/ref.boundary.us.protected.usfs-forests.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 694e88852ac4
+  entry_digest: bdb489f13ad9
 - id: ref.boundary.us.state.cb20m
   file: entries/data/ref.boundary.us.state.cb20m.yaml
   type: boundary
@@ -469,6 +525,13 @@ entries:
   rev: 1
   tags_digest: 7765652d315b
   entry_digest: 7a021085e2a1
+- id: ref.gazetteer.world.address.openaddresses
+  file: entries/data/ref.gazetteer.world.address.openaddresses.yaml
+  type: gazetteer
+  status: active
+  rev: 1
+  tags_digest: 51056b8d99d2
+  entry_digest: fd4deb6fc8b1
 - id: ref.gazetteer.world.place.geonames
   file: entries/data/ref.gazetteer.world.place.geonames.yaml
   type: gazetteer
@@ -476,6 +539,13 @@ entries:
   rev: 3
   tags_digest: 5f8ee361bec2
   entry_digest: dc2cdcb6068e
+- id: ref.gazetteer.world.place.geonames-cities1000
+  file: entries/data/ref.gazetteer.world.place.geonames-cities1000.yaml
+  type: gazetteer
+  status: active
+  rev: 1
+  tags_digest: 5f8ee361bec2
+  entry_digest: 07256ac74689
 - id: ref.gazetteer.world.place.ne10
   file: entries/data/ref.gazetteer.world.place.ne10.yaml
   type: gazetteer
@@ -592,9 +662,9 @@ entries:
   file: entries/data/ref.infrastructure.world.cell.opencellid.yaml
   type: infrastructure
   status: active
-  rev: 1
+  rev: 2
   tags_digest: 5c277a95f485
-  entry_digest: ece5d56d8639
+  entry_digest: 061722b9514c
 - id: ref.infrastructure.world.osm.geofabrik
   file: entries/data/ref.infrastructure.world.osm.geofabrik.yaml
   type: infrastructure
@@ -742,6 +812,41 @@ entries:
   rev: 1
   tags_digest: 8db46247711e
   entry_digest: d437e49287cf
+- id: ref.public-service.ch.transit.opentransportdata
+  file: entries/data/ref.public-service.ch.transit.opentransportdata.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 79b6fd6ad4dd
+  entry_digest: f965ec584133
+- id: ref.public-service.cz.weather.chmi
+  file: entries/data/ref.public-service.cz.weather.chmi.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 732b394fc038
+  entry_digest: 8dac5ef9301b
+- id: ref.public-service.de.weather.dwd
+  file: entries/data/ref.public-service.de.weather.dwd.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 80ed4006dbf1
+  entry_digest: f7947437f1ab
+- id: ref.public-service.dk.mapping.dataforsyningen
+  file: entries/data/ref.public-service.dk.mapping.dataforsyningen.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: b78c9c0103cf
+  entry_digest: ab4917ffd8ef
+- id: ref.public-service.dk.weather.dmi
+  file: entries/data/ref.public-service.dk.weather.dmi.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 250339f70f86
+  entry_digest: 86d0fc006140
 - id: ref.public-service.es.weather.aemet
   file: entries/data/ref.public-service.es.weather.aemet.yaml
   type: public-service
@@ -749,6 +854,13 @@ entries:
   rev: 2
   tags_digest: c2a4816688be
   entry_digest: b8c5241ec4d6
+- id: ref.public-service.fi.mapping.nls
+  file: entries/data/ref.public-service.fi.mapping.nls.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 9138e0a0e117
+  entry_digest: 10c0a95b1c5e
 - id: ref.public-service.fi.transit.digitransit
   file: entries/data/ref.public-service.fi.transit.digitransit.yaml
   type: public-service
@@ -756,6 +868,20 @@ entries:
   rev: 2
   tags_digest: e78929bf3b60
   entry_digest: 1f6060d099c1
+- id: ref.public-service.fi.weather.fmi
+  file: entries/data/ref.public-service.fi.weather.fmi.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 2f31c4c35a92
+  entry_digest: 0695c018cffa
+- id: ref.public-service.fr.weather.meteo-france
+  file: entries/data/ref.public-service.fr.weather.meteo-france.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 55f43523ce24
+  entry_digest: a89c736c512c
 - id: ref.public-service.nl.weather.knmi
   file: entries/data/ref.public-service.nl.weather.knmi.yaml
   type: public-service
@@ -763,6 +889,13 @@ entries:
   rev: 2
   tags_digest: fb140c99b40b
   entry_digest: d55a76b5afbd
+- id: ref.public-service.no.transit.entur
+  file: entries/data/ref.public-service.no.transit.entur.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 5f98d22e862b
+  entry_digest: e8cfaf791362
 - id: ref.public-service.no.weather.met-frost
   file: entries/data/ref.public-service.no.weather.met-frost.yaml
   type: public-service
@@ -770,6 +903,27 @@ entries:
   rev: 2
   tags_digest: 4b5475f38856
   entry_digest: dfedb52877ca
+- id: ref.public-service.se.mapping.lantmateriet
+  file: entries/data/ref.public-service.se.mapping.lantmateriet.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 2246e6820b46
+  entry_digest: 9989e6e13546
+- id: ref.public-service.se.weather.smhi
+  file: entries/data/ref.public-service.se.weather.smhi.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 5142451a21f5
+  entry_digest: cd4c822d1458
+- id: ref.public-service.uk.coverage.ofcom-api
+  file: entries/data/ref.public-service.uk.coverage.ofcom-api.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: c5b800dce73c
+  entry_digest: 9bc2bc052921
 - id: ref.public-service.uk.transit.tfl
   file: entries/data/ref.public-service.uk.transit.tfl.yaml
   type: public-service
@@ -938,6 +1092,13 @@ entries:
   rev: 5
   tags_digest: f677c51841c4
   entry_digest: 9a0293abb7bb
+- id: ref.public-service.world.transit.navitia
+  file: entries/data/ref.public-service.world.transit.navitia.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 622bd3cf569a
+  entry_digest: f3ee11b706f7
 - id: ref.public-service.world.transit.transitland
   file: entries/data/ref.public-service.world.transit.transitland.yaml
   type: public-service
@@ -966,6 +1127,13 @@ entries:
   rev: 2
   tags_digest: 6aeeb8aff9a8
   entry_digest: a5bc34e58a49
+- id: ref.public-service.world.weather.weatherapi
+  file: entries/data/ref.public-service.world.weather.weatherapi.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: f5759d59fb32
+  entry_digest: 056ab5387635
 - id: ref.public-service.world.wikidata
   file: entries/data/ref.public-service.world.wikidata.yaml
   type: public-service
@@ -973,6 +1141,34 @@ entries:
   rev: 1
   tags_digest: 48f58f8cb272
   entry_digest: b7c95dacdb4f
+- id: ref.statistic.au.coverage.accc-mobile
+  file: entries/data/ref.statistic.au.coverage.accc-mobile.yaml
+  type: statistic
+  status: active
+  rev: 1
+  tags_digest: 3bc236f740a0
+  entry_digest: 44d10e5e1942
+- id: ref.statistic.ca.coverage.wireless-data-network
+  file: entries/data/ref.statistic.ca.coverage.wireless-data-network.yaml
+  type: statistic
+  status: active
+  rev: 1
+  tags_digest: 6cd86028fec9
+  entry_digest: ed93aea1cb20
+- id: ref.statistic.de.coverage.bnetza-mobile
+  file: entries/data/ref.statistic.de.coverage.bnetza-mobile.yaml
+  type: statistic
+  status: active
+  rev: 1
+  tags_digest: f125ab1f5839
+  entry_digest: 4e0fcedb376f
+- id: ref.statistic.fr.coverage.arcep-mobile
+  file: entries/data/ref.statistic.fr.coverage.arcep-mobile.yaml
+  type: statistic
+  status: active
+  rev: 1
+  tags_digest: 1b6529fb0185
+  entry_digest: 02ab209fef42
 - id: ref.statistic.mx.coverage.ift
   file: entries/data/ref.statistic.mx.coverage.ift.yaml
   type: statistic
@@ -980,6 +1176,13 @@ entries:
   rev: 2
   tags_digest: 32c8b1b0ac49
   entry_digest: 78b8fcddc9ca
+- id: ref.statistic.uk.coverage.ofcom-connected-nations
+  file: entries/data/ref.statistic.uk.coverage.ofcom-connected-nations.yaml
+  type: statistic
+  status: active
+  rev: 1
+  tags_digest: 4bc8ace17c26
+  entry_digest: 2945343f8370
 - id: ref.statistic.us.acs5.broadband
   file: entries/data/ref.statistic.us.acs5.broadband.yaml
   type: statistic
@@ -1029,6 +1232,13 @@ entries:
   rev: 3
   tags_digest: af118c654ce2
   entry_digest: 36723ea9063d
+- id: ref.statistic.us.climate.noaa-normals
+  file: entries/data/ref.statistic.us.climate.noaa-normals.yaml
+  type: statistic
+  status: active
+  rev: 1
+  tags_digest: e11d239aa622
+  entry_digest: c56c324b80e0
 - id: ref.statistic.us.coverage.fcc-bdc-mobile-h3
   file: entries/data/ref.statistic.us.coverage.fcc-bdc-mobile-h3.yaml
   type: statistic
@@ -1078,6 +1288,20 @@ entries:
   rev: 1
   tags_digest: '906769109899'
   entry_digest: 8e333864379d
+- id: ref.statistic.world.population.hrsl
+  file: entries/data/ref.statistic.world.population.hrsl.yaml
+  type: statistic
+  status: active
+  rev: 1
+  tags_digest: 4a3f894b0287
+  entry_digest: a9331e1c2d05
+- id: ref.statistic.world.population.kontur
+  file: entries/data/ref.statistic.world.population.kontur.yaml
+  type: statistic
+  status: active
+  rev: 1
+  tags_digest: bc1b127b6fd7
+  entry_digest: fbbeba8f9ac5
 - id: ref.statistic.world.population.worldpop
   file: entries/data/ref.statistic.world.population.worldpop.yaml
   type: statistic
@@ -1089,9 +1313,9 @@ entries:
   file: entries/data/ref.statistic.world.speed.ookla.yaml
   type: statistic
   status: active
-  rev: 2
+  rev: 3
   tags_digest: e092110b9959
-  entry_digest: a91a55353e09
+  entry_digest: dfa03d343d34
 - id: ref.symbol-set.basic-shapes
   file: entries/style/ref.symbol-set.basic-shapes.yaml
   type: symbol-set
@@ -1141,6 +1365,69 @@ entries:
   rev: 1
   tags_digest: 648cae9164e2
   entry_digest: 49d90e0a6e17
+- id: ref.terrain.antarctica.dem.rema
+  file: entries/data/ref.terrain.antarctica.dem.rema.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 1100033a1049
+  entry_digest: 8a25e4a50e85
+- id: ref.terrain.arctic.dem.arcticdem
+  file: entries/data/ref.terrain.arctic.dem.arcticdem.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 1cb9daac4e96
+  entry_digest: a0613de01410
+- id: ref.terrain.au.dem.ga-lidar-5m
+  file: entries/data/ref.terrain.au.dem.ga-lidar-5m.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 480643c8b0c0
+  entry_digest: 34221a3eb9f7
+- id: ref.terrain.be-vlg.dem.dhmv
+  file: entries/data/ref.terrain.be-vlg.dem.dhmv.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 631f9eda132b
+  entry_digest: 45ba78ff87df
+- id: ref.terrain.be-vlg.lidar.dhmv-openlidar
+  file: entries/data/ref.terrain.be-vlg.lidar.dhmv-openlidar.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 2ce062397abf
+  entry_digest: 080461666604
+- id: ref.terrain.ca.dem.mrdem
+  file: entries/data/ref.terrain.ca.dem.mrdem.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 9857cbaa2b78
+  entry_digest: 91684f98fb01
+- id: ref.terrain.fr.dem.rge-alti
+  file: entries/data/ref.terrain.fr.dem.rge-alti.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: db2af36d7bba
+  entry_digest: c87a9c234338
+- id: ref.terrain.jp.dem.gsi
+  file: entries/data/ref.terrain.jp.dem.gsi.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 77944bfcca0b
+  entry_digest: 0533fb0238aa
+- id: ref.terrain.se.dem.lantmateriet-mhm
+  file: entries/data/ref.terrain.se.dem.lantmateriet-mhm.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: e8b8582d6251
+  entry_digest: 7ee7fb2bfbca
 - id: ref.terrain.us.dem.3dep
   file: entries/data/ref.terrain.us.dem.3dep.yaml
   type: terrain
@@ -1148,6 +1435,13 @@ entries:
   rev: 1
   tags_digest: e5c1c8f771f4
   entry_digest: a12b98c9af63
+- id: ref.terrain.world.bathymetry.gebco
+  file: entries/data/ref.terrain.world.bathymetry.gebco.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: b53838087226
+  entry_digest: 5abd0d5dfd5d
 - id: ref.terrain.world.dem.copernicus-glo30
   file: entries/data/ref.terrain.world.dem.copernicus-glo30.yaml
   type: terrain

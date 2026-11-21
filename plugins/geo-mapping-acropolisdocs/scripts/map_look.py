@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""map_look: the map's look (0.17.0; visual styling spec, docs/visual-styling-spec in the project).
+"""map_look: the map's look (0.17.0).
 
     style:
       look: auto          # the default: a restrained visual hierarchy (below)

@@ -1,0 +1,80 @@
+id: ref.statistic.world.population.hrsl
+type: statistic
+rev: 1
+status: active
+title: Meta High Resolution Settlement Layer (HRSL), about 30 m
+summary: 'Meta''s (Data for Good) High Resolution Settlement Layer: people a 1-arc-second cell (about 30 m) on buildings seen in satellite imagery, read
+  for the map''s window from the public VRT of Cloud-Optimized GeoTIFFs.'
+tags:
+  geography:
+  - world
+  level:
+  - grid
+  domain:
+  - demographics
+  use_for:
+  - density-surface
+  - normalization
+  - dot-density
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - metro
+  - local
+  - site
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - derived
+use_when:
+- People near a site or along a corridor where GHSL's 100 m cells are too coarse (population covered by a small cell's footprint).
+avoid_when:
+- 'A country or a state: at most about 1.1 degrees a side are read for one map; GHSL covers a region.'
+- 'Countries HRSL does not cover: the VRT has no data there.'
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  url_template: https://dataforgood-fb-data.s3.amazonaws.com/hrsl-cogs/hrsl_general/hrsl_general-latest.vrt
+  format: GDAL VRT of COGs, Float64 people a cell, EPSG:4326 (1,295,354 x 458,338 cells)
+  note: raster_fetch.py reads the window by GDAL range reads and keeps it as a GeoTIFF; the VRT answered 200 on 2026-11-20.
+source:
+  publisher: Meta (Data for Good) and CIESIN, Columbia University
+  product: High Resolution Settlement Layer (HRSL)
+  url: https://dataforgood.facebook.com/dfg/tools/high-resolution-population-density-maps
+  terms_url: https://creativecommons.org/licenses/by/4.0/
+url_verified_on: '2026-11-20'
+vintage:
+  current: hrsl_general latest
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Population: High Resolution Settlement Layer, Meta Data for Good and CIESIN (Columbia University), CC BY 4.0.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://dataforgood-fb-data.s3.amazonaws.com/hrsl-cogs/hrsl_general/hrsl_general-latest.vrt
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, gap analysis): the VRT read on 2026-11-20; raster_fetch.py reads its window.'
+join:
+  key: none
+  type: raster
+  note: 'No join: the value is read under polygons with raster_io.zonal (sum).'

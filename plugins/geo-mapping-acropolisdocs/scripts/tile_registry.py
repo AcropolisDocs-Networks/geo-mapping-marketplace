@@ -39,6 +39,9 @@ PROVIDER_IDS = {
     "pmtiles": "ref.basemap-provider.pmtiles-user", "protomaps": "ref.basemap-provider.protomaps-api", "esri": "ref.basemap-provider.esri-arcgis",
     "maptiler": "ref.basemap-provider.maptiler", "mapbox": "ref.basemap-provider.mapbox", "usgs": "ref.basemap-provider.usgs-topo",
     "google-maps": "ref.basemap-provider.google-maps", "bing-maps": "ref.basemap-provider.bing-maps", "nasa-gibs": "ref.basemap-provider.nasa-gibs",
+    "stadia": "ref.basemap-provider.stadia", "thunderforest": "ref.basemap-provider.thunderforest",
+    "jawg": "ref.basemap-provider.jawg", "here": "ref.basemap-provider.here", "tomtom": "ref.basemap-provider.tomtom",       # 3.1.0
+    "geoportail-fr": "ref.basemap-provider.geoportail-fr", "ign": "ref.basemap-provider.geoportail-fr",
 }
 DAILY_LAG_DAYS = 2                    # 0.16.0: a daily imagery layer (NASA GIBS) with no day named shows the day before yesterday: today's mosaic is partial
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")

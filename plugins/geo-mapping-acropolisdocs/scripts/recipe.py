@@ -20,6 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gmap_common as gc  # noqa: E402
 
 TECH_LABEL = {"5GNR": "5G", "4GLTE": "4G LTE", "3G": "3G"}
+TECH_BY_COUNTRY = {"de": {"5GNR": "5G", "4GLTE": "4G", "3G": "4G"}, "fr": {"5GNR": "4G", "4GLTE": "4G", "3G": "3G"},       # Arcep publishes 2G, 3G, 4G
+                   "au": {"5GNR": "5G", "4GLTE": "4G", "3G": "3G"}, "gb": {"5GNR": "5G", "4GLTE": "4G", "3G": "3G"}}
 
 
 def recipes() -> dict:
@@ -65,8 +67,29 @@ def make(name: str, region_text: str, **opts) -> dict:
     slug = re.sub(r"[^a-z0-9]+", "-", reg.name.lower()).strip("-")[:40]
     vals = {**d, "region_block": blk, "region_name": reg.name, "technology_label": TECH_LABEL.get(str(d.get("technology")), str(d.get("technology"))),
             "id": f"{name}-{slug}"}
-    spec = _fill(r["mapspec"], vals)
-    return {"spec": spec, "region": reg.record(), "notes": reg.notes, "second_panel": r["recipe"].get("second_panel")}
+    for cc, table in TECH_BY_COUNTRY.items():
+        vals[f"technology_{cc}"] = table.get(str(d.get("technology")), str(d.get("technology")))
+    base = dict(r["mapspec"])
+    notes = list(reg.notes)
+    countries = sorted({str(c).upper().split("-")[0] for c in reg.countries})
+    variant = (r.get("variants") or {}).get(countries[0]) if len(countries) == 1 and countries[0] != "US" else None
+    if variant:                                              # 3.1.0: the region's own regulator, grid and message
+        if variant.get("refuse"):
+            raise RecipeError(variant["refuse"])
+        base.update({k: v for k, v in variant.items() if k != "refuse"})
+        if countries[0] == "FR" and str(d.get("technology")) == "5GNR":
+            vals["technology_label"] = "4G"
+            notes.append("Arcep's theoretical coverage maps are 2G, 3G and 4G; the map shows 4G")
+        notes.append(f"the {countries[0]} variant of {name}: {variant['layers'][0]['source'].get('adapter')}")
+    elif len(countries) > 1 and r.get("variants") and set(countries) - {"US"}:
+        notes.append(f"{reg.name} spans {', '.join(countries)}: the FCC data cover only the United States, so the rest of the region is empty "
+                     "(one map a country uses each regulator's own data)")
+    spec = _fill(base, vals)
+    return {"spec": spec, "region": reg.record(), "notes": notes, "second_panel": r["recipe"].get("second_panel") if not variant else None}
+
+
+class RecipeError(Exception):
+    pass
 
 
 def main(argv=None) -> int:
@@ -90,6 +113,9 @@ def main(argv=None) -> int:
     except region_mod.RegionError as ex:
         print(json.dumps({"ok": False, "findings": [{"id": ex.rule, "severity": "BLOCK", "message": str(ex)}]}, indent=2))
         return ex.code
+    except RecipeError as ex:
+        print(json.dumps({"ok": False, "findings": [{"id": "MAP-REG-003", "severity": "BLOCK", "message": str(ex)}]}, indent=2))
+        return gc.EXIT_REFUSED
     Path(a.out).write_text(gc.dump_mapspec(got["spec"]), encoding="utf-8")
     gc.ledger_note(outputs=[a.out])
     print(json.dumps({"ok": True, "out": a.out, "region": got["region"]["name"], "definition": got["region"]["definition"], "notes": got["notes"],

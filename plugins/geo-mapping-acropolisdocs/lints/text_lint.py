@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""text_lint: the words on the map (0.21.0; docs/specs/map-text-spec.md, Draft 2, owner decisions 2026-11-08).
+"""text_lint: the words on the map (0.21.0; the map-text module, owner decisions 2026-11-08).
 
 The title names the subject; the subtitle adds the one thing a reader needs next; every other fact goes to the element that owns it (spec §3).
 MAP-TEXT-001 to 012 never block a build or a deliverable (D3): each is a WARN or INFO with the text it found and one suggested fix, and every
@@ -151,6 +151,10 @@ def strip_filler(s: str) -> str:
     return t
 
 
+DANGLING = {"a", "an", "the", "and", "or", "but", "across", "with", "in", "of", "for", "from", "to", "at", "by", "on", "over", "under", "into",
+            "through", "per", "than", "as", "where", "that", "which", "who", "is", "are"}
+
+
 def tidy_title(message: str) -> str:
     """The title the plugin makes when the MapSpec gives none (spec §10, the part a script can do): the message's first sentence, cut at a dash,
     colon or parenthesis, filler, dates and hashtags stripped, Title Case, no trailing period, at most 60 characters at a word boundary. The
@@ -164,6 +168,13 @@ def tidy_title(message: str) -> str:
     if len(s) > TITLE_WARN:
         cut = s[:TITLE_WARN].rsplit(" ", 1)[0]
         s = cut.rstrip(",;:-– ")
+        # 3.1.0: a cut never ends on a word that leads into what was cut ("... with 5G Across")
+        while True:
+            head, _, last = s.rpartition(" ")
+            if head and last.lower() in DANGLING:
+                s = head.rstrip(",;:-– ")
+            else:
+                break
     return s
 
 

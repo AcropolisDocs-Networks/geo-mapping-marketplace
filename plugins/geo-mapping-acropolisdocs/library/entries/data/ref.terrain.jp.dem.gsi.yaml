@@ -1,0 +1,82 @@
+id: ref.terrain.jp.dem.gsi
+type: terrain
+rev: 1
+status: active
+title: GSI Japan elevation tiles (dem_png, about 10 m)
+summary: 'The Geospatial Information Authority of Japan''s elevation tiles, 256 px PNGs at zoom 14 (about 10 m), decoded as GSI documents: the relief and
+  analysis source inside Japan from 3.1.0.'
+tags:
+  geography:
+  - jp
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  - parcel-level
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Relief, a profile or a line of sight inside Japan (terrain.source auto).
+avoid_when:
+- 'A window outside Japan: the next source in the chain is used.'
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  url_template: https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png
+  format: 'PNG tiles: x = R*65536 + G*256 + B; x < 2^23 is x*0.01 m, above it (x - 2^24)*0.01 m; 2^23 is no data'
+  cap: 64 tiles a map, zoom 14 or lower
+  note: A zoom-14 tile over Tokyo answered 200 (50,651 bytes) on 2026-11-20.
+source:
+  publisher: Geospatial Information Authority of Japan
+  product: GSI elevation tiles (標高タイル, dem_png)
+  url: https://maps.gsi.go.jp/development/ichiran.html
+  terms_url: https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html
+url_verified_on: '2026-11-20'
+vintage:
+  current: dem_png (DEM10B)
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: Geospatial Information Authority of Japan (GSI) elevation tiles (国土地理院).'
+  note: GSI's content terms allow reuse, commercial included, with the source named (compatible with CC BY 4.0).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14552/6451.png
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, T-08): one tile answered 200 on 2026-11-20; the decoding rule from GSI''s tile documentation.'

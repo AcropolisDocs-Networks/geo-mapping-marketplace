@@ -1,0 +1,105 @@
+id: ref.basemap-provider.here
+type: basemap-provider
+rev: 1
+status: active
+title: HERE raster basemaps (Raster Tile API v3)
+summary: HERE's raster map tiles (explore.day, satellite, topo and other styles) with the person's own API key; the Base plan includes 30,000 raster tile
+  requests a month free.
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - licensed
+  quality:
+  - commercial
+use_when:
+- A HERE basemap where the client licenses HERE or wants its cartography, with the person's own key (map-credentials add here).
+avoid_when:
+- 'The copyright line cannot be shown: HERE requires ''© <year> HERE'' with the supplier label for the view on every visualised map.'
+- 'Bulk or offline tiles: requests are metered and the terms do not allow caching beyond the session (not stated; treated as no).'
+url_template: https://maps.hereapi.com/v3/base/mc/{z}/{x}/{y}/png8?style={style}&apiKey={key}
+provider:
+  attribution_html: © HERE
+  max_zoom: 20
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: false
+  print_ok: null
+  production_ok: true
+  styles:
+  - explore.day
+  - explore.night
+  - explore.satellite.day
+  - topo.day
+  - lite.day
+  - logistics.day
+delivery:
+  mode: fetch
+  requires_credential:
+    name: here
+    kind: apikey
+    class: secret
+    class_allowed:
+    - secret
+    - browser
+    host: maps.hereapi.com
+    inject:
+      query: apiKey
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://platform.here.com/sign-up
+    probe: https://maps.hereapi.com/v3/base/mc/0/0/0/png8
+    free: true
+    limits: 'Raster Tile: 0 to 30,000 transactions a month free, then $0.113 per 1,000 (HERE plans page, read 2026-11-20); without payment information the
+      Limited Plan rate limits apply.'
+  note: A wrong key answers 401 (2026-11-20). The copyright label for the view comes from the API's /copyright endpoint and is refreshed daily.
+source:
+  publisher: HERE Global B.V.
+  product: HERE Raster Tile API v3
+  url: https://www.here.com/get-started/pricing
+  terms_url: https://legal.here.com/
+url_verified_on: '2026-11-20'
+license:
+  class: licensed
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: © 2026 HERE
+  note: 'Required copyright notice (docs.here.com, read 2026-11-20): ''© 20XX HERE, XXX'' with the current year and the label of the zoom range and area
+    from the copyright endpoint, conspicuous on every visualised map, on top of the map.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://www.here.com/get-started/pricing
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): the plans page and the required copyright notice read on 2026-11-20; a wrong key answered 401.'
+attribution:
+  corner: © 2026 HERE
+  links:
+  - text: © 2026 HERE
+    href: https://legal.here.com/terms
+  required_on_map: true
+  collapse: never
+  export:
+    text: © 2026 HERE
+  terms_read: '2026-11-20'

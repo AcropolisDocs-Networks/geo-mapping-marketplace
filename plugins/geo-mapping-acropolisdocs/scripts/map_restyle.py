@@ -212,7 +212,7 @@ def apply(spec: dict, a, manifest: dict) -> tuple[dict, list[str]]:
         if isinstance(el, dict):                           # the element toggle is the same switch; keep the two in step
             el["on"] = a.terrain != "off"
         done.append(f"terrain {a.terrain}" + (" (relief fetched for the window when the map is built: 3DEP in the US; give terrain.source a DEM file to fetch nothing)"
-                                               if a.terrain != "off" and str(t.get("source") or "auto") in ("auto", "3dep", "terrarium") else ""))
+                                               if a.terrain != "off" and str(t.get("source") or "auto") in ("auto", "3dep", "terrarium", "copernicus") else ""))
     for item in a.position or []:
         name, _, pos = item.partition(":")
         if pos == "default":                               # back to the element's default corner

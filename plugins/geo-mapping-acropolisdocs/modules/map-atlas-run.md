@@ -26,6 +26,9 @@ python3 "$GMAP_ROOT/scripts/pipelines.py" run  map-atlas-run --spec MAP.yaml --o
 3. **Stages.** probe, atlas-plan (values, shared class edges, one MapSpec per map in the run folder), build (every map built and linted; findings carry the value in brackets; MAP-CART-014 checks the classes match), assemble (index pages and the combined PDF with bookmarks), package.
 4. **Report.** Give the folder, the page count, the BLOCK/WARN counts, and anything the index page says about comparability.
 
+**By area** (3.1.0): `--option by=admin1|admin2|regions|h3 [--option region=...] [--option resolution=4]` makes one page per area of the
+region (each page clipped and framed to its area, the classes shared) instead of one per value of a field.
+
 ## Package layout
 
 `<out>/<map id>-atlas/` holds `<map id>-atlas.pdf`, `index.csv` (page, value, title, features, folder), `atlas.json` (layer, field, mode, values, class edges), `mapspec.yaml` (the original), `lint_report.md`, `methods.md`, `maps/<value>/` (each map's files and `provenance.json`), and `manifest.json` (every file with its SHA-256).

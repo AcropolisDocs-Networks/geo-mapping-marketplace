@@ -1,0 +1,80 @@
+id: ref.terrain.arctic.dem.arcticdem
+type: terrain
+rev: 1
+status: active
+title: ArcticDEM mosaic v4.1 (32 m), the Arctic above 60 N
+summary: 'The Polar Geospatial Center''s ArcticDEM Mosaic v4.1, 32 m tiles on AWS read by range: the relief source at the pole from 3.1.0, its voids filled
+  by the next source.'
+tags:
+  geography:
+  - world
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  - parcel-level
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Relief in the polar region (terrain.source auto).
+avoid_when:
+- 'A bare-earth analysis: it is a surface model (ice and snow surface).'
+crs: EPSG:3413
+delivery:
+  mode: fetch
+  url_template: https://pgc-opendata-dems.s3.us-west-2.amazonaws.com/arcticdem/mosaics/v4.1/32m/{tile}/{tile}_32m_v4.1_dem.tif
+  format: Cloud-Optimized GeoTIFF, EPSG:3413
+  cap: 64 tiles a map
+  note: 100 km tiles row_col from (-4,000,000, -4,000,000) in EPSG:3413 (07_40 covers x -100 to 0 km, y -3,400 to -3,300 km, checked against its STAC item)
+source:
+  publisher: Polar Geospatial Center, University of Minnesota
+  product: ArcticDEM Mosaic v4.1
+  url: https://registry.opendata.aws/pgc-arcticdem/
+  terms_url: https://creativecommons.org/licenses/by/4.0/
+url_verified_on: '2026-11-20'
+vintage:
+  current: ArcticDEM Mosaic v4.1
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: ArcticDEM v4.1 mosaic, Polar Geospatial Center (University of Minnesota), CC BY 4.0; DEMs created from Maxar imagery.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://pgc-opendata-dems.s3.us-west-2.amazonaws.com/arcticdem/mosaics/v4.1/32m/07_40/07_40_32m_v4.1.json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, T-08): the bucket listing and one STAC item read on 2026-11-20 (licence CC-BY-4.0 in the item); the tile grid worked out from it.'

@@ -1,0 +1,80 @@
+id: ref.terrain.be-vlg.lidar.dhmv-openlidar
+type: terrain
+rev: 1
+status: active
+title: DHMV II LiDAR point cloud (Flanders, openlidar LAZ tiles)
+summary: 'The Flemish lidar survey itself: 500 m LAZ tiles (8 to 16 points a square metre, classified ground, water and other) found through the openlidar
+  WFS and gridded by lidar.py into a bare-earth or surface model.'
+tags:
+  geography:
+  - be-vlg
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  - parcel-level
+  - site-precision
+  scale:
+  - local
+  - site
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- A site where the 1 m grid is not enough, or a surface model with the buildings and trees in it (lidar.py flanders --surface dsm; terrain.source flanders-lidar).
+avoid_when:
+- 'More than about 4 km2: at most 16 tiles are fetched a map (each 1 to 30 MB); the 1 m DTM (flanders-dhmv) covers a larger window.'
+crs: EPSG:31370
+delivery:
+  mode: fetch
+  url_template: https://remotesensing.vlaanderen.be/download/openlidar/{tile_location}
+  format: LAZ (LAS 1.4, point format 3), no CRS in the header (Belgian Lambert 72, EPSG:31370)
+  note: 'Tile index: https://remotesensing.vlaanderen.be/services/openlidar/wfs, layer LiDAR_DHMV_II_LAZtiles (tile_location, tile_year, tile_totalpoints);
+    one 2.4-million-point tile downloaded keylessly on 2026-11-20 (12.7 MB).'
+source:
+  publisher: Digitaal Vlaanderen (EODaS)
+  product: LiDAR Digitaal Hoogtemodel Vlaanderen II, ruwe remote sensing data
+  url: https://remotesensing.vlaanderen.be/apps/openlidar/
+  terms_url: https://assets.vlaanderen.be/image/upload/v1679331485/GratisopendatalicentieVlaanderenv12_bqxu2t.pdf
+url_verified_on: '2026-11-20'
+vintage:
+  current: DHMV II (2013-2015)
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: LiDAR Digitaal Hoogtemodel Vlaanderen II (DHMV II) point cloud, Digitaal Vlaanderen, Modellicentie Gratis Hergebruik (free
+    reuse with credit).'
+  note: The openlidar page links the Gratis open data licentie Vlaanderen v1.2 (free reuse, commercial included, with the source named).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://remotesensing.vlaanderen.be/apps/openlidar/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3, with the LAS/LAZ reader lidar.py): the WFS tile index and one tile download read on 2026-11-20.'

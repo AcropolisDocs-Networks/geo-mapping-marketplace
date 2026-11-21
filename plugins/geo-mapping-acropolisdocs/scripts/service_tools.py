@@ -754,6 +754,18 @@ def library_fetch(entry_id: str, variant: str = "", level: str = "", refresh: bo
     return {"ok": True, **res}
 
 
+def library_tool_fetch(entry_id: str, params: dict, refresh: bool = False, store=None, http=None) -> dict:
+    """3.1.0: an entry fetched by its tool for a region (NOAA normals: the stations in the region), not once per state."""
+    import ref_fetch as rf
+    try:
+        h = http or oh.SafeHTTP(resolver=RESOLVER, limits={"timeout_s": 120, "max_bytes": oh.CEILING["max_bytes"], "retries": 1})
+        res = rf.fetch_by_tool(rf.find_entry(entry_id), params, refresh=bool(refresh), http=h, store=store)
+    except rf.FetchError as e:
+        kind = {gc.EXIT_USAGE: "usage", gc.EXIT_LINT: "lint", gc.EXIT_REFUSED: "refused", gc.EXIT_SERVICE: "service"}.get(e.code, "service")
+        return fail(kind, e.rule or "MAP-SVC-013", str(e))
+    return {"ok": True, **res}
+
+
 # ---------------------------------------------------------------------------------------------------------------- 1.3.0: data-source tools, host-side
 def _tool_fail(ex) -> dict:
     code = getattr(ex, "code", gc.EXIT_LINT)
@@ -859,6 +871,110 @@ def fcc_bdc_coverage_tool(region: str = "", technology: str = "5GNR", speed: str
     finally:
         if c is not None:
             c.close()
+
+
+def region_of_text(region: str):
+    """3.1.0: a tool's region argument (a place name, or admin codes such as DE-BY or US-WA,US-OR) -> a Region. RegionError when unknown."""
+    import region as region_mod
+    txt = str(region or "").strip()
+    if not txt:
+        raise region_mod.RegionError("region is a place name (Cascadia) or admin codes (DE-BY, US-WA,US-OR)")
+    codes = [c.strip() for c in txt.split(",") if c.strip()]
+    blk = {"admin": codes if len(codes) > 1 else codes[0]} if all(region_mod.CODE.match(c.upper()) for c in codes) else {"place": txt}
+    return region_mod.resolve(blk)
+
+
+def region_parts(region: str, kind: str) -> tuple[list[str], list[str], str]:
+    """3.1.0: the parts of a region a per-partition tool takes, and the parts outside it: kind us_states (postal codes), us_fips (state FIPS)
+    or iso3 (countries, lower case). -> (inside, outside, region name). RegionError when the region is unknown."""
+    reg = region_of_text(region)
+    us = list(reg.partitions.get("us_states") or [])
+    if kind in ("us_states", "us_fips"):
+        outside = [c for c in reg.admin1 if not str(c).startswith("US-")] or [c for c in reg.countries if c not in ("US", "PR")]
+        if kind == "us_fips":
+            import census_query as cq
+            return [cq.fips(s_) for s_ in us], outside, reg.name
+        return us, outside, reg.name
+    cs = gc.load_yaml(gc.plugin_root() / "data" / "countries.yaml")["countries"]
+    return [str(cs[c]["iso3"]).lower() for c in reg.countries if c in cs], [], reg.name
+
+
+def per_region(region: str, kind: str, call) -> dict:
+    """Run a per-partition tool once per part of the region (3.1.0): -> {ok, region, parts: [{part, result}], outside}."""
+    import region as region_mod
+    try:
+        inside, outside, name = region_parts(region, kind)
+    except region_mod.RegionError as ex:
+        return fail("usage", ex.rule, str(ex))
+    if not inside:
+        return fail("usage", "MAP-REG-003", f"{name} has no part this source covers" + (f" ({', '.join(outside)} are outside it)" if outside else ""))
+    parts = [{"part": x, "result": call(x)} for x in inside]
+    out = {"ok": all(p_["result"].get("ok", True) for p_ in parts), "region": name, "parts": parts}
+    if outside:
+        out["outside"] = outside
+        out["findings"] = [{"id": "MAP-REG-003", "severity": "INFO", "message": f"{', '.join(outside)} is outside this source's coverage and has no data from it"}]
+    return out
+
+
+def coverage_fetch_tool(adapter: str = "", region: str = "", options: str = "", confirm: bool = False, opener=None, http=None) -> dict:
+    """3.1.0 (G-12): the files a coverage adapter needs for a region (bnetza-mobile-coverage, arcep-mon-reseau-mobile, accc-mobile-coverage,
+    canada-wireless-coverage, opencellid, ookla-open-data), with their size (the cost card) and the licence; with confirm=true, fetched into the
+    work folder's data/<adapter>/, where `source: {type: h3, adapter: NAME}` reads them. options: key=value pairs, comma-separated
+    (technology=5G, use=data, environment=outdoor, kind=mobile, quarter=2025Q4)."""
+    import adapters
+    import region as region_mod
+    try:
+        a = adapters.get(adapter)
+    except adapters.AdapterError as ex:
+        return fail("usage", ex.rule, str(ex))
+    try:
+        reg = region_of_text(region)
+    except region_mod.RegionError as ex:
+        return fail("usage", ex.rule, str(ex))
+    if not hasattr(a, "fetch") or a.fetch.__qualname__.startswith("Adapter."):
+        return fail("usage", "MAP-REG-003", f"{a.name} fetches through its own tool (fcc_bdc_coverage for the FCC, census_query for the Census)")
+    opts = {}
+    for kv in [x for x in str(options or "").split(",") if "=" in x]:
+        k, _, v = kv.partition("=")
+        opts[k.strip()] = v.strip()
+    cov = a.covers(reg)
+    if a.coverage_countries and cov <= 0:
+        return fail("usage", "MAP-REG-003", f"{reg.name} is outside {a.name}'s coverage ({', '.join(a.coverage_countries)})")
+    folder = gc.data_dir(a.name)
+    try:
+        kw = dict(opts, http=http) if http is not None else dict(opts)
+        if opener is not None:
+            kw["opener"] = opener
+        r = a.fetch(reg, folder, confirm=bool(confirm), **kw)
+    except adapters.AdapterError as ex:
+        return fail("refused" if ex.code == 4 else "service", ex.rule, str(ex))
+    out = {"ok": True, "adapter": a.name, "region": reg.name, "covers": round(cov, 3), "licence": a.licence_class, "card": r.get("card")}
+    blocked = adapters.blocked_for(a, "external")
+    if blocked:
+        out["note"] = blocked
+    if not confirm:
+        out["next"] = "show the person the cost (files, MB) and the licence, and call again with confirm=true after they agree"
+        return out
+    out.update(fetched=r.get("files"), path=str(folder), source={"type": "h3", "adapter": a.name, **opts})
+    return out
+
+
+def ofcom_postcodes_tool(postcodes: str = "", http=None) -> dict:
+    """3.1.0: Ofcom's mobile coverage for up to 500 postcodes (comma-separated), with the person's ofcom-mobile key: per postcode, the most
+    common value of each operator's data and voice, outdoor and indoor (0 none, 3 limited, 4 likely)."""
+    import credentials as cr
+    from adapters import coverage as cv
+    pcs = [p for p in str(postcodes or "").split(",") if p.strip()]
+    if not pcs:
+        return fail("usage", "MAP-SVC-001", "postcodes is a comma-separated list (SW1A 1AA, EH1 1YZ)")
+    try:
+        auth = cr.resolve("cred:ofcom-mobile", host="api-proxy.ofcom.org.uk")
+    except cr.CredentialError as ex:
+        return fail("refused", ex.findings[0]["id"], ex.findings[0]["message"])
+    rows = cv.ofcom_postcodes(pcs, auth=auth, http=http)
+    return {"ok": True, "postcodes": len(rows), "rows": rows, "codes": {"0": "none", "3": "limited", "4": "likely"},
+            "operators": {"EE": "EE", "H3": "Three", "TF": "Virgin Media O2", "VO": "Vodafone"},
+            "attribution": "Mobile coverage: Ofcom, through its API, used under its API terms."}
 
 
 def basemap_tiles_tool(op: str, spec: str, provider: str = "", style: str = "", zoom: int = 0, detail: str = "", http=None, env=None, sleep=None) -> dict:
@@ -1004,7 +1120,31 @@ def default_work_folder() -> str:
     env = (os.environ.get("GMAP_WORK_FOLDER") or "").strip()
     if env:
         return env
-    return (_LAST_FOLDER.get("folder") or "") if STICKY else ""
+    if STICKY and _LAST_FOLDER.get("folder"):
+        return _LAST_FOLDER["folder"]
+    roots = ROOTS.get("folders") or []                 # 3.1.0 (I-20): the client's roots, when it sends them (the desktop app's connected folders)
+    return roots[0] if STICKY and roots else ""
+
+
+ROOTS: dict = {}
+
+
+def set_roots(uris) -> list[str]:
+    """3.1.0 (I-20): the client's MCP roots (file:// URIs) as local folders that exist; the first is the default work folder of a call that names
+    none and has no folder from an earlier call. -> the folders kept."""
+    import urllib.parse
+    import urllib.request
+    out = []
+    for u in uris or []:
+        u = str(u)
+        if not u.startswith("file:"):
+            continue
+        path = urllib.request.url2pathname(urllib.parse.urlparse(u).path)      # file:///C:/Users/x is C:\\Users\\x on Windows
+        if Path(path).is_dir():
+            out.append(str(Path(path)))
+    ROOTS.clear()
+    ROOTS.update({"folders": out, "checked": True})
+    return out
 
 
 def located(res: dict, folder: Path) -> dict:

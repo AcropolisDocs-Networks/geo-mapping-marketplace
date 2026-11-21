@@ -1,0 +1,73 @@
+id: ref.public-service.fi.weather.fmi
+type: public-service
+rev: 1
+status: active
+title: FMI Open Data (Finland weather observations)
+summary: 'Weather observations from Finnish Meteorological Institute (FMI), keyless open data: WFS 2.0 stored queries, simple feature XML (one row a station,
+  time and parameter).'
+tags:
+  geography:
+  - fi
+  level:
+  - site
+  domain:
+  - weather
+  use_for:
+  - site-map
+  - density-surface
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Observed weather across Finland (temperature, precipitation, wind at the national network's stations), keyless.
+avoid_when:
+- 'More than a week of observations a request: the stored queries cap the time span.'
+delivery:
+  mode: service
+  protocol: files
+  request: https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature&storedquery_id=fmi::observations::weather::simple&bbox={bbox}&parameters=t2m
+  format: WFS 2.0 stored queries, simple feature XML (one row a station, time and parameter)
+  note: Keyless; every request goes through the plugin's HTTP client (public host, GET, size and time caps).
+source:
+  publisher: Finnish Meteorological Institute (FMI)
+  product: FMI open data WFS
+  url: https://en.ilmatieteenlaitos.fi/open-data-manual
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Data: Finnish Meteorological Institute (FMI), CC BY 4.0'
+  note: 'FMI''s open data are CC BY 4.0; keyless (2026-11-20: 200 for Helsinki''s t2m).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_get
+    url: https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=GetCapabilities
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): the endpoint answered 200 without a key from the person''s computer on 2026-11-20; FMI''s open data are CC BY 4.0.'

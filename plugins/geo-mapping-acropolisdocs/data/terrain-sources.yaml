@@ -1,8 +1,9 @@
 # 2.5.0 (T-08): the elevation sources the build may read, with where each has data. terrain_fetch chooses by intersecting the map's window with
 # each source's coverage (coverage_share), and a window that one source covers only in part is mosaicked from the next (T-03).
 # coverage: "world", or a bundled shape: us+border (Natural Earth's United States grown by `buffer_deg`, plus the Virgin Islands; 3DEP's
-# 1/3 arc-second coverage reaches over the borders). status: active (fetched) or candidate (to verify for licence, keyless access and COG
-# before it ships; never fetched).
+# 1/3 arc-second coverage reaches over the borders), "country:XX" (a country, Natural Earth 110 m), arctic (60 N and up), antarctica.
+# status: active (in the chains), bathymetry (terrain.bathymetry only), superseded or excluded (never fetched). partial: true means the
+# next source always follows, to fill where this one has no data.
 - id: 3dep
   title: USGS 3D Elevation Program (3DEP)
   entry: ref.terrain.us.dem.3dep
@@ -37,11 +38,118 @@
   credit: the regional sources the window uses
   fetch: 256 px PNG tiles, at most 64 a map
   byte_budget_mb: 40
-- {id: canada-mrdem, title: Canada MRDEM / CDEM (NRCan), status: candidate, coverage: canada, surface: bare earth and surface, licence: Open Government Licence - Canada (to verify)}
-- {id: gsi-japan, title: GSI Japan elevation tiles, status: candidate, coverage: japan, surface: bare earth, licence: GSI terms (to verify)}
-- {id: ga-elvis, title: Geoscience Australia ELVIS, status: candidate, coverage: australia, surface: bare earth, licence: CC BY 4.0 (to verify keyless access)}
-- {id: ign-rge-alti, title: IGN RGE ALTI, status: candidate, coverage: france, surface: bare earth, licence: Licence Ouverte 2.0 (to verify)}
-- {id: eu-dem, title: Copernicus EU-DEM successors, status: candidate, coverage: europe, surface: surface, licence: to verify}
-- {id: arcticdem, title: ArcticDEM, status: candidate, coverage: arctic, surface: surface, licence: public domain (to verify COG access)}
-- {id: rema, title: REMA (Antarctica), status: candidate, coverage: antarctica, surface: surface, licence: public domain (to verify COG access)}
+# 3.1.0 (T-08): the national and polar sources, verified and fetched (dem_sources.py). A national bare-earth model comes before the
+# Copernicus surface model in its own country, for relief and analysis alike.
+- id: canada-mrdem
+  title: NRCan CanElevation MRDEM-30 (DTM)
+  entry: ref.terrain.ca.dem.mrdem
+  status: active
+  coverage: "country:CA"
+  buffer_deg: 0.02
+  native_m: 30
+  surface: bare earth (DTM)
+  licence: Open Government Licence - Canada
+  credit: Natural Resources Canada (MRDEM)
+  fetch: one Cloud-Optimized GeoTIFF for Canada on AWS (canelevation-dem), overview range reads
+- id: ign-rge-alti
+  title: IGN RGE ALTI (France)
+  entry: ref.terrain.fr.dem.rge-alti
+  status: active
+  coverage: "country:FR"
+  buffer_deg: 0.0
+  native_m: 1
+  surface: bare earth (DTM)
+  licence: Licence Ouverte 2.0
+  credit: IGN RGE ALTI
+  fetch: Geoplateforme WMS-R as 32-bit floats in Lambert-93, 2048 px tiles, at most 4096 px a side
+- id: ga-lidar-5m
+  title: Geoscience Australia 5 m LiDAR DEM
+  entry: ref.terrain.au.dem.ga-lidar-5m
+  status: active
+  partial: true
+  coverage: "country:AU"
+  buffer_deg: 0.0
+  native_m: 5
+  surface: bare earth (DTM)
+  licence: CC BY 4.0
+  credit: Geoscience Australia
+  fetch: WCS 1.0.0 GetCoverage as GeoTIFF (GDA94); covers the populated coast and the Murray-Darling floodplains, the next source fills the rest
+- id: gsi-japan
+  title: GSI Japan elevation tiles (dem_png)
+  entry: ref.terrain.jp.dem.gsi
+  status: active
+  coverage: "country:JP"
+  buffer_deg: 0.05
+  native_m: 10
+  surface: bare earth (DTM)
+  licence: GSI content terms (attribution, compatible with CC BY 4.0)
+  credit: Geospatial Information Authority of Japan
+  fetch: 256 px PNG tiles at zoom 14 or lower, at most 64 a map
+- id: arcticdem
+  title: ArcticDEM mosaic v4.1 (32 m)
+  entry: ref.terrain.arctic.dem.arcticdem
+  status: active
+  partial: true
+  coverage: arctic
+  native_m: 32
+  surface: surface model (DSM)
+  licence: CC BY 4.0
+  credit: Polar Geospatial Center
+  fetch: 100 km COG tiles in EPSG:3413 on AWS (pgc-opendata-dems), at most 64 a map
+- id: rema
+  title: REMA mosaic v2.0 (32 m, Antarctica)
+  entry: ref.terrain.antarctica.dem.rema
+  status: active
+  partial: true
+  coverage: antarctica
+  native_m: 32
+  surface: surface model (DSM)
+  licence: CC BY 4.0
+  credit: Polar Geospatial Center
+  fetch: 100 km COG tiles in EPSG:3031 on AWS (pgc-opendata-dems), at most 64 a map
+- id: flanders-dhmv
+  title: Digitaal Hoogtemodel Vlaanderen II, DTM 1 m (Flanders)
+  entry: ref.terrain.be-vlg.dem.dhmv
+  status: active
+  partial: true
+  coverage: bbox:2.46,50.63,6.02,51.56
+  native_m: 1
+  surface: bare earth (DTM)
+  licence: Modellicentie Gratis Hergebruik (free reuse with credit)
+  credit: Digitaal Vlaanderen
+  fetch: WCS 1.0.0 GetCoverage EL.GridCoverage.DTM as GeoTIFF in Belgian Lambert 72 (EPSG:31370), at most 4096 px a side; Flanders only, so Wallonia and the Netherlands come from the next source
+- id: flanders-lidar
+  title: DHMV II LiDAR point cloud (Flanders, openlidar)
+  entry: ref.terrain.be-vlg.lidar.dhmv-openlidar
+  status: named
+  partial: true
+  coverage: bbox:2.46,50.63,6.02,51.56
+  native_m: 1
+  surface: bare earth (DTM)
+  licence: Modellicentie Gratis Hergebruik (free reuse with credit)
+  credit: Digitaal Vlaanderen
+  fetch: the openlidar WFS tile index, then the 500 m LAZ tiles (at most 16 a map), gridded by lidar.py (ground and water points, the lowest a cell); only when named
+- id: lantmateriet
+  title: Lantmäteriet Markhöjdmodell, 1 m (Sweden)
+  entry: ref.terrain.se.dem.lantmateriet-mhm
+  status: active
+  coverage: country:SE
+  buffer_deg: 0.0
+  native_m: 1
+  surface: bare earth (DTM)
+  licence: CC BY 4.0
+  credit: Lantmäteriet
+  credential: lantmateriet
+  fetch: STAC search (keyless) then COG range reads with the person's own Geotorget login (HTTP Basic, dl1.lantmateriet.se); at most 16 tiles a map; without the login the chain passes it over and says so
+- id: gebco
+  title: GEBCO 2026 grid (bathymetry)
+  entry: ref.terrain.world.bathymetry.gebco
+  status: bathymetry
+  coverage: world
+  native_m: 450
+  surface: sea floor and land
+  licence: public domain (credit asked)
+  credit: GEBCO Compilation Group (2026)
+  fetch: one COG on Source Cooperative (ausantarctic/gebco), overview range reads; used by terrain.bathymetry, not for land relief
+- {id: eu-dem, title: EEA EU-DEM v1.1, status: superseded, coverage: world, surface: surface, licence: withdrawn by the EEA; its successor for open use is the Copernicus DEM GLO-30 (above)}
 - {id: fabdem, title: FABDEM, status: excluded, coverage: world, surface: bare earth, licence: CC BY-NC-SA 4.0 (non-commercial; out by owner decision O6)}

@@ -1,0 +1,79 @@
+id: ref.statistic.ca.coverage.wireless-data-network
+type: statistic
+rev: 1
+status: active
+title: 'Atlas of Canada Wireless Data Network: LTE and 5G availability (Canada)'
+summary: Where LTE and 5G wireless data service is available in Canada (CRTC data, 2024), from the Atlas of Canada map service; not by provider. Read for
+  the region onto H3 by the canada-wireless-coverage adapter.
+tags:
+  geography:
+  - ca
+  level:
+  - grid
+  domain:
+  - telecom
+  use_for:
+  - coverage-footprint
+  - choropleth
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- Where 5G or LTE is available across a Canadian province.
+avoid_when:
+- 'A carrier choice: the data are not by provider.'
+join:
+  key: h3
+  type: string
+  note: Polygons with Speed (LTE, 5G); the adapter turns them into H3 cells (resolution 9)
+crs: EPSG:3978
+delivery:
+  mode: service
+  url_template: https://maps-cartes.services.geo.ca/server_serveur/rest/services/NRCan/Wireless_Data_Network_Reseau_donnees_sans_fil/MapServer/0
+  format: ArcGIS MapServer layer, polygons with Speed (LTE, 5G) and Year, EPSG:3978
+  note: Queried for the region's box as GeoJSON in EPSG:4326 (layer read 2026-11-20).
+source:
+  publisher: Natural Resources Canada (Atlas of Canada), data from the CRTC
+  product: Atlas of Canada - Wireless Data Network
+  url: https://open.canada.ca/data/en/dataset/16ec36d1-b320-4dcd-b71f-94670a59095a
+  terms_url: https://open.canada.ca/en/open-government-licence-canada
+url_verified_on: '2026-11-20'
+vintage:
+  current: '2024'
+  cadence: annual
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Wireless data network: Atlas of Canada (Natural Resources Canada), CRTC data; contains information licensed under the Open Government
+    Licence - Canada.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://maps-cartes.services.geo.ca/server_serveur/rest/services/NRCan/Wireless_Data_Network_Reseau_donnees_sans_fil/MapServer/0?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, G-12): the service layer read on 2026-11-20 (fields Speed, Year); OGL-Canada from the open.canada.ca record.'

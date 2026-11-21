@@ -1,0 +1,84 @@
+id: ref.statistic.world.population.kontur
+type: statistic
+rev: 1
+status: active
+title: 'Kontur Population: people per H3 cell (resolution 8), by country'
+summary: Kontur's population grid on H3 resolution 8 (about 0.74 km2 a cell), one GeoPackage a country, combining GHSL, Meta's HRSL, building footprints
+  and censuses; the kontur-population adapter puts it on the map's H3 grid as it is.
+tags:
+  geography:
+  - world
+  level:
+  - grid
+  domain:
+  - demographics
+  use_for:
+  - choropleth
+  - density-surface
+  - normalization
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - annual
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - derived
+use_when:
+- A population hex map of a country or region, or people under a coverage footprint on the same H3 grid.
+avoid_when:
+- 'A count for a legal or funding purpose: it is a modelled estimate.'
+- 'Cells smaller than about 0.7 km2: use HRSL (30 m) or GHSL (100 m).'
+crs: EPSG:3857
+delivery:
+  mode: fetch
+  url_template: https://geodata-eu-central-1-kontur-public.s3.amazonaws.com/kontur_datasets/kontur_population_{ISO2}_{date}.gpkg.gz
+  format: GeoPackage (gzip), columns h3 and population, EPSG:3857 hexagons
+  note: Found through each country's HDX dataset (data.humdata.org, organization kontur; the bucket refuses listings); Germany's 20231101 file is 25.9 MB,
+    Liechtenstein's 17 KB (2026-11-20).
+source:
+  publisher: Kontur Inc.
+  product: Kontur Population Dataset
+  url: https://data.humdata.org/dataset/kontur-population-dataset
+  terms_url: https://creativecommons.org/licenses/by/4.0/
+url_verified_on: '2026-11-20'
+vintage:
+  current: '2023-11-01'
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Population: Kontur Population (kontur.io), CC BY 4.0.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://geodata-eu-central-1-kontur-public.s3.amazonaws.com/kontur_datasets/kontur_population_LI_20231101.gpkg.gz
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, gap analysis): the HDX records (cc-by) and two country files read on 2026-11-20; the Liechtenstein file read whole (207 cells,
+      45,500 people).'
+join:
+  key: h3
+  type: string
+  note: H3 cell id at resolution 8; the adapter turns it into the map's _h3

@@ -1,0 +1,91 @@
+id: ref.public-service.ch.transit.opentransportdata
+type: public-service
+rev: 1
+status: active
+title: opentransportdata.swiss (Switzerland public transport)
+summary: Switzerland's timetable as GTFS (keyless download) and the Open Journey Planner 2.0 API (with the person's own token), from the Swiss public transport
+  open data platform.
+tags:
+  geography:
+  - ch
+  level:
+  - site
+  - line
+  domain:
+  - transport
+  use_for:
+  - site-map
+  - flow-line
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Stops and routes across Switzerland (the yearly GTFS through gtfs.py), or journeys through OJP 2.0 with the person's token (map-credentials add opentransportdata).
+avoid_when:
+- 'Live or journey data without a token: OJP answers 403 without one (2026-11-20).'
+delivery:
+  mode: service
+  protocol: xml
+  requires_credential:
+    name: opentransportdata
+    kind: bearer
+    class: secret
+    host: api.opentransportdata.swiss
+    inject:
+      bearer: true
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://api-manager.opentransportdata.swiss/
+    free: true
+    limits: No quota stated on the pages read 2026-11-20 (the API manager shows a token's limits).
+    note: A token per API from the platform's API manager; OJP 2.0 answered 403 'Requested endpoint is forbidden' without one (2026-11-20).
+  request: https://api.opentransportdata.swiss/ojp20
+  gtfs: https://data.opentransportdata.swiss/en/dataset/timetable-2026-gtfs2020/permalink
+  note: The GTFS permalink redirects to the current file (gtfs_fp2026_20261118.zip on 2026-11-20), keyless.
+source:
+  publisher: SKI+ (Systemaufgaben Kundeninformation, on behalf of the Federal Office of Transport)
+  product: opentransportdata.swiss
+  url: https://opentransportdata.swiss/
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Public transport data: opentransportdata.swiss'
+  note: 'The OJP 2.0 record on opendata.swiss (read 2026-11-20): ''Non-commercial Allowed / Commercial Allowed / Reference Required'' (opendata.swiss terms_by).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_head
+    url: https://opentransportdata.swiss/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, a source the 2026-11-07 dive did not reach): the GTFS permalink and OJP''s answer without a token read on 2026-11-20; terms from
+      the opendata.swiss record.'

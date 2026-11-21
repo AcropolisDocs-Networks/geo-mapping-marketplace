@@ -1,0 +1,105 @@
+id: ref.basemap-provider.tomtom
+type: basemap-provider
+rev: 1
+status: active
+title: TomTom raster basemaps (Map Display API)
+summary: TomTom's raster map tiles (basic, hybrid, labels; main or night) with the person's own key; 200,000 raster tile requests a month are free, with
+  no card needed.
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - licensed
+  quality:
+  - commercial
+use_when:
+- A TomTom basemap for a page or a print the client licenses TomTom for, with the person's own key (map-credentials add tomtom).
+avoid_when:
+- The TomTom copyright cannot be shown on the map (its copyright service supplies the text; '© TomTom' at least).
+- 'Bulk or offline tiles: not covered by the free monthly requests.'
+url_template: https://api.tomtom.com/map/1/tile/{style}/{z}/{x}/{y}.png?key={key}
+provider:
+  attribution_html: © TomTom
+  max_zoom: 22
+  tile_size: 256
+  bulk_ok: false
+  cache_ok: null
+  print_ok: null
+  production_ok: true
+  styles:
+  - basic/main
+  - basic/night
+  - hybrid/main
+  - labels/main
+delivery:
+  mode: fetch
+  requires_credential:
+    name: tomtom
+    kind: apikey
+    class: secret
+    class_allowed:
+    - secret
+    - browser
+    host: api.tomtom.com
+    inject:
+      query: key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://developer.tomtom.com/user/register
+    probe: https://api.tomtom.com/map/1/tile/basic/main/0/0/0.png
+    free: true
+    limits: 'Map Display API: 200K raster tiles, 200K vector tiles and 20K raster non-tile requests a month free, no credit card needed (pricing page, read
+      2026-11-20).'
+  note: 'Tile format from the Map Display API documentation (read 2026-11-20): layer basic, hybrid or labels; style main or night; zoom 0 to 22; 256 or
+    512 px (tileSize). A wrong key answers 401.'
+source:
+  publisher: TomTom International B.V.
+  product: TomTom Map Display API (raster tiles)
+  url: https://docs.tomtom.com/pricing
+  terms_url: https://developer.tomtom.com/terms-and-conditions
+url_verified_on: '2026-11-20'
+license:
+  class: licensed
+  redistribute_ok: false
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: © TomTom
+  note: 'The copyright text comes from TomTom''s copyrights service (not read: the page failed to load on 2026-11-20); ''© TomTom'' is the minimum. Commercial
+    use per TomTom''s developer terms (not read).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://docs.tomtom.com/pricing
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): pricing and the tile documentation read on 2026-11-20; a wrong key answered 401. The copyrights page did not load:
+      ''© TomTom'' is the recorded minimum.'
+attribution:
+  corner: © TomTom
+  links:
+  - text: © TomTom
+    href: https://www.tomtom.com/
+  required_on_map: true
+  collapse: after_interaction
+  export:
+    text: © TomTom
+  terms_read: '2026-11-20'

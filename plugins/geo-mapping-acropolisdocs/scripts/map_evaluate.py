@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""map_evaluate: grade finished maps, observe only (2.2.0; spec docs/specs/map-evaluator-spec.md).
+"""map_evaluate: grade finished maps, observe only (2.2.0; the map-evaluate module).
 
 It looks at the rendered output only (a still, an SVG or PDF sheet, a web map's default view, a video's frames, a story's panels) and
 grades it against the rubric in evaluation/rubric.yaml, so the plugin's functions can be improved later. It never edits a map, never

@@ -1,0 +1,84 @@
+id: ref.terrain.ca.dem.mrdem
+type: terrain
+rev: 1
+status: active
+title: NRCan CanElevation MRDEM-30, Canada's 30 m elevation model (DTM)
+summary: 'The Medium Resolution Digital Elevation Model of Canada (bare earth, 30 m), one Cloud-Optimized GeoTIFF on AWS read by range: the relief and analysis
+  source inside Canada from 3.1.0.'
+tags:
+  geography:
+  - ca
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  - parcel-level
+  - site-precision
+  scale:
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  detail:
+  - detailed
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - static
+  tier:
+  - T1
+  - T2
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- Relief, a profile or a line of sight inside Canada (terrain.source auto picks it there).
+avoid_when:
+- 'A window outside Canada: the next source in the chain is used.'
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  url_template: https://canelevation-dem.s3.ca-central-1.amazonaws.com/mrdem-30/mrdem-30-dtm.tif
+  format: Cloud-Optimized GeoTIFF, float32, EPSG:3979
+  note: One 84 GB COG for all of Canada (HEAD 200, 2026-11-20); dem_sources.py reads the window by range reads at the overview that matches the target cell
+    size. The DSM is mrdem-30-dsm.tif beside it.
+source:
+  publisher: Natural Resources Canada
+  product: CanElevation Series, Medium Resolution Digital Elevation Model (MRDEM)
+  url: https://open.canada.ca/data/en/dataset/18752265-bda3-498c-a4ba-9dfe68cb98da
+  terms_url: https://open.canada.ca/en/open-government-licence-canada
+url_verified_on: '2026-11-20'
+vintage:
+  current: MRDEM-30 (2026 update)
+  cadence: irregular
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: Medium Resolution Digital Elevation Model (MRDEM), Natural Resources Canada; contains information licensed under the Open
+    Government Licence - Canada.'
+  note: Open Government Licence - Canada (open.canada.ca record and the AWS registry page canelevation-dem).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://canelevation-dem.s3.ca-central-1.amazonaws.com/mrdem-30/mrdem-30-dtm.tif
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, T-08): the COG answered HEAD 200 from the person''s computer on 2026-11-20 (83,854,027,098 bytes); licence from the open.canada.ca
+      record.'

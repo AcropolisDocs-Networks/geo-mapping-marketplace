@@ -1,0 +1,82 @@
+id: ref.basemap-provider.geoportail-fr
+type: basemap-provider
+rev: 1
+status: active
+title: IGN Géoplateforme basemaps (Plan IGN, orthophotos), keyless
+summary: France's national basemaps from the IGN Géoplateforme WMTS (Plan IGN v2, orthophotos, cadastre), keyless and open (Licence Ouverte 2.0), with world
+  coverage beyond France for Plan IGN at small scales.
+tags:
+  use_for:
+  - context-basemap
+  avoid_for: []
+  scale:
+  - world
+  - national
+  - regional
+  - state
+  - metro
+  - local
+  audience:
+  - any
+  tier:
+  - T2
+  license_class:
+  - open
+  quality:
+  - authoritative
+use_when:
+- A French map that wants the national cartography (Plan IGN v2) or IGN orthophotos behind a site plan, with no key.
+avoid_when:
+- 'A map mostly outside France: Plan IGN is detailed only over France and its overseas territories.'
+url_template: https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER={style}&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png
+provider:
+  attribution_html: <a href="https://www.ign.fr/">© IGN</a>
+  max_zoom: 19
+  tile_size: 256
+  bulk_ok: true
+  cache_ok: true
+  print_ok: true
+  production_ok: true
+  styles:
+  - GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2
+  - ORTHOIMAGERY.ORTHOPHOTOS
+  - CADASTRALPARCELS.PARCELLAIRE_EXPRESS
+delivery:
+  mode: fetch
+  note: Keyless WMTS GetTile in Web Mercator (TILEMATRIXSET PM); a Plan IGN v2 tile over France answered 200 image/png on 2026-11-20. The orthophotos are
+    image/jpeg.
+source:
+  publisher: Institut national de l'information géographique et forestière (IGN)
+  product: Géoplateforme WMTS
+  url: https://geoservices.ign.fr/services-geoplateforme-diffusion
+  terms_url: https://www.etalab.gouv.fr/licence-ouverte-open-licence/
+url_verified_on: '2026-11-20'
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: © IGN (Géoplateforme), Licence Ouverte 2.0
+  note: 'IGN''s data are open under the Licence Ouverte 2.0 since 2021: reuse, commercial included, with the source and the date named.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_head
+    url: https://geoservices.ign.fr/services-geoplateforme-diffusion
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, library P3): one Plan IGN v2 tile answered 200 on 2026-11-20; Licence Ouverte 2.0.'
+attribution:
+  corner: © IGN
+  links:
+  - text: © IGN
+    href: https://www.ign.fr/
+  required_on_map: true
+  collapse: after_interaction
+  export:
+    text: © IGN (Géoplateforme), Licence Ouverte 2.0
+  terms_read: '2026-11-20'

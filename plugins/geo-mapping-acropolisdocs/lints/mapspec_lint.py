@@ -157,6 +157,18 @@ def lint_spec(spec: dict) -> list[dict]:
         hb = ly.get("h3") if isinstance(ly.get("h3"), dict) else None
         if src.get("type") == "h3" and not src.get("id_field") and not src.get("adapter"):
             out.append(finding("MAP-SPEC-003", "BLOCK", f"layer '{ly.get('id')}': an h3 source needs id_field (the column of cell ids) or an adapter", ly.get("id")))
+        if src.get("type") in ("h3", "adapter") and src.get("adapter"):          # 3.1.0: a known adapter, and a region for it to read
+            try:
+                import adapters as _ad
+                _a = _ad.get(src["adapter"])
+                if src.get("type") == "adapter" and not hasattr(_a, "fetch_layer"):
+                    out.append(finding("MAP-SPEC-003", "BLOCK", f"layer '{ly.get('id')}': adapter {src['adapter']} gives H3 cells: use source type h3", src["adapter"]))
+            except Exception:  # noqa: BLE001 - an unknown name
+                out.append(finding("MAP-SPEC-003", "BLOCK", f"layer '{ly.get('id')}': no data adapter '{src['adapter']}'", src["adapter"]))
+            if not spec.get("region"):
+                out.append(finding("MAP-SPEC-006", "BLOCK", f"layer '{ly.get('id')}': adapter {src['adapter']} reads its data for the map's region: add a region: block", "region"))
+        if src.get("type") == "adapter" and not src.get("adapter"):
+            out.append(finding("MAP-SPEC-003", "BLOCK", f"layer '{ly.get('id')}': source type adapter needs adapter: NAME", ly.get("id")))
         if hb is not None:
             if hb.get("complete") and not spec.get("region"):
                 out.append(finding("MAP-SPEC-006", "BLOCK", f"layer '{ly.get('id')}': h3.complete: region needs a region: block (admin, place, admin2, file, bbox or h3)", "h3.complete"))

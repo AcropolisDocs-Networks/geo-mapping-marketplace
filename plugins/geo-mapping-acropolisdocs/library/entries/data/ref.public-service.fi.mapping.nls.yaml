@@ -1,0 +1,93 @@
+id: ref.public-service.fi.mapping.nls
+type: public-service
+rev: 1
+status: active
+title: National Land Survey of Finland open interfaces (Topographic Database, OGC API Features)
+summary: Finland's Topographic Database and other NLS open data through OGC API Features, with the person's own free API key.
+tags:
+  geography:
+  - fi
+  level:
+  - site
+  - line
+  - admin2
+  domain:
+  - general
+  - transport
+  use_for:
+  - context-basemap
+  - site-map
+  - label-reference
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Buildings, roads, water and place names in Finland from the national topographic database, with the person's own key (map-credentials add nls-finland).
+avoid_when:
+- The key is in the URL of every link the API returns once added; the plugin adds it at send time only, never in a saved page.
+delivery:
+  mode: service
+  protocol: ogcapi
+  requires_credential:
+    name: nls-finland
+    kind: apikey
+    class: secret
+    host: avoin-paikkatieto.maanmittauslaitos.fi
+    inject:
+      query: api-key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://omatili.maanmittauslaitos.fi/
+    probe: https://avoin-paikkatieto.maanmittauslaitos.fi/maastotiedot/features/v1/collections?f=json
+    free: true
+    limits: Free of charge under the open interface terms; no quota stated on the pages read 2026-11-20.
+    note: 'The API key guide (read 2026-11-20): the key as the api-key URL parameter, or as the Basic username with an empty password; a personal key from
+      the My Account service. Without a key 401, with a wrong one 403 (2026-11-20).'
+  request: https://avoin-paikkatieto.maanmittauslaitos.fi/maastotiedot/features/v1/collections
+source:
+  publisher: National Land Survey of Finland (Maanmittauslaitos)
+  product: Topographic Database, OGC API Features (open service)
+  url: https://www.maanmittauslaitos.fi/en/node/13248
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: Contains data from the National Land Survey of Finland Topographic Database 11/2026
+  note: 'NLS open data licence CC BY 4.0 (read 2026-11-20): name the National Land Survey of Finland, the dataset and the month of delivery.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_head
+    url: https://www.maanmittauslaitos.fi/en/node/13248
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, a source the 2026-11-07 dive did not reach): base URL, key methods and the CC BY 4.0 wording read on 2026-11-20; 401 without a
+      key, 403 with a wrong one.'

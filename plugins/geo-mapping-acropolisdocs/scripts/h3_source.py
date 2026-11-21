@@ -314,7 +314,10 @@ def load_layer(layer: dict, base: Path, *, region_geom=None, mm_per_km=None, rea
             raise H3SourceError(str(ex), ex.code, ex.rule) from None
         df, src_steps = got["table"], got["steps"]
         id_field = "_h3"
-        if not cfg.get("by") and "provider" in df.columns:
+        for k, v in (got.get("defaults") or {}).items():          # 3.1.0: each adapter says how its table rolls up (operators per cell, a speed, a group count)
+            if k not in cfg:
+                cfg[k] = v
+        if not cfg.get("by") and "provider" in df.columns and cfg.get("agg") in (None, "count_groups", "share", "any", "all"):
             cfg["by"] = "provider"
     else:
         if not src.get("id_field"):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """terrain: elevation profiles, line of sight, viewsheds, hillshade and contours from a DEM (gap analysis P1-4; M12).
 
-    terrain.py fetch     --bounds lon0,lat0,lon1,lat1 --res 30 [--source auto|3dep|terrarium] --out dem.tif [--cache DIR]
+    terrain.py fetch     --bounds lon0,lat0,lon1,lat1 --res 30 [--source auto|3dep|copernicus|terrarium|canada-mrdem|gsi-japan|ga-lidar-5m|ign-rge-alti|arcticdem|rema|gebco] --out dem.tif [--cache DIR]
     terrain.py profile   --dem dem.tif --a lon,lat --b lon,lat [--samples 200] [--out profile.json] [--csv profile.csv]
     terrain.py los       --dem dem.tif --a lon,lat --b lon,lat --ha 30 --hb 30 [--k 1.333] [--freq 11] [--out los.json]
     terrain.py viewshed  --dem dem.tif --point lon,lat --h 30 --radius 10000 [--step 1] [--target-h 1.5] --out visible.geojson
@@ -372,7 +372,8 @@ def main(argv=None) -> int:
     ap.add_argument("--step", type=float, default=1.0)
     ap.add_argument("--bounds")
     ap.add_argument("--res", type=float, default=30.0)
-    ap.add_argument("--source", default="auto", choices=["auto", "3dep", "terrarium", "copernicus"])
+    ap.add_argument("--source", default="auto", choices=["auto", "3dep", "terrarium", "copernicus", "canada-mrdem", "gsi-japan", "ga-lidar-5m",
+                                                           "ign-rge-alti", "arcticdem", "rema", "gebco"])
     ap.add_argument("--terms-acknowledged", action="store_true", help=argparse.SUPPRESS)    # older callers; the Terrarium credit is printed for you
     ap.add_argument("--cache")
     ap.add_argument("--azimuth", type=float, default=315.0)

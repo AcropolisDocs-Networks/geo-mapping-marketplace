@@ -211,8 +211,16 @@
             "nasa-gibs",
             "google-maps",
             "bing-maps",
-            "protomaps"
-          ]
+            "protomaps",
+            "stadia",
+            "thunderforest",
+            "jawg",
+            "here",
+            "tomtom",
+            "geoportail-fr",
+            "ign"
+          ],
+          "description": "3.1.0 adds stadia, thunderforest, jawg, here and tomtom (each with your own key) and geoportail-fr (IGN's Plan IGN v2 and orthophotos, keyless; ign is the same)"
         },
         "style": {
           "type": "string"
@@ -352,16 +360,17 @@
                   "service",
                   "user-run",
                   "geocode",
-                  "h3"
+                  "h3",
+                  "adapter"
                 ],
-                "description": "2.6.0: h3 reads a table of H3 cell ids (id_field) from path (a file or a glob), or from an adapter, and draws its cells (the layer's h3: block rolls them up)"
+                "description": "2.6.0: h3 reads a table of H3 cell ids (id_field) from path (a file or a glob), or from an adapter, and draws its cells (the layer's h3: block rolls them up); 3.1.0: adapter reads polygons from a data adapter that publishes by area (ofcom-connected-nations: councils with the share covered)"
               },
               "id_field": {"type": "string", "description": "2.6.0, type h3: the column holding the cell ids (strings or 64-bit integers)"},
               "path": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
               "layer": {"type": "string"},
               "where": {"type": "string"},
               "group_field": {"type": "string", "description": "2.6.0, type h3: the column the h3.by groups come from, when h3.by is not given"},
-              "adapter": {"type": "string", "description": "3.0.0 (G-11): a data adapter that fetches for the map's region, partition by partition (fcc-bdc-mobile)"},
+              "adapter": {"type": "string", "description": "3.0.0 (G-11): a data adapter that fetches for the map's region, partition by partition (fcc-bdc-mobile; 3.1.0: bnetza-mobile-coverage, arcep-mon-reseau-mobile, accc-mobile-coverage, canada-wireless-coverage, ofcom-connected-nations, opencellid, ookla-open-data). Its own options sit beside it: technology, use, level, environment, year, service, coverage, min_operators, metric, kind, quarter, radio"},
               "technology": {"type": "string"},
               "speed": {"type": "string"},
               "environment": {"enum": ["outdoor", "in-vehicle"]},
@@ -410,8 +419,10 @@
               },
               "crs": {
                 "type": "string",
-                "description": "mode image: the CRS the picture is requested in (default EPSG:3857, which every server draws); it is warped into the map's own"
+                "description": "mode image: the CRS the picture is requested in (default EPSG:3857, which every server draws); it is warped into the map's own. 3.1.0, a LAS or LAZ file: its CRS when the header names none"
               },
+              "cell_m": {"type": "number", "exclusiveMinimum": 0, "description": "3.1.0, a LAS or LAZ file: the grid cell in metres (default 1)"},
+              "surface": {"enum": ["dtm", "dsm"], "description": "3.1.0, a LAS or LAZ file: dtm (ground and water points, the lowest a cell; the default) or dsm (every point but noise, the highest)"},
               "legend": {
                 "type": "boolean",
                 "description": "mode image: false leaves the service's legend out of the map legend"
@@ -1208,8 +1219,9 @@
         },
         "source": {
           "type": "string",
-          "description": "auto (USGS 3DEP inside the United States; elsewhere, from 1.5.0, the Copernicus DEM GLO-30 from the keyless AWS Open Data bucket, GLO-90 where a 30 m tile is absent), 3dep, copernicus, terrarium, or the path of a DEM GeoTIFF (nothing is fetched)"
+          "description": "auto (by coverage: USGS 3DEP in the United States, the national bare-earth model in Canada (canada-mrdem), France (ign-rge-alti), Flanders (flanders-dhmv), Sweden (lantmateriet, with your free Geotorget login), Australia (ga-lidar-5m) and Japan (gsi-japan), ArcticDEM and REMA at the poles, the Copernicus DEM GLO-30 elsewhere, Terrarium last), any of those names, flanders-lidar (the DHMV II point cloud gridded at 1 m, named only), or the path of a DEM GeoTIFF or a LAS or LAZ point cloud (gridded to bare earth; nothing is fetched)"
         },
+        "crs": {"type": "string", "description": "3.1.0: the CRS of a LAS or LAZ file whose header names none (EPSG:31370 for Flanders tiles)"},
         "terms_acknowledged": {
           "type": "boolean",
           "description": "older MapSpecs only (before 0.23.0); ignored: Terrarium is the default outside the US and its credit is printed for you"
@@ -1223,7 +1235,7 @@
         "cast_shadows": {"type": "boolean", "description": "2.5.0: shadows marched toward the sun (one sun only)"},
         "multidirectional": {"type": "boolean", "description": "2.5.0: four suns (the default when neither azimuth nor altitude is given)"},
         "max_px": {"type": "integer", "minimum": 256, "maximum": 4096, "description": "2.5.0: the relief picture's longer side"},
-        "bathymetry": {"type": "boolean", "description": "2.5.0 (T-10): the sea floor too, where the DEM has it (Terrarium); by default water is masked with the map's own ocean and lakes and flat sea-level cells, and never shaded as land"},
+        "bathymetry": {"oneOf": [{"type": "boolean"}, {"enum": ["gebco"]}], "description": "2.5.0 (T-10): the sea floor too, where the DEM has it (Terrarium); 3.1.0: gebco puts the GEBCO grid under the water and keeps the land's own DEM; by default water is masked with the map's own ocean and lakes and flat sea-level cells, and never shaded as land"},
         "exaggeration": {
           "anyOf": [
             {

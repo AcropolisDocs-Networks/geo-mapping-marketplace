@@ -1,0 +1,76 @@
+id: ref.gazetteer.world.address.openaddresses
+type: gazetteer
+rev: 1
+status: active
+title: OpenAddresses (open address points, by source)
+summary: Address points from government sources worldwide, one file a source (county, state or country), each with its own licence; listed keylessly, downloaded
+  with a free OpenAddresses login.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  domain:
+  - geocoding
+  use_for:
+  - site-map
+  - label-reference
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  scale:
+  - metro
+  - local
+  - site
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T1
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - community
+use_when:
+- Address points for a county or city map (a site list matched to addresses), after the person downloads the source's file.
+avoid_when:
+- 'A source whose licence is share-alike or unknown: each source carries its own licence; read it before a client deliverable.'
+- 'Addresses of private individuals as the subject of a map: the plugin maps sites, not people.'
+crs: EPSG:4326
+delivery:
+  mode: user-supplied
+  format: GeoJSON (gzip), one point an address (number, street, unit, city, postcode)
+  note: The source list is keyless (https://batch.openaddresses.io/api/data?source=us/wa/king answered 200 on 2026-11-20); a job's file (api/job/<id>/output/source.geojson.gz)
+    answered 403 without a login, so the person downloads it from batch.openaddresses.io and puts it in the work folder.
+source:
+  publisher: OpenAddresses (Batch)
+  product: OpenAddresses
+  url: https://batch.openaddresses.io/data
+  terms_url: https://openaddresses.io/
+url_verified_on: '2026-11-20'
+vintage:
+  current: rolling
+  cadence: monthly
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Addresses: OpenAddresses, from <source> (its licence)'
+  note: Each source names its own licence and attribution in the batch record; most US county sources are public domain or CC BY.
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-11-20'
+  check:
+    kind: http_get
+    url: https://batch.openaddresses.io/api/data?source=us/wa/king
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, gap analysis): the keyless listing and the 403 on a download without a login seen on 2026-11-20.'

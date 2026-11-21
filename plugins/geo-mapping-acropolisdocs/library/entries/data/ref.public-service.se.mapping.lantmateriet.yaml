@@ -1,0 +1,89 @@
+id: ref.public-service.se.mapping.lantmateriet
+type: public-service
+rev: 1
+status: active
+title: 'Lantmäteriet open geodata (Sweden: elevation, laser data, maps)'
+summary: 'Sweden''s national mapping agency''s open data: the 1 m Markhöjdmodell and laser data through a keyless STAC catalogue, the files behind a free
+  Geotorget login; the terrain chain uses it as terrain.source lantmateriet.'
+tags:
+  geography:
+  - se
+  level:
+  - grid
+  domain:
+  - general
+  use_for:
+  - context-basemap
+  - site-map
+  avoid_for:
+  - engineering-grade
+  - site-precision
+  scale:
+  - national
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - attribution
+  quality:
+  - authoritative
+use_when:
+- Relief or a line of sight in Sweden at 1 m, with the person's own Geotorget login (map-credentials add lantmateriet --kind basic --host dl1.lantmateriet.se).
+avoid_when:
+- 'No Geotorget login: the files answer 401, so the chain uses the Copernicus DEM and says what the login would add.'
+delivery:
+  mode: service
+  protocol: stac
+  requires_credential:
+    name: lantmateriet
+    kind: basic
+    class: secret
+    host: dl1.lantmateriet.se
+    inject:
+      basic: true
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://geotorget.lantmateriet.se/
+    free: true
+    limits: Free of charge (avgiftsfri) under CC BY 4.0; no quota stated on the pages read 2026-11-20.
+    note: 'Lantmäteriet''s guide (read 2026-11-20): order the product (free) in Geotorget, then authenticate with the Geotorget username and password; the
+      STAC search is keyless, the data asset answered 401 without a login.'
+  catalogue: https://api.lantmateriet.se/stac-hojd/v1/collections/dtm-cog/items (keyless STAC search; the login goes only to dl1.lantmateriet.se)
+source:
+  publisher: Lantmäteriet
+  product: STAC Höjd (Markhöjdmodell, Ythöjdmodell, Laserdata Skog)
+  url: https://api.lantmateriet.se/stac-hojd/v1/
+url_verified_on: '2026-11-20'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: © Lantmäteriet, CC BY 4.0
+  note: 'The STAC catalogue (read 2026-11-20): ''avgiftsfria och tillgängliga för användning under Creative Commons licens CC BY 4.0''; the dtm-cog collection''s
+    licence is CC-BY-4.0 (the surface model and forest laser data have their own terms).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-20'
+  verify_by: '2027-02-20'
+  check:
+    kind: http_get
+    url: https://api.lantmateriet.se/stac-hojd/v1/
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-20'
+    note: 'Added (3.1.0, a source the 2026-11-07 dive did not reach): the STAC catalogue, its collections and a 401 on a data asset seen on 2026-11-20.'
