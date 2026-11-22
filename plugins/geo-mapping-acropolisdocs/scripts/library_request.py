@@ -181,11 +181,12 @@ def build(entry: dict, request: str | None, params: dict | None, bbox=None, file
     return {"name": name, "url": url, "missing": missing, "method": method, "template": tpl}
 
 
-def shown(entry: dict, url: str) -> str:
+def shown(entry: dict, url: str, keyed: bool = True) -> str:
+    """The request as recorded: the key's place masked, and (3.5.1) no key shown when none is sent (TfL's optional key, not registered)."""
     import credentials as cr
     import ogc_http as oh
     b = cr.entry_block(entry)
-    if not b:
+    if not b or not keyed:
         return oh.redact_url(url)
     inj = cr.parse_inject(b.get("inject")) or {}
     q = cr.inject_query_shown(inj)
@@ -209,12 +210,21 @@ def sample(entry: dict) -> dict:
             "file": smp.get("file")}
 
 
+def _optional_unregistered(b: dict) -> bool:
+    import credentials as cr
+    try:
+        return cr.Store().get(str(b["name"])) is None
+    except Exception:  # noqa: BLE001 - no credential folder here: nothing would be sent
+        return True
+
+
 def plan(entry_id: str, request: str | None = None, params: dict | None = None, bbox=None, file: str | None = None) -> dict:
     import credentials as cr
     e = _entry(entry_id)
     r = build(e, request, params, bbox, file)
     b = cr.entry_block(e)
-    out = {"ok": not r["missing"], "entry": e["id"], "request": r["name"], "send": shown(e, r["url"]) if not r["missing"] else None,
+    keyed = bool(b) and not (b.get("optional") and _optional_unregistered(b))
+    out = {"ok": not r["missing"], "entry": e["id"], "request": r["name"], "send": shown(e, r["url"], keyed=keyed) if not r["missing"] else None,
            "method": r["method"], "needs": r["missing"], "requests": list(((e.get("delivery") or {}).get("requests") or {}).keys()) or ["default"],
            "credential": f"cred:{b['name']}" if b else None, "host": urllib.parse.urlsplit(r["template"].replace("{", "").replace("}", "")).hostname}
     if r["missing"]:
@@ -686,7 +696,7 @@ def run(entry_id: str, request: str | None = None, params: dict | None = None, b
             path = folder / f"{stem}.parquet"
             df.to_parquet(path, index=False)
     b = cr.entry_block(e)
-    rec = {"request_version": 1, "entry": e["id"], "rev": e.get("rev"), "request": r["name"], "send": shown(e, r["url"]), "method": r["method"],
+    rec = {"request_version": 1, "entry": e["id"], "rev": e.get("rev"), "request": r["name"], "send": shown(e, r["url"], keyed=auth is not None), "method": r["method"],
            "retrieved_at": os.environ.get("GMAP_FIXED_DATE") or dt.date.today().isoformat(), "credential": f"cred:{b['name']}" if b else None,
            "answer": k, "path": str(path), "rows": rows, "columns": cols, "geometry": geo,
            "sha256": resp.sha256 if k == "file" else hashlib.sha256(raw).hexdigest(), **({"bytes": int(resp.streamed_bytes)} if k == "file" else {}),

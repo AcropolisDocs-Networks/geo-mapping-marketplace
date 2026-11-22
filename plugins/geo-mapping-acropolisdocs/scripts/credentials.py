@@ -1502,12 +1502,18 @@ def add(store: Store, name: str, *, cls: str | None = None, restricted: bool = F
             fs.append(finding("MAP-CRED-001", "BLOCK", f"expires ({exp.isoformat()}) is not in the future; generate a new token and give its end date"))
     elif b.get("lifetime_days"):
         exp = today() + dt.timedelta(days=int(b["lifetime_days"]))
+    lifetime_guess = bool(exp) and not expires        # 3.5.1: a date from the service's lifetime, not one the person gave
     if inj and inj.get("path") and cls == "browser":
         fs.append(finding("MAP-CRED-011", "BLOCK", "a key that sits in the address path is always secret class: the address would carry it into the page"))
     if blocks(fs):
         return {"ok": False, "findings": fs}
     reg = store.load()
     existed = name in reg["credentials"]
+    kept_expiry = None
+    if lifetime_guess and existed and _date((reg["credentials"].get(name) or {}).get("expires")):
+        # 3.5.1: running add again on a registered token keeps its recorded end date; only expires= (or a rotate) changes it
+        kept_expiry = _date(reg["credentials"][name]["expires"])
+        exp = kept_expiry
     fs += _create_private(store, store.root, folder=True)
     e = dict(reg["credentials"].get(name) or {})
     fname = e.get("file") or f"{name}.key"
@@ -1586,6 +1592,7 @@ def add(store: Store, name: str, *, cls: str | None = None, restricted: bool = F
         nxt.append("This is a browser key: restrict it to your web site's domain in the provider's dashboard, then run add again with --confirm-restricted.")
     if exp:
         how = ("" if expires else " (the end date of the token it took over)" if adopted.get("expires") else
+               " (the end date already recorded; give --expires to change it)" if kept_expiry and exp == kept_expiry else
                f" ({b['lifetime_days']} days from today, the service's lifetime); if you made it earlier, run add again with --expires and the date the service shows"
                if b.get("lifetime_days") else "")
         nxt.append(f"The token ends on {exp.isoformat()}{how}. Status warns {EXPIRY_WARN_DAYS} days before; after that day runs refuse to send it until you rotate.")
