@@ -49,6 +49,8 @@ ORIGIN = math.pi * R
 CAPS = {"T1": 25, "T2": 100}
 BULK_FACTOR = 4                 # a provider that does not allow bulk use gets a quarter of the cap
 HARD_CAP = 400
+SMALL_MAP_MM = 120.0       # 3.4.0: a map this narrow (an inset) should print its tiles at SMALL_MAP_DPI at least
+SMALL_MAP_DPI = 150
 MAX_MISSING = 0.1
 MIN_PAUSE_S = 0.5
 TILE_LABEL_PX = 11.0            # the height tile styles letter most labels at, in tile pixels (CARTO, OpenStreetMap: 10 to 12 px)
@@ -183,7 +185,11 @@ def spec_extent(spec_path):
     lo_, la_ = t.transform([win[0], win[2]], [win[1], win[3]])
     rect = lo.rect_of(plan.tpl["map"])
     dpi = float(spec0.get("export", {}).get("dpi") or plan.tpl.get("raster_default_dpi") or 150)
-    return {"merc": tuple(win), "wgs84": (min(lo_), min(la_), max(lo_), max(la_)), "width_mm": float(rect.w), "dpi": min(dpi, 200.0), "map_id": plan.spec["id"],
+    width = float(rect.w)
+    pw = (spec0.get("basemap") or {}).get("print_width_mm")
+    if pw:                     # 3.4.0 (Day 20 #25): a map drawn to be placed smaller (a street inset) asks for tiles at the width it prints at
+        width = max(10.0, min(float(pw), width))
+    return {"merc": tuple(win), "wgs84": (min(lo_), min(la_), max(lo_), max(la_)), "width_mm": width, "dpi": min(dpi, 200.0), "map_id": plan.spec["id"],
             "audience": plan.spec.get("audience") or "external", "spec": spec0, "display_crs": plan.crs if own else "EPSG:3857"}
 
 
@@ -335,6 +341,10 @@ def plan_render(spec_path, provider: str | None = None, *, tier: str = "T1", max
         if labelled and g["label_pt"] < LEGIBLE_LABEL_PT:
             fs.append(finding("MAP-TILE-001", "WARN", f"the basemap's labels print at about {g['label_pt']:g} pt, too small to read; set basemap: {{detail: legible}} "
                               "for readable place names, or use a style without labels when the map's own labels carry the names"))
+        if g["limited_by_cap"] and 60 <= g["paper_dpi"] < SMALL_MAP_DPI and w_mm < SMALL_MAP_MM and getmap is None:
+            fs.append(finding("MAP-TILE-004", "WARN", f"the tile cap ({cap}) holds this {w_mm:.0f} mm map's basemap at about {g['paper_dpi']} dpi, under {SMALL_MAP_DPI}: "
+                              "streets and their names print soft. If the map is drawn larger and placed smaller (an inset), set basemap.print_width_mm "
+                              "to the width it prints at, so the zoom is chosen for that size"))
         if g["paper_dpi"] < 60 and getmap is None:
             fs.append(finding("MAP-TILE-001", "WARN", f"the basemap prints at about {g['paper_dpi']} dpi, which shows as blocky pixels; "
                               + ("the tile cap holds the zoom down" if g["limited_by_cap"] else "set a higher basemap.zoom, or basemap: {detail: sharp}")))

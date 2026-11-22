@@ -511,6 +511,9 @@ def mp4_info(path: str) -> dict:
 def check_mp4(path: str, size_px: tuple[int, int], seconds: float) -> list[dict]:
     """MAP-OUT-013 (MP4): read back, H.264 in yuv420p (what every phone and slide tool plays), even dimensions of the size asked for, and about
     the length asked for (the frames' holds added up)."""
+    import gmap_common as gc
+    gc.ledger_start_lazy("output_lint.check_mp4")      # 3.4.0 (F-3): the MP4 it checks is an output
+    gc.ledger_note(outputs=[path] if Path(path).is_file() else None)
     p = Path(path)
     if not p.is_file() or p.stat().st_size == 0:
         return [finding("MAP-OUT-013", "BLOCK", f"{p.name} was not written", None)]

@@ -312,7 +312,42 @@ def lint(plan, report: dict) -> tuple[list[dict], dict]:
             fs.append(finding("MAP-STORY-007", "WARN", f"layer '{lid}' was named on the map in place of its key, but {', '.join(v['missing'][:4])} found no "
                               f"room, so the map shows it without saying what it is; legend: {{direct: false}} on the layer puts its key back",
                               {"layer": lid, "missing": v["missing"], "suggest": "legend: {direct: false}"}))
+    off = off_message_layers(plan)
+    measures["off_message"] = off
+    if off:
+        fs.append(finding("MAP-STORY-027", "INFO", f"layer(s) {', '.join(repr(x) for x in off[:4])} are drawn as data, but the message, title and subtitle "
+                          "never name them: each adds marks that compete with what the map says. Leave them off, or give them emphasis: background "
+                          "(or role context) when they are surroundings", {"layers": off, "suggest": "drop the layer, or emphasis: background"}))
     return fs, measures
+
+
+OFF_MESSAGE_ROLES = ("points", "lines", "polygons", "proportional", "choropleth", "hexbin", "grid")
+
+
+def off_message_layers(plan) -> list[str]:
+    """3.4.0 (eval INFO-3, the Day 21 what-if's trees and bus stops): data layers drawn at full strength that nothing in the message, title
+    or subtitle names, by their id or legend title words. Context, supporting and background layers, legend-only and label-only layers are
+    never counted, and a map with one data layer has none."""
+    import re as _re
+    el = (plan.spec.get("elements") or {}).get("title") or {}
+    words = " ".join(str(x or "") for x in (plan.spec.get("message"), el.get("text"), el.get("subtitle"))).lower()
+    if not words.strip():
+        return []
+    data = [l for l in plan.layers if l.role in OFF_MESSAGE_ROLES and not getattr(l, "legend_only", False)
+            and str((l.spec.get("symbol") or {}).get("shape") or "").lower() != "none"]
+    if len(data) < 2:
+        return []
+    out = []
+    for l in data:
+        emp = str(getattr(l, "emphasis", None) or l.spec.get("emphasis") or "auto")
+        if emp in ("supporting", "background"):
+            continue
+        title = str((l.spec.get("legend") or {}).get("title") or getattr(l, "title", "") or "")
+        terms = {w for w in _re.findall(r"[a-z]{4,}", (l.id.replace("_", " ") + " " + title).lower())}
+        stems = {w[:-1] if w.endswith("s") else w for w in terms}
+        if stems and not any(st in words for st in stems):
+            out.append(l.id)
+    return out
 
 
 def summary_lines(findings: list[dict]) -> list[str]:

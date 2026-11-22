@@ -197,8 +197,13 @@ def thin_ticks(ticks: list[dict], width_of, gap_mm: float = TICK_LABEL_GAP_MM) -
     if len(ticks) <= 2:
         return list(ticks)
 
+    # 3.4.0 (Antakya #11): "2 2.5 km" read as one number: the label before the end label keeps a wider gap (two digit widths), so the last
+    # two never run together
+    end_gap = max(2 * gap_mm, 2 * width_of("0"))
+
     def fits(sel):
-        return all(a["at_mm"] + width_of(a["label"]) / 2 + gap_mm <= b["at_mm"] - width_of(b["label"]) / 2 for a, b in zip(sel, sel[1:]))
+        return all(a["at_mm"] + width_of(a["label"]) / 2 + (end_gap if b is ticks[-1] else gap_mm) <= b["at_mm"] - width_of(b["label"]) / 2
+                   for a, b in zip(sel, sel[1:]))
     n = len(ticks) - 1
     for step in range(1, n + 1):
         keep = [ticks[i] for i in range(0, n, step)]

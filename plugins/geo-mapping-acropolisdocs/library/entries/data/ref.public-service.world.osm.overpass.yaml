@@ -1,6 +1,6 @@
 id: ref.public-service.world.osm.overpass
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: Overpass API (OpenStreetMap queries)
 summary: The public Overpass API answers Overpass QL queries over live OpenStreetMap data (towers, masts, buildings, roads in a bbox) under fair-use limits;
@@ -49,12 +49,32 @@ avoid_when:
 pairs_with:
 - ref.infrastructure.world.osm.geofabrik
 delivery:
-  mode: user-supplied
-  format: JSON from an Overpass QL query (converted with osmtogeojson or read as nodes with lat/lon)
-  note: 'POST the query to overpass-api.de/api/interpreter, e.g. [out:json][timeout:60];(node["man_made"~"mast|tower"](33.2,-112.3,33.7,-111.6););out body;
-    and save the JSON. Caps: one query at a time, under 180 s, data under 512 MB, a few thousand requests a day; set an identifying User-Agent. Verified
-    from the user''s computer on 2026-11-07: /api/status answered (rate limit 2 slots) and a mast query in a Phoenix box returned JSON (Overpass API
-    0.7.62.11, ODbL notice in osm3s.copyright).'
+  mode: service
+  protocol: overpass
+  tool: osm_fetch
+  api:
+    host: overpass-api.de
+    requests:
+    - method: POST
+      path: /api/interpreter
+      body: form
+      idempotent: true
+      changes: false
+    limits:
+      sequential: true
+  mirrors:
+  - host: overpass-api.de
+    seen: answered from the person's computer (2026-11-21), often HTTP 502 "at capacity" on a first try
+  - host: overpass.kumi.systems
+    seen: blocked by the account's network allowlist (2026-11-21)
+  - host: overpass.private.coffee
+    seen: blocked by the account's network allowlist (2026-11-21)
+  - host: maps.mail.ru
+    seen: answered 504 (2026-11-21)
+  note: '3.4.0: fetched by the map server''s osm_fetch tool and the MapSpec source `{type: osm, tags: [...]}` (scripts/osm.py): one POST at a time
+    with the query in the form field `data`, `out geom`; 429, 502, 503 and 504 tried again after 2, 6 and 18 s, then the next mirror, stopping after
+    the list. The cloud workspace reaches none of the mirrors: fetch on the person''s computer (the map server runs there). Caps: one query at a time,
+    under 180 s, data under 512 MB, a few thousand requests a day; set an identifying User-Agent.'
 source:
   url: https://overpass-api.de/api/status
   publisher: OpenStreetMap community (Overpass API, overpass-api.de)
@@ -72,7 +92,7 @@ license:
   note: 'Open Database License 1.0: attribution, and a derived database (not a rendered map) carries the same licence (MAP-LIC-004).'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
+  reviewed_on: '2026-11-21'
   verify_by: '2027-02-07'
   changelog:
   - rev: 1
@@ -83,3 +103,6 @@ maintenance:
   - rev: 2
     date: '2026-11-07'
     note: 'Active: overpass-api.de answered from the user''s computer on 2026-11-07 (status endpoint, rate limit 2 slots; a node query returned JSON with the ODbL notice). The fair-use caps stay as recorded from the OSM wiki.'
+  - rev: 3
+    date: '2026-11-21'
+    note: 'Fetched by the plugin (3.4.0, Day 21): the delivery is a service through osm_fetch, with the mirrors and what was seen of each on 2026-11-21 (only overpass-api.de answered from the person''s computer; the public instance answered 502 at capacity on most first tries).'

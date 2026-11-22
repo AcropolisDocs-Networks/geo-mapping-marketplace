@@ -879,7 +879,7 @@ def fcc_bdc_coverage_tool(region: str = "", technology: str = "5GNR", speed: str
                                 providers="all" if providers in ("", "all") else [p.strip() for p in providers.split(",")])
         out = {"ok": True, "region": reg.name, "as_of": plan["as_of"], "states": plan["partitions"]["inside"], "outside_fcc": plan["partitions"]["outside"],
                "files": [{k: f.get(k) for k in ("file_id", "name", "provider", "state", "bytes")} for f in plan["files"]], "cost": plan["cost"],
-               "environment": am.ENVIRONMENT_LABEL.get(environment, environment), "findings": c.findings}
+               "environment": am.env_label(environment), "findings": list(c.findings) + [{"id": "MAP-FCC-009", "severity": "INFO", "message": am.ENVIRONMENT_NOTE}]}
         if plan["partitions"]["outside"]:
             out["findings"] = list(out["findings"]) + [{"id": "MAP-FCC-008", "severity": "INFO", "message": f"{', '.join(plan['partitions']['outside'])} "
                                                        "is outside the FCC's coverage (the United States and its territories); it has no data from this source"}]
@@ -1058,6 +1058,37 @@ def hist_fetch_tool(op: str, as_of: str, bbox: str, admin_level: str = "4", tags
             dest = gc.outputs_dir() / dest
         return hf.fetch(as_of, bbox, admin_level, dest, tl, http=http)
     except hf.HistError as ex:
+        return _tool_fail(ex)
+
+
+def osm_fetch_tool(tags: str = "", bbox: str = "", query: str = "", out: str = "", confirm: bool = False, http=None) -> dict:
+    """3.4.0: OpenStreetMap features by tag through Overpass (osm.py fetch). Without confirm: the query and the hosts (the plan)."""
+    import osm
+    tl = [t.strip() for t in tags.split(";") if t.strip()]
+    try:
+        if not confirm:
+            return {"ok": True, **osm.plan(tl, bbox or None, query or None), "next": "show the person the query and call again with confirm=true"}
+        if not bbox and not query:
+            return fail("usage", "MAP-OSM-002", "bbox (W,S,E,N) is needed with tags")
+        name = "osm_" + (re.sub(r"[^a-z0-9]+", "_", (tl[0] if tl else "query").lower()).strip("_")[:40] or "query") + ".gpkg"
+        dest = Path(out) if out else gc.data_dir("osm") / name
+        if not dest.is_absolute():
+            dest = gc.outputs_dir() / dest
+        return osm.fetch(tl, bbox or None, dest, own_query=query or None, http=http)
+    except osm.OsmError as ex:
+        return _tool_fail(ex)
+
+
+def osm_history_tool(op: str, filter_: str, bbox: str = "", polygon: str = "", time_: str = "", out: str = "", http=None) -> dict:
+    """3.4.0: OpenStreetMap history through ohsome (osm.py history): counts, born, snapshot, users."""
+    import osm
+    try:
+        ext = ".csv" if op in ("counts", "users") else ".gpkg"
+        dest = Path(out) if out else gc.data_dir("osm") / f"ohsome_{op}{ext}"
+        if not dest.is_absolute():
+            dest = gc.outputs_dir() / dest
+        return osm.history(op, filter_, bbox=bbox or None, polygon=polygon or None, time_=time_, out=dest, http=http)
+    except osm.OsmError as ex:
         return _tool_fail(ex)
 
 

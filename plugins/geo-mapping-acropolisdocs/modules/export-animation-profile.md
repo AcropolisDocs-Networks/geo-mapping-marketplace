@@ -46,6 +46,11 @@ description: >
   along the bottom, faded over 0.45 s; `counters:` run a number through key times ("AD {v}", "{v} fans"); `end_hold:` holds the last frame;
   `poster: last` opens the video on its final frame held `poster_hold` seconds and dissolving into the flight (X shows the first frame as the
   thumbnail and does not autoplay). Every flythrough frame carries the brand logo bottom left, above the credits.
+- **"The city appears building by building", "slow motion through the burst", "a date counter"** (3.4.0): `clock: [[real, video_s], ...]`
+  maps real time to video time (story lines may say `at: 2023-02-08`, counters' keys and feature events take real times); a counter
+  `{format: date, pattern: "%-d %B %Y"}` shows the clock's date, `{source: reveal}` the features on the map; `reveal: {layer, time_field,
+  end_field, class_field, colours, flash_s, before}` brings a polygon or point layer in feature by feature from an id raster (65,000
+  buildings), each new one flashing and keyed "Just added". Counters of one corner stack as a column; a long story line wraps on its row.
 - **"Add my voice-over", "captions for the player"** (2.0.0): `--audio FILE` (mp3, m4a, aac, wav, ogg or flac: the person's own
   recording; the plugin makes no voice) is laid under a flythrough and cut at the video's last frame. A timeline with `story:` lines also
   writes `<video>.srt` and `<video>.vtt` beside the MP4 (two lines of at most 42 characters, shifted by the poster's lead-in), for players,

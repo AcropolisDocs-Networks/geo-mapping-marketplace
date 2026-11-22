@@ -48,7 +48,9 @@ style: {look: auto}                # auto (default) picks focus (areas), clean (
 # 2.0.0: story: {claim, beats: [{role, title, say, figure, show: {view, focus, highlight, layers, time, marks}, hold}], counters, outputs}: one story,
 #   many formats (the map-story skill and the story-beats module; scripts/story.py plan | build). A map without it is a single map, as before
 # 1.19.0: elements.figures: {on: true, items: [{svg: section.svg, position: lower-left | upper-left | ..., w_mm: 110} | {svg: ..., rect_mm: [x, y, w, h]}]}:
-#   an SVG drawn into the map frame on every build (a section box, a chart), stacked beside the corner's elements; labels keep clear of it
+#   an SVG drawn into the map frame on every build (a section box, a chart), stacked beside the corner's elements; labels keep clear of it.
+#   rect_mm is measured from the map frame's top-left corner, not the page's (3.4.0: `from: page` measures it from the page)
+# 3.4.0: elements.detail takes layers: [ids, or inline layers], opacity, basemap: {...} and width: legend (as wide as the legend)
 # 1.20.0: elements.section: {on: true, line: [[lon, lat], [lon, lat]] | {layer: cut}, sun: auto, labels: [{text, at: [lon, lat]}], ends: [A, "A′"],
 #   title, position, w_mm, dem}: a terrain cross-section box (true scale, or the least exaggeration that fits), the cut dashed on the map; with
 #   a one-sun hillshade (sun: auto) the air in shadow and the grazing rays, exact when the cut runs along the sun's bearing

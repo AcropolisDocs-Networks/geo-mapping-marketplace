@@ -6,6 +6,8 @@
       detail: {on: true, bbox: [-122.34, 47.59, -122.32, 47.60]}    # or a window in longitude and latitude
       detail: {on: true, subject: true}                             # or what the map is about (the message's layers, their highlight)
               position: lower-left    w_mm: 70    title: "Lumen Field"    pad: 0.25
+      detail: {on: true, bbox: [...], layers: [cells, {id: streets, source: ..., role: lines}], opacity: 0.7,
+               basemap: {provider: carto-positron}, width: legend}          # 3.4.0 (Day 20 #23): its own layers, strength, ground and width
 
 The locator in the lower right says where the map is; a detail inset says what is at one spot on it, at a scale where it can be read.
 Day 15's stadium was a twentieth of a frame that also had to show three stations: with a detail inset the frame can keep the stations and
@@ -75,15 +77,20 @@ def window(plan, cfg: dict) -> tuple:
     return (x0 - px, y0 - py, x1 + px, y1 + py)
 
 
-def for_map(plan, cfg: dict) -> dict:
-    """-> {figure (an elements.figures item the plugin drew), window (display coordinates, as drawn), notes}."""
+def for_map(plan, cfg: dict, legend_w: float | None = None) -> dict:
+    """-> {figure (an elements.figures item the plugin drew), window (display coordinates, as drawn), notes}. 3.4.0 (Day 20 #23): `layers`
+    (the ids of the map's layers to draw in it, and layers of its own written inline), `opacity` (the strength of its data layers),
+    `basemap` (its own ground, a tile provider for a street inset) and `width: legend` (as wide as the legend, so the two line up)."""
     import atlas
     import map_plan as mp
     import map_render as mr
     import sheet
     from pyproj import Transformer
     box = window(plan, cfg)
-    w_mm = min(max(float(cfg.get("w_mm") or WIDTH_MM), 40.0), 140.0)
+    if str(cfg.get("width") or "") == "legend" and legend_w:
+        w_mm = min(max(float(legend_w), 30.0), 140.0)
+    else:
+        w_mm = min(max(float(cfg.get("w_mm") or WIDTH_MM), 40.0), 140.0)
     h_mm = round(w_mm * float(cfg.get("aspect") or ASPECT), 2)
     tr = Transformer.from_crs(plan.crs, "EPSG:4326", always_xy=True)
     lon, lat = tr.transform([box[0], box[2], box[0], box[2]], [box[1], box[1], box[3], box[3]])
@@ -101,6 +108,20 @@ def for_map(plan, cfg: dict) -> dict:
             els.pop(k, None)
         els["scale_bar"] = {**(els.get("scale_bar") or {}), "on": True}
         sp.pop("story", None)
+        if cfg.get("layers"):
+            ids = [x for x in cfg["layers"] if isinstance(x, str)]
+            own = [copy.deepcopy(x) for x in cfg["layers"] if isinstance(x, dict) and x.get("id")]
+            known = {ly.get("id") for ly in sp.get("layers") or []}
+            missing = [i for i in ids if i not in known]
+            if missing:
+                raise DetailError(f"elements.detail.layers names {', '.join(missing)}, which the map does not have")
+            sp["layers"] = [ly for ly in sp.get("layers") or [] if ly.get("id") in ids] + own
+        if cfg.get("opacity") is not None:
+            for ly in sp.get("layers") or []:
+                if ly.get("role") not in ("context", "labels"):
+                    ly["symbol"] = {**(ly.get("symbol") or {}), "opacity": float(cfg["opacity"])}
+        if isinstance(cfg.get("basemap"), dict):
+            sp["basemap"] = copy.deepcopy(cfg["basemap"])
     sub = mp.prepare(str(plan.spec_path), mode=plan.mode, brand=plan.brand, template=plan.tpl_name, spec_edit=edit, direct_labels=False)
     sub.tpl = sheet.bare_template(plan.tpl, w_mm, h_mm)
     local = lo.Rect(0.0, 0.0, w_mm, h_mm)

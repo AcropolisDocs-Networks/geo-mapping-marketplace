@@ -104,6 +104,9 @@ second step, not the first; a draft is never chosen for a map until the person a
 
 ## Data-source tools (1.3.0)
 
+- **OpenStreetMap by tag** (3.4.0): `osm_fetch` (Overpass: tags or a query, a box; busy answers retried, mirrors in turn; run on the person's
+  computer, the cloud workspace reaches no Overpass) or the MapSpec source `{type: osm, tags: [...]}`. **OSM history:** `osm_history`
+  (ohsome: counts, born, snapshot, users). Never write the queries by hand.
 - **Historical boundaries:** `ref.boundary.world.historical.ohm` (OpenHistoricalMap, public domain unless a feature says otherwise):
   `hist_fetch` with a date, a box and an admin level; or the op `{as_of: 1861-10-24}` on a layer with start_date / end_date.
 - **Census tables by variable:** `ref.statistic.us.acs5.table`, `.broadband` (B28002), `.computers` (B28001), `.median-income` (B19013):

@@ -11,6 +11,7 @@ map_full: {x: 8, y: 8, w: 187.2, h: 196}   # the default layout: the map runs up
 footer: {x: 8, y: 207, w: 187.2, h: 40}
 footer_fit: true                         # the footer shrinks to its notes and the map grows into the room
 fonts:  {title: 22, subtitle: 12, label: 10, legend_title: 11, legend: 10, note: 10, scale: 10, banner: 11}
+medium: {line_scale: 1.3, point_scale: 1.3, fonts: {label: 12, legend: 12, legend_title: 12}}   # 3.4.0: read on a phone (not under classic)
 legend_max: {w: 80, h: 110}
 inset_size: {w: 44, h: 38}
 logo_height_mm: 11

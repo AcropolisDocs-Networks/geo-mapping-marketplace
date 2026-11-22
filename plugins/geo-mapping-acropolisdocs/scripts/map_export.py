@@ -617,7 +617,7 @@ def rasterize(pdf_bytes: bytes, dpi: float, svg: str | None = None, *, alpha: bo
     import pdf_stack
     if pdf_stack.pdfium_available():
         try:
-            return pdf_stack.render_png(pdf_bytes, dpi, alpha=alpha)
+            return nominal_pixels(pdf_stack.render_png(pdf_bytes, dpi, alpha=alpha), W, H, dpi)
         except Exception:  # noqa: BLE001
             pass                                           # fall through to pdftoppm
     if alpha:
@@ -637,6 +637,29 @@ def rasterize(pdf_bytes: bytes, dpi: float, svg: str | None = None, *, alpha: bo
     if svg is not None:
         return _chromium_png(svg, dpi)
     raise ExportError("no rasterizer found: install pypdfium2, poppler (pdftoppm) or Playwright Chromium; run the doctor to see what is missing")
+
+
+def nominal_pixels(png: bytes, w_mm: float | None, h_mm: float | None, dpi: float) -> bytes:
+    """3.4.0 (Day 21 #22): a sheet whose size in millimetres is rounded (the 16x9 slide's 338.67 mm) comes out one pixel over its nominal size
+    at some dpi (3841 x 2160 at 288 dpi). The one extra column or row (a sliver of the page edge, never the map) is cut so the PNG is
+    3840 x 2160 as the slide is."""
+    if not w_mm or not h_mm:
+        return png
+    import io
+
+    from PIL import Image
+    import math
+    im = Image.open(io.BytesIO(png))
+    xw, xh = w_mm / MM_PER_IN * dpi, h_mm / MM_PER_IN * dpi
+    # only a size a hair over a whole pixel (338.67 mm at 288 dpi is 3840.03 px) is cut back; a real fraction (A4 at 72 dpi, 595.3 px) keeps
+    # the rasterizer's own rounding up, as every earlier PNG and the golden pictures have it
+    tw = math.floor(xw) if 0 < xw - math.floor(xw) < 0.1 else im.width
+    th = math.floor(xh) if 0 < xh - math.floor(xh) < 0.1 else im.height
+    if (im.width, im.height) == (tw, th) or not (0 <= im.width - tw <= 1 and 0 <= im.height - th <= 1):
+        return png
+    out = io.BytesIO()
+    im.crop((0, 0, tw, th)).save(out, format="PNG", **({"dpi": im.info["dpi"]} if "dpi" in im.info else {}))
+    return out.getvalue()
 
 
 def _chromium_png(svg: str, dpi: float, alpha: bool = False) -> bytes:
@@ -687,6 +710,7 @@ def export(svg: str, out_dir: Path, stem: str, formats: list[str], *, props: dic
 
     `options` (options_from): a transparent PNG, a PDF with bleed (and crop marks), PDF/A-2b, the SVG as Inkscape layers and an outlined-text SVG.
     The PNG is always the sheet's own size (never the bleed); `svg` in `formats` writes <stem>.svg here (build_map writes its own)."""
+    gc.ledger_start_lazy("map_export.export")
     out_dir.mkdir(parents=True, exist_ok=True)
     opt = options_from(None, options or {})              # idempotent: options already in this form pass through unchanged
     res = {"files": [], "dpi": dpi, "size_mm": svg_size_mm(svg), "options": opt, "variants": {}, "title": title}

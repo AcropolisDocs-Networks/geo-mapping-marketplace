@@ -770,6 +770,13 @@ entries:
   rev: 2
   tags_digest: 0c2b90a8422d
   entry_digest: fbada5a95b46
+- id: ref.map-type.what-if-walk
+  file: entries/method/ref.map-type.what-if-walk.yaml
+  type: map-type
+  status: active
+  rev: 1
+  tags_digest: d8669af0319a
+  entry_digest: 14e6522649e7
 - id: ref.palette.categorical
   file: entries/style/ref.palette.categorical.yaml
   type: palette
@@ -1064,13 +1071,20 @@ entries:
   rev: 4
   tags_digest: 21f99a1237d7
   entry_digest: 30b604ab56a1
+- id: ref.public-service.world.osm.ohsome
+  file: entries/data/ref.public-service.world.osm.ohsome.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 93badb659e8d
+  entry_digest: 2b941a0d6dc2
 - id: ref.public-service.world.osm.overpass
   file: entries/data/ref.public-service.world.osm.overpass.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: aea340b94900
-  entry_digest: c0efce7e7c7c
+  entry_digest: fc86f512501e
 - id: ref.public-service.world.platform.carto
   file: entries/data/ref.public-service.world.platform.carto.yaml
   type: public-service

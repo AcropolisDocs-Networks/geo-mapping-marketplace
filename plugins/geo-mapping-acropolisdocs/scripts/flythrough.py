@@ -634,6 +634,7 @@ AUDIO_TYPES = (".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac")
 def encode(frames_dir: Path, out: Path, fps: float, meta: dict, crf: int = 20, audio=None, seconds: float | None = None) -> dict:
     """2.0.0: `audio` is the person's own narration or sound file, laid under the frames as AAC from the first frame; the video keeps its own
     length (`seconds`): a longer recording is cut at the last frame, a shorter one ends in silence."""
+    gc.ledger_start_lazy("flythrough.encode")          # 3.4.0 (F-3)
     import animate
     exe = animate.ffmpeg_exe()
     if not exe:
@@ -651,12 +652,14 @@ def encode(frames_dir: Path, out: Path, fps: float, meta: dict, crf: int = 20, a
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         raise FlyError(f"ffmpeg failed: {r.stderr.strip()[:300]}")
+    gc.ledger_note(outputs=[str(out)])
     return {"path": str(out), "bytes": out.stat().st_size}
 
 
 def web_copy(frames_dir: Path, mp4: Path, fps: float, meta: dict, cap_mb: float = WEB_MB) -> dict | None:
     """A `<stem>_web.mp4` beside an MP4 over `cap_mb`: the same frames at CRF 26, then 28, 30 and 32, until one is under the cap. None when
     the MP4 is already under it (or the cap is 0)."""
+    gc.ledger_start_lazy("flythrough.web_copy")
     if not cap_mb or mp4.stat().st_size <= cap_mb * 1e6:
         return None
     out = mp4.with_name(mp4.stem + "_web.mp4")

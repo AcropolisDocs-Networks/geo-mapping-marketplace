@@ -197,6 +197,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "print_width_mm": {"type": "number", "exclusiveMinimum": 0, "description": "3.4.0: the width the map prints at when it is drawn larger and placed smaller (an inset): tile zoom and cap follow it"},
         "provider": {
           "enum": [
             "none",
@@ -312,7 +313,8 @@
               "value_field": {"type": "string"},
               "field": {"type": "string", "description": "the name of the rolled-up value (default: the layer's value_field, else value)"},
               "complete": {"const": "region", "description": "every cell of the region at the resolution; cells with no data get the zero value"},
-              "mode": {"enum": ["centre", "intersect", "share"]}
+              "mode": {"enum": ["centre", "intersect", "share"]},
+              "legend": {"type": "boolean", "description": "3.4.0 (Day 20 #18): false keeps an `empty: none` class out of the key (legend.note can say it)"}
             }
           },
           "empty": {"enum": ["outline", "none", "fill"], "description": "2.6.0 (H-08): how the zero (no data) class of a cells layer is drawn: an outline only (default for a complete H3 grid), not at all, or filled"},
@@ -361,9 +363,10 @@
                   "user-run",
                   "geocode",
                   "h3",
-                  "adapter"
+                  "adapter",
+                  "osm"
                 ],
-                "description": "2.6.0: h3 reads a table of H3 cell ids (id_field) from path (a file or a glob), or from an adapter, and draws its cells (the layer's h3: block rolls them up); 3.1.0: adapter reads polygons from a data adapter that publishes by area (ofcom-connected-nations: councils with the share covered)"
+                "description": "3.4.0: osm fetches OpenStreetMap features by tag through Overpass (tags, bbox or the map's region; geometry picks points, lines or polygons), cached in data/osm/. 2.6.0: h3 reads a table of H3 cell ids (id_field) from path (a file or a glob), or from an adapter, and draws its cells (the layer's h3: block rolls them up); 3.1.0: adapter reads polygons from a data adapter that publishes by area (ofcom-connected-nations: councils with the share covered)"
               },
               "id_field": {"type": "string", "description": "2.6.0, type h3: the column holding the cell ids (strings or 64-bit integers)"},
               "path": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
@@ -373,7 +376,11 @@
               "adapter": {"type": "string", "description": "3.0.0 (G-11): a data adapter that fetches for the map's region, partition by partition (fcc-bdc-mobile; 3.1.0: bnetza-mobile-coverage, arcep-mon-reseau-mobile, accc-mobile-coverage, canada-wireless-coverage, ofcom-connected-nations, opencellid, ookla-open-data). Its own options sit beside it: technology, use, level, environment, year, service, coverage, min_operators, metric, kind, quarter, radio"},
               "technology": {"type": "string"},
               "speed": {"type": "string"},
-              "environment": {"enum": ["outdoor", "in-vehicle"]},
+              "environment": {"enum": ["outdoor", "stationary", "outdoor-stationary", "in-vehicle", "all"], "description": "3.4.0: FCC outdoor is environment codes 0 and 1; stationary 0 only; in-vehicle 1 only"},
+              "tags": {"type": "array", "items": {"type": "string"}, "description": "3.4.0, type osm: tag filters, one set per item (k=v, k=*, k!=v, k~regex; a comma joins filters that must all hold)"},
+              "query": {"type": "string", "description": "3.4.0, type osm: an Overpass QL query of your own instead of tags"},
+              "geometry": {"enum": ["points", "lines", "polygons"], "description": "3.4.0, type osm: which geometry of the answer the layer draws"},
+              "cache": {"type": "string", "description": "3.4.0, type osm: the folder the answer is cached in (default data/osm)"},
               "as_of": {"type": "string"},
               "providers": {"anyOf": [{"const": "all"}, {"type": "array", "items": {"type": "string"}}]},
               "mode": {
@@ -567,7 +574,8 @@
                     "reconcile",
                     "dot_density",
                     "density_surface",
-                    "flow_lines"
+                    "flow_lines",
+                    "network_nearest"
                   ]
                 },
                 "layer": {
@@ -581,6 +589,14 @@
                 "to": {
                   "type": "string",
                   "description": "line_of_sight: the id of the layer of far-end sites (unset: every pair of this layer's sites)"
+                },
+                "sites": {
+                  "type": "string",
+                  "description": "3.4.0, network_nearest: the id of the point layer the walk goes to (the nearest of them along the lines)"
+                },
+                "compare": {
+                  "type": "string",
+                  "description": "3.4.0, network_nearest: a second sites layer for a what-if: the minutes with both, and changed: true where the band moves"
                 },
                 "raster": {
                   "type": "string",

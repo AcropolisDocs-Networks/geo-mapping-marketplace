@@ -37,7 +37,8 @@ JSON whose page gets the Map quality section (the map trace sets it).
    (general purpose) and this instruction, and nothing else: *"Read the file <prompt> and follow its instructions exactly. Do nothing
    else."* Never answer a read yourself, never add context, and never pass on what you know about the map: you may have made it, and a
    grader that saw the making grades its own work. All cold reads first (they can run in parallel); then run `status` again, which writes
-   the graded prompts, and start one new agent per graded read. If an agent could not write its file and replied with the JSON, store it
+   the graded prompts (a `save` of a cold read writes its output's graded prompts at once and prints their `MAP_EVAL_PENDING:` lines),
+   and start one new agent per graded read. If an agent could not write its file and replied with the JSON, store it
    unchanged with `map_evaluate.py save --run <run folder> --read <id> <file holding the reply>`. With no agent tool in this session, stop
    and say so: the packets are kept and the evaluation can be finished in a session that has one.
 4. **Record.** When `MAP_EVAL_READY: yes`, run `python3 "$GMAP_ROOT/scripts/map_evaluate.py" record --run <run folder>` (add

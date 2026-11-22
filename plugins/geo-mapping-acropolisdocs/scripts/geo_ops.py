@@ -1896,6 +1896,204 @@ def op_flow_lines(gdf, p: dict, ctx: Ctx) -> OpResult:
                     _prov("flow_lines", p, len(gdf), len(out), crs, dropped=dropped))
 
 
+# ---------------------------------------------------------------------------------------------------------------- 3.4.0: walk along a network
+def _graph(lines, snap_tol: float):
+    """Nodes (vertices rounded to snap_tol so touching ends join) and edges (consecutive vertices) of a line layer in a metric CRS."""
+    import numpy as np
+    import shapely
+    q = max(float(snap_tol), 1e-6)
+    key: dict = {}
+    xs, ys, ea, eb, ew, eseg = [], [], [], [], [], []
+
+    def node(x, y):
+        k = (round(x / q), round(y / q))
+        i = key.get(k)
+        if i is None:
+            i = key[k] = len(xs)
+            xs.append(x)
+            ys.append(y)
+        return i
+    for si, g in enumerate(lines):
+        for part in shapely.get_parts(g):
+            c = shapely.get_coordinates(part)
+            if len(c) < 2:
+                continue
+            ids = [node(x, y) for x, y in c]
+            d = np.hypot(np.diff(c[:, 0]), np.diff(c[:, 1]))
+            for a, b, w in zip(ids[:-1], ids[1:], d, strict=True):
+                if a != b:
+                    ea.append(a)
+                    eb.append(b)
+                    ew.append(float(w))
+                    eseg.append(si)
+    return np.array(xs), np.array(ys), np.array(ea, dtype=int), np.array(eb, dtype=int), np.array(ew), np.array(eseg, dtype=int)
+
+
+def _multi_source(n: int, ea, eb, ew, sources, offsets=None):
+    """Shortest distance from the nearest source to every node (a virtual node joined to each source by its snap distance, then one Dijkstra;
+    scipy when present, else a heap)."""
+    import numpy as np
+    srcs = [int(x) for x in sources]
+    if not srcs:
+        return np.full(n, np.inf)
+    off = [float(o) for o in (offsets if offsets is not None else [0.0] * len(srcs))]
+    v = n                                                  # the virtual source
+    try:
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import dijkstra
+        rows = np.r_[ea, eb, np.full(len(srcs), v)]
+        cols = np.r_[eb, ea, np.array(srcs)]
+        w = np.r_[ew, ew, np.maximum(np.array(off), 1e-9)]
+        m = coo_matrix((w, (rows, cols)), shape=(n + 1, n + 1)).tocsr()
+        return dijkstra(m, directed=True, indices=v)[:n]
+    except ImportError:
+        import heapq
+        adj: list[list] = [[] for _ in range(n)]
+        for a, b, w in zip(ea, eb, ew, strict=True):
+            adj[a].append((b, w))
+            adj[b].append((a, w))
+        dist = np.full(n, np.inf)
+        h = []
+        for s_, o in zip(srcs, off, strict=True):
+            if o < dist[s_]:
+                dist[s_] = o
+                h.append((o, s_))
+        heapq.heapify(h)
+        while h:
+            d, u = heapq.heappop(h)
+            if d > dist[u]:
+                continue
+            for v2, w in adj[u]:
+                nd = d + w
+                if nd < dist[v2]:
+                    dist[v2] = nd
+                    heapq.heappush(h, (nd, v2))
+        return dist
+
+
+def _walk_edges(left, sites, speed_ms: float, snap_m: float, tol: float):
+    """Every edge of the line layer (consecutive vertices) with its walk in minutes (the mean of its two ends' distance to the nearest site
+    along the network, each site entering at its snap distance) -> (minutes per edge, edge feature index, edge geometries, snapped, sites)."""
+    import numpy as np
+    import shapely
+    xs, ys, ea, eb, ew, eseg = _graph(left.geometry.values, tol)
+    nodes = shapely.points(np.c_[xs, ys])
+    tree = shapely.STRtree(nodes)
+    pts = shapely.get_coordinates(sites.geometry.centroid.values)
+    src, off = [], []
+    for x, y in pts:
+        j, d = tree.query_nearest(shapely.Point(x, y), return_distance=True)
+        if len(j) and d[0] <= snap_m:
+            src.append(int(j[0]))
+            off.append(float(d[0]))
+    dist = _multi_source(len(xs), ea, eb, ew, src, off)
+    mins = (dist[ea] + dist[eb]) / 2.0 / speed_ms / 60.0
+    geoms = shapely.linestrings(np.stack([np.c_[xs[ea], ys[ea]], np.c_[xs[eb], ys[eb]]], axis=1)) if len(ea) else np.array([], dtype=object)
+    return mins, eseg, geoms, ew, len(src), len(pts)
+
+
+def _walk_minutes(left, sites, crs, speed_ms: float, snap_m: float, tol: float):
+    """Per line feature: the length-weighted walk in minutes over its edges; and how many sites snapped."""
+    import numpy as np
+    mins, eseg, _g, ew, snapped, total = _walk_edges(left, sites, speed_ms, snap_m, tol)
+    out = np.full(len(left), np.inf)
+    ok = np.isfinite(mins)
+    if ok.any():
+        num = np.bincount(eseg[ok], weights=mins[ok] * ew[ok], minlength=len(left))
+        den = np.bincount(eseg[ok], weights=ew[ok], minlength=len(left))
+        has = den > 0
+        out[has] = num[has] / den[has]
+    return out, snapped, total
+
+
+def op_network_nearest(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """network_nearest {sites, speed_kmh: 4.5, snap_m: 25, bands: [5, 10, 15], field: walk_min, compare}: the walk along this line layer to the
+    nearest of `sites` (multi-source Dijkstra on the lines' shared vertices, offline, any number of sites; Day 21's walk to 26 fountains),
+    in minutes per line, with a band label; `compare` (a second sites layer) adds the minutes with both and `changed` where the band moves."""
+    import numpy as np
+    _require_crs(gdf, "network_nearest")
+    sname = p.get("sites") or p.get("layer")
+    sites = ctx.other(sname, "network_nearest")
+    speed = float(p.get("speed_kmh", 4.5))
+    if speed <= 0:
+        raise OpsError("network_nearest: speed_kmh must be above 0")
+    snap_m = to_metres(p.get("snap_m", 25), "m", "snap_m")[0]
+    tol = float(p.get("join_m", 0.05))
+    bands = [float(b) for b in (p.get("bands") or [5, 10, 15])]
+    field = str(p.get("field") or "walk_min")
+    if set(_families(gdf)) - {"LineString", "LinearRing"}:
+        raise OpsError("network_nearest runs on a line layer (streets, footways)")
+    crs, why = measure_crs(gdf, "distance", [sites], ctx=ctx)
+    left = _in_measure(gdf, crs).reset_index(drop=True)
+    sp = speed / 3.6
+    split = str(p.get("split") or "").lower() in ("segments", "true", "yes", "1")
+    if split:
+        # 3.4.0: one row per segment between two vertices (Day 21's 121,786 pieces), so a long street changes colour where its walk does
+        import geopandas as gpd
+        em, eseg, eg, _ew, snapped, total = _walk_edges(left, _in_measure(sites, crs), sp, snap_m, tol)
+        attrs = left.drop(columns=[left.geometry.name]).iloc[eseg].reset_index(drop=True)
+        left = gpd.GeoDataFrame(attrs, geometry=list(eg), crs=crs)
+        mins = em
+        out = _back(left, gdf.crs).reset_index(drop=True)
+    else:
+        mins, snapped, total = _walk_minutes(left, _in_measure(sites, crs), crs, sp, snap_m, tol)
+        out = gdf.reset_index(drop=True).copy()
+
+    def band(m):
+        if not np.isfinite(m):
+            return None
+        lo = 0.0
+        for b in bands:
+            if m < b:
+                return f"{_fmt(lo)}-{_fmt(b)} min"
+            lo = b
+        return f"{_fmt(bands[-1])}+ min"
+    out[field] = np.where(np.isfinite(mins), np.round(mins, 2), np.nan)
+    out[f"{field}_band"] = [band(m) for m in mins]
+    lengths = left.geometry.length.to_numpy()
+    total_len = float(lengths[np.isfinite(mins)].sum()) or 1.0
+    share = {}
+    for lab in [band(b - 1e-9) for b in bands] + [band(bands[-1] + 1)]:
+        share[lab] = round(float(lengths[np.array([band(m) == lab for m in mins])].sum()) / total_len, 4)
+    notes = [f"Walk along '{ctx.layer_id or 'this layer'}' to the nearest of {snapped} of {total} '{sname}' site(s) (snapped within "
+             f"{_fmt(snap_m)} m) at {speed:g} km/h, measured in {crs} ({why}): `{field}` and `{field}_band`; share of length by band: "
+             + ", ".join(f"{k} {v:.1%}" for k, v in share.items())]
+    findings = []
+    if snapped < total:
+        findings.append({"id": "MAP-OPS-016", "severity": "WARN", "message": f"network_nearest: {total - snapped} of {total} site(s) are farther than "
+                         f"{_fmt(snap_m)} m from the network and were left out (snap_m sets the reach)", "detail": {"left_out": total - snapped}})
+    unreached = int((~np.isfinite(mins)).sum())
+    if unreached:
+        notes.append(f"{unreached:,} line(s) are on parts of the network no site reaches; they have no {field}")
+    extra = {"share_by_band": share, "speed_kmh": speed, "sites": snapped}
+    if p.get("compare"):
+        cname = p["compare"]
+        both = _in_measure(ctx.other(cname, "network_nearest"), crs)
+        import pandas as pd
+        allsites = pd.concat([_in_measure(sites, crs)[[sites.geometry.name]].rename_geometry("geometry") if sites.geometry.name != "geometry" else _in_measure(sites, crs)[["geometry"]],
+                              both[[both.geometry.name]].rename_geometry("geometry") if both.geometry.name != "geometry" else both[["geometry"]]], ignore_index=True)
+        import geopandas as gpd
+        allsites = gpd.GeoDataFrame(allsites, geometry="geometry", crs=crs)
+        if split:
+            m2, _es, _eg, _w, sn2, t2 = _walk_edges(left, allsites, sp, snap_m, tol)
+        else:
+            m2, sn2, t2 = _walk_minutes(left, allsites, crs, sp, snap_m, tol)
+        out[f"{field}_before"] = out[field]
+        out[field] = np.where(np.isfinite(m2), np.round(m2, 2), np.nan)
+        out[f"{field}_band_before"] = out[f"{field}_band"]
+        out[f"{field}_band"] = [band(m) for m in m2]
+        out["changed"] = out[f"{field}_band"] != out[f"{field}_band_before"]
+        share2 = {lab: round(float(lengths[np.array([band(m) == lab for m in m2])].sum()) / (float(lengths[np.isfinite(m2)].sum()) or 1.0), 4) for lab in share}
+        extra.update(share_by_band_before=share, share_by_band=share2, compare=cname)
+        notes.append(f"What-if with '{cname}' as well ({sn2} of {t2} sites): `{field}` is the walk with both, `{field}_before` without, "
+                     f"`changed` marks {int(out['changed'].sum()):,} line(s) whose band moves; share of length by band: "
+                     + ", ".join(f"{k} {v:.1%}" for k, v in share2.items()))
+    method = (f"Walk times along the mapped network at {speed:g} km/h to the nearest site (snapped within {_fmt(snap_m)} m); modelled, not timed"
+              + ("; a hypothetical with the second set of sites" if p.get("compare") else ""))
+    return OpResult(out, notes, findings, _prov("network_nearest", p, len(gdf), len(out), crs, other_layer=sname, other_rows=len(sites),
+                                                method_note=method, **extra))
+
+
 def pd_numeric(s):
     import pandas as pd
     return pd.to_numeric(s, errors="coerce")
@@ -1962,6 +2160,7 @@ OPS = {
     "split_by": op_split_by,
     "thin_lines": op_thin_lines,
     "reconcile": op_reconcile,
+    "network_nearest": op_network_nearest,
 }
 
 NEEDS_LAYER = {"clip", "intersect", "intersection", "union", "difference", "symmetric_difference", "spatial_join", "nearest",
@@ -2121,6 +2320,10 @@ def equivalent(op: str, p: dict, prov: dict | None = None) -> dict:
                             "(no one-step PostGIS equivalent: ST_SnapToGrid counts, then a kernel in SQL or raster ST_MapAlgebra, then ST_DumpAsPolygons)"),
         "flow_lines": ("for each row: a quadratic arc from the origin point to the destination, its control point bend x chord to the right of travel",
                        "ST_LineInterpolatePoints over ST_MakeLine(o, ST_Translate(midpoint, normal * bend * chord), d), or ST_CurveToLine of a CircularString"),
+        "network_nearest": ("graph of the lines' shared vertices (scipy.sparse.csgraph): a virtual source joined to every site's snapped vertex, one "
+                            "dijkstra; minutes = metres / (speed_kmh / 0.06), banded",
+                            "pgr_dijkstraCost(edges_sql, ARRAY[site vertex ids], ARRAY[every vertex id]) with min() per end vertex (pgRouting), "
+                            "then ST_LineLocatePoint per line"),
         "reconcile": (f"gpd.sjoin(gdf, {other}.to_crs(gdf.crs).buffer(tolerance), predicate='intersects') then share of length within tolerance >= threshold",
                       f"SELECT a.id, ST_Length(ST_Intersection(a.geom, ST_Buffer(b.geom, tol))) / ST_Length(a.geom) FROM a JOIN {other} b ON ST_DWithin(a.geom, b.geom, tol)"),
     }

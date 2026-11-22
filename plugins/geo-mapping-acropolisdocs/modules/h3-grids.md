@@ -15,7 +15,7 @@ cell on every map. `role: hexbin` puts points and polygons on H3; `source: {type
 region: {place: Idaho Panhandle}
 layers:
 - id: carriers
-  source: {type: h3, path: "data/fcc-bdc/*.gpkg", id_field: h3_res9_id, where: "environmnt = 0"}   # or adapter: fcc-bdc-mobile
+  source: {type: h3, path: "data/fcc-bdc/*.gpkg", id_field: h3_res9_id, where: "environmnt IN (0, 1)"}   # outdoor = 0 and 1; or adapter: fcc-bdc-mobile
   h3: {resolution: auto, by: brandname, share_min: 0.5, agg: count_groups, complete: region, mode: centre}
   role: choropleth
   value_field: carriers

@@ -1,0 +1,51 @@
+id: ref.map-type.what-if-walk
+type: map-type
+rev: 1
+status: active
+title: What-if walk to the nearest site
+summary: Every street coloured by the walk to the nearest of a set of sites, and again with a second set added (a what-if), the streets whose band
+  changes drawn at full strength and the rest held back; from the network_nearest op with compare (3.4.0, Day 21).
+tags:
+  use_for:
+  - coverage-footprint
+  avoid_for:
+  - engineering-grade
+use_when:
+- The message is how far people walk to something (water, a clinic, a stop) and how a change to the sites would move that (Day 21's fountains and restaurants).
+- 'One line layer of the walkable network and two point layers: `{op: network_nearest, sites: fountains, compare: restaurants, bands: [5, 10, 15]}`.'
+avoid_when:
+- The walk needs real routing (one-way rules, crossings, slopes, opening hours); use the isochrone skill's routing service.
+- The comparison is the message but only the after state is drawn; give the changed streets the strength (highlight on `changed`) and say the before share.
+pairs_with:
+- ref.public-service.world.osm.overpass
+chooses_when:
+  message_type:
+  - availability
+  - compare
+  data_shape:
+  - polygon-footprint
+requires:
+  data_shape: see chooses_when
+  join_key: false
+recommended:
+  role: lines
+  classification: manual breaks on walk_min (the op's bands)
+  highlight: '{layer: streets, column: changed, in: [true]}'
+  wording: modelled walk, hypothetical sites
+guarded_by:
+- MAP-OPS-016
+- MAP-STORY-027
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-21'
+  verify_by: '2027-11-21'
+  check: the network_nearest op's compare columns (tests/test_release_340.py)
+  changelog:
+  - rev: 1
+    date: '2026-11-21'
+    note: 'Active (3.4.0): the Day 21 what-if (fountains only 49% of street length 10+ min away, with restaurants 10%) as a map type.'

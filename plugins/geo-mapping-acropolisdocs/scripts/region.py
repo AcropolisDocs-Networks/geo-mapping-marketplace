@@ -22,6 +22,7 @@ county), `countries` (ISO 3166-1 alpha-2) and `admin1` (ISO 3166-2), each the ar
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -76,6 +77,7 @@ class Region:
     sources: list = field(default_factory=list)
     notes: list = field(default_factory=list)
     members: list = field(default_factory=list)
+    findings: list = field(default_factory=list)            # 3.4.0: MAP-REG-004 when a US region fell back to the coarse outline
 
     @property
     def bounds(self) -> tuple:
@@ -193,13 +195,25 @@ def admin_shape(code: str, base: Path | None = None):
 FINER_COUNTIES = "ref.boundary.us.county.cb500k"
 
 
+_FALLBACK: list = []          # 3.4.0 (Day 20 #16): why the finer counties were not used, read once per resolve()
+
+
 def _finer_us_counties():
-    """US counties at 1:500,000 (the library's cb500k entry) when it is cached on this computer, else the bundled ones: a region keeps the
-    finest boundary it can read without a fetch (Day 20's ten counties: 11,400 cells, as prep.py counted them)."""
+    """US counties at 1:500,000 (the library's cb500k entry), fetched into the library cache on first use (one file, about 3 MB; 3.4.0, Day
+    20 #16: 3.0.0 used them only when cached, so cell counts changed silently from 38,409 to 37,652), else the bundled ones with a reason in
+    _FALLBACK that resolve() turns into MAP-REG-004."""
     try:
         import ref_fetch
         e = ref_fetch.find_entry(FINER_COUNTIES)
         p = ref_fetch.cached_path(e)
+        if p is None and os.environ.get("GMAP_OFFLINE") != "1":
+            try:
+                p = Path(ref_fetch.fetch(e)["path"])
+            except Exception as ex:  # noqa: BLE001 - no network: the bundled counties stand in, said loudly
+                _FALLBACK.append(("WARN", f"the 1:500,000 counties could not be fetched ({type(ex).__name__}: {str(ex)[:120]})"))
+                p = None
+        elif p is None:
+            _FALLBACK.append(("INFO", "offline (GMAP_OFFLINE=1): the 1:500,000 counties are not cached"))
         if p is not None:
             if p.name not in _CACHE:
                 import geopandas as gpd
@@ -333,6 +347,7 @@ def resolve(block, base: Path | None = None, *, fetch_admin2=None) -> Region:
     if not isinstance(block, dict) or not any(k in block for k in KEYS):
         raise RegionError(f"region needs one of {', '.join(KEYS)}")
     from shapely.ops import unary_union
+    _FALLBACK.clear()
     geoms, sources, notes, members = [], [], [], []
     name, definition = None, None
     if "place" in block:
@@ -410,6 +425,10 @@ def resolve(block, base: Path | None = None, *, fetch_admin2=None) -> Region:
     reg = Region(geometry=geom, name=str(block.get("name") or name), definition=str(definition), sources=list(dict.fromkeys(sources)),
                  notes=notes, members=members)
     _partitions(reg)
+    for sev, why in dict.fromkeys(_FALLBACK):                 # 3.4.0 (Day 20 #16): never a silent coarse outline
+        reg.findings.append({"id": "MAP-REG-004", "severity": "WARN" if sev == "WARN" else "INFO", "message": f"region {reg.name}: {why}, so its US outline comes from the bundled "
+                             "coarser counties and an H3 grid completed to it counts cells differently (Washington: 38,409 instead of 37,652); "
+                             f"run ref_fetch.py fetch {FINER_COUNTIES} on a computer with network, then build again"})
     return reg
 
 

@@ -39,6 +39,15 @@ A timeline (YAML or JSON; every key optional):
   date: auto                         1.19.0: the date at the right end of the credits band (auto: today; off; or a text of your own)
   grow: {layer: bars, start: 3, end: 19}   1.19.0: an extruded layer built with extrude.moments rises through its moments (flythrough);
                                      1.20.0: its classes recolour as the values grow (recolor: false keeps the final colours)
+  clock: [["2023-02-05", 0], ["2023-02-08", 6], ["2023-02-11", 22], ["2023-03-15", 40]]
+                                     3.4.0 (Day 21 Antakya #7): real time to video time, piecewise linear (slow motion through a burst). Then
+                                     a story line may say `at: 2023-02-08` instead of start, a counter's keys may be [real time, value], a
+                                     feature event's t may be a real time, and a reveal's times are read through it
+  counters: [{format: date, pattern: "%-d %B %Y", position: top-right}]
+                                     3.4.0 (#6): a date counter shows the clock's real time at t (no keys needed)
+  reveal: {layer: buildings, time_field: created, end_field: deleted, class_field: kind, flash_s: 0.6}
+                                     3.4.0 (#3): a polygon or point layer appears feature by feature at its time (65,000 buildings): drawn
+                                     from an id raster, class colours, each new feature flashing in the label colour, keyed "Just added"
 
 The camera is never put under min_eye_m (6 m) above the ground: MapLibre clips the ground nearer than its near plane, so a 3 m street-level
 eye showed the page background (Day 15 issue 12). A finding names each keyframe raised.
@@ -84,7 +93,7 @@ def load(src, *, duration: float | None = None) -> dict:
     if not isinstance(d, dict):
         raise TimelineError("a timeline is a mapping (story, counters, keyframes, features, end_hold, poster)")
     known = {"duration", "story", "counters", "keyframes", "features", "end_hold", "poster", "poster_hold", "poster_dissolve", "logo", "fade_s",
-             "min_eye_m", "date", "grow", "chart"}
+             "min_eye_m", "date", "grow", "chart", "clock", "reveal"}
     extra = sorted(set(d) - known)
     if extra:
         raise TimelineError(f"unknown timeline key(s): {', '.join(extra)}; the keys are {', '.join(sorted(known))}")
@@ -96,11 +105,14 @@ def load(src, *, duration: float | None = None) -> dict:
            "date": d.get("date", "auto")}               # 1.19.0 (Day 16 issue 14): the date in the credits band: auto, off or a text
     if out["poster"] not in ("first", "last", "none"):
         raise TimelineError(f"poster is first, last or none, not '{out['poster']}'")
-    out["story"] = _story(d.get("story") or [], dur)
-    out["counters"] = [_counter(c, i) for i, c in enumerate(d.get("counters") or [])]
+    out["clock"] = _clock(d.get("clock")) if d.get("clock") else None
+    out["story"] = _story(d.get("story") or [], dur, out["clock"])
+    out["counters"] = [_counter(c, i, out["clock"]) for i, c in enumerate(d.get("counters") or [])]
+    out["reveal"] = _reveal(d["reveal"]) if d.get("reveal") else None
     out["keyframes"] = _keyframes(d.get("keyframes") or [], out)
-    out["features"] = _features(d.get("features")) if d.get("features") else None
+    out["features"] = _features(d.get("features"), out["clock"]) if d.get("features") else None
     out["grow"] = _grow(d["grow"]) if d.get("grow") else None
+    out["findings"] += caption_repeats(out)
     import heat_anim                                  # 2.1.0 (Day 19 video issue 15): bars and a line, the current row marked
     try:
         out["chart"] = heat_anim.load_chart(d.get("chart"))
@@ -134,12 +146,118 @@ def grow_at(tl: dict, t: float, moments: int) -> dict | None:
     return {"layer": g["layer"], "i": i, "j": j, "f": round(x - i, 4), "k": g["per_unit_m"]}
 
 
-def _story(items, dur) -> list[dict]:
+def caption_repeats(tl: dict) -> list[dict]:
+    """3.4.0 (eval INFO-3): MAP-STORY-026 (WARN) when a story line states the number or date a counter shows on screen at that moment:
+    two text blocks then say one thing; the caption should say what the counter cannot (where, who, why)."""
+    out = []
+    for r in tl.get("story") or []:
+        t = r["start"] + min(0.5, max(0.0, (r["end"] - r["start"]) / 2)) if math.isfinite(r["end"]) else r["start"] + 0.5
+        for text, _pos in counters_at(tl, t):
+            for tok in re.findall(r"\d[\d,.]*\d|\d{3,}", text) + ([text] if re.search(r"[A-Za-z]{3,}", text) and re.search(r"\d", text) else []):
+                core = tok.strip()
+                if len(re.sub(r"\D", "", core)) >= 3 and core in r["line"]:
+                    out.append({"id": "MAP-STORY-026", "severity": "WARN", "message": f"the story line at {r['start']:g} s ('{r['line'][:60]}') repeats "
+                                f"'{core}', which the counter shows at that moment; let the caption say what the counter cannot (where, who, why)",
+                                "detail": {"line": r["line"], "counter": text}})
+                    break
+    return out
+
+
+# ------------------------------------------------------------------------------------------------------------------- 3.4.0: the clock
+def real_seconds(v) -> float:
+    """A real time as seconds since 1970 (UTC): an ISO date or date-time, a datetime, or a number (already seconds, or a year)."""
+    import datetime as dt
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v)
+    if isinstance(v, dt.datetime):
+        return (v if v.tzinfo else v.replace(tzinfo=dt.timezone.utc)).timestamp()
+    if isinstance(v, dt.date):
+        return dt.datetime(v.year, v.month, v.day, tzinfo=dt.timezone.utc).timestamp()
+    t = str(v).strip().replace("Z", "+00:00")
+    try:
+        x = dt.datetime.fromisoformat(t)
+    except ValueError:
+        raise TimelineError(f"'{v}' is not a date or time (2023-02-08, 2023-02-08T12:00Z)") from None
+    return (x if x.tzinfo else x.replace(tzinfo=dt.timezone.utc)).timestamp()
+
+
+def _clock(items) -> list[tuple[float, float]]:
+    if not isinstance(items, list) or len(items) < 2:
+        raise TimelineError("clock is a list of at least two [real time, video seconds] pairs")
+    pts = []
+    for i, p in enumerate(items):
+        if not isinstance(p, (list, tuple)) or len(p) != 2:
+            raise TimelineError(f"clock entry {i + 1} is [real time, video seconds]")
+        pts.append((real_seconds(p[0]), float(p[1])))
+    pts.sort()
+    for (r0, v0), (r1, v1) in zip(pts, pts[1:]):
+        if r1 <= r0 or v1 < v0:
+            raise TimelineError("the clock's real times and video seconds both rise (a clock never runs backwards)")
+    return pts
+
+
+def _interp(x: float, xs: list[float], ys: list[float]) -> float:
+    if x <= xs[0]:
+        k = (ys[1] - ys[0]) / (xs[1] - xs[0]) if xs[1] != xs[0] else 0.0
+        return ys[0] + (x - xs[0]) * k
+    for a, b, c, d in zip(xs, xs[1:], ys, ys[1:]):
+        if a <= x <= b:
+            return c + (d - c) * ((x - a) / (b - a) if b > a else 0.0)
+    k = (ys[-1] - ys[-2]) / (xs[-1] - xs[-2]) if xs[-1] != xs[-2] else 0.0
+    return ys[-1] + (x - xs[-1]) * k
+
+
+def to_video(clock, real) -> float:
+    """Video seconds for a real time, through the clock (straight on past its ends)."""
+    if not clock:
+        raise TimelineError("a real time needs a clock: [[real time, video seconds], ...] in the timeline")
+    return _interp(real_seconds(real), [p[0] for p in clock], [p[1] for p in clock])
+
+
+def to_real(clock, t: float) -> float:
+    """Real time (seconds since 1970, UTC) at video second t."""
+    vs = [p[1] for p in clock]
+    if len(set(vs)) < len(vs):                       # a pause in video time: the later real time of a held moment
+        pass
+    return _interp(float(t), vs, [p[0] for p in clock])
+
+
+def _vt(v, clock) -> float:
+    """A time in a timeline: video seconds as given, or a real time read through the clock."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v)
+    return to_video(clock, v)
+
+
+def strftime_portable(ts: float, pattern: str) -> str:
+    """strftime with %-d / %-m / %-H (no leading zero) on every platform (Windows has no %-d)."""
+    import datetime as dt
+    x = dt.datetime.fromtimestamp(ts, dt.timezone.utc)
+    for code, val in (("%-d", str(x.day)), ("%-m", str(x.month)), ("%-H", str(x.hour)), ("%-I", str((x.hour % 12) or 12))):
+        pattern = pattern.replace(code, val)
+    return x.strftime(pattern)
+
+
+def _reveal(r) -> dict:
+    if not isinstance(r, dict) or not r.get("layer") or not r.get("time_field"):
+        raise TimelineError("reveal needs layer (a polygon or point layer of the map) and time_field (when each feature appears)")
+    return {"layer": str(r["layer"]), "time_field": str(r["time_field"]), "end_field": r.get("end_field"), "class_field": r.get("class_field"),
+            "colours": dict(r.get("colours") or {}), "flash_s": max(0.0, float(r.get("flash_s", 0.6))), "flash_colour": r.get("flash_colour"),
+            "flash_label": str(r.get("flash_label") or "Just added"), "glow": r.get("glow", True) is not False,
+            "supersample": int(min(4, max(1, int(r.get("supersample", 3))))), "opacity": float(r.get("opacity", 1.0)),
+            "before": r.get("before")}
+
+
+def _story(items, dur, clock=None) -> list[dict]:
     rows = []
     for i, s in enumerate(items):
+        if isinstance(s, dict) and "at" in s and "start" not in s:
+            s = {**s, "start": _vt(s["at"], clock)}           # 3.4.0: a line placed at a real time, by the clock
+            if s.get("until") is not None:
+                s["end"] = _vt(s["until"], clock)
         if not isinstance(s, dict) or "line" not in s or "start" not in s:
-            raise TimelineError(f"story line {i + 1} needs start (seconds) and line (text)")
-        rows.append({"start": float(s["start"]), "end": None if s.get("end") is None else float(s["end"]), "line": str(s["line"])})
+            raise TimelineError(f"story line {i + 1} needs start (seconds) or at (a real time, with a clock) and line (text)")
+        rows.append({"start": _vt(s["start"], clock), "end": None if s.get("end") is None else _vt(s["end"], clock), "line": str(s["line"])})
     rows.sort(key=lambda r: r["start"])
     for i, r in enumerate(rows):
         if r["end"] is None:
@@ -149,10 +267,23 @@ def _story(items, dur) -> list[dict]:
     return rows
 
 
-def _counter(c, i) -> dict:
+def _counter(c, i, clock=None) -> dict:
+    if isinstance(c, dict) and str(c.get("format") or "") == "date":
+        # 3.4.0 (Antakya #6): the clock's real time as a date, one counter in place of two step counters
+        if not clock:
+            raise TimelineError(f"counter {i + 1}: format: date shows the clock's time; add clock: [[real time, video seconds], ...]")
+        pos = str(c.get("position") or "top-right")
+        if pos not in POSITIONS:
+            raise TimelineError(f"counter {i + 1}: position is one of {', '.join(POSITIONS)}")
+        return {"text": str(c.get("text") or "{v}"), "keys": [(clock[0][1], 0.0), (clock[-1][1], 0.0)], "format": "date",
+                "pattern": str(c.get("pattern") or "%-d %B %Y"), "step": False, "position": pos, "clock": clock,
+                "start": _vt(c.get("start", clock[0][1]), clock), "end": _vt(c["end"], clock) if c.get("end") is not None else math.inf}
+    if isinstance(c, dict) and c.get("source") in ("reveal",) and not c.get("keys"):
+        # 3.4.0: a counter of the reveal's features on the map at each moment (filled in by the video once the layer is read)
+        c = {**c, "keys": [[0.0, 0.0], [1.0, 0.0]]}
     if not isinstance(c, dict) or not c.get("keys"):
         raise TimelineError(f"counter {i + 1} needs keys: [[t, value], ...]")
-    keys = sorted((float(k[0]), float(k[1])) for k in c["keys"])
+    keys = sorted((_vt(k[0], clock), float(k[1])) for k in c["keys"])
     pos = str(c.get("position") or "top-right")
     if pos not in POSITIONS:
         raise TimelineError(f"counter {i + 1}: position is one of {', '.join(POSITIONS)}")
@@ -160,7 +291,8 @@ def _counter(c, i) -> dict:
     if "{v}" not in text:
         raise TimelineError("counter " + str(i + 1) + ": its text needs {v} where the value goes")
     return {"text": text, "keys": keys, "format": str(c.get("format") or ",.0f"), "step": bool(c.get("step")), "position": pos,
-            "start": float(c.get("start", keys[0][0])), "end": float(c["end"]) if c.get("end") is not None else math.inf}
+            "start": _vt(c.get("start", keys[0][0]), clock), "end": _vt(c["end"], clock) if c.get("end") is not None else math.inf,
+            "source": c.get("source"), "class": c.get("class")}
 
 
 def _keyframes(items, out) -> list[dict]:
@@ -208,7 +340,7 @@ def _keyframes(items, out) -> list[dict]:
     return rows
 
 
-def _features(f) -> dict:
+def _features(f, clock=None) -> dict:
     if not isinstance(f, dict) or not f.get("layer"):
         raise TimelineError("features needs layer (a polygon layer of the map) and events")
     evs = []
@@ -220,7 +352,7 @@ def _features(f) -> dict:
             raise TimelineError(f"feature event {i + 1}: action is one of {', '.join(ACTIONS)}")
         if e.get("ids") is None and e.get("where") is None:
             raise TimelineError(f"feature event {i + 1} needs ids or where")
-        evs.append({"t": float(e["t"]), "action": a, "dur": max(0.0, float(e.get("dur", 0.0 if a in ("show", "hide", "recolor") else 1.0))),
+        evs.append({"t": _vt(e["t"], clock), "action": a, "dur": max(0.0, float(e.get("dur", 0.0 if a in ("show", "hide", "recolor") else 1.0))),
                     "ids": None if e.get("ids") is None else [str(x) for x in e["ids"]], "where": e.get("where"),
                     "dx_mm": float(e.get("dx_mm", 0.0)), "dy_mm": float(e.get("dy_mm", 0.0)), "rotate": float(e.get("rotate", 0.0)),
                     "scale": float(e.get("scale", 1.0)), "colour": e.get("colour") or e.get("color"),
@@ -269,7 +401,11 @@ def counters_at(tl: dict, t: float) -> list[tuple[str, str]]:
     out = []
     for c in tl.get("counters") or []:
         if c["start"] <= t < c["end"]:
-            out.append((c["text"].replace("{v}", format(counter_value(c, t), c["format"])), c["position"]))
+            if c["format"] == "date":
+                v = strftime_portable(to_real(c["clock"], t), c["pattern"])
+            else:
+                v = format(counter_value(c, t), c["format"])
+            out.append((c["text"].replace("{v}", v), c["position"]))
     return out
 
 
@@ -433,6 +569,8 @@ def lead_in_s(tl: dict, fps: float) -> float:
 def write_captions(tl: dict, out_dir: Path, stem: str, fps: float) -> list[str]:
     """2.0.0: <stem>.srt and <stem>.vtt beside a video whose timeline has a story line: the captions as text a player can show, a reader
     can search and a platform can translate. Nothing is written for a timeline with no lines."""
+    import gmap_common as gc
+    gc.ledger_start_lazy("timeline.write_captions")    # 3.4.0 (F-3)
     if not [r for r in (tl.get("story") or []) if str(r.get("line") or "").strip()]:
         return []
     import story
@@ -447,6 +585,8 @@ def write_captions(tl: dict, out_dir: Path, stem: str, fps: float) -> list[str]:
 def assemble(frames_dir: Path, n: int, fps: float, tl: dict) -> tuple[Path, int]:
     """The frames in video order (sequence()) in frames_dir/seq, blended where the poster dissolves. -> (folder, frame count). With no
     poster and no end hold the drawn frames are the video and the folder is frames_dir itself."""
+    import gmap_common as gc
+    gc.ledger_start_lazy("timeline.assemble")
     seq = sequence(n, fps, tl)
     if len(seq) == n and all(s == (i, None, 0.0) for i, s in enumerate(seq)):
         return frames_dir, n
@@ -491,9 +631,25 @@ def story_room(d, text, font_path, size, min_size, y, avoid, pad, W, H, lo, hi, 
         return out
 
     yy = y
+    first = True
     for _ in range(8):
         y0, y1 = yy - 8 * k, yy + size * 1.3 + 6 * k
         room = max(gaps(y0, y1), key=lambda g: g[1] - g[0], default=(lo, lo))
+        if first and avoid:
+            # 3.4.0 (Antakya #5): a line too long for the room on its row wraps to two lines there before it moves (lines jumped between two
+            # heights as they changed); the two lines grow upward from the row, over the same gap
+            first = False
+            f1 = ImageFont.truetype(font_path, max(min_size, size))
+            fits_one = d.textlength(text, font=ImageFont.truetype(font_path, min_size)) + 28 * k <= room[1] - room[0]
+            two = None if fits_one or d.textlength(text, font=f1) + 28 * k <= room[1] - room[0] else \
+                wrap_two(d, text, font_path, size, min_size, room[1] - room[0] - 28 * k)
+            if two:
+                s2, f2, lines, tw2 = two
+                y2 = yy - s2 * 1.3                           # the second line sits on the row; the first above it
+                room2 = max(gaps(y2 - 8 * k, yy + s2 * 1.3 + 6 * k), key=lambda g: g[1] - g[0], default=(lo, lo))
+                if room2[1] - room2[0] >= tw2 + 28 * k:
+                    mid = (room2[0] + room2[1]) / 2
+                    return max(room2[0] + 14 * k, mid - tw2 / 2), y2, s2, f2, tw2, lines
         s = size
         f = ImageFont.truetype(font_path, s)
         while d.textlength(text, font=f) + 28 * k > room[1] - room[0] and s > min_size:
@@ -504,14 +660,38 @@ def story_room(d, text, font_path, size, min_size, y, avoid, pad, W, H, lo, hi, 
             mid = (room[0] + room[1]) / 2
             if room == (lo, hi):
                 mid = W / 2                                   # nothing in the way: centred on the frame, as before
-            return max(room[0] + 14 * k, mid - tw / 2), yy, s, f, tw
+            return max(room[0] + 14 * k, mid - tw / 2), yy, s, f, tw, [text]
         above = [a[1] for a in avoid if a[1] < y1 and a[3] > y0]
         yy = min(above) - 6 * k - size * 1.3 - 8 * k if above else yy
         if yy < pad:
             break
     f = ImageFont.truetype(font_path, size)
     tw = d.textlength(text, font=f)
-    return (W - tw) / 2, y, size, f, tw
+    if tw + 28 * k > W - 2 * pad:                      # 3.4.0: a line wider than the frame wraps rather than running off its edges
+        two = wrap_two(d, text, font_path, size, min_size, W - 2 * pad - 28 * k)
+        if two:
+            s2, f2, lines, tw2 = two
+            return (W - tw2) / 2, y - s2 * 1.3, s2, f2, tw2, lines
+    return (W - tw) / 2, y, size, f, tw, [text]
+
+
+def wrap_two(d, text, font_path, size, min_size, width):
+    """The line split at the space nearest its middle, at the largest size (down to min_size) where both halves fit `width`, or None."""
+    from PIL import ImageFont
+    words = text.split()
+    if len(words) < 3 or width <= 0:
+        return None
+    cuts = sorted(range(1, len(words)), key=lambda i: abs(len(" ".join(words[:i])) - len(" ".join(words[i:]))))
+    s = size
+    while s >= min_size:
+        f = ImageFont.truetype(font_path, s)
+        for i in cuts[:3]:
+            a, b = " ".join(words[:i]), " ".join(words[i:])
+            tw = max(d.textlength(a, font=f), d.textlength(b, font=f))
+            if tw <= width:
+                return s, f, [a, b], tw
+        s -= 1
+    return None
 
 
 def _clear(box, avoid, down: bool):
@@ -529,7 +709,11 @@ def _clear(box, avoid, down: bool):
     return x0, y0, x1, y1
 
 
-def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, bottom_px: int = 0, top_px: int = 0, avoid=None):
+COUNTER_FOLLOW = 0.7          # 3.4.0: the second and later counters of a corner, as a share of the first's size
+COUNTER_MAX_SHARE = 0.04      # 3.4.0 (eval HIER-1): a counter's type at most this share of the frame height
+
+
+def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, bottom_px: int = 0, top_px: int = 0, avoid=None, frame_px=None):
     """Draw the timeline's screen elements on a frame at t: the story line (centred, above the credits band of bottom_px), the counters in
     their corners, and the brand logo bottom left above the band. `avoid`: rectangles in pixels (the map's legend, title, inset, logo) a
     counter steps clear of. -> (image, placed: {story, counters, logo})."""
@@ -552,7 +736,7 @@ def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, b
         logo_w = lg.width + pad
         placed["logo"] = True
     s = story_at(tl, t)
-    cf = ImageFont.truetype(font_path, max(12, int(26 * k)))
+    cf = ImageFont.truetype(font_path, max(12, min(int(26 * k), int(H * COUNTER_MAX_SHARE))))
     if s:
         text, a = s
         size = max(11, int(22 * k))
@@ -567,23 +751,43 @@ def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, b
         x, y = (W - tw) / 2, H - bottom_px - pad - size * 1.6
         # 2.1.0 (Day 19 video issue 16): the line keeps clear of the map's overlays (the locator inset bottom right, the legend) as the
         # counters do: it is centred in the room left between them on its row, made smaller to fit, or moved up past them
-        x, y, size, f, tw = story_room(d, text, font_path, size, max(9, int(14 * k)), y, avoid, pad, W, H, pad + logo_w, W - pad - right, k)
-        bx = [x - 14 * k, y - 8 * k, x + tw + 14 * k, y + size * 1.3 + 6 * k]
+        x, y, size, f, tw, lines = story_room(d, text, font_path, size, max(9, int(14 * k)), y, avoid, pad, W, H, pad + logo_w, W - pad - right, k)
+        lh = size * 1.3
+        bx = [x - 14 * k, y - 8 * k, x + tw + 14 * k, y + lh * len(lines) + 6 * k]
         placed["story_box"] = [round(v, 1) for v in bx]
+        placed["story_lines"] = len(lines)
         d.rounded_rectangle(bx, radius=int(6 * k), fill=_rgb(bgc, int(215 * a)))
-        d.text((x, y), text, font=f, fill=ink[:3] + (int(255 * a),))
+        for li, ln in enumerate(lines):
+            lx = x + (tw - d.textlength(ln, font=f)) / 2 if len(lines) > 1 else x
+            d.text((lx, y + li * lh), ln, font=f, fill=ink[:3] + (int(255 * a),))
         placed["story"] = True
-    slots = {"top-left": 0, "top-right": 0, "bottom-right": 0, "bottom-left": 0}
+    # 3.4.0 (Antakya #4): the counters of one corner are one column, cleared past the overlays as one block and then stacked, so three
+    # top-right counters no longer land on one line under the legend; the first leads, the rest are set at COUNTER_FOLLOW of its size
+    # (eval STYLE-4), and the column's edge is the map frame's when it is given (eval LAYOUT-4)
+    sub = ImageFont.truetype(font_path, max(10, int(cf.size * COUNTER_FOLLOW)))
+    cols: dict[str, list[str]] = {}
     for text, pos in counters_at(tl, t):
-        tw = d.textlength(text, font=cf)
-        row = slots[pos]
-        slots[pos] += 1
-        x = pad if pos.endswith("left") else W - pad - tw
-        y = (top_px + pad + row * cf.size * 1.5) if pos.startswith("top") else (H - bottom_px - pad - (row + 1) * cf.size * 1.5
-                                                                             - (int(44 * k) + pad if pos == "bottom-left" and placed["logo"] else 0))
-        x, y, _x1, _y1 = _clear((x, y, x + tw, y + cf.size * 1.25), avoid, pos.startswith("top"))
-        d.text((x, y), text, font=cf, fill=ink, stroke_width=max(2, int(cf.size * 0.12)), stroke_fill=_rgb(bgc))
-        placed["counters"] += 1
+        cols.setdefault(pos, []).append(text)
+    right_edge = (frame_px[2] if frame_px else W) - pad
+    left_edge = (frame_px[0] if frame_px else 0) + pad
+    for pos, texts in cols.items():
+        fonts_ = [cf] + [sub] * (len(texts) - 1)
+        widths = [d.textlength(tx, font=fo) for tx, fo in zip(texts, fonts_)]
+        heights = [fo.size * 1.45 for fo in fonts_]
+        bw, bh = max(widths), sum(heights)
+        x0 = left_edge if pos.endswith("left") else right_edge - bw
+        if pos.startswith("top"):
+            y0 = top_px + pad
+        else:
+            y0 = H - bottom_px - pad - bh - (int(44 * k) + pad if pos == "bottom-left" and placed["logo"] else 0)
+        x0, y0, _x1, _y1 = _clear((x0, y0, x0 + bw, y0 + bh), avoid, pos.startswith("top"))
+        y = y0
+        for tx, fo, w_, h_ in zip(texts, fonts_, widths, heights):
+            x = x0 if pos.endswith("left") else x0 + bw - w_
+            d.text((x, y), tx, font=fo, fill=ink, stroke_width=max(2, int(fo.size * 0.12)), stroke_fill=_rgb(bgc))
+            y += h_
+            placed["counters"] += 1
+        placed.setdefault("counter_boxes", {})[pos] = [round(x0, 1), round(y0, 1), round(x0 + bw, 1), round(y0 + bh, 1)]
     return Image.alpha_composite(im, over).convert("RGB"), placed
 
 

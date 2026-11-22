@@ -31,6 +31,7 @@ import html as _html
 import io
 import json
 import math
+import os
 import re
 import shutil
 import statistics
@@ -229,12 +230,14 @@ def discover(paths: list[str | Path], specs: dict | None = None) -> tuple[list[d
 
 def sidecar_spec(p: Path) -> dict | None:
     """2.4.0 (map-trace MT-05): the `spec` block of the provenance sidecar beside a finished file ({path, sha256, id, message}), or None."""
-    side = Path(p).with_name(Path(p).stem + ".provenance.json")
-    try:
-        s = json.loads(side.read_text(encoding="utf-8")).get("spec")
-    except (OSError, ValueError, AttributeError):
-        return None
-    return s if isinstance(s, dict) else None
+    p = Path(p)
+    for side in (p.with_name(p.name + ".provenance.json"), p.with_name(p.stem + ".provenance.json")):   # 3.4.0 (F-6): x.mp4.provenance.json too
+        try:
+            s = json.loads(side.read_text(encoding="utf-8")).get("spec")
+        except (OSError, ValueError, AttributeError):
+            continue
+        return s if isinstance(s, dict) else None
+    return None
 
 
 def _spec_beside(p: Path) -> str | None:
@@ -245,6 +248,17 @@ def _spec_beside(p: Path) -> str | None:
         q = (Path(p).parent / s["path"])
         if q.is_file():
             return str(q.resolve())
+    if s:                                   # 3.4.0 (F-6): the files were moved or copied since the build; find the spec by its hash
+        cands = [Path(s["abs_path"])] if s.get("abs_path") else []
+        name = s.get("name") or Path(str(s.get("path") or "")).name
+        if name:
+            cands += [up / name for up in [Path(p).parent, *list(Path(p).parents)[:3]]]
+        for q in cands:
+            try:
+                if q.is_file() and (not s.get("sha256") or _sha(q) == s["sha256"]):
+                    return str(q.resolve())
+            except OSError:
+                continue
     for name in ("mapspec.yaml", "MapSpec.yaml", f"{p.stem}.mapspec.yaml"):
         q = p.parent / name
         if q.is_file():
@@ -1712,6 +1726,68 @@ def attach_to_trace(trace_json: Path, cards: list[dict], backlog: list[dict], ru
     return {"html": html_line, "pdf": pdf_line}
 
 
+# ---------------------------------------------------------------------------------------------------------------- 3.4.0 (F-5): scorecards read back
+def _card_roots(outputs: list[dict], extra: list[str] | None = None) -> list[Path]:
+    roots = [evaluations_root()]
+    for o in outputs:
+        for f in o.get("files") or [o.get("path")]:
+            if not f:
+                continue
+            for up in list(Path(f).parents)[:4]:
+                roots.append(up / gc.WORKDIR_NAME / EVAL_DIRNAME)
+    roots += [Path(x) / gc.WORKDIR_NAME / EVAL_DIRNAME for x in extra or []]
+    seen, keep = set(), []
+    for r in roots:
+        k = str(r)
+        if k not in seen and r.is_dir():
+            seen.add(k)
+            keep.append(r)
+    return keep
+
+
+def recorded_cards(outputs: list[dict], extra: list[str] | None = None) -> dict[str, dict]:
+    """The newest scorecard already recorded for each output (same file name and SHA-256 as the file now), by the output's id. Nothing is read
+    again and nothing is graded: a trace of a session whose maps were evaluated before fills its Map quality section from these."""
+    want: dict[str, dict[str, str]] = {}
+    for o in outputs:
+        hashes = {}
+        for f in o.get("files") or [o.get("path")]:
+            try:
+                hashes[Path(f).name] = _sha(Path(f))
+            except (OSError, TypeError):
+                pass
+        if hashes:
+            want[o["id"]] = hashes
+    best: dict[str, dict] = {}
+    for root in _card_roots(outputs, extra):
+        for cf in root.glob("*/*.eval.json"):
+            try:
+                card = json.loads(cf.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            got = (card.get("output") or {}).get("sha256") or {}
+            for oid, hashes in want.items():
+                if any(got.get(n) == h for n, h in hashes.items()):
+                    if oid not in best or str(card.get("evaluated_at")) > str(best[oid].get("evaluated_at")):
+                        best[oid] = {**card, "_file": str(cf)}
+    return best
+
+
+def evaluate_mode() -> str:
+    """3.4.0 (F-5): `ask` (default) or `auto`, from GMAP_EVALUATE or `evaluate:` in ~/.geo-mapping/config.yaml (GEO_MAPPING_HOME in tests).
+    `auto` lets the map-trace skill run the cold and graded reads without asking; they stay fresh agents and observe only."""
+    v = os.environ.get("GMAP_EVALUATE")
+    if not v:
+        home = os.environ.get("GEO_MAPPING_HOME")
+        cp = (Path(home) if home else Path.home() / gc.WORKDIR_NAME) / "config.yaml"
+        try:
+            import yaml
+            v = (yaml.safe_load(cp.read_text(encoding="utf-8")) or {}).get("evaluate") if cp.is_file() else None
+        except Exception:  # noqa: BLE001
+            v = None
+    return "auto" if str(v or "").strip().lower() == "auto" else "ask"
+
+
 # ---------------------------------------------------------------------------------------------------------------- history, trend, anchors, review
 def history(path: Path | None = None) -> list[dict]:
     p = path or evaluations_root() / "history.jsonl"
@@ -1950,6 +2026,10 @@ def main(argv=None) -> int:
                     print("map_evaluate: save needs --read ID and the file with the agent's JSON", file=sys.stderr)
                     return gc.EXIT_USAGE
                 print(f"MAP_EVAL_SAVED: {save_read(run, a.read, Path(a.file))}")
+                if a.read.endswith(":cold"):                 # 3.4.0 (Day 20 #27): the graded prompts are written as soon as the cold read is in
+                    for q in status(run)["pending"]:
+                        if q["output"] == a.read.partition(":")[0]:
+                            print(f"MAP_EVAL_PENDING: {q['read']} prompt={q['prompt']} answer={q['answer']}")
                 return gc.EXIT_OK
             r = record(run, Path(a.trace) if a.trace else None)
             print(json.dumps({k: v for k, v in r.items() if k != "findings"}, indent=1, default=str))

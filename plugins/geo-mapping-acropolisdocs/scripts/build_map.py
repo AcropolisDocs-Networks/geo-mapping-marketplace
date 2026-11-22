@@ -147,6 +147,7 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     """`export_options` (M16): transparent, bleed_mm, crop_marks, pdfa, inkscape, outline_text over the MapSpec's `export:` block
     (map_export.options_from); each variant is read back (MAP-OUT-014 to 018). 1.3.0 (R1-PANEL): a file with a top-level `sheet_version` is a
     SheetSpec, built by sheet.build (two to six panels with one shared frame)."""
+    gc.ledger_start_lazy("build_map.build")
     import sheet as sheet_mod
     if sheet_mod.is_sheet(spec_path):
         try:
@@ -217,7 +218,9 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
         raise mp.PlanError(str(ex), gc.EXIT_USAGE)
     formats = static + (["svg"] if (opts["inkscape"] or opts["outline_text"]) and "svg" not in static else [])
     result = {"id": plan.spec["id"], "brand": plan.brand, "template": plan.tpl_name, "crs": plan.crs, "findings": [],
-              "blocked": False, "files": [], "report": rendered.report, "stem": rendered.filename_stem, "notes": plan.notes, "dpi": dpi}
+              "blocked": False, "files": [], "report": rendered.report, "stem": rendered.filename_stem, "notes": plan.notes, "dpi": dpi,
+              "map_window_lonlat": (rendered.report.get("map_window") or {}).get("lonlat"),        # 3.4.0: the window drawn, W, S, E, N
+              "map_window_area_km2": (rendered.report.get("map_window") or {}).get("area_km2")}
     try:                                              # 1.16.0 (Day 14 issue 12): say when a newer plugin release is out (today's answer only)
         import release_check as rc
         rn = rc.check(cache_only=True)["note"]

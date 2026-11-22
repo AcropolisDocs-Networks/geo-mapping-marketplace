@@ -61,7 +61,8 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-pdf-publisher        # any modu
 
 - Never claim a file was written without the build result listing it. Exit 3 means a check blocked: report which one, fix the cause, rebuild.
 - With `--strict` a blocked build leaves no files; without it the files stay and the BLOCK is reported next to them.
-- The person gets the files by `SendUserFile`; name them in plain words (the PDF, the PNG), not by path.
+- The person gets the files by `SendUserFile`; name them in plain words (the PDF, the PNG), not by path. A file over 25 MB goes back to
+  their computer by its file id once sent, never by its staged path (that copy is refused over 25 MB) (3.4.0, Day 20 #28).
 - If `pdftoppm` is missing the PNG falls back to headless Chromium; if neither exists, `/geo-mapping-acropolisdocs:map-doctor` names the fix.
 
 ## The terms register (1.3.0)

@@ -504,6 +504,25 @@ def ofcom_postcodes(postcodes: str = "", work_folder: str = "") -> dict:
 
 @mcp.tool()
 @st.masked
+def osm_fetch(tags: str = "", bbox: str = "", query: str = "", out: str = "", confirm: bool = False, work_folder: str = "") -> dict:
+    """OpenStreetMap features by tag through the public Overpass API (3.4.0, no key, ODbL). tags: filter sets separated by ';' (k=v, k=*,
+    k!=v, k~regex; a comma joins filters that must all hold), e.g. "amenity=drinking_water;highway=*,foot!=no"; bbox W,S,E,N (a city, not a
+    region), or query: an Overpass QL query of your own. Without confirm: the query and the hosts it goes to. With confirm=true: one POST at
+    a time, busy answers (429, 502, 503, 504) tried again after 2, 6, 18 s, then the next mirror; written as a GeoPackage (layers points,
+    lines, polygons) in WORK_FOLDER/data/osm/ with the OSM base time in its record. The map's `source: {type: osm, tags: [...]}` reads it."""
+    return st.in_work_folder(work_folder, st.osm_fetch_tool, tags, bbox, query, out, confirm)
+
+@mcp.tool()
+@st.masked
+def osm_history(op: str, filter: str, bbox: str = "", polygon: str = "", time: str = "", out: str = "", work_folder: str = "") -> dict:
+    """OpenStreetMap history through HeiGIT's ohsome API (3.4.0, no key, ODbL). op counts (per period: time START/END/P1D), born (each
+    feature's creation and deletion time and last shape: time START,END), snapshot (as it stood at time T; falls back to the full history of
+    the hour before T when ohsome refuses elements/geometry), users (mappers over polygon, a GeoJSON file or text, or bbox). filter is
+    ohsome's (building=* and geometry:polygon). Boxes over 0.1 square degrees are tiled. Writes CSV (counts, users) or a GeoPackage."""
+    return st.in_work_folder(work_folder, st.osm_history_tool, op, filter, bbox, polygon, time, out)
+
+@mcp.tool()
+@st.masked
 def hist_fetch(op: str = "plan", as_of: str = "", bbox: str = "", admin_level: str = "4", tags: str = "", out: str = "", work_folder: str = "") -> dict:
     """Historical boundaries as of a date from OpenHistoricalMap (public domain unless a feature says otherwise). op plan shows the Overpass query and a
     rough size; op fetch sends one GET (no key) and writes a GeoPackage of the boundaries that exist on as_of (YYYY, YYYY-MM or YYYY-MM-DD) in bbox

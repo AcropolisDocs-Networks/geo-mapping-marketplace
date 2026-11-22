@@ -10,6 +10,7 @@ footer: {x: 8, y: 165, w: 322.67, h: 21}
 footer_fit: true                           # 1.0.0: the footer shrinks to its notes and the map grows into the room (layout.fit_footer)
 footer_fit_classic: false                  # the classic look keeps the fixed footer it had before 1.0.0
 fonts:  {title: 26, subtitle: 14, label: 10, legend_title: 12, legend: 10.5, note: 10, scale: 10, banner: 11}
+medium: {line_scale: 1.5, point_scale: 1.4, fonts: {label: 12, legend: 12, legend_title: 13}}   # 3.4.0: read across a room (not under classic)
 legend_max: {w: 92, h: 118}
 inset_size: {w: 60, h: 40}
 logo_height_mm: 10

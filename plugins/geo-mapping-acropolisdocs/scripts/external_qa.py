@@ -114,6 +114,7 @@ def _first_frame(path: Path):
 
 
 def run(file, spec, *, credits_shown: str | None = None, out_dir=None, brand: str | None = None) -> dict:
+    gc.ledger_start_lazy("external_qa.run")
     import map_brand
     import map_plan as mp
     import output_lint as ol

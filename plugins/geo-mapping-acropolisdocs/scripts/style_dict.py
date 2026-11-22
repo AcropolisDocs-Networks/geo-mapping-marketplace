@@ -87,9 +87,13 @@ def token(value: str, tokens: dict | None):
             return tokens["categorical"][int(key.split(".", 1)[1])]
         if key.startswith("sequential."):
             return tokens["sequential_ramp"][int(key.split(".", 1)[1])]
+        if key.startswith("diverging."):                         # 3.4.0: the same tokens the build takes
+            return tokens["diverging_ramp"][int(key.split(".", 1)[1])]
+        if key.startswith("neutral."):
+            return tokens["neutral_ramp"][int(key.split(".", 1)[1])]
     except (KeyError, IndexError, ValueError):
         pass
-    raise StyleError(f"unknown brand colour '{v}' (try @brand.accent, .land, .water, .no_data, .status.success, .categorical.N, .sequential.N)")
+    raise StyleError(f"unknown brand colour '{v}' (try @brand.accent, .land, .water, .no_data, .status.success, .categorical.N, .sequential.N, .diverging.N, .neutral.N)")
 
 
 def rgba(value, tokens: dict | None = None) -> tuple[int, int, int, int]:

@@ -1,0 +1,109 @@
+id: ref.public-service.world.osm.ohsome
+type: public-service
+rev: 1
+status: active
+title: ohsome API (OpenStreetMap full history, HeiGIT)
+summary: HeiGIT's ohsome API answers questions about OpenStreetMap's history - counts per period, every contribution with its time, the features as they
+  stood on a date, and how many mappers edited an area - for any box or polygon; no key.
+tags:
+  geography:
+  - world
+  level:
+  - site
+  - place
+  domain:
+  - general
+  - transport
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  - legal-boundary
+  scale:
+  - metro
+  - local
+  - site
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - monthly
+  tier:
+  - T2
+  license_class:
+  - share-alike
+  quality:
+  - community
+use_when:
+- How an area was mapped over time (Antakya after the February 2023 earthquake, Day 21): buildings as they entered OpenStreetMap, counts per day, mappers per area.
+- The streets or buildings of a past date, when Overpass's dated (attic) query runs out of memory.
+avoid_when:
+- 'Live data: the history lags OpenStreetMap by days to weeks (the newest time ohsome holds is in its metadata).'
+- 'A whole country of contributions in one request: tile the box (osm_history does it) and keep periods short.'
+pairs_with:
+- ref.public-service.world.osm.overpass
+delivery:
+  mode: service
+  protocol: ohsome
+  tool: osm_history
+  api:
+    host: api.ohsome.org
+    requests:
+    - method: POST
+      path: /v1/elements/count
+      body: form
+      idempotent: true
+      changes: false
+    - method: POST
+      path: /v1/elements/geometry
+      body: form
+      idempotent: true
+      changes: false
+    - method: POST
+      path: /v1/elementsFullHistory/geometry
+      body: form
+      idempotent: true
+      changes: false
+    - method: POST
+      path: /v1/contributions/geometry
+      body: form
+      idempotent: true
+      changes: false
+    - method: POST
+      path: /v1/users/count
+      body: form
+      idempotent: true
+      changes: false
+    limits:
+      sequential: true
+  note: '3.4.0: the map server''s osm_history tool (scripts/osm.py history): counts, born (creation and deletion per feature with its last shape),
+    snapshot and users, boxes over 0.1 square degrees tiled. On 2026-11-21 elements/geometry and elements/centroid answered 403 from both the
+    cloud workspace and the person''s computer while count, contributions and elementsFullHistory worked; snapshot then reads elementsFullHistory
+    over the hour before the date and says so (MAP-OSM-006).'
+source:
+  url: https://api.ohsome.org/v1/metadata
+  publisher: HeiGIT (Heidelberg Institute for Geoinformation Technology)
+  product: ohsome API
+url_verified_on: '2026-11-21'
+vintage:
+  current: OpenStreetMap full history to the date in the API's metadata
+  cadence: weekly to monthly
+license:
+  class: share-alike
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: © OpenStreetMap contributors, ODbL 1.0.
+  note: 'The data is OpenStreetMap''s (ODbL 1.0: attribution, and a derived database keeps the licence, MAP-LIC-004); the API is HeiGIT''s public
+    service, for reasonable use.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-21'
+  verify_by: '2027-02-21'
+  changelog:
+  - rev: 1
+    date: '2026-11-21'
+    note: 'Active: used live for the Day 21 Antakya video from both machines (ohsome 1.10.4): contributions/geometry, elementsFullHistory/geometry,
+      users/count and elements/count answered; elements/geometry and elements/centroid answered 403.'

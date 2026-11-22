@@ -318,9 +318,11 @@ def base_dpi(dpi: float, scale: float) -> int:
     return max(72, int(round(float(dpi) * float(scale))))
 
 
-def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand: str | None, scale: float = 1.0, also: tuple = ()):
+def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand: str | None, scale: float = 1.0, also: tuple = (),
+               reveal: dict | None = None):
     """The map without the event layer (keyed in the legend only), at the size's template and dpi. `also`: more layers keyed in the legend
     only (1.16.0: a timeline's feature layer, drawn by the overlay). -> (RGB image, report, plan, events frame or None, colour, dpi, {id: plan})."""
+    gc.ledger_start_lazy("events_anim.build_base")      # 3.4.0 (F-3): a session's own script that imports this leaves a ledger line
     import animate
     import build_map as bm
     import map_plan as mp
@@ -332,6 +334,17 @@ def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand:
     names = ', '.join(ly.get('id', '?') for ly in spec.get('layers') or [])
     plan = mp.prepare(str(spec_path))
     events_gdf, layer_colour, extra = None, None, {}
+    if reveal:                                            # 3.4.0: the reveal's layer, keyed only, its flash keyed as a row of its own
+        lay = next((ly for ly in spec.get("layers") or [] if ly.get("id") == reveal["layer"]), None)
+        lp = next((l for l in plan.layers if l.id == reveal["layer"]), None)
+        if lay is None or lp is None or lp.kind not in ("polygon", "point"):
+            raise EventsError(f"the timeline's reveal layer '{reveal['layer']}' must be a polygon or point layer that the map draws; its layers: {names}")
+        extra[reveal["layer"]] = lp
+        lg_ = lay.setdefault("legend", {})
+        lg_["only"] = True
+        if reveal.get("flash_s", 0) > 0:
+            lg_["extra"] = list(lg_.get("extra") or []) + [{"label": reveal.get("flash_label") or "Just added",
+                                                           "fill": reveal.get("flash_colour") or "@brand.label"}]
     for lid in ([layer] if layer else []) + list(also):
         lay = next((ly for ly in spec.get("layers") or [] if ly.get("id") == lid), None)
         if lay is None:
@@ -411,11 +424,12 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
     if timeline is not None and tl["duration"]:
         duration = tl["duration"]
     feats = tl["features"]
-    if not layer and not (feats or tl["story"] or tl["counters"]):
-        raise EventsError("give --layer (a point layer of events), or a --timeline with story, counters or features")
+    rv_cfg = tl.get("reveal")
+    if not layer and not (feats or rv_cfg or tl["story"] or tl["counters"]):
+        raise EventsError("give --layer (a point layer of events), or a --timeline with story, counters, features or reveal")
     work = Path(tempfile.mkdtemp(prefix="gm-events-"))
     base, report, plan, gdf, layer_colour, dpi, extra = build_base(spec_path, layer, size, work, brand, scale,
-                                                                   also=(feats["layer"],) if feats else ())
+                                                                   also=(feats["layer"],) if feats else (), reveal=rv_cfg)
     n = int(frames or max(2, round(duration * fps)))
     intro_f = min(n - 2, round(intro * fps))
     win = report["map_window"]
@@ -463,6 +477,19 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
     fdir = out / f"{stem}_frames"
     fdir.mkdir(parents=True, exist_ok=True)
     pieces = Pieces(extra[feats["layer"]], feats, win, ppm, base.size, plan.tokens, font_path=str(fl._inter_ttf(600))) if feats else None
+    rv = None
+    if rv_cfg:                                        # 3.4.0 (Antakya #3): the layer appears feature by feature, from an id raster
+        import reveal as rvm
+        try:
+            rv = rvm.Reveal(extra[rv_cfg["layer"]].gdf, rv_cfg, tl.get("clock"), lambda x_, y_: to_px(x_, y_, win, ppm), base.size, plan.tokens,
+                            lambda ref: _token(plan.tokens, ref))
+        except (rvm.RevealError, tlm.TimelineError) as ex:
+            raise EventsError(str(ex)) from None
+        for c in tl.get("counters") or []:            # `source: reveal` counters count the features on the map (or one class's) at each moment
+            if c.get("source") == "reveal":
+                ts = [i_ / fps for i_ in range(0, n, max(1, round(fps / 5)))] + [(n - 1) / fps]
+                c["keys"] = [(t_, float(rv.counts(t_).get(c.get("class") or "alive", 0))) for t_ in ts]
+                c["start"] = min(c["start"], 0.0)
     findings = list(tl["findings"])
     bottom_px = max(0, base.size[1] - round(win["rect_mm"][3] * ppm)) + round(base.size[1] * 0.02)
     font_tl = str(fl._inter_ttf(600))
@@ -481,6 +508,8 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
     for k in range(n):
         tk = k / fps
         b = pieces.draw(base, tk) if pieces else base
+        if rv is not None:
+            b = rv.draw(b, tk)
         fields = None
         if heat:
             b, shown, fields = _heat_frame(ha, heat, b, k, fps, events)
@@ -492,7 +521,7 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
             im, chart_rect = ha.paint_chart(im, tk, chart, t, font_path=font_tl, avoid=avoid, ramp=heat["field"].ramp if heat else None)
         if tl["story"] or tl["counters"]:
             im, _pl = tlm.paint(im, tk, tl, t, font_path=font_tl, logo=None, bottom_px=bottom_px, top_px=round(win["rect_mm"][1] * ppm),
-                                avoid=avoid + ([chart_rect] if chart_rect else []))
+                                avoid=avoid + ([chart_rect] if chart_rect else []), frame_px=[v * ppm for v in win["rect_mm"]])
         im.save(fdir / f"frame_{k:05d}.png")
     if pieces:
         findings += pieces.end_findings((n - 1) / fps)
@@ -502,6 +531,7 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
     rep = {"ok": True, "frames": n, "fps": fps, "size": list(base.size), "events": len(events), "highlighted": sum(e["hl"] for e in events),
            "intro_s": intro_f / fps, "time_field": tf, "files": [], "findings": findings, "frames_dir": str(fdir),
            "pieces": len(pieces.ids) if pieces else 0, "trail": trail,
+           "reveal": ({"layer": rv_cfg["layer"], "features": rv.n, "drawn": rv.drawn, "end": rv.counts((n - 1) / fps)} if rv is not None else None),
            "heat": {k_: v for k_, v in (heat or {}).items() if k_ in ("scale_peak", "sigma_px", "masked", "bandwidth_m", "periods")} or None,
            "chart": chart_rect,
            "notes": [f"{len(events):,} events over {n / fps:.1f} s; the map built once at {size} ({base.size[0]} x {base.size[1]} px)"]}

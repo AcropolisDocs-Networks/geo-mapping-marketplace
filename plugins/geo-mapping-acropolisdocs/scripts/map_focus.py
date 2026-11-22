@@ -71,6 +71,17 @@ def study_area(plan, cfg: dict):
     import shapely
     if cfg["mask"] is False:
         return None
+    reg = getattr(plan, "region", None)
+    if reg is not None and not cfg["area"] and cfg["mask"] in ("auto", True) and _subject_layers(plan, cfg):
+        # 3.4.0 (Day 20 #19, #21): a map of a region is about the region: the mask is cut from it, not from the union of the data layer, so
+        # the relief inside the region stays clear where the cells do not reach, and the region's own towns keep the inside ink
+        try:
+            import geopandas as gpd
+            g = gpd.GeoSeries([reg.geometry], crs="EPSG:4326").to_crs(plan.crs).iloc[0]
+            if g is not None and not g.is_empty:
+                return g
+        except Exception:  # noqa: BLE001 - the data layers stand in
+            pass
     ls = _subject_layers(plan, cfg)
     geoms = []
     for l in ls:

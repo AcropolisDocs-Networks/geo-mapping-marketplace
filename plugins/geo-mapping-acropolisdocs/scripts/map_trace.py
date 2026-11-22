@@ -80,7 +80,7 @@ READING = {"input": "a gate or the input stopped the run (the spec, the data or 
            "unclassified": "the output does not say why; reproduce before calling it a defect.",
            "host": "the plugin's folder moved during the session (an update put a new copy beside the old one, ~g2): a command or script that "
                    "named the old folder found nothing. Find the folder in each command (the skills' root finder takes the newest copy); "
-                   "never write it into a script. Not a plugin defect."}
+                   "a script of the session's own reads it from ~/.geo-mapping/plugin-root.txt (3.4.0), never a pasted path. Not a plugin defect."}
 # 2.1.0 (Day 19 trace): reading the plugin's own instructions is not raising a finding; a call of these names no finding
 READING_SCRIPTS = {"modules", "map_guide"}
 # 2.1.0: programs a shell command runs beside the plugin's script; its time is then the whole command's, not the script's
@@ -361,7 +361,71 @@ def _target(cmd: str) -> str:
     return hashlib.sha1(" ".join(sorted(set(Path(f).name for f in files))).encode()).hexdigest()[:10] if files else "-"
 
 
-def classify(call: dict, inv: dict, pname: str, window: str | None) -> dict:
+# 3.4.0 (F-3): a Python file the session wrote that imports the plugin's modules is map work (the Antakya render.py: events_anim, timeline,
+# flythrough, map_brand, output_lint). Read at trace time from the disk, or from the Write that made it when the file is gone.
+PY_FILE_RUN = re.compile(r"""(?:^|[\s;&|(])(?:&\s*)?(?:"[^"]*python[^"]*"|[^\s"';&|()]*python3?(?:\.\d+)?(?:\.exe)?|py(?:\.exe)?)(?:\s+-[A-Za-z]+)*\s+["']?([^\s"';&|]+\.py)\b""", re.I)
+HEREDOC_PY = re.compile(r"""\bcat\s+>\s*["']?([^\s"'<>]+\.py)["']?\s*<<-?\s*["']?(\w+)["']?\n(.*?)\n\2\b""", re.S)
+PLUGIN_PATH_HINT = re.compile(r"""scripts|GMAP_ROOT|geo-mapping|lints""")
+
+
+def _note_written(call: dict, written: dict[str, str]) -> None:
+    """Python files the session wrote (Write, Edit, a heredoc), by absolute path and by name -> their text as written ('' for an Edit)."""
+    tool, inp = call["tool"], call["input"] or {}
+    if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        fp = str(inp.get("file_path") or inp.get("notebook_path") or "")
+        if fp.endswith(".py"):
+            written[fp.replace("\\", "/")] = str(inp.get("content") or written.get(fp.replace("\\", "/"), ""))
+            written.setdefault("name:" + Path(fp.replace("\\", "/")).name, fp.replace("\\", "/"))
+        return
+    cmd = _command(call)
+    for m in HEREDOC_PY.finditer(cmd):
+        base = shell_calls.effective_dir(cmd, call.get("cwd"), m.start())
+        fp = m.group(1) if m.group(1).startswith("/") or not base else f"{base}/{m.group(1)}"
+        written[fp] = m.group(3)
+        written.setdefault("name:" + Path(fp).name, fp)
+
+
+def _file_imports(cmd: str, call: dict, written: dict[str, str], inv: dict) -> list[str]:
+    mods: list[str] = []
+    for m in PY_FILE_RUN.finditer(cmd):
+        raw = m.group(1)
+        if Path(raw).name in {f"{x}.py" for x in inv["scripts"]}:
+            continue
+        base = shell_calls.effective_dir(cmd, call.get("cwd"), m.start())
+        fp = raw if raw.startswith("/") or re.match(r"[A-Za-z]:/", raw) or not base else f"{base}/{raw}"
+        key = fp if fp in written else written.get("name:" + Path(raw).name)
+        if not key:
+            continue
+        text = ""
+        try:
+            text = Path(key).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = written.get(key) or ""
+        if not PLUGIN_PATH_HINT.search(text):
+            continue
+        mods += [x for x in IMPORT.findall(text) if x in inv["scripts"] and x not in ("gmap_common",)]
+    return list(dict.fromkeys(mods))
+
+
+def call_folders(calls: list[dict]) -> list[str]:
+    """3.4.0 (F-2): every folder a shell call changed to, and the parent of every --out folder it named: where a script's own ledger is."""
+    out: list[str] = []
+    for c in calls:
+        cmd = _command(c)
+        if not cmd:
+            continue
+        fs = shell_calls.folders_named(cmd, c.get("cwd"))
+        out += fs
+        om = OUT_ARG.search(cmd)
+        if om:
+            base = shell_calls.effective_dir(cmd, c.get("cwd"), om.start()) or c.get("cwd")
+            if base:
+                o = _resolve(next(g for g in om.groups() if g), Path(base))
+                out += [str(o.parent), str(o)]
+    return list(dict.fromkeys(out))
+
+
+def classify(call: dict, inv: dict, pname: str, window: str | None, written: dict | None = None) -> dict:
     """Map lane, basis, scripts, op, options and the keys rework detection uses, or lane None for a call that is not the map plugin's."""
     tool, inp = call["tool"], call["input"]
     ev = {"lane": None, "basis": None, "scripts": [], "op": None, "options": [], "mcp_tool": None, "write": None, "key": None, "target": None}
@@ -387,6 +451,9 @@ def classify(call: dict, inv: dict, pname: str, window: str | None) -> dict:
     if SHELL_WRITE.search(cmd):
         ev["write"] = "inferred"
     found, how = map_scripts(cmd, inv)
+    if not found and written:
+        found = _file_imports(cmd, call, written, inv)
+        how = "import-file" if found else None
     if not found:
         return ev
     main = next((s for s in reversed(found) if s not in PREAMBLE_SCRIPTS), None) or next((s for s in found if s not in ("gmap_common", "redact")), found[0])
@@ -668,15 +735,17 @@ LEDGER_SLACK_S = 5.0
 DEGRADED_TEXT = re.compile(r"\brelief missing\b|\"degraded\":\s*\[\s*\"", re.I)
 
 
-def ledger_dirs(records: list[dict]) -> list[Path]:
-    """Where the plugin's run ledger (gmap_common.ledger_note, X-02) may be: this process's own, and .geo-mapping/traces/runs under every
-    folder the session's calls ran from."""
+def ledger_dirs(records: list[dict], extra: list[str] | None = None) -> list[Path]:
+    """Where the plugin's run ledger (gmap_common.ledger_note, X-02) may be: this process's own, the person's one session ledger (3.4.0,
+    F-2), and .geo-mapping/traces/runs under every folder the session's calls ran from, every folder a command changed to with `cd` and every
+    `--out` folder's parent (`extra`)."""
     out: list[Path] = []
-    try:
-        out.append(gc.ledger_dir())
-    except Exception:  # noqa: BLE001
-        pass
-    for c in dict.fromkeys(str(d.get("cwd")) for d in records if d.get("cwd")):
+    for f in (gc.ledger_dir, gc.session_ledger_dir):
+        try:
+            out.append(f())
+        except Exception:  # noqa: BLE001
+            pass
+    for c in dict.fromkeys([str(d.get("cwd")) for d in records if d.get("cwd")] + list(extra or [])):
         out.append(Path(c) / gc.WORKDIR_NAME / "traces" / "runs")
     seen, keep = set(), []
     for d in out:
@@ -690,9 +759,9 @@ def ledger_dirs(records: list[dict]) -> list[Path]:
     return keep
 
 
-def read_ledger(records: list[dict], lo: dt.datetime | None = None, hi: dt.datetime | None = None) -> tuple[list[dict], list[str]]:
-    rows, files = [], []
-    for d in ledger_dirs(records):
+def read_ledger(records: list[dict], lo: dt.datetime | None = None, hi: dt.datetime | None = None, extra: list[str] | None = None) -> tuple[list[dict], list[str]]:
+    rows, files, seen = [], [], set()
+    for d in ledger_dirs(records, extra):
         for f in sorted(d.glob("*.ndjson")):
             files.append(str(f))
             try:
@@ -707,6 +776,10 @@ def read_ledger(records: list[dict], lo: dt.datetime | None = None, hi: dt.datet
                 st = parse_ts(r.get("start"))
                 if not st or (lo and st < lo - dt.timedelta(minutes=1)) or (hi and st > hi + dt.timedelta(minutes=1)):
                     continue
+                key = (r.get("script"), r.get("start"), r.get("pid"))      # 3.4.0: one line is in the script's ledger and the session's
+                if key in seen:
+                    continue
+                seen.add(key)
                 r["_start"], r["_end"] = st, parse_ts(r.get("end")) or st
                 rows.append(r)
     return rows, files
@@ -836,8 +909,10 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     run = run_shape(records, *((min(times), max(times)) if win and times else (None, None)))
     events, window = [], None
     last_trace = max((i for i, c in enumerate(calls) if "map_trace.py" in _command(c)), default=-1)
+    written: dict[str, str] = {}
     for n, c in enumerate(calls, 1):
-        ev = classify(c, inv, pname, window)
+        _note_written(c, written)
+        ev = classify(c, inv, pname, window, written)
         if ev.get("opens"):
             window = ev["opens"]
         elif ev.get("closes"):
@@ -878,7 +953,7 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     for e, c in zip(events, calls, strict=False):           # 2.4.0 (X-04): a build that exited 0 but dropped what the spec asked for
         if e["status"] == "ok" and e["lane"] and not is_report(e) and DEGRADED_TEXT.search(c["result"] or ""):
             e.update(status="degraded", degraded=degraded_items(c["result"] or ""))
-    led_rows, led_files = read_ledger(records, *((min(times), max(times)) if times else (None, None)))
+    led_rows, led_files = read_ledger(records, *((min(times), max(times)) if times else (None, None)), extra=call_folders(calls))
     led_matched = apply_ledger(events, led_rows)
     mapev = [e for e in events if e["lane"]]
     lo_t, hi_t = (min(times), max(times)) if times else (None, None)
@@ -971,8 +1046,9 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     fix = fix_spec(failed, events) + degraded_spec(mapev, start=len(groups_of(failed)) + 1)
     evals = [e for e in events if e.get("evaluation")]
     outputs, miss = session_outputs(calls, events, records, why=True)
+    recorded = recorded_quality(outputs, calls)
     glue = outside_work(calls, events, inv)
-    return {"outside_plugin": glue, "outputs_missed": miss, "run_ledger": {"files": [Path(f).name for f in led_files], "rows": len(led_rows), "calls_matched": led_matched},
+    return {**({"map_quality": recorded} if recorded else {}), "outside_plugin": glue, "outputs_missed": miss, "run_ledger": {"files": [Path(f).name for f in led_files], "rows": len(led_rows), "calls_matched": led_matched},
             "evaluation_calls": {"calls": len(evals), "seconds": round(sum(e["seconds"] or 0.0 for e in evals), 1)}, "outputs": outputs,"plugin": pname, "version": _version(), "transcript": path.stem, "found_by": how, "files_read": files, "window": win,
             "first": first.isoformat() if first else None, "last": last.isoformat() if last else None,
             "calls": {"total": len(events), "map": len(mapev), "other": len(events) - len(mapev)},
@@ -1055,8 +1131,10 @@ def session_outputs(calls: list[dict], events: list[dict], records: list[dict], 
         if e.get("status") not in ("ok", "degraded") or e.get("evaluation") or not (set(e.get("scripts") or []) & OUTPUT_SCRIPTS):
             continue
         builds += 1
-        base = Path(c.get("cwd")) if c.get("cwd") else default_base
         cmd = _command(c)
+        run_at = next((m.start() for m in shell_calls.RUN.finditer(cmd)), None) if cmd else None
+        eff = shell_calls.effective_dir(cmd, c.get("cwd") or str(default_base), run_at) if cmd else None   # 3.4.0 (F-2): `cd day21 && ...`
+        base = Path(eff) if eff else (Path(c.get("cwd")) if c.get("cwd") else default_base)
         sm = SPEC_ARG.search(cmd)
         spec = None
         specs = list(e.get("_ledger_specs") or [])
@@ -1093,6 +1171,10 @@ def session_outputs(calls: list[dict], events: list[dict], records: list[dict], 
                 reasons.append("the output folder is gone")
             else:
                 reasons.append("no map with a provenance sidecar was written in the call's window")
+    stems = {Path(k).stem for k in found}                     # 3.4.0 (F-4): what the person was sent, when the working copy is not found
+    for f, n in delivered_files(calls, events):
+        if Path(f).stem not in stems and str(f) not in found:
+            found[str(f)] = {"path": str(f), "spec": None, "call": n, "how": "delivered"}
     try:
         import map_evaluate as me
         outs_, _fs = me.discover(list(found), {k: v["spec"] for k, v in found.items() if v["spec"]})
@@ -1119,6 +1201,97 @@ def session_outputs(calls: list[dict], events: list[dict], records: list[dict], 
     return res, miss
 
 
+COPY_STEM = re.compile(r"_(?:poster|qa|web)$", re.I)
+DELIVERED_EXT = (".png", ".svg", ".pdf", ".mp4", ".gif", ".webm", ".html", ".jpg", ".jpeg")
+OUTPUTS_FOLDER = Path("/mnt/user-data/outputs")
+
+
+def plugin_mark(p: Path) -> bool:
+    """3.4.0 (F-4): the file carries this plugin's mark: a provenance sidecar beside it, the PNG's Software/BrandPack text, the MP4 comment
+    the encoder writes, the page's generator meta or the SVG's data-map-edition."""
+    for side in (p.with_name(p.name + SIDECAR), p.with_name(p.stem + SIDECAR)):
+        if side.is_file():
+            return True
+    try:
+        head = p.read_bytes()[:400_000] if p.stat().st_size < 400_000_000 else b""
+    except OSError:
+        return False
+    suf = p.suffix.lower()
+    if suf == ".png":
+        return b"BrandPack" in head or (b"Software" in head and b"geo-mapping" in head)
+    if suf in (".mp4", ".webm", ".gif"):
+        return b"geo-mapping" in head or b"BrandPack" in head or b"brand_pack" in head
+    if suf in (".html", ".svg"):
+        return b"data-map-edition" in head or (b'name="generator"' in head and b"geo-mapping" in head)
+    if suf == ".pdf":
+        return b"geo-mapping" in head
+    return False
+
+
+def delivered_files(calls: list[dict], events: list[dict]) -> list[tuple[Path, int]]:
+    """Files the session handed to the person: SendUserFile's files, device_commit_files' staged paths, Artifact asset uploads and publishes,
+    and maps under /mnt/user-data/outputs written in the session's window; map extensions carrying the plugin's mark only. -> [(path, call n)]"""
+    out: list[tuple[Path, int]] = []
+    lo = min((c["start"] for c in calls if c.get("start")), default=None)
+    hi = max((c["end"] or c["start"] for c in calls if c.get("start")), default=None)
+    for c, e in zip(calls, events, strict=False):
+        tool, inp = c["tool"], c["input"] or {}
+        raw: list[str] = []
+        if tool == "SendUserFile":
+            raw = [str(x) for x in inp.get("files") or []]
+        elif tool.endswith("device_commit_files"):
+            raw = [str(f.get("stagedPath")) for f in inp.get("files") or [] if isinstance(f, dict) and f.get("stagedPath")]
+        elif tool == "Artifact":
+            raw = [str(x) for x in ([inp.get("file_path")] + list(inp.get("file_paths") or [])) if x]
+        base = Path(c.get("cwd")) if c.get("cwd") else Path.cwd()
+        for r in raw:
+            q = _resolve(r, base)
+            if q.suffix.lower() in DELIVERED_EXT and q.is_file() and plugin_mark(q):
+                out.append((q, e["n"]))
+    if OUTPUTS_FOLDER.is_dir():
+        for q in sorted(OUTPUTS_FOLDER.rglob("*")):
+            if q.is_file() and q.suffix.lower() in DELIVERED_EXT and (lo is None or _in_window(q, lo, hi, 600)) and plugin_mark(q):
+                out.append((q, 0))
+    seen, keep = set(), []
+    for q, n in out:
+        if COPY_STEM.search(q.stem):                         # the video's poster still, its _qa and _web copies: the same map
+            continue
+        if str(q) not in seen:
+            seen.add(str(q))
+            keep.append((q, n))
+    return keep
+
+
+def recorded_quality(outputs: list[dict], calls: list[dict]) -> dict | None:
+    """3.4.0 (F-5): the Map quality section from scorecards already recorded for these outputs (same file and hash), every output listed:
+    scored ones with Effectiveness, Craft and works, the rest "not scored" with the reason. None when no output has a scorecard."""
+    if not outputs:
+        return None
+    try:
+        import map_evaluate as me
+        by_id: dict[str, dict] = {}
+        for x in outputs:
+            by_id.setdefault(x["id"], {"id": x["id"], "files": []})["files"].append(x["path"])
+        cards = me.recorded_cards(list(by_id.values()), [str(c.get("cwd")) for c in calls if c.get("cwd")][:1])
+    except Exception:  # noqa: BLE001 - the trace stands without the scores
+        return None
+    if not cards:
+        return None
+    rows = []
+    for oid in by_id:
+        c = cards.get(oid)
+        if c:
+            h = c.get("headline") or {}
+            rows.append({"output": oid, "effectiveness": h.get("effectiveness"), "craft": h.get("craft"), "works": h.get("works"),
+                         "flags": h.get("flags") or [], "run": c.get("run"), "recorded": True})
+        else:
+            rows.append({"output": oid, "effectiveness": None, "craft": None, "works": "not scored", "flags": ["no scorecard for this file yet"],
+                         "recorded": False})
+    any_card = next(iter(cards.values()))
+    return {"run": ", ".join(sorted({str(c.get("run")) for c in cards.values()})), "rubric_version": any_card.get("rubric_version"),
+            "report": str(Path(any_card["_file"]).parent / "report.html"), "outputs": rows, "top_components": [], "from": "recorded"}
+
+
 def offer_evaluation(o: dict, stem: Path) -> list[str]:
     """2.2.0 (map evaluator O2): the outputs list beside the report and a map-evaluate plan for it; the lines to print. Nothing runs here:
     the person sees the cost and says yes first. 2.4.0 (MT-03): finished builds with no output found are never a bare 0: the line says how many
@@ -1134,10 +1307,23 @@ def offer_evaluation(o: dict, stem: Path) -> list[str]:
         lst = stem.with_suffix(".outputs.json")
         lst.write_text(json.dumps({"session": o["transcript"], "outputs": outs, "from_out_folders": True}, indent=1), encoding="utf-8")
         return lines + _plan_lines({**o, "outputs": outs}, stem, lst)
+    mq = o.get("map_quality") or {}
+    done = {x["output"] for x in mq.get("outputs") or [] if x.get("recorded")}
+    todo = [x for x in o["outputs"] if x["id"] not in done]
     lst = stem.with_suffix(".outputs.json")
-    lst.write_text(json.dumps({"session": o["transcript"], "outputs": o["outputs"]}, indent=1), encoding="utf-8")
+    lst.write_text(json.dumps({"session": o["transcript"], "outputs": todo or o["outputs"]}, indent=1), encoding="utf-8")
     n = len({x["id"] for x in o["outputs"]})
-    return [f"MAP_TRACE_OUTPUTS: {n} {lst}"] + _plan_lines(o, stem, lst)
+    head = f"MAP_TRACE_OUTPUTS: {n} {lst}" + (f" ({len(done)} already scored, read back)" if done else "")
+    if not todo:
+        return [head, "MAP_TRACE_EVALUATE: skipped - every output already has a scorecard (the Map quality section shows them)"]
+    auto = []
+    try:
+        import map_evaluate as me
+        if me.evaluate_mode() == "auto":
+            auto = ["MAP_TRACE_EVALUATE_AUTO: yes (the owner set evaluate: auto; run it without asking, by fresh agents, observe only)"]
+    except Exception:  # noqa: BLE001
+        pass
+    return [head] + _plan_lines({**o, "outputs": todo}, stem, lst) + auto
 
 
 def _plan_lines(o: dict, stem: Path, lst: Path) -> list[str]:

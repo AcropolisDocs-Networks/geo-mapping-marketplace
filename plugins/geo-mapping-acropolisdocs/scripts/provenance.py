@@ -307,6 +307,26 @@ def as_of_notes(plan) -> list[str]:
     return out
 
 
+def method_notes(plan) -> list[str]:
+    """3.4.0 (eval HON-4): a modelled measure says how it was made, once, in the source note: the walk times of a network_nearest op (speed,
+    snap, a hypothetical when it compares two sets of sites), and an OpenStreetMap source that counts are what its contributors mapped."""
+    out: list[str] = []
+    for l in all_layers(plan):
+        if not credited(l):
+            continue
+        for o in (l.provenance or {}).get("ops") or []:
+            if isinstance(o, dict) and o.get("method_note"):
+                n = str(o["method_note"]).rstrip(".") + "."
+                if n not in out:
+                    out.append(n)
+        src = (getattr(l, "spec", None) or {}).get("source") or {}
+        if isinstance(src, dict) and src.get("type") == "osm":
+            n = "Counts are what OpenStreetMap contributors have mapped."
+            if n not in out:
+                out.append(n)
+    return out
+
+
 def api_notice_lines(plan) -> list[str]:
     """1.3.0 (R1-TERMS): the notices an API's terms ask a deliverable to display, even for public-domain data: the Census Data API's "This
     product uses the Census Bureau Data API but is not endorsed or certified by the Census Bureau." From the layer's attribution or its library
@@ -497,7 +517,12 @@ def spec_ref(plan, sidecar: Path) -> dict | None:
         sha = hashlib.sha256(sp.read_bytes()).hexdigest()
     except OSError:
         sha = None
-    return {"path": Path(rel).as_posix(), "sha256": sha, "id": plan.spec.get("id"), "message": plan.spec.get("message")}
+    try:
+        absolute = str(sp.resolve())
+    except OSError:
+        absolute = str(sp)
+    return {"path": Path(rel).as_posix(), "abs_path": absolute, "name": sp.name, "sha256": sha, "id": plan.spec.get("id"),
+            "message": plan.spec.get("message")}
 
 
 def write_sidecar(path: Path, plan, recs: list[dict], meth: dict | None) -> Path:

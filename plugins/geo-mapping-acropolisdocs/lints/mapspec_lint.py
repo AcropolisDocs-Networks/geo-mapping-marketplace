@@ -18,7 +18,7 @@ import gmap_common as gc  # noqa: E402
 import ops_lint  # noqa: E402
 
 CATEGORICAL_METHODS = {"categorical", "unique", "categories"}      # classify.ALIASES maps the last two to categorical
-LAYER_REF_KEYS = ("layer", "clip_layer", "to", "within", "outside")  # the keys of an op that name another layer of the spec (`to`: line_of_sight, M12;
+LAYER_REF_KEYS = ("layer", "clip_layer", "to", "within", "outside", "sites", "compare")  # the keys of an op that name another layer of the spec (`to`: line_of_sight, M12;
                                                                      # `within`, `outside`: density_surface, 2.1.0)
 
 
@@ -45,7 +45,7 @@ ROLES_NEEDING_VALUE = {"choropleth"}
 
 # 1.13.0: layer keys the code reads that the schema does not list (the schema leaves layers open); anything else is MAP-SPEC-011
 LAYER_KEYS_OUTSIDE_SCHEMA = {"qa", "symbol", "value_field", "title", "provenance", "palette", "popup", "popup_fields", "queryable", "visible", "layout",
-                             "home_addresses_reviewed"}
+                             "home_addresses_reviewed", "texture"}   # 3.4.0: texture: true (a layer drawn as texture on purpose)
 LAYER_KEY_HINTS = {"note": "legend.note", "label": "legend.label",
                    "where": "filter: {column, in: [...]} (a file layer; source.where is for a library service layer)", "color": "symbol.color", "colour": "symbol.color", "size": "symbol.size", "width": "symbol.width",
                    "opacity": "symbol.opacity", "max_size": "symbol.max_size", "scale_with": "symbol.scale_with", "shape": "symbol.shape",
@@ -216,8 +216,8 @@ def lint_spec(spec: dict) -> list[dict]:
     return out
 
 
-BRAND_RAMP_REF = __import__("re").compile(r"^@brand\.(categorical|sequential|neutral)\.(.+)$")
-RAMP_TOKENS = {"categorical": "categorical", "sequential": "sequential_ramp", "neutral": "neutral_ramp"}
+BRAND_RAMP_REF = __import__("re").compile(r"^@brand\.(categorical|sequential|neutral|diverging)\.(.+)$")
+RAMP_TOKENS = {"categorical": "categorical", "sequential": "sequential_ramp", "neutral": "neutral_ramp", "diverging": "diverging_ramp"}
 
 
 def _ramp_sizes(spec: dict) -> dict | None:

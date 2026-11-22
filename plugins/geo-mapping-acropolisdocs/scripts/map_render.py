@@ -354,6 +354,80 @@ def room_on_data(fr: "lo.Frame", room: tuple, lim) -> tuple:
 SIDES = ("left", "bottom", "right", "top")
 
 
+
+
+def visible_counts(plan, rep: dict) -> None:
+    """3.4.0: `legend: {counts: visible}` on a point (or any) layer adds the number of its features inside the map's extent to its legend
+    row ("Drinking fountains (26)"), so a count written on the map follows the window; with `extent.fit: overlay` the extent is the window
+    drawn. The counts go to the report as legend_counts."""
+    try:
+        from shapely.geometry import box
+        win = box(*[float(v) for v in plan.extent])
+    except Exception:  # noqa: BLE001
+        return
+    for l in plan.layers:
+        lg_ = l.spec.get("legend") if isinstance(l.spec.get("legend"), dict) else {}
+        if lg_.get("counts") != "visible" or not l.legend_block or l.gdf is None or not len(l.gdf):
+            continue
+        try:
+            n = int(l.gdf.geometry.intersects(win).sum())
+        except Exception:  # noqa: BLE001
+            continue
+        items = l.legend_block.get("items") or []
+        if len(items) == 1:
+            it = items[0]
+            if not str(it.get("label", "")).endswith(f"({n:,})"):
+                it["label"] = f"{it.get('label') or l.title} ({n:,})"
+        elif l.legend_block.get("kind") != "points" and not l.legend_block.get("title", "").endswith(")"):
+            l.legend_block["title"] = f"{l.legend_block.get('title') or l.title} ({n:,})"
+        rep.setdefault("legend_counts", {})[l.id] = n
+
+
+
+POINT_KEY_MIN_MM = 1.6         # 3.4.0 (Day 21 #20): the smallest point swatch in a key on paper
+POINT_KEY_MIN_SLIDE_MM = 2.2   # ... on a slide or social frame, read from further away
+
+
+def point_key_min(plan) -> float:
+    name = str(getattr(plan, "tpl_name", "") or "")
+    return POINT_KEY_MIN_SLIDE_MM if ("slide" in name or "social" in name) else POINT_KEY_MIN_MM
+
+
+def window_lonlat(plan, rep: dict, visible) -> list[dict]:
+    """3.4.0 (Day 21 #17 and Antakya #9): the window the map draws, in lon/lat (W, S, E, N) and km², in the report as map_window.lonlat and
+    .area_km2, so data, counts and captions can follow the frame; MAP-SPEC-013 (INFO) when a bbox extent was drawn more than 5% larger or
+    smaller than asked (the corner-clearing fit moves and zooms the map)."""
+    try:
+        import pyproj
+        import shapely
+        from shapely.geometry import box
+        g = shapely.segmentize(box(*[float(v) for v in visible]), max(float(visible[2]) - float(visible[0]), float(visible[3]) - float(visible[1])) / 20)
+        tr = pyproj.Transformer.from_crs(plan.crs, "EPSG:4326", always_xy=True)
+        ll = shapely.transform(g, lambda c: __import__("numpy").column_stack(tr.transform(c[:, 0], c[:, 1])))
+        w, s_, e, n = (round(float(v), 5) for v in ll.bounds)
+        geod = pyproj.Geod(ellps="WGS84")
+        area = abs(geod.geometry_area_perimeter(ll)[0]) / 1e6
+    except Exception:  # noqa: BLE001 - a CRS pyproj cannot invert: the window stays in the map's own CRS
+        return []
+    rep["map_window"]["lonlat"] = [w, s_, e, n]
+    rep["map_window"]["area_km2"] = round(area, 2)
+    ext = (plan.spec.get("extent") or {}) if isinstance(plan.spec.get("extent"), dict) else {}
+    if ext.get("mode") == "bbox" and ext.get("bbox"):
+        try:
+            b = [float(v) for v in ext["bbox"]]
+            import pyproj as _p
+            from shapely.geometry import box as _box
+            asked = abs(_p.Geod(ellps="WGS84").geometry_area_perimeter(_box(*b))[0]) / 1e6
+        except Exception:  # noqa: BLE001
+            return []
+        if asked and abs(area / asked - 1) > 0.05:
+            return [{"id": "MAP-SPEC-013", "severity": "INFO", "message": f"extent bbox {', '.join(f'{v:g}' for v in b)} ({asked:.1f} km²) is drawn as "
+                     f"{w:g}, {s_:g}, {e:g}, {n:g} ({area:.1f} km², {area / asked:.0%} of it): counts and captions written for the bbox may not "
+                     "match the sheet; the report's map_window.lonlat is the window drawn (`extent.fit: overlay` keeps the bbox)",
+                     "detail": {"asked": b, "drawn": [w, s_, e, n]}}]
+    return []
+
+
 def coverage_findings(plan, frame: "lo.Frame") -> list[dict]:
     """1.21.0 (Day 18 issues 5 and 6, and the strip down the right edge):
     MAP-CART-040 a relief or a raster that fills the map stops inside the frame (its data ends; the ground shows as a strip);
@@ -750,6 +824,13 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
             rot = _point_rotations(plan, l, gdf) if l.symbol.get("rotate_field") else None
 
             def symbols(col, shp, sel):
+                if getattr(l, "hollow", False):            # 3.4.0 (Day 21 #13, #23): `symbol: {fill: none}` is a ring in the layer's colour
+                    ring = float(l.symbol.get("_ring_mm", 0.35))
+                    rp = "".join(sd.symbol_paths(shp, mx[sel], my[sel], max(d_mm - ring, ring)))
+                    if stroked:
+                        g.append(f'<path fill="none" stroke="{l.stroke}" stroke-width="{sd.num(ring + 2 * sw)}" d="{rp}"/>')
+                    g.append(f'<path fill="none" stroke="{col}" stroke-width="{sd.num(ring)}" d="{rp}"/>')
+                    return
                 if rot is not None:                      # direction of travel (0.11.0): a pointer where the heading is known, the shape where not
                     has = sel[np.isfinite(rot[sel])]
                     if len(has):
@@ -1360,6 +1441,10 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                     else:
                         if op < 1:                          # the swatch shows the fill as the map draws it: see-through, over the land color
                             out.append(sd.rect(cx, mid - lg.SWATCH_H_MM / 2, lg.SWATCH_W_MM, lg.SWATCH_H_MM, t["land"]))
+                            if it.get("relief"):            # 3.4.0 (Day 20 #22): over a hillshade the swatch shows the lit and the shaded side
+                                y0_, y1_ = mid - lg.SWATCH_H_MM / 2, mid + lg.SWATCH_H_MM / 2
+                                out.append(f'<path d="M{sd.num(cx + lg.SWATCH_W_MM)} {sd.num(y0_)}L{sd.num(cx + lg.SWATCH_W_MM)} {sd.num(y1_)}L{sd.num(cx)} {sd.num(y1_)}Z" '
+                                           f'fill="{t["label"]}" fill-opacity="0.28"/>')
                         edge, thick = key_edge(it["fill"], it["stroke"], t["legend_bg"] if frame else t["background"], t["label"])
                         out.append(sd.rect(cx, mid - lg.SWATCH_H_MM / 2, lg.SWATCH_W_MM, lg.SWATCH_H_MM, it["fill"], edge, 0.25 if thick else 0.15, opa))
                         if it.get("pattern"):                       # the class's hatch over its colour (M15)
@@ -1374,8 +1459,14 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                     dash = f' stroke-dasharray="{sd.esc(it["dash"])}"' if it.get("dash") else ""
                     out.append(f'<path d="M{sd.num(cx)} {sd.num(mid)}h{sd.num(lg.SWATCH_W_MM)}" stroke="{it["stroke"]}" stroke-width="{sd.num(it["width_mm"])}" fill="none" stroke-linecap="round"{dash}/>')
                 else:
-                    edge, thick = key_edge(it["fill"], it["stroke"], t["legend_bg"] if frame else t["background"], t["label"])
-                    out.append(f'<path d="{sd.symbol_path(it["shape"], cx + icon_w / 2, mid, it["size_mm"])}" fill="{it["fill"]}" stroke="{edge}" stroke-width="{0.2 if thick else 0.12}"/>')
+                    # 3.4.0 (Day 21 #20): a point's key is at least POINT_KEY_MIN_MM (a 0.7 mm tree dot could not be read in the key); the map keeps its size
+                    ksz = max(float(it["size_mm"]), float(it.get("key_min_mm") or POINT_KEY_MIN_MM))
+                    if it.get("hollow"):                     # 3.4.0 (Day 21 #23): a hollow point is keyed as the ring it is drawn as
+                        ring = float(it.get("ring_mm") or 0.35)
+                        out.append(f'<path d="{sd.symbol_path(it["shape"], cx + icon_w / 2, mid, max(ksz - ring, ring))}" fill="none" stroke="{it["fill"]}" stroke-width="{sd.num(ring)}"/>')
+                    else:
+                        edge, thick = key_edge(it["fill"], it["stroke"], t["legend_bg"] if frame else t["background"], t["label"])
+                        out.append(f'<path d="{sd.symbol_path(it["shape"], cx + icon_w / 2, mid, ksz)}" fill="{it["fill"]}" stroke="{edge}" stroke-width="{0.2 if thick else 0.12}"/>')
                 kop = float(b.get("key_opacity", 1.0))
                 if kop < 1 and len(out) > k0:                # 1.13.0: a supporting or background layer's key at the layer's own strength
                     out.insert(k0, f'<g opacity="{sd.num(kop)}" data-emphasis="key">')
@@ -1461,18 +1552,26 @@ def scale_bar_visible_h(pt: float, show_ratio: bool) -> float:
 SCALE_STYLES = ("alternating", "line", "ticks", "ladder")      # 0.15.0: elements.scale_bar.style (1.4.0: ladder)
 
 
-def draw_scale_bar(info: dict, x: float, y: float, t: dict, pt: float, show_ratio: bool, style: str = "alternating") -> tuple[str, float, float]:
+def scale_lead_mm(pt: float) -> float:
+    """3.4.0 (eval ORIENT-2, STYLE-5): the room kept before the bar beside the logo: half the "0" label, which hangs left of the bar's start,
+    and 0.8 mm, so the label and the brand mark never touch."""
+    return tm.width_mm("0", pt, 400, tnum=True) / 2 + 0.8
+
+
+def draw_scale_bar(info: dict, x: float, y: float, t: dict, pt: float, show_ratio: bool, style: str = "alternating", lead_mm: float = 0.0) -> tuple[str, float, float]:
     """The scale bar. `alternating` (the default): filled and open segments. `line`: one line with an end tick at each end. `ticks`: one line
-    with a tick at every segment boundary. All three keep the same height and labels, so the layout does not change with the style."""
+    with a tick at every segment boundary. All three keep the same height and labels, so the layout does not change with the style.
+    `lead_mm` (3.4.0): room before the bar (beside the logo), included in the width."""
     if info.get("bar2"):                           # 3.1.0 (G-10): miles and kilometres, the second bar under the first, the ratio last
-        top, w1, h1 = draw_scale_bar({**info, "bar2": None}, x, y, t, pt, False, style)
-        low, w2, h2 = draw_scale_bar({**info, "bar": info["bar2"], "bar2": None}, x, y + h1 - 0.4, t, pt, show_ratio, style)
+        top, w1, h1 = draw_scale_bar({**info, "bar2": None}, x, y, t, pt, False, style, lead_mm)
+        low, w2, h2 = draw_scale_bar({**info, "bar": info["bar2"], "bar2": None}, x, y + h1 - 0.4, t, pt, show_ratio, style, lead_mm)
         return top + low, max(w1, w2), h1 + h2 - 0.4
+    x = x + lead_mm
     bar = info["bar"]
     L = bar["length_mm"]
     bh = SCALE_BAR_H_MM
     end_label = bar["ticks"][-1]["label"]
-    w = L + tm.width_mm(end_label, pt, 400, tnum=True) / 2 + 1.0
+    w = L + tm.width_mm(end_label, pt, 400, tnum=True) / 2 + 1.0 + lead_mm
     h = bh + pt * PT * 1.6 + (pt * PT * 1.4 if show_ratio else 0) + 1.0
     out = [f'<g class="gm-scalebar" data-style="{sd.esc(style)}" role="img" aria-label="Scale bar">']
     if style in ("line", "ticks"):
@@ -1556,7 +1655,18 @@ def wrap_lines(text: str, w: float, pt: float, weight: int = 400, max_lines: int
 def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
     """render, stage 2 (1.9.0): the legend, the confidentiality banner, the locator and the sizes of every overlay, none of which depend on the frame. Split from render() unchanged."""
     # ---- legend (does not depend on the frame)
+    visible_counts(plan, rep)                       # 3.4.0 (Day 21 notes 5): `legend: {counts: visible}` on a point layer
     blocks = [l.legend_block for l in plan.layers if l.legend_block]
+    kmin = point_key_min(plan)
+    for b in blocks:                                # 3.4.0 (Day 21 #20): point keys at least kmin across (the map keeps its own sizes)
+        if b.get("kind") == "points":
+            for it in b.get("items") or []:
+                it["key_min_mm"] = kmin
+    if any(b.get("kind") == "hillshade" for b in plan.basemap or []):
+        for b in blocks:                            # 3.4.0 (Day 20 #22): a see-through class over the relief is keyed lit and shaded
+            for it in b.get("items") or []:
+                if float(it.get("opacity", 1.0)) < 1:
+                    it["relief"] = True
     classified = {l.id: l.cls for l in plan.layers if l.cls is not None}
     for l in plan.layers:
         if l.role == "proportional" and l.legend_block is None and (l.spec.get("legend") or {}).get("include", True) is not False:
@@ -1636,6 +1746,19 @@ def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
     sb_wanted = bool(on("scale_bar"))
     inmap = tpl.get("layout") == "in-map"                     # the default layout: title, logo and the other elements sit inside the map frame
     tbox = title_box(plan, fonts, map_rect, findings) if inmap else None
+    if legend_fit and legend_fit.get("fits"):
+        rep["legend_size_mm"] = [round(float(legend_fit["size"]["width"]), 2), round(float(legend_fit["size"]["height"]), 2)]   # 3.4.0: detail width: legend
+    lg_cfg = els.get("legend") or {}
+    if (tbox and legend_fit and legend_fit.get("fits") and lg_cfg.get("position", "upper-right") == "upper-right"
+            and (els.get("title") or {}).get("position", "upper-left") == "upper-left"):
+        # 3.4.0 (Antakya #10): a long subtitle made the title box as wide as its cap, the legend no longer fitted beside it and left its corner
+        # (the video's counters, placed by the legend, moved with it). The subtitle and tagline wrap in the room beside the legend instead
+        room = map_rect.w - float(legend_fit["size"]["width"]) - 3 * TITLE_GAP_MM
+        if tbox["w"] > room >= 0.3 * map_rect.w:
+            tb2 = title_box(plan, fonts, map_rect, [], text_cap_w=room)
+            if tb2 and tb2["w"] <= room + 0.01:
+                tbox = tb2
+                rep.setdefault("notes", []).append("the subtitle wraps beside the legend, so the legend keeps its corner")
     logo_box = None
     logo_beside_scale = bool(inmap and sb_wanted and "position" not in (els.get("scale_bar") or {})
                              and (els.get("logo") or {}).get("position", "lower-left") == "lower-left")
@@ -1732,7 +1855,9 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
                         "locked": locked, **({"beside": "legend", "side": "left"} if inmap and "position" not in na_cfg else {})})
         sb_svg_, sw_, sh_ = "", 0.0, 0.0
         if sb_wanted and inf["bar"] is not None:
-            sb_svg_, sw_, sh_ = draw_scale_bar(inf, 0, 0, t, fonts["scale"], bool((els.get("scale_bar") or {}).get("ratio", False)))
+            lead = scale_lead_mm(float(fonts["scale"])) if (logo_box and logo_beside_scale and plan.look != "classic") else 0.0
+            rep["scale_lead_mm"] = round(lead, 3)
+            sb_svg_, sw_, sh_ = draw_scale_bar(inf, 0, 0, t, fonts["scale"], bool((els.get("scale_bar") or {}).get("ratio", False)), lead_mm=lead)
             if logo_box and logo_beside_scale:
                 sh_ = logo_box["h"]                         # same height as the logo, so the two line up top and bottom
             corner, locked = pos(els.get("scale_bar"), "lower-left" if inmap else "lower-right")
@@ -1944,6 +2069,7 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
                                                       f"{fit_limit * 100:g}% limit; the map is never shrunk in this mode (use fit: auto to allow it)"))
     rep["frame_scale_mm_per_unit"] = frame.scale
     rep["map_window"] = {"crs": plan.crs, "extent": [round(float(v), 6) for v in frame.visible], "rect_mm": [map_rect.x0, map_rect.y0, map_rect.x1, map_rect.y1], "page_mm": [W, H]}
+    findings += window_lonlat(plan, rep, frame.visible)       # 3.4.0 (Day 21 #17, Antakya #9): the window drawn, in lon/lat
     if plan.basemap or any(l.kind == "raster" for l in plan.layers):
         # 1.21.0 (Day 18 issue 5): what the rasters, the relief and the ground were read for; build_map reads again when the frame left it
         rep["raster_window"] = [round(float(v), 6) for v in (getattr(plan, "raster_window", None) or mp.plan_visible_pad(plan))]
@@ -2048,7 +2174,7 @@ def _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rec
     if dv_cfg.get("on"):
         import detail_inset as dvi
         try:
-            dv = dvi.for_map(plan, dv_cfg)
+            dv = dvi.for_map(plan, dv_cfg, legend_w=(rep.get("legend_size_mm") or [None])[0])
             fg_cfg["items"] = list(fg_cfg.get("items") or []) + [dv["figure"]]
             body.append(dvi.window_outline(frame, dv["window"], t))
             findings += dv["findings"]
@@ -2150,7 +2276,7 @@ def _render_labels(H, W, banner_h, banner_on, blocks, body, border, co_svg, dt_c
     if "scale" in placed:
         r = placed["scale"]["rect"]
         svg_, _, _ = draw_scale_bar(info, r.x0, r.y0 + (0.09 if (logo_box and logo_beside_scale) else 0.5), t, fonts["scale"], bool((els.get("scale_bar") or {}).get("ratio", False)),
-                                    style=sb_style)
+                                    style=sb_style, lead_mm=float(rep.get("scale_lead_mm") or 0.0))
         ov.append(svg_)
     if banner_on:
         txt = (els.get("confidentiality_banner") or {}).get("text") or "CLIENT CONFIDENTIAL"
@@ -2361,7 +2487,10 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
             if named:
                 m2 = np.fromiter((str(v) in named for v in vals), dtype=bool, count=len(vals))
                 prio[m2] += 4 * span
-                w[m2] = 700
+                # 3.4.0 (eval READ-3): bold singles out a few names; when the message names a third or more of a layer's labels (Day 21:
+                # three of six parks) bold reads as an arbitrary hierarchy, so they keep the layer's weight and are only placed first
+                if m2.mean() < NAMED_BOLD_MAX_SHARE:
+                    w[m2] = 700
             if direct:
                 w = np.maximum(w, 600)
             return prio, w
@@ -2658,7 +2787,7 @@ def map_raster_offline() -> bool:
 
 # 3.1.0: names the bundled Natural Earth layers carry wrong (a letter lost in the source), corrected where they are drawn; the files keep
 # their published hash
-NAME_FIXES = {"rivers": {"Sane": "Saône"}}
+NAME_FIXES = {"rivers": {"Sane": "Saône", "Pend Orielle": "Pend Oreille"}}   # 3.4.0 (Day 20 #20): Natural Earth misspells it
 
 
 def message_places(gdf, message) -> set:
@@ -3703,6 +3832,10 @@ def draw_inset(inset: dict, x: float, y: float, t: dict, visible: tuple | None =
 
 # ---------------------------------------------------------------------------------------------------------------- title, footer
 TITLE_MAX_FRAC = 0.5          # the in-map title box is at most this share of the map's width (elements.title.max_width_pct sets it, 0.19.0)
+NAMED_BOLD_MAX_SHARE = 1 / 3      # 3.4.0: message-named labels are bold only when they are fewer than this share of the layer's labels
+TITLE_GAP_MM = 2.0            # 3.4.0: the gap kept between the title box and the legend when the subtitle wraps beside it
+TITLE_MAX_FRAC_WIDE = 0.62    # 3.4.0: on a map frame at least WIDE_ASPECT wide (a 16:9 slide), so a title of the 45-character target stays on one line
+WIDE_ASPECT = 1.5
 TITLE_PAD_MM = 0.5
 TITLE_SCALE_IN_MAP = 0.75     # the in-map title is set at this share of the template's title size (it sits on the map, not above it)
 TITLE_FLOOR_PT = 11.0
@@ -3713,7 +3846,7 @@ LOGO_PAD_MM = 0.0
 
 
 @_role("title")
-def title_box(plan: mp.Plan, fonts: dict, map_rect: Rect, findings: list) -> dict | None:
+def title_box(plan: mp.Plan, fonts: dict, map_rect: Rect, findings: list, text_cap_w: float | None = None) -> dict | None:
     """The title (and subtitle) as a box for the map's upper-left corner: wrapped lines, their size and the box's width and height."""
     el = (plan.spec.get("elements") or {}).get("title") or {}
     if el.get("on") is False:
@@ -3721,6 +3854,8 @@ def title_box(plan: mp.Plan, fonts: dict, map_rect: Rect, findings: list) -> dic
     text = text_lint.title_text(plan.spec)                # 0.21.0: supplied text as written, else the message's first sentence tidied (map text §10)
     sub = el.get("subtitle")
     frac = TITLE_MAX_FRAC
+    if map_rect.w / max(map_rect.h, 1e-6) >= WIDE_ASPECT:  # 3.4.0 (Day 21 #25): on a wide sheet half the width wrapped a 44-character title
+        frac = TITLE_MAX_FRAC_WIDE
     if el.get("max_width_pct") is not None:              # 0.19.0 (Day 7 issue 27): a wider box keeps a long title on one line
         frac = max(0.2, min(0.9, float(el["max_width_pct"]) / 100.0))
     maxw = map_rect.w * frac - 2 * TITLE_PAD_MM
@@ -3732,7 +3867,12 @@ def title_box(plan: mp.Plan, fonts: dict, map_rect: Rect, findings: list) -> dic
     if cut:
         findings.append(f("MAP-SPEC-005", "WARN", "the title is too long for the template and was shortened"))
     sp = float(fonts["subtitle"])
-    sl = wrap_lines(sub, maxw, sp, 400, 2)[0] if sub else []
+    if text_cap_w is not None:                            # 3.4.0: the box kept to the room beside the legend; the title lines too
+        maxw = min(maxw, text_cap_w - 2 * TITLE_PAD_MM)
+        lines, cut = wrap_lines(text, maxw, size, 700, 3)
+        if cut:
+            return None
+    sl = wrap_lines(sub, maxw, sp, 400, 3 if text_cap_w is not None else 2)[0] if sub else []
     tag = el.get("tagline")
     tl = wrap_lines(str(tag), maxw, sp, 400, 1)[0] if tag else []
     lean = sp * PT * 0.75 * math.tan(math.radians(TAGLINE_SLANT_DEG))      # the slant pushes the top of the letters right

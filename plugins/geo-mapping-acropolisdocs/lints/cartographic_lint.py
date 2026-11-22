@@ -269,8 +269,40 @@ def check_009(plan, report) -> list[dict]:
         out.append(finding("MAP-CART-009", "INFO", "the data covers very little of the frame", cover))
     clipped = (report or {}).get("clipped_features")
     if clipped:
-        out.append(finding("MAP-CART-009", "WARN", f"{clipped} feature(s) are cut by the frame; widen the extent if that is not intended", clipped))
+        if full_bleed(plan, report):
+            # 3.4.0 (Day 21 #21): a street network meant to run off every edge (fit: overlay, or a line layer that fills the window) is
+            # cut by the frame on purpose; said once as a note, not a warning
+            out.append(finding("MAP-CART-009", "INFO", f"{clipped:,} feature(s) run past the frame: the map is full-bleed by design", clipped))
+        else:
+            out.append(finding("MAP-CART-009", "WARN", f"{clipped} feature(s) are cut by the frame; widen the extent if that is not intended", clipped))
     return out
+
+
+def full_bleed(plan, report) -> bool:
+    ext = (getattr(plan, "spec", None) or {}).get("extent")
+    if isinstance(ext, dict) and ext.get("fit") == "overlay":
+        return True
+    win = ((report or {}).get("map_window") or {}).get("extent")
+    if not win:
+        return False
+    w, h = float(win[2]) - float(win[0]), float(win[3]) - float(win[1])
+    for l in getattr(plan, "layers", []) or []:
+        if getattr(l, "kind", None) != "line" or getattr(l, "gdf", None) is None or not len(l.gdf):
+            continue
+        try:
+            b = l.gdf.total_bounds
+        except Exception:  # noqa: BLE001
+            continue
+        if (min(b[2], win[2]) - max(b[0], win[0])) >= 0.9 * w and (min(b[3], win[3]) - max(b[1], win[1])) >= 0.9 * h:
+            return True
+    return False
+
+
+def texture(l) -> bool:
+    """3.4.0 (Day 21 #21): a layer set as texture or as supporting/background on purpose (thousands of trees) is not held to the find-and-tell-
+    apart size or the overplotting count."""
+    sp = getattr(l, "spec", None) or {}
+    return sp.get("texture") is True or str(sp.get("emphasis") or "") in ("supporting", "background")
 
 
 def check_010(plan) -> list[dict]:
@@ -289,7 +321,7 @@ def check_011(plan, report) -> list[dict]:
     t = plan.tpl
     map_cm2 = (t["map"]["w"] * t["map"]["h"]) / 100.0
     for l in plan.layers:
-        if l.kind != "point" or l.role in ("context", "labels"):
+        if l.kind != "point" or l.role in ("context", "labels") or texture(l):
             continue
         n = len(l.gdf)
         if n / map_cm2 > 12 and l.fill_opacity >= 0.999:
@@ -391,12 +423,26 @@ def _drawn_color(l, tokens) -> str | None:
     return color
 
 
+def label_only(l) -> bool:
+    """3.4.0 (Day 21 #19): a layer drawn as names alone (`symbol: {shape: none}` or role labels) shows no symbol: no colour to clash and the
+    label colour is its own to take."""
+    sym = (getattr(l, "spec", None) or {}).get("symbol") or {}
+    return str(sym.get("shape") or "").lower() == "none" or getattr(l, "role", None) == "labels"
+
+
+def _shape_key(l) -> tuple:
+    sym = (getattr(l, "spec", None) or {}).get("symbol") or {}
+    return (str(sym.get("shape") or "circle").lower(), str(sym.get("fill") or "").lower() == "none")
+
+
 def check_015(plan) -> list[dict]:
     """A data layer is drawn in a page or text color (label, background, land, frame, no data...), not the brand palette."""
     out = []
     t = plan.tokens
     ui = {t[k].upper(): k for k in UI_TOKENS if isinstance(t.get(k), str)}
     for l in plan.layers:
+        if label_only(l):
+            continue
         color, raw = _data_color(l)
         if not color or (not raw and l.kind == "polygon"):        # an unfilled polygon layer is an outline over the land on purpose
             continue
@@ -429,7 +475,10 @@ def check_016(plan) -> list[dict]:
     """Two single-symbol data layers share a color or are too close to tell apart. 1.14.0: the message names a brand colour that would not."""
     out = []
     seen: list[tuple[str, str]] = []
-    every = [c for c in (_drawn_color(l, plan.tokens) for l in plan.layers) if c]
+    every = [c for c in (_drawn_color(l, plan.tokens) for l in plan.layers if not label_only(l)) if c]
+    every += [c for l in plan.layers for c in (getattr(l, "colors", None) or []) if isinstance(c, str)]     # 3.4.0 (Day 21 #24): class colours are taken too
+    shape = {l.id: _shape_key(l) for l in plan.layers}
+    point = {l.id: getattr(l, "kind", None) == "point" for l in plan.layers}
     # 1.16.0 (Day 15 issue 5): the parts of one structure (stands, wall, roof) share a `group` and are meant to read as one; a layer left out
     # of the legend is never told apart from another in it
     grp = {l.id: (l.spec or {}).get("group") for l in plan.layers}
@@ -437,11 +486,13 @@ def check_016(plan) -> list[dict]:
              else (l.spec or {}).get("legend") is not False for l in plan.layers}
     for l in plan.layers:
         color = _drawn_color(l, plan.tokens)
-        if not color:
+        if not color or label_only(l):
             continue
         for other_id, other in seen:
             if (grp.get(l.id) and grp.get(l.id) == grp.get(other_id)) or not keyed.get(l.id, True) or not keyed.get(other_id, True):
                 continue
+            if point.get(l.id) and point.get(other_id) and shape[l.id] != shape[other_id]:
+                continue                                  # 3.4.0 (Day 21 #23): a triangle beside a circle, a ring beside a dot, is told apart by its shape
             d = cl.cvd_min_delta_e(color, other)
             if d < DISTINCT_DELTA_E:
                 alt = brand_alternative(plan.tokens, [c for c in every if c.upper() != color.upper()])

@@ -58,6 +58,9 @@ GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f 
    builds were not matched to outputs, give the reason, and offer the evaluation it lists (`MAP_TRACE_EVALUATE:` and
    `MAP_TRACE_EVALUATE_RUN:` follow it when those builds' `--out` folders still hold maps). Never report a session that built maps as having
    no outputs without saying why.
+   3.4.0: outputs that already have a scorecard are read back into the Map quality section with no new reads, and only the others are
+   offered. When the run prints `MAP_TRACE_EVALUATE_AUTO: yes`, the owner set `evaluate: auto` (`~/.geo-mapping/config.yaml` or
+   `GMAP_EVALUATE=auto`): run the evaluation without asking, still by fresh agents and still observe only, and say it was run.
 
    ```bash
    GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"

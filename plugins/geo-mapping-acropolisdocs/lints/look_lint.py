@@ -125,6 +125,9 @@ def check_031(plan) -> list[dict]:
     for l in _data(plan):
         dots = any(isinstance(o, dict) and o.get("op") == "dot_density" for o in ((getattr(l, "spec", None) or {}).get("ops") or []))
         labels_only = str((l.symbol or {}).get("shape", "")).lower() == "none"        # 1.21.0 (Day 18 issue 4): no symbol is drawn, only labels
+        sp = getattr(l, "spec", None) or {}
+        if sp.get("texture") is True or str(sp.get("emphasis") or "") in ("supporting", "background"):
+            continue                                                                    # 3.4.0 (Day 21 #21): texture on purpose
         if l.kind == "point" and l.role != "proportional" and not dots and not labels_only and _point_d(l) < POINT_MIN_MM - 1e-9:     # 1.17.0: dots are small on purpose
             out.append(finding("MAP-CART-031", "WARN", f"layer '{l.id}': point symbols {_point_d(l):.2f} mm across, under the {POINT_MIN_MM:g} mm a reader "
                                "can find and tell apart; drop symbol.size (the look sizes points by count) or raise it", {"diameter_mm": round(_point_d(l), 3)}, l.id))

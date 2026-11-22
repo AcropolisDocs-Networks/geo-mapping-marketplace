@@ -2,7 +2,7 @@
 """h3_source: data that already arrives on the H3 grid, read, rolled up, counted and drawn without a hand-written script (2.6.0, spec
 global-regions H-01 to H-07).
 
-    source: {type: h3, path: data/*.gpkg, id_field: h3_res9_id, layer: <optional>, where: "environmnt = 0", group_field: brandname}
+    source: {type: h3, path: data/*.gpkg, id_field: h3_res9_id, layer: <optional>, where: "environmnt IN (0, 1)", group_field: brandname}   # FCC outdoor: codes 0 and 1
     h3: {resolution: auto | 0-15, by: brandname, share_min: 0.5, agg: count_groups, field: carriers, complete: region, mode: centre}
 
     read_ids(paths, id_field, ...)        -> DataFrame with `h3` (string ids) and the attribute columns asked for; no geometry is built
@@ -209,6 +209,19 @@ def rollup(df, res: int, *, by: str | None = None, share_min: float = SHARE_MIN,
     return out, notes, res, s
 
 
+def outside_share(cells, region_geom) -> float:
+    """The share of cells whose centre falls outside the region (EPSG:4326)."""
+    import shapely
+    h3 = hexbin._h3()
+    ids = [str(c) for c in cells]
+    if not ids:
+        return 0.0
+    pts = shapely.points([(lng, lat) for lat, lng in (h3.cell_to_latlng(c) for c in ids)])
+    shapely.prepare(region_geom)
+    inside = shapely.contains_xy(region_geom, shapely.get_x(pts), shapely.get_y(pts))
+    return float(1.0 - inside.mean())
+
+
 # ---------------------------------------------------------------------------------------------------------------- the complete grid
 def complete_grid(geom, res: int, mode: str = "centre") -> tuple[list[str], dict]:
     """Every cell of `geom` (lon/lat) at `res`: centre (the cell's centre inside), intersect (touching it) or share (touching, with the
@@ -368,6 +381,12 @@ def load_layer(layer: dict, base: Path, *, region_geom=None, mm_per_km=None, rea
                      f"{int((full['children'] == 0).sum()):,} with no data drawn as {empty_val}"
                      + (f"; {dropped:,} cell(s) with data outside the region left out" if dropped else ""))
         table = full
+    elif region_geom is not None and len(table):            # 3.4.0 (Day 20 #17): cells outside the region are kept, never silently
+        out_share = outside_share(table.index, region_geom)
+        if out_share >= 0.005:
+            findings.append({"id": "MAP-HEX-003", "severity": "WARN", "layer": layer.get("id"),
+                             "message": f"{out_share:.1%} of the H3 cells have their centre outside the region (offshore or across a border) and are "
+                                        "drawn and counted; `h3: {complete: region}` keeps the region's own cells only", "detail": {"share_outside": round(out_share, 4)}})
     if field in table.columns and table[field].dtype.kind in "f" and (table[field] == table[field].round()).all() and cfg.get("agg", "count_groups") in ("count_groups", "count", "any", "all"):
         table[field] = table[field].astype(int)
     gdf = cells_gdf(table, res)

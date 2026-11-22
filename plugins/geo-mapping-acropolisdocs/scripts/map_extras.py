@@ -550,8 +550,10 @@ def place_figures(plan, map_rect: Rect, placed: dict, cfg: dict, base: Path) -> 
                 continue
         aspect = box[3] / box[2] if box[2] else 1.0
         if it.get("rect_mm"):
+            # rect_mm is [x, y, w, h] from the map frame's top-left corner; 3.4.0 (Day 20 #24): `from: page` measures it from the page's
             x, y, w, h = (float(v) for v in it["rect_mm"])
-            r = Rect(map_rect.x0 + x, map_rect.y0 + y, map_rect.x0 + x + w, map_rect.y0 + y + h)
+            ox, oy = (0.0, 0.0) if str(it.get("from") or "frame") == "page" else (map_rect.x0, map_rect.y0)
+            r = Rect(ox + x, oy + y, ox + x + w, oy + y + h)
         else:
             w = float(it.get("w_mm") or min(120.0, map_rect.w * 0.45))
             h = float(it.get("h_mm") or w * aspect)

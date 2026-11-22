@@ -370,6 +370,49 @@ def ledger_file() -> Path:
     return ledger_dir() / f"{name}.ndjson"
 
 
+def session_ledger_dir() -> Path:
+    """3.4.0 (F-2): the one ledger folder of the person, whatever folder a script ran in: GMAP_LEDGER_DIR, else <home>/.geo-mapping/traces/runs
+    (GEO_MAPPING_HOME stands in for the home folder in tests). A build run as `cd day21 && build_map.py ...` writes its line here as well as
+    under day21/.geo-mapping, so a trace from any folder finds it."""
+    base = os.environ.get("GMAP_LEDGER_DIR")
+    if base:
+        return Path(base)
+    home = os.environ.get("GEO_MAPPING_HOME")
+    return (Path(home) if home else Path.home() / WORKDIR_NAME) / LEDGER_DIRNAME
+
+
+# 3.4.0 (F-3): the library entries that write or check an output start the ledger when a session's own script imports them, so a video made
+# by render.py through events_anim, timeline and flythrough leaves a line with its outputs, as a plugin entrypoint does.
+LAZY_ENTRIES = ("events_anim.build_base", "flythrough.encode", "flythrough.web_copy", "timeline.write_captions", "timeline.assemble",
+                "output_lint.check_mp4", "external_qa.run", "build_map.build", "map_export.export", "story.build")
+
+
+def ledger_start_lazy(entry: str) -> None:
+    """Start the ledger on the first call of a plugin library entry (LAZY_ENTRIES) when no plugin entrypoint started it: the line names the
+    module as its script, the host program the session wrote, and is written at exit like any other."""
+    import atexit
+    import datetime as _dt
+    import time as _time
+    if _LEDGER.get("on") or os.environ.get("GMAP_NO_LEDGER") == "1":
+        return
+    main = sys.modules.get("__main__")
+    host = Path(getattr(main, "__file__", "") or "").name or None
+    try:
+        cwd = str(Path.cwd())
+    except OSError:
+        cwd = None
+    _LEDGER.update(on=True, lazy=True, script=entry.split(".", 1)[0], entry=entry, host=host,
+                   start=_dt.datetime.now(_dt.timezone.utc).isoformat(timespec="milliseconds"), t0=_time.monotonic(),
+                   options=[a.split("=", 1)[0] for a in sys.argv[1:] if a.startswith("--")][:16], cwd=cwd, spec=None, out=None)
+    real_hook = sys.excepthook
+
+    def _hook(tp, val, tb):
+        _LEDGER.update(exit=1, exception=tp.__name__)
+        real_hook(tp, val, tb)
+    sys.excepthook = _hook
+    atexit.register(_ledger_write)
+
+
 def ledger_note(*, outputs=None, findings=None, degraded=None, **extra) -> None:
     """A script adds what it wrote and found to its ledger line (written at exit). Safe to call from library code: it does nothing until the
     process's own entrypoint started the ledger."""
@@ -402,16 +445,25 @@ def _ledger_write() -> None:
     row = {"script": _LEDGER["script"], "start": _LEDGER["start"], "end": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="milliseconds"),
            "seconds": round(_time.monotonic() - _LEDGER["t0"], 2), "exit": _LEDGER.get("exit", 0), "options": _LEDGER["options"],
            "cwd": _LEDGER["cwd"], "pid": os.getpid()}
-    for k in ("outputs", "findings", "degraded", "exception", "spec", "out"):
+    for k in ("outputs", "findings", "degraded", "exception", "spec", "out", "lazy", "entry", "host"):
         if _LEDGER.get(k):
             row[k] = _LEDGER[k]
-    try:
-        f = ledger_file()
-        f.parent.mkdir(parents=True, exist_ok=True)
-        with open(f, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, default=str) + "\n")
-    except OSError:                                          # a read-only folder: the trace falls back to the transcript alone
+    line = json.dumps(row, default=str) + "\n"
+    f = ledger_file()
+    targets = [f]
+    try:                                                     # 3.4.0 (F-2): the person's one session ledger as well
+        s = session_ledger_dir() / f.name
+        if s.resolve() != f.resolve():
+            targets.append(s)
+    except OSError:
         pass
+    for t in targets:
+        try:
+            t.parent.mkdir(parents=True, exist_ok=True)
+            with open(t, "a", encoding="utf-8") as fh:
+                fh.write(line)
+        except OSError:                                      # a read-only folder: the trace falls back to the transcript alone
+            pass
 
 
 def ledger_start() -> None:
@@ -462,4 +514,34 @@ def ledger_start() -> None:
     atexit.register(_ledger_write)
 
 
+ROOT_POINTER = "plugin-root.txt"
+
+
+def root_pointer_path() -> Path:
+    home = os.environ.get("GEO_MAPPING_HOME")
+    return (Path(home) if home else Path.home() / WORKDIR_NAME) / ROOT_POINTER
+
+
+def note_root() -> None:
+    """3.4.0 (Day 19 #17, Day 21 #13): every plugin script run as a program writes the folder it runs from to ~/.geo-mapping/plugin-root.txt,
+    so a script the session wrote reads the plugin's folder from there (newest copy, whatever an update renamed it to, such as ~g2) instead of
+    a path pasted earlier that an update can move away."""
+    main = sys.modules.get("__main__")
+    mf = getattr(main, "__file__", None)
+    if not mf or os.environ.get("GMAP_NO_LEDGER") == "1":
+        return
+    mp = Path(mf).resolve()
+    root = plugin_root()
+    if mp.parent.parent != root or not (root / "BUILD-MANIFEST.json").is_file():
+        return
+    try:
+        f = root_pointer_path()
+        if not f.is_file() or f.read_text(encoding="utf-8").strip() != str(root):
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(str(root) + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
 ledger_start()
+note_root()

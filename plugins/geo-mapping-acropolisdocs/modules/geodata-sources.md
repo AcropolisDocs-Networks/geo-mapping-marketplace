@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 210 entries (208 active); basemap-provider 18, boundary 37, boundary-derived 2, context 16, crosswalk 1, gazetteer 8, infrastructure 16, map-type 12, palette 2, public-service 52, statistic 24, symbol-set 1, template 6, terrain 15.
+Library: 212 entries (210 active); basemap-provider 18, boundary 37, boundary-derived 2, context 16, crosswalk 1, gazetteer 8, infrastructure 16, map-type 13, palette 2, public-service 53, statistic 24, symbol-set 1, template 6, terrain 15.
 
 ### Usable now
 
@@ -136,7 +136,8 @@ Library: 210 entries (208 active); basemap-provider 18, boundary 37, boundary-de
 | `ref.public-service.world.geocoder.geoapify` | Geoapify geocoding, routing and isochrones | Geoapify GmbH, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
 | `ref.public-service.world.geocoder.nominatim` | Nominatim (OpenStreetMap geocoder) | OpenStreetMap Foundation, live | web service | share-alike |  |
 | `ref.public-service.world.hazard.nasa-firms` | NASA FIRMS active fire detections (VIIRS, MODIS) | NASA, Earth Science Data Systems (FIRMS), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | public-domain |  |
-| `ref.public-service.world.osm.overpass` | Overpass API (OpenStreetMap queries) | OpenStreetMap community (Overpass API, overpass-api.de), live (minutely diffs) | you supply the file | share-alike |  |
+| `ref.public-service.world.osm.ohsome` | ohsome API (OpenStreetMap full history, HeiGIT) | HeiGIT (Heidelberg Institute for Geoinformation Technology), OpenStreetMap full history to the date in the API's metadata | web service | share-alike |  |
+| `ref.public-service.world.osm.overpass` | Overpass API (OpenStreetMap queries) | OpenStreetMap community (Overpass API, overpass-api.de), live (minutely diffs) | web service | share-alike |  |
 | `ref.public-service.world.platform.carto` | CARTO platform API (US East region) | CARTO, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.world.router.ors` | openrouteservice (HeiGIT) routing and isochrones | Heidelberg Institute for Geoinformation Technology (HeiGIT), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | share-alike |  |
 | `ref.public-service.world.router.valhalla-fossgis` | FOSSGIS public Valhalla server (routing and isochrones) | FOSSGIS e.V., live | web service | share-alike |  |

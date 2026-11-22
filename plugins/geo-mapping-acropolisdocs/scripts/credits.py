@@ -155,7 +155,15 @@ def items(plan) -> list[Item]:
     return [i for i in out if i]
 
 
+def _same_party(a: str, b: str) -> bool:
+    n = lambda x: re.sub(r"[^a-z0-9]+", " ", str(x).lower().replace("©", "")).strip()
+    return bool(n(a)) and (n(a) == n(b) or n(a) in n(b) or n(b) in n(a))
+
+
 def _display(org: str, pub: dict | None, products: list, required: list, vias: list) -> str:
+    # 3.4.0 (Day 21 #18): "derived by © OpenStreetMap contributors" under © OpenStreetMap contributors says the source twice: a via whose maker
+    # is the credited organization itself is dropped
+    vias = [v for v in vias if not any(_same_party(v.split(" by ", 1)[-1], x) for x in [org, *required])]
     inner = list(dict.fromkeys(products + vias))
     head = "; ".join(required) if required else org
     if not inner:
@@ -189,7 +197,7 @@ def consolidated(plan, label: str = "Sources") -> tuple[str, dict]:
         if norm(req) not in norm(body):
             appended.append(req.rstrip("."))
             body = (body + "; " if body else "") + req.rstrip(".")
-    for n in pv.api_notice_lines(plan) + pv.as_of_notes(plan):     # 1.3.0: an API notice (Census "not endorsed or certified") and an as-of date, once each
+    for n in pv.api_notice_lines(plan) + pv.as_of_notes(plan) + pv.method_notes(plan):     # 1.3.0: an API notice and an as-of date; 3.4.0: how a modelled measure was made
         if norm(n) not in norm(body):
             body = (body + ". " if body else "") + n.rstrip(".")
     line = (f"{label}: " if label else "") + body + "."

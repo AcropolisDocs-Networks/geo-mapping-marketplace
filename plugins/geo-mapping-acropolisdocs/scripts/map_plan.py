@@ -354,6 +354,7 @@ class LayerPlan:
     smooth: dict | None = None                  # 2.3.0: a smooth density surface: {fine: step per feature, colors: the ramp steps} (smooth_surface)
     edge_in_fill: bool = False                  # 0.22.0: polygons drawn see-through with the edge in each fill colour at full strength
     outline: bool = False                       # 1.2.0: a polygons layer with no fill, drawn as its edge only
+    hollow: bool = False                        # 3.4.0: a point layer with symbol fill: none, drawn as rings
     stroke_named: bool = False                  # 1.2.0: the spec names the edge colour, so it is drawn at full strength
     class_opacity: list | None = None           # 0.20.0: one opacity per class (value by alpha on a hexbin): low classes let the ground show
     emphasis: str = "primary"                   # 1.13.0: primary | supporting | background (map_emphasis): how strongly the layer is drawn
@@ -419,7 +420,8 @@ def resolve_color(value, tokens: dict, what: str = "color") -> str:
         if key.startswith("status."):
             return tokens["status"][key.split(".", 1)[1]]
         for fam, ramp in (("categorical", tokens.get("categorical")), ("sequential", tokens.get("_brand_sequential_ramp") or tokens.get("sequential_ramp")),
-                          ("neutral", tokens.get("neutral_ramp"))):          # neutral: planned features on an atlas-by-time page (M15)
+                          ("neutral", tokens.get("neutral_ramp")),          # neutral: planned features on an atlas-by-time page (M15)
+                          ("diverging", tokens.get("diverging_ramp"))):     # 3.4.0 (Day 21 #16, Day 20 #26): the lint passed it, the build refused it
             if key.startswith(fam + "."):
                 # 1.2.0 (Day 10 issue 1): an index past the ramp is a plain message, not an IndexError in the build
                 n = len(ramp or [])
@@ -430,7 +432,7 @@ def resolve_color(value, tokens: dict, what: str = "color") -> str:
                 if not 0 <= i < n:
                     raise PlanError(f"{what}: '{v}' is not in the brand's {fam} ramp, which has {n} steps (@brand.{fam}.0 to .{max(n - 1, 0)})", gc.EXIT_USAGE)
                 return ramp[i]
-        raise PlanError(f"{what}: unknown brand color '{v}' (try @brand.accent, .land, .water, .status.success, .categorical.N)")
+        raise PlanError(f"{what}: unknown brand color '{v}' (try @brand.accent, .land, .water, .status.success, .categorical.N, .sequential.N, .diverging.N, .neutral.N)")
     allowed = {c.upper() for c in _all_token_colors(tokens)}
     if v.upper() in allowed:
         return v
@@ -636,7 +638,12 @@ def h3_cells_style(plan, l, ly: dict, res, t: dict) -> None:
         if mode == "outline":
             it.update(fill=t["frame"], stroke=t["frame"], outline=True, width_mm=0.25, label="None" if str(it.get("label")) in ("0", "0–0") else it.get("label"))
     elif zero is not None and items and mode == "none":
-        items[0].update(label="None (not drawn)", outline=True, fill=t["background"], stroke=t["frame"])
+        h3cfg = ly.get("h3") or {}
+        if h3cfg.get("legend") is False or (ly.get("legend") or {}).get("empty") is False:
+            # 3.4.0 (Day 20 #18): the empty class drawn as nothing need not be keyed; legend.note can say it instead
+            blk["items"] = items = items[1:]
+        else:
+            items[0].update(label=str((ly.get("legend") or {}).get("empty_label") or "None (not drawn)"), outline=True, fill=t["background"], stroke=t["frame"])
     if info.get("resolution") is not None:
         km2 = info.get("cell_km2")
         note = f"H3 resolution {info['resolution']}, {km2:.1f} km² per cell" if km2 and km2 >= 1 else f"H3 resolution {info['resolution']}, {km2:.2f} km² per cell"
@@ -731,7 +738,16 @@ def load_source(layer: dict, base: Path, window=None):
         return r.gdf, ent, r.crs_assumed, [n.as_dict() for n in r.notes], None
     if t in ("service", "user-run"):
         return load_capture(layer, base)
-    raise PlanError(f"layer '{layer['id']}': source type '{t}' is not a source this plugin knows (file, ref, service, user-run)", gc.EXIT_USAGE)
+    if t == "osm":                           # 3.4.0 (Day 21 #14): OpenStreetMap by tag through Overpass, cached in data/osm/
+        import osm
+        reg = _BUILD.get("region")
+        try:
+            gdf, prov = osm.source_layer(src, base, src.get("bbox") or (list(reg.bounds) if reg is not None else window))
+        except osm.OsmError as ex:
+            raise PlanError(f"{ex.rule}: layer '{layer['id']}': {ex}", ex.code) from None
+        return gdf, library_entry(osm.ENTRY), False, [{"step": f"OpenStreetMap features ({', '.join(src.get('tags') or ['own query'])}) from "
+                                                               f"{prov.get('source', 'Overpass')}, {prov.get('vintage', 'live')}: {len(gdf):,} feature(s)"}], None
+    raise PlanError(f"layer '{layer['id']}': source type '{t}' is not a source this plugin knows (file, ref, service, user-run, h3, adapter, osm)", gc.EXIT_USAGE)
 
 
 # 0.15.0 MAP-LIC-013: a layer the person supplied that looks like people's home addresses (a person's name beside an address, or a column
@@ -1438,6 +1454,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         except region_mod.RegionError as ex:
             raise PlanError(f"{ex.rule}: {ex}", ex.code) from None
         pre_notes += _BUILD["region"].notes
+        _BUILD.setdefault("findings", []).extend(getattr(_BUILD["region"], "findings", None) or [])   # 3.4.0: MAP-REG-004
         if "region" not in {ly.get("id") for ly in spec["layers"]}:
             loaded["region"] = _BUILD["region"].gdf()      # `ops: [{op: clip, layer: region}]` clips any layer to the region
     fr = tpl.get("map_full") or tpl.get("map") or {}
@@ -1663,6 +1680,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         extent = tuple(float(v) for v in _gpd.GeoSeries([_BUILD["region"].frame_geometry], crs="EPSG:4326").to_crs(display).total_bounds)
     else:
         extent = project_bbox(wgs, display)
+    tpl = medium_template(tpl, look)                     # 3.4.0 (eval MEDIUM-2): slide and social sheets read from further away
     plan = Plan(spec=spec, spec_path=spec_path, manifest=manifest, brand=slug, brand_name=bl.brand_name(slug), pack=pack, tokens=tokens, mode=mode,
                 tpl=tpl, tpl_name=tpl_name, crs=display, crs_info=crs_info, extent=extent, layers=layers, basemap=[], findings=findings, helpers=helpers,
                 look=look, style=style)
@@ -2050,6 +2068,19 @@ def assign_palette(plan: Plan) -> None:
     palette = list(t["categorical"])
     order = list(t.get("categorical_order") or range(len(palette)))     # 0.17.0 auto: near-twin colours wait their turn (map_look)
     k = 0
+    # 3.4.0 (eval STYLE-3, READ-2): the hue families of classed layers' ramps (a navy walk-time ramp) are taken too, so a point layer is not
+    # handed a purple beside the navy lines or a teal beside green trees: a free colour must stay CATEGORICAL_FLOOR apart under CVD
+    near = set(used)
+    for l in plan.layers:
+        c = l.spec.get("classification") or {}
+        if c and cf.ALIASES.get(c.get("method", "quantile"), c.get("method")) != "categorical" and plan.look != "classic":
+            pal = str((l.spec.get("palette") or {}).get("name") or "")
+            near |= {x.upper() for x in (t.get("diverging_ramp") if "diverging" in pal or c.get("midpoint") is not None else t.get("sequential_ramp")) or []}
+    import colorlib
+    import map_look as _ml
+
+    def apart(hexc: str) -> bool:
+        return all(colorlib.cvd_min_delta_e(hexc, u) >= _ml.CATEGORICAL_FLOOR for u in near if u != hexc.upper())
     for l in plan.layers:
         ly = l.spec
         outline = (l.role == "polygons" and l.kind == "polygon" and not l.wedge_info and _is_outline(ly) and plan.look != "classic")
@@ -2058,9 +2089,11 @@ def assign_palette(plan: Plan) -> None:
         if outline and (ly.get("symbol") or {}).get("stroke"):
             continue
         free = [i for i in order if palette[i].upper() not in used]
-        i = free[0] if free else order[k % len(order)]
+        far = [i for i in free if apart(palette[i])] if plan.look != "classic" else []
+        i = far[0] if far else (free[0] if free else order[k % len(order)])
         k += 1
         used.add(palette[i].upper())
+        near.add(palette[i].upper())
         if outline:                                   # 1.2.0: an outline takes its edge colour from the palette
             ly["symbol"] = dict(ly.get("symbol") or {}, stroke=f"@brand.categorical.{i}")
             plan.notes.append(f"layer '{l.id}' is an outline (no fill), so its edge takes brand palette color categorical.{i} ({palette[i]})")
@@ -2141,6 +2174,20 @@ def centre_on_midpoint(plan: Plan, l: LayerPlan, res, vals, mid, fmt, c: dict):
     return res
 
 
+def medium_template(tpl: dict, look: str) -> dict:
+    """3.4.0 (eval MEDIUM-2, both Day 21 slides scored 2): a slide or social template's `medium:` block, under every look but classic:
+    `fonts` raised for reading across a room or on a phone, and `line_scale` and `point_scale` applied to the look's default widths and sizes
+    (a width or size the MapSpec names is kept). Classic keeps the template as it was."""
+    med = tpl.get("medium") if isinstance(tpl.get("medium"), dict) else None
+    if not med or look == "classic":
+        return tpl
+    out = dict(tpl)
+    out["fonts"] = {**(tpl.get("fonts") or {}), **(med.get("fonts") or {})}
+    out["_line_scale"] = float(med.get("line_scale", 1.0))
+    out["_point_scale"] = float(med.get("point_scale", 1.0))
+    return out
+
+
 def point_size(plan: Plan, l: LayerPlan, lk: dict) -> float | None:
     """A point layer's symbol diameter in mm under the auto look: symbol.size (points) when given, else by the layer's feature count, one size
     smaller when more than POINT_OVERLAP_SHARE of the symbols would touch a neighbour at the sheet scale (noted). None under classic: the renderer
@@ -2153,6 +2200,7 @@ def point_size(plan: Plan, l: LayerPlan, lk: dict) -> float | None:
     d = map_look.point_size_mm(plan.look, len(l.gdf))
     if d is None:
         return None
+    d = round(d * float(plan.tpl.get("_point_scale", 1.0)), 3)
     try:
         x0, y0, x1, y1 = plan.extent
         m = plan.tpl.get("map") or {}
@@ -2183,6 +2231,10 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
         sym["_color"] = resolve_color(sym["color"], t, f"layer '{l.id}' symbol color")
     if "fill" in sym and str(sym["fill"]).lower() != "none":
         sym["_fill"] = resolve_color(sym["fill"], t, f"layer '{l.id}' fill")
+    if "stroke" in sym and str(sym["stroke"]).lower() == "none":    # 3.4.0 (Day 20 #26): stroke: none is no edge, as stroke_width: 0 is
+        sym.pop("stroke")
+        sym["stroke_width"] = 0
+        sym["_no_stroke"] = True
     if "stroke" in sym:
         sym["_stroke"] = resolve_color(sym["stroke"], t, f"layer '{l.id}' stroke")
     vf = l.value_field
@@ -2210,7 +2262,14 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
             res = cf.classify(l.gdf[vf].tolist(), "categorical", order=c.get("order"), max_categories=int(c.get("max_categories", cf.MAX_CATEGORIES)),
                               keep_absent=bool(c.get("keep_absent")))
             kind = "categorical"
-            if c.get("labels"):                      # display names for the categories, in the order of `order`
+            if isinstance(c.get("labels"), dict):    # 3.4.0 (Antakya #8): a mapping {value: name} was read as its keys, so the raw codes showed
+                lab = {str(k): str(v) for k, v in c["labels"].items()}
+                unknown = sorted(set(lab) - {str(x) for x in res.labels})
+                if unknown:
+                    raise PlanError(f"MAP-SPEC-014: layer '{l.id}': classification.labels names {', '.join(unknown[:5])}, which are not categories "
+                                    f"of '{vf}' ({', '.join(res.labels[:8])})", gc.EXIT_USAGE)
+                res.labels = [lab.get(str(x), str(x)) for x in res.labels]
+            elif c.get("labels"):                    # display names for the categories, in the order of `order`
                 if len(c["labels"]) != res.k:
                     raise PlanError(f"layer '{l.id}': classification.labels has {len(c['labels'])} entries but there are {res.k} categories", gc.EXIT_USAGE)
                 res.labels = [str(x) for x in c["labels"]]
@@ -2254,6 +2313,9 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
             res.labels = cf.classic_labels(res.labels, integer_style)       # 1.2.0: the classic look keeps "a to under b"
         elif res.kind != "categorical" and not integer_style and res.k > 1 and cf.HALF_OPEN_NOTE not in l.notes:
             l.notes.append(cf.HALF_OPEN_NOTE)
+        if res.kind != "categorical" and isinstance(c.get("labels"), dict):
+            raise PlanError(f"MAP-SPEC-014: layer '{l.id}': classification.labels for numeric classes is a list, one per class in order "
+                            f"({'; '.join(res.labels)}); a mapping names categories", gc.EXIT_USAGE)
         if res.kind != "categorical" and c.get("labels"):
             # 1.2.0 (Day 9 issue 11): numeric classes take their own labels too ("40 – 83" where the method wrote another form), one per class
             if len(c["labels"]) != res.k:
@@ -2336,7 +2398,7 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
         ctx_line = l.role == "context" and plan.look != "classic"
         # 1.2.0 (Day 10 issue 8): a context line layer with no colour is a quiet mid neutral, never the emphasis colour
         l.stroke = sym.get("_color") or (_neutral(t, CONTEXT_LINE_NEUTRAL) if ctx_line else t["emphasis"])
-        l.stroke_w_mm = float(sym["width"]) * 0.3528 if "width" in sym else (CONTEXT_LINE_MM if ctx_line else lk["line_width_mm"])
+        l.stroke_w_mm = float(sym["width"]) * 0.3528 if "width" in sym else (CONTEXT_LINE_MM if ctx_line else lk["line_width_mm"] * float(plan.tpl.get("_line_scale", 1.0)))
         sym["_width_mm"] = l.stroke_w_mm
         if lk["casing_extra_mm"] and l.role not in ("context", "contour") and sym.get("casing", True) is not False:
             l.casing = {"color": t[lk["casing_color"]], "extra_mm": lk["casing_extra_mm"], "opacity": lk["casing_opacity"]}
@@ -2350,6 +2412,14 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
         # 1.19.0 (Day 17 issues A3, A5): a point reads symbol.fill as well as symbol.color (the dot-density recipe wrote fill and the dots fell
         # to the default colour), and symbol.stroke and stroke_width (pt; 0 or stroke: none for no casing) as the lines and areas do
         l.fill = sym.get("_color") or sym.get("_fill") or t["emphasis"]
+        if str(sym.get("fill", "")).lower() == "none" and str(sym.get("shape", "")).lower() != "none":
+            # 3.4.0 (Day 21 #23): a hollow point: a ring in the stroke colour (else the layer's colour), with a light casing
+            l.hollow = True
+            l.fill = sym.get("_stroke") or sym.get("_color") or t["emphasis"]
+            sym["_ring_mm"] = float(sym["stroke_width"]) * 0.3528 if float(sym.get("stroke_width") or 0) > 0 else 0.35
+            sym.pop("stroke", None)
+            sym.pop("_stroke", None)
+            sym.pop("stroke_width", None)
         no_casing = str(sym.get("stroke", "")).lower() == "none" or ("stroke_width" in sym and float(sym["stroke_width"] or 0) <= 0)
         l.stroke = "none" if no_casing else (sym.get("_stroke") or t["background"])
         if "stroke_width" in sym and not no_casing:
@@ -2369,6 +2439,9 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
             sym["_size_mm"] = 0.0
         elif l.legend_block is None:
             l.legend_block = lg.points_block(ly | {"title": l.title, "symbol": sym}, t | {"emphasis": l.fill})
+            if getattr(l, "hollow", False):
+                for it in l.legend_block["items"]:
+                    it.update(hollow=True, ring_mm=sym["_ring_mm"], fill=l.fill)
     if sym.get("parallel") and (l.kind != "line" or l.cls is None or getattr(l.cls, "kind", "categorical") != "categorical"):
         plan.findings.append({"id": "MAP-CART-023", "severity": "WARN", "layer": l.id, "detail": l.id,
                               "message": f"layer '{l.id}': symbol.parallel sets lines that share a path side by side, so it needs a lines layer "
@@ -2380,6 +2453,14 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
             for it, a_ in zip(l.legend_block["items"], l.class_opacity, strict=True):
                 if a_ < 1:
                     it["opacity"] = a_
+    extra = (ly.get("legend") or {}).get("extra") if isinstance(ly.get("legend"), dict) else None
+    if extra and l.legend_block is not None:       # 3.4.0: rows of the key for a state the map shows that is not a class (a video's "Just added")
+        for x in extra:
+            if isinstance(x, dict) and x.get("label"):
+                col = resolve_color(x.get("fill") or "@brand.label", t, f"layer '{l.id}' legend.extra")
+                shp = x.get("shape") or ("circle" if l.legend_block.get("kind") == "points" else None)
+                l.legend_block.setdefault("items", []).append({"label": str(x["label"]), "fill": col, "stroke": t["background"],
+                                                               **({"shape": shp, "size_mm": 2.0} if shp else {}), "extra": True})
     import symbology
     symbology.after_classes(plan, l)          # class patterns, graduated line widths, line swatches for classed lines, nested circles (M15)
     smooth_surface(plan, l, ly)                # 2.3.0: a density surface drawn smooth (density_surface smooth: true)
