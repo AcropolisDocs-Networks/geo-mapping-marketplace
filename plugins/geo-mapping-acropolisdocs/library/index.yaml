@@ -795,16 +795,16 @@ entries:
   file: entries/data/ref.public-service.ca-bc.transit.translink.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: a0dbfec61d0e
-  entry_digest: f7b3d6a9a464
+  entry_digest: e29b75680f3f
 - id: ref.public-service.ca-on.transit.octranspo
   file: entries/data/ref.public-service.ca-on.transit.octranspo.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: 251ce0ee610a
-  entry_digest: 658ec4c27eee
+  entry_digest: 0304d68cccac
 - id: ref.public-service.ca-qc.transit.stm
   file: entries/data/ref.public-service.ca-qc.transit.stm.yaml
   type: public-service
@@ -886,9 +886,9 @@ entries:
   file: entries/data/ref.public-service.fr.weather.meteo-france.yaml
   type: public-service
   status: active
-  rev: 1
+  rev: 2
   tags_digest: 55f43523ce24
-  entry_digest: 34f305d02fc7
+  entry_digest: 6a1997ee5821
 - id: ref.public-service.nl.weather.knmi
   file: entries/data/ref.public-service.nl.weather.knmi.yaml
   type: public-service
@@ -928,23 +928,23 @@ entries:
   file: entries/data/ref.public-service.uk.coverage.ofcom-api.yaml
   type: public-service
   status: active
-  rev: 1
+  rev: 2
   tags_digest: c5b800dce73c
-  entry_digest: d7bcc1050539
+  entry_digest: 319d8b87b968
 - id: ref.public-service.uk.transit.tfl
   file: entries/data/ref.public-service.uk.transit.tfl.yaml
   type: public-service
   status: active
-  rev: 1
+  rev: 2
   tags_digest: f29e165fd03c
-  entry_digest: a5754f621620
+  entry_digest: 718b1a80c750
 - id: ref.public-service.uk.weather.metoffice-datahub
   file: entries/data/ref.public-service.uk.weather.metoffice-datahub.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: 54e1bfdcd26d
-  entry_digest: ff99ba239a0b
+  entry_digest: eb1cf75316de
 - id: ref.public-service.us-az.gis.azgeo
   file: entries/data/ref.public-service.us-az.gis.azgeo.yaml
   type: public-service
@@ -980,6 +980,13 @@ entries:
   rev: 1
   tags_digest: 60a8ee6b72b8
   entry_digest: 18c484c28656
+- id: ref.public-service.us-wa.transit.onebusaway-pugetsound
+  file: entries/data/ref.public-service.us-wa.transit.onebusaway-pugetsound.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: 8009392e9e07
+  entry_digest: c7e2c4314aef
 - id: ref.public-service.us-wa.transit.sound-transit
   file: entries/data/ref.public-service.us-wa.transit.sound-transit.yaml
   type: public-service
@@ -1008,6 +1015,13 @@ entries:
   rev: 1
   tags_digest: fd9ad1911420
   entry_digest: f15073932644
+- id: ref.public-service.us.telecom.fcc-ecfs
+  file: entries/data/ref.public-service.us.telecom.fcc-ecfs.yaml
+  type: public-service
+  status: active
+  rev: 1
+  tags_digest: af3aaa340a30
+  entry_digest: 651e91f826af
 - id: ref.public-service.us.weather.noaa-cdo
   file: entries/data/ref.public-service.us.weather.noaa-cdo.yaml
   type: public-service
@@ -1145,9 +1159,9 @@ entries:
   file: entries/data/ref.public-service.world.weather.visual-crossing.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: 6aeeb8aff9a8
-  entry_digest: a5bc34e58a49
+  entry_digest: 2bf05107187f
 - id: ref.public-service.world.weather.weatherapi
   file: entries/data/ref.public-service.world.weather.weatherapi.yaml
   type: public-service

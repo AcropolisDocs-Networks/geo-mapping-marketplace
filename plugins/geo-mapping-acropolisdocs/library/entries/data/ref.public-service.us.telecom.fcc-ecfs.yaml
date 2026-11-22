@@ -1,0 +1,94 @@
+id: ref.public-service.us.telecom.fcc-ecfs
+type: public-service
+rev: 1
+status: active
+title: FCC Electronic Comment Filing System (ECFS) public API
+summary: 'Comments and filings in FCC proceedings (dockets) from the ECFS public API, with the person''s own API key: filer, proceeding, date and document
+  links, for a table or a map joined by filer address.'
+tags:
+  geography:
+  - us
+  level:
+  - country
+  - site
+  domain:
+  - telecom
+  use_for:
+  - site-map
+  - market-rollup
+  avoid_for:
+  - engineering-grade
+  scale:
+  - national
+  - state
+  - metro
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - public-domain
+  quality:
+  - authoritative
+use_when:
+- Who filed in an FCC proceeding and when (a docket such as 17-108), with the person's own key (map-credentials add fcc-ecfs).
+avoid_when:
+- 'Filer addresses are as typed by the filer: geocode them (geocode-addresses) and expect misses.'
+- 'Bulk history: page through with limit and offset at the API''s rate, not one large pull.'
+delivery:
+  sample:
+    request: recent
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: fcc-ecfs
+    aliases:
+    - ecfs
+    kind: apikey
+    class: secret
+    host: publicapi.fcc.gov
+    inject:
+      query: api_key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://www.fcc.gov/reports-research/developers
+    probe: https://publicapi.fcc.gov/ecfs/filings?limit=1
+    free: true
+    limits: A free key; the FCC developer page states no quota (read 2026-11-22).
+  requests:
+    recent: https://publicapi.fcc.gov/ecfs/filings?sort=date_disseminated,DESC&limit=25
+    proceeding: https://publicapi.fcc.gov/ecfs/filings?proceedings.name={proceeding}&sort=date_disseminated,DESC&limit=25
+  read:
+    records: filing
+  note: Without a key the API answered 403 API_KEY_MISSING and with a made-up key 403 API_KEY_INVALID on 2026-11-22; the key goes as the query parameter
+    api_key.
+source:
+  publisher: Federal Communications Commission
+  product: ECFS public API
+  url: https://www.fcc.gov/ecfs/search/search-filings
+url_verified_on: '2026-11-22'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: false
+  attribution_text: 'Source: FCC Electronic Comment Filing System (ECFS).'
+  note: US federal government data; the FCC API Terms of Service apply to the key (https://www.fcc.gov/general/api-terms-service).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-22'
+  verify_by: '2027-02-22'
+  changelog:
+  - rev: 1
+    date: '2026-11-22'
+    note: 'Added (3.5.0): the key the owner registered by hand as fcc-ecfs (host publicapi.fcc.gov) now has its entry; 403 API_KEY_MISSING without a key and
+      API_KEY_INVALID with a made-up one on 2026-11-22.'

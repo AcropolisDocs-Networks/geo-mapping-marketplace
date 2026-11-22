@@ -66,6 +66,13 @@ should be treated as exposed, and point to `/geo-mapping-acropolisdocs:map-crede
 - **MAP-CRED-011.** A `secret`-class key is never written into a web map or other shared output; only a `browser`-class tile key may be.
 - **MAP-CRED-013.** A fetch that needs a credential stops when none is registered ("run /geo-mapping-acropolisdocs:map-credentials add NAME"), or when the registered host is
   not the request's host.
+  *3.5.0:* `add` with a name the library does not know names the closest library names ("did you mean meteo-france?") and points to
+  `/geo-mapping-acropolisdocs:map-credentials services`, the list of every service the plugin takes a key for (MCP `credentials_services`).
+- **MAP-CRED-015 (INFO, 3.5.0).** A library credential's other names (`aliases`, and the per-host names it `replaces`) are accepted by `add` and
+  registered under the library's own name: `add meteofrance` registers `cred:meteo-france`, `add ofcom` registers `cred:ofcom-mobile`. Only `add`
+  reads aliases; a registered name is matched exactly everywhere else.
+- **Optional keys (3.5.0).** A library block with `optional: true` (TfL) is used when it is registered and left out when it is not: the service
+  answers without a key at a lower limit.
 - **MAP-SVC-029** (Basic files). Only `netrc:` and `file:` references, as plain paths. The secrets file sits outside the project, output and plugin
   folders and outside cloud-synced folders; on the device shell it may sit in a connected folder only when that folder is the credential folder
   itself. The check prints yes/no answers (`exists`, `regular`, `private`, `shaped`, `synced`, `inside_project`, `mount_synthetic`), never the content.

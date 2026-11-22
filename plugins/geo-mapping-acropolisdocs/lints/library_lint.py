@@ -88,7 +88,7 @@ def load_entries(entries_dir: Path, scope: str) -> list[dict]:
 CRED_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 CRED_HOST = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}\.)+[a-z]{2,63}$")
 CRED_FIELDS = {"name", "kind", "class", "class_allowed", "host", "inject", "reject", "probe", "signup_url", "free", "limits", "shape", "note", "lifetime_days",
-               "hosts", "host_suffixes", "handoff_hosts", "replaces"}       # 3.2.0: one credential for a family of hosts (Earthdata)
+               "hosts", "host_suffixes", "handoff_hosts", "replaces", "aliases", "optional"}    # 3.5.0: other names add accepts; a key the service does not require       # 3.2.0: one credential for a family of hosts (Earthdata)
 _SUFFIX = re.compile(r"^\.(?:[a-z0-9](?:[a-z0-9-]{0,62})\.){2,}[a-z]{2,63}$")
 _HANDOFF = re.compile(r"^\.(?:[a-z0-9](?:[a-z0-9-]{0,62})\.)+[a-z]{2,63}$")
 _KEY_IN_REQUEST = re.compile(r"(?i)[?&](key|api_key|apikey|token|access_token)=(?!\{key\}(?:&|$))|\$[A-Za-z_{]")
@@ -120,6 +120,11 @@ def credential_findings(e: dict, eid: str) -> list[dict]:
         out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential has fields this release does not read", extra))
     if not CRED_NAME.match(str(b.get("name") or "")):
         out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.name is lower-case letters, digits, - and _ (the cred:NAME the person registers)"))
+    al = b.get("aliases")
+    if al is not None and not (isinstance(al, list) and all(isinstance(a, str) and CRED_NAME.match(a) and a != b.get("name") for a in al)):
+        out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.aliases is a list of other credential names (lower-case letters, digits, - and _), not the name itself"))
+    if "optional" in b and not isinstance(b["optional"], bool):
+        out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.optional is true or false: true when the service also answers without the key"))
     if b.get("kind") not in ("basic", "apikey", "bearer", "userkey"):
         out.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.kind is basic, apikey, bearer or userkey"))
     host = str(b.get("host") or "").lower()

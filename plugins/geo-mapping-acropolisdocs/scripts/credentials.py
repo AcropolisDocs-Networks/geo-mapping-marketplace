@@ -528,6 +528,81 @@ def library_defaults(name: str, entries: list[dict] | None = None) -> tuple[dict
     return None, None
 
 
+def library_lookup(name: str, entries: list[dict] | None = None) -> tuple[dict | None, dict | None, str | None]:
+    """3.5.0: (block, entry, canonical name) for NAME, matched on the library credential's name, then its `aliases` and the per-host names it
+    `replaces` (meteofrance -> meteo-france, ofcom -> ofcom-mobile, earthdata-lpdaac -> earthdata). Used where a person types a name
+    (add); everywhere else a registered name is matched exactly (library_defaults)."""
+    es = entries if entries is not None else library_entries()
+    b, e = library_defaults(name, es)
+    if b:
+        return b, e, name
+    for e in es:
+        b = entry_block(e)
+        if b and b.get("name") and name in [str(a) for a in (b.get("aliases") or [])] + _hostlist(b.get("replaces")):
+            return b, e, str(b["name"])
+    return None, None, None
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(s or "").lower())
+
+
+def suggest_names(name: str, entries: list[dict] | None = None, n: int = 3) -> list[str]:
+    """3.5.0: the library credential names closest to NAME (by name, alias, entry title or host), for a 'did you mean' line."""
+    import difflib
+    es = entries if entries is not None else library_entries()
+    keys: dict[str, str] = {}
+    for e in es:
+        b = entry_block(e)
+        if not (b and b.get("name")):
+            continue
+        cn = str(b["name"])
+        for k in [cn, *[str(a) for a in (b.get("aliases") or [])], str(e.get("title") or ""), str(b.get("host") or "").split(".")[-2] if b.get("host") else ""]:
+            if _norm(k):
+                keys.setdefault(_norm(k), cn)
+    q = _norm(name)
+    out: list[str] = []
+    for k in [k for k in keys if q and (q in k or k in q)] + difflib.get_close_matches(q, list(keys), n=6, cutoff=0.6):
+        if keys[k] not in out:
+            out.append(keys[k])
+    return out[:n]
+
+
+def services(entries: list[dict] | None = None, include_keyless: bool = False) -> dict:
+    """3.5.0: every service in the plugin's library that takes a person's own key: the name to give add, its other accepted names, the host and
+    how the key is sent, the key class, the sign-up address, the free-tier limits, whether check --probe can test it, and whether the key is
+    optional (the service also answers without one). With include_keyless, the active entries that need no key are listed too (id, title,
+    type). Nothing about the person's own credentials: that is status."""
+    es = entries if entries is not None else library_entries()
+    keyed: dict[str, dict] = {}
+    keyless = []
+    for e in sorted(es, key=lambda x: str(x.get("id"))):
+        b = entry_block(e)
+        if not (b and b.get("name")):
+            if include_keyless and e.get("status") == "active" and e.get("type") not in ("map-type", "palette", "template", "symbol-set"):
+                keyless.append({"entry": e.get("id"), "title": e.get("title"), "type": e.get("type")})
+            continue
+        n = str(b["name"])
+        row = keyed.get(n)
+        if row:
+            row["entries"].append(e.get("id"))
+            continue
+        keyed[n] = {"name": n, "aliases": [str(a) for a in (b.get("aliases") or [])] + _hostlist(b.get("replaces")), "title": e.get("title"),
+                    "entries": [e.get("id")], "status": e.get("status"), "kind": b.get("kind", "apikey"), "host": b.get("host"),
+                    "sent_as": _inject_text(b.get("inject")) or ("bearer" if b.get("kind") == "bearer" else None),
+                    "class": b.get("class", "secret"), "browser_ok": "browser" in (b.get("class_allowed") or [b.get("class", "secret")]),
+                    "signup_url": b.get("signup_url"), "free": b.get("free"), "limits": b.get("limits"), "probe": bool(b.get("probe")),
+                    "optional": bool(b.get("optional")), "lifetime_days": b.get("lifetime_days")}
+    rows = list(keyed.values())
+    out = {"ok": True, "count": len(rows), "services": rows,
+           "how": f"Register any of these with /{_prefix()}:map-credentials add NAME (an alias works too and is registered under NAME). A service that is "
+                  "not listed needs host= and inject= with add."}
+    if include_keyless:
+        out["keyless"] = keyless
+        out["keyless_count"] = len(keyless)
+    return out
+
+
 def _prefix_ok(p) -> bool:
     """A header prefix is one scheme word; Bearer and Basic have their own forms (bearer, basic)."""
     return isinstance(p, str) and bool(PREFIX_RE.match(p)) and p.lower() not in ("bearer", "basic")
@@ -1378,7 +1453,13 @@ def add(store: Store, name: str, *, cls: str | None = None, restricted: bool = F
     credential whose file is empty takes over the value of the per-host credentials it `replaces` (adopt=False leaves the file empty)."""
     if not NAME_RE.match(name or ""):
         return {"ok": False, "findings": [finding("MAP-CRED-001", "BLOCK", "a credential name is lower-case letters, digits, - and _ (at most 40), such as census")]}
-    block, entry = library_defaults(name, store.entries())
+    alias_of = None
+    if not host and not inject:
+        block, entry, canon = library_lookup(name, store.entries())
+        if canon and canon != name:                  # 3.5.0: another name for a library service is registered under the library's own name
+            alias_of, name = name, canon
+    else:
+        block, entry = library_defaults(name, store.entries())
     b = dict(block or {})
     fam_problem = family_problem(also_hosts, None, None)
     if fam_problem:
@@ -1397,7 +1478,11 @@ def add(store: Store, name: str, *, cls: str | None = None, restricted: bool = F
     elif cls == "browser" and "browser" not in allowed_cls:
         fs.append(finding("MAP-CRED-011", "BLOCK", f"'{name}' cannot be a browser-class key: only tile-provider keys the provider designs to be public may be"))
     if not host_ok(host, kind):
-        fs.append(finding("MAP-CRED-013", "BLOCK", f"'{name}' is not a service the library knows; give the one host it may be sent to (--host api.example.org) and how it is sent (--inject query:key)"))
+        near = suggest_names(name, store.entries()) if not block else []
+        fs.append(finding("MAP-CRED-013", "BLOCK", f"'{name}' is not a service the library knows"
+                          + (f" (did you mean {' or '.join(near)}?)" if near else "")
+                          + f"; /{_prefix()}:map-credentials services lists every service the plugin takes a key for. For another service, give the one host "
+                            "it may be sent to (--host api.example.org) and how it is sent (--inject query:key)", near or None))
     if not inj:
         fs.append(finding("MAP-CRED-001", "BLOCK", inject_problem(inject if inject else b.get("inject"))))
     elif kind in KINDS and not inject_fits(kind, inj):
@@ -1505,7 +1590,9 @@ def add(store: Store, name: str, *, cls: str | None = None, restricted: bool = F
                if b.get("lifetime_days") else "")
         nxt.append(f"The token ends on {exp.isoformat()}{how}. Status warns {EXPIRY_WARN_DAYS} days before; after that day runs refuse to send it until you rotate.")
     covers_shown = fam["hosts"] + ["*" + s for s in fam["suffixes"]]
-    out = {"ok": not blocks(fs), "name": name, "file": shown, "host": host, "kind": kind, "class": cls, "already_registered": existed, "expires": e.get("expires"),
+    if alias_of:
+        fs.append(finding("MAP-CRED-015", "INFO", f"'{alias_of}' is another name for '{name}', the library's name for {(entry or {}).get('title') or name}: it is registered as {name} (cred:{name})", alias_of))
+    out = {"ok": not blocks(fs), "name": name, **({"asked_as": alias_of} if alias_of else {}), "file": shown, "host": host, "kind": kind, "class": cls, "already_registered": existed, "expires": e.get("expires"),
            **({"also_sent_to": covers_shown} if covers_shown else {}), **({"adopted": adopted} if adopted else {}),
            "signup_url": b.get("signup_url"), "free": b.get("free"), "library_entry": (entry or {}).get("id"), "next": nxt, "findings": fs,
            "never": "Never paste the key into the chat. If you already did, treat it as exposed: get a new one and rotate.",
@@ -2162,6 +2249,8 @@ def main(argv=None) -> int:
     ap.add_argument("--json", action="store_true")
     sub = ap.add_subparsers(dest="op", required=True)
     sub.add_parser("status")
+    p = sub.add_parser("services", help="3.5.0: every service the plugin's library takes a key for (name, aliases, host, how sent, sign-up)")
+    p.add_argument("--keyless", action="store_true", help="also list the active entries that need no key")
     p = sub.add_parser("add")
     p.add_argument("name")
     p.add_argument("--class", dest="cls", choices=CLASSES)
@@ -2210,6 +2299,8 @@ def main(argv=None) -> int:
         try:
             if a.op == "status":
                 res = status(store)
+            elif a.op == "services":
+                res = services(store.entries(), include_keyless=a.keyless)
             elif a.op == "add":
                 res = add(store, a.name, cls=a.cls, restricted=a.confirm_restricted, host=a.host, inject=a.inject, kind=a.kind, review_after=a.review_after, expires=a.expires,
                           also_hosts=a.also_hosts or None, adopt=not a.no_adopt)

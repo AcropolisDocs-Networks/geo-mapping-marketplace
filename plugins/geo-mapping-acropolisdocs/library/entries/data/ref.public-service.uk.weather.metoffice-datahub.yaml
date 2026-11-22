@@ -1,6 +1,6 @@
 id: ref.public-service.uk.weather.metoffice-datahub
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: Met Office Weather DataHub
 summary: UK and global site-specific forecasts, observations and map images from the Met Office Weather DataHub, by product subscription with daily call
@@ -38,19 +38,47 @@ tags:
   quality:
   - authoritative
 use_when:
-- UK site forecasts on a UK site or venue map, once the person holds a DataHub subscription.
+- UK site forecasts on a UK site or venue map, with the person's own Weather DataHub key for the free site-specific plan (map-credentials add metoffice-datahub).
 avoid_when:
-- 'Until the free plan, the key header and the terms are read: the DataHub pages need JavaScript (2026-11-07).'
+- 'More than 360 calls a day on the free site-specific plan: the limit resets at 00:00 UTC.'
 - 'Official UK warnings: those come from the Met Office warnings service, not this entry.'
 delivery:
-  mode: user-supplied
-  note: Register, choose a product (Global Spot site-specific, observations, map images), subscribe to a plan; API-call plans have daily limits that reset
-    at 00:00 UTC. Product data is GeoJSON. Key delivery and the free plan were not read.
+  sample:
+    request: hourly
+    params:
+      lat: '51.5'
+      lon: '-0.12'
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: metoffice-datahub
+    aliases:
+    - metoffice
+    - met-office
+    kind: apikey
+    class: secret
+    host: data.hub.api.metoffice.gov.uk
+    inject:
+      header: apikey
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://datahub.metoffice.gov.uk/
+    probe: https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=51.5&longitude=-0.12
+    free: true
+    limits: 'Free site-specific plan: 360 calls a day, reset at 00:00 UTC (pricing page, read 2026-11-15).'
+  requests:
+    hourly: https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude={lat}&longitude={lon}
+    three-hourly: https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/three-hourly?latitude={lat}&longitude={lon}
+    daily: https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/daily?latitude={lat}&longitude={lon}
+  note: 'Global Spot site-specific forecasts as GeoJSON (one point, its time series in the properties). The key goes in a header named apikey; without one
+    the gateway answered 401 "Missing Credentials" and named that header, and a made-up key 401, on 2026-11-22.'
 source:
   publisher: Met Office
   product: Weather DataHub
   url: https://datahub.metoffice.gov.uk/
-url_verified_on: '2026-11-15'
+url_verified_on: '2026-11-22'
 vintage:
   current: live
   cadence: live
@@ -64,8 +92,8 @@ license:
     free site-specific plan of 360 calls a day (limits reset at 00:00 UTC). Treated as restricted: no redistribution of the raw data.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-15'
-  verify_by: '2027-02-15'
+  reviewed_on: '2026-11-22'
+  verify_by: '2027-02-22'
   changelog:
   - rev: 1
     date: '2026-11-07'
@@ -74,3 +102,7 @@ maintenance:
   - rev: 2
     date: '2026-11-15'
     note: 'Active (1.17.0): the free site-specific plan (360 calls a day) read on the pricing page; the terms open only after sign-in and are accepted there.'
+  - rev: 3
+    date: '2026-11-22'
+    note: 'Fetched by the plugin (3.5.0): the site-specific hourly, three-hourly and daily point forecasts through library_request with cred:metoffice-datahub
+      (header apikey); 401 without a key and with a made-up key on 2026-11-22.'

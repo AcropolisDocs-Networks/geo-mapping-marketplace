@@ -1,6 +1,6 @@
 id: ref.public-service.fr.weather.meteo-france
 type: public-service
-rev: 1
+rev: 2
 status: active
 title: Météo-France public API (observations, forecasts, climatology)
 summary: France's weather observations (SYNOP and the station network), forecasts and climatology from Météo-France's API portal, with the person's own
@@ -61,6 +61,8 @@ delivery:
     limits: No quota stated on the pages read 2026-11-20 (the portal shows each API's quota after sign-up).
     note: Without a token the gateway answers 401 'Missing Credentials' and asks for an OAuth2 token in the Authorization header with the Bearer scheme
       (2026-11-20); the API documentation's examples use the Bearer form.
+    aliases:
+    - meteofrance
   request: https://public-api.meteofrance.fr/public/DPObs/v1/liste-stations
 source:
   publisher: Météo-France
@@ -80,7 +82,7 @@ license:
     conditions were not read on 2026-11-20.
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-20'
+  reviewed_on: '2026-11-22'
   verify_by: '2027-02-20'
   check:
     kind: http_head
@@ -91,3 +93,6 @@ maintenance:
     date: '2026-11-20'
     note: 'Added (3.1.0, a source the 2026-11-07 dive did not reach): the gateway''s answer without a token read on 2026-11-20 (401, Bearer); the portal''s
       quota not read.'
+  - rev: 2
+    date: '2026-11-22'
+    note: '3.5.0: add also accepts meteofrance and registers it as cred:meteo-france.'

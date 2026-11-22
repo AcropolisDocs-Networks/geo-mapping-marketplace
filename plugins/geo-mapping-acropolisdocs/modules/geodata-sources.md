@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 212 entries (210 active); basemap-provider 18, boundary 37, boundary-derived 2, context 16, crosswalk 1, gazetteer 8, infrastructure 16, map-type 13, palette 2, public-service 53, statistic 24, symbol-set 1, template 6, terrain 15.
+Library: 214 entries (212 active); basemap-provider 18, boundary 37, boundary-derived 2, context 16, crosswalk 1, gazetteer 8, infrastructure 16, map-type 13, palette 2, public-service 55, statistic 24, symbol-set 1, template 6, terrain 15.
 
 ### Usable now
 
@@ -96,8 +96,8 @@ Library: 212 entries (210 active); basemap-provider 18, boundary 37, boundary-de
 | `ref.infrastructure.world.osm.geofabrik` | OpenStreetMap extracts by state or country (Geofabrik) | Geofabrik GmbH (OpenStreetMap data), daily extracts | you supply the file | share-alike |  |
 | `ref.infrastructure.world.road.ne10` | Roads worldwide, 1:10,000,000 (Natural Earth) | Natural Earth, 5.1.x (naciscdn.org current file, downloaded 2026-11-04) | downloaded on first use | public-domain |  |
 | `ref.infrastructure.world.submarine-cable.telegeography` | Submarine cable systems and landing points (TeleGeography Submarine Cable Map) | TeleGeography | you supply the file | licensed |  |
-| `ref.public-service.ca-bc.transit.translink` | TransLink (Metro Vancouver) GTFS and GTFS-realtime | TransLink, current GTFS | you supply the file | restricted |  |
-| `ref.public-service.ca-on.transit.octranspo` | OC Transpo (Ottawa) GTFS and GTFS-realtime | City of Ottawa, OC Transpo, current GTFS | you supply the file | restricted |  |
+| `ref.public-service.ca-bc.transit.translink` | TransLink (Metro Vancouver) GTFS and GTFS-realtime | TransLink, current GTFS | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
+| `ref.public-service.ca-on.transit.octranspo` | OC Transpo (Ottawa) GTFS and GTFS-realtime | City of Ottawa, OC Transpo, current GTFS | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.ca-qc.transit.stm` | STM Montréal GTFS (bus and métro) | Société de transport de Montréal, current GTFS | downloaded on first use | attribution |  |
 | `ref.public-service.ca.weather.eccc-geomet` | Environment and Climate Change Canada weather, climate and water (MSC GeoMet) | Environment and Climate Change Canada, Meteorological Service of Canada, live | web service | attribution |  |
 | `ref.public-service.ch.transit.opentransportdata` | opentransportdata.swiss (Switzerland public transport) | SKI+ (Systemaufgaben Kundeninformation, on behalf of the Federal Office of Transport), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
@@ -116,17 +116,19 @@ Library: 212 entries (210 active); basemap-provider 18, boundary 37, boundary-de
 | `ref.public-service.se.mapping.lantmateriet` | Lantmäteriet open geodata (Sweden: elevation, laser data, maps) | Lantmäteriet, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
 | `ref.public-service.se.weather.smhi` | SMHI Open Data (Sweden weather observations) | Swedish Meteorological and Hydrological Institute (SMHI), live | web service | attribution |  |
 | `ref.public-service.uk.coverage.ofcom-api` | Ofcom mobile coverage API (UK, by postcode) | Ofcom, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
-| `ref.public-service.uk.transit.tfl` | Transport for London Unified API | Transport for London, live | web service | attribution |  |
-| `ref.public-service.uk.weather.metoffice-datahub` | Met Office Weather DataHub | Met Office, live | you supply the file | restricted |  |
+| `ref.public-service.uk.transit.tfl` | Transport for London Unified API | Transport for London, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
+| `ref.public-service.uk.weather.metoffice-datahub` | Met Office Weather DataHub | Met Office, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.us-az.gis.azgeo` | AZGeo Data Hub and ArcGIS Server (Arizona) | AZGeo Data Hub and ArcGIS Server, live portal | web service | open |  |
 | `ref.public-service.us-ca.gis.geoportal` | California State Geoportal (gis.data.ca.gov) | California State Geoportal, live portal | web service | open |  |
 | `ref.public-service.us-fl.gis.fgio` | Florida Geospatial Open Data Portal (FGIO) and FGDL | Florida Geospatial Open Data Portal, live portal | web service | open |  |
 | `ref.public-service.us-tx.gis.txgio` | Texas Geographic Information Office (TxGIO, formerly TNRIS) | Texas Geographic Information Office, live portal | web service | open |  |
 | `ref.public-service.us-wa.gis.geo-wa` | Washington State Geospatial Open Data Portal (geo.wa.gov) | Washington State Geospatial Open Data Portal, live portal | web service | open |  |
+| `ref.public-service.us-wa.transit.onebusaway-pugetsound` | OneBusAway Puget Sound API (stops, arrivals, live vehicles) | Sound Transit and King County Metro (OneBusAway Puget Sound), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.us-wa.transit.sound-transit` | Sound Transit GTFS (Link light rail, Sounder, T Line, ST Express) | Sound Transit, current GTFS (service periods; Fall 2026 SC-Fall-2026.6 read on Day 15) | you supply the file | restricted |  |
 | `ref.public-service.us.broadband.fcc-bdc-api` | FCC Broadband Data Collection public data API | Federal Communications Commission, per as-of date | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | public-domain |  |
 | `ref.public-service.us.energy.eia-opendata` | US Energy Information Administration Open Data API (v2) | US Energy Information Administration, rolling | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | public-domain |  |
 | `ref.public-service.us.geocoder.census` | US Census Bureau Geocoder | US Census Bureau, Public_AR_Current benchmark | web service | public-domain |  |
+| `ref.public-service.us.telecom.fcc-ecfs` | FCC Electronic Comment Filing System (ECFS) public API | Federal Communications Commission, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | public-domain |  |
 | `ref.public-service.us.weather.noaa-cdo` | NOAA Climate Data Online (CDO) web services v2 | NOAA, National Centers for Environmental Information, rolling | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | public-domain |  |
 | `ref.public-service.us.weather.nws` | NOAA National Weather Service watches, warnings and advisories | NOAA, National Weather Service, live | web service | public-domain |  |
 | `ref.public-service.us.weather.nws-forecast` | NOAA National Weather Service forecast API (api.weather.gov) | NOAA, National Weather Service, live | web service | public-domain |  |
@@ -146,7 +148,7 @@ Library: 212 entries (210 active); basemap-provider 18, boundary 37, boundary-de
 | `ref.public-service.world.transit.transitland` | Transitland (GTFS feed catalogue and API) | Interline Technologies (Transitland), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.world.weather.open-meteo` | Open-Meteo weather forecast and history API | Open-Meteo, live | web service | restricted |  |
 | `ref.public-service.world.weather.openweathermap` | OpenWeatherMap (current weather and forecast) | OpenWeather Ltd, live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
-| `ref.public-service.world.weather.visual-crossing` | Visual Crossing Weather (history and forecast) | Visual Crossing Corporation | you supply the file | restricted |  |
+| `ref.public-service.world.weather.visual-crossing` | Visual Crossing Weather (history and forecast) | Visual Crossing Corporation | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.world.weather.weatherapi` | WeatherAPI.com (current, forecast and history, worldwide) | WeatherAPI.com (Apilayer), live | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | attribution |  |
 | `ref.public-service.world.wikidata` | Wikidata SPARQL query service | Wikimedia Foundation (Wikidata), live | you supply the file | public-domain |  |
 | `ref.statistic.au.coverage.accc-mobile` | ACCC Mobile Infrastructure Report: coverage per operator (Australia) | Australian Competition and Consumer Commission, 2026 | downloaded on first use | attribution | h3 (string) |

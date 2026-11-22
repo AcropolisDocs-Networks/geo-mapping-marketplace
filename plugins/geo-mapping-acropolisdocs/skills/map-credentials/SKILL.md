@@ -2,8 +2,8 @@
 name: map-credentials
 disable-model-invocation: true
 description: >
-  Keep your own API keys for map data services in a private folder on your computer: status, add, check, rotate, remove, audit. Never asks
-  for a key in chat.
+  Keep your own API keys for map data services in a private folder on your computer: services, status, add, check, rotate, remove, audit.
+  Never asks for a key in chat.
 ---
 
 # map-credentials
@@ -19,6 +19,19 @@ names and metadata only. Maps and profiles name a key as `cred:NAME` (for exampl
 - **If a person pastes a key into the chat:** do not use it, do not repeat it, do not put it in a file. Say, in one or two sentences, that the key
   is now in this conversation and should be treated as exposed: get a new key from the service and run `rotate`. Then carry on with `add` or `rotate`.
 - Show names, hosts, dates, yes/no answers and file paths. Never the content of a credential file.
+
+## Which services the plugin takes a key for (3.5.0)
+
+`credentials_services` (CLI `services`) lists every service in the plugin's library that takes the person's own key: the name to give `add`,
+the other names `add` also accepts (`meteofrance` for `meteo-france`, `ofcom` for `ofcom-mobile`, `earthdata-lpdaac` for `earthdata`), host,
+how the key is sent, sign-up address and free limits. `include_keyless=true` adds the active entries that need no key.
+
+- **Never tell the person a service is not in the plugin without this list.** When `add NAME` answers MAP-CRED-013 "not a service the library
+  knows", read its "did you mean" names and the list, and run `add` again with the library's name. Ask for a host and how the key is sent only
+  for a service that is truly not listed.
+- An alias is registered under the library's own name (MAP-CRED-015): say which name it was registered as, because maps use `cred:NAME`.
+- A key marked `optional` (TfL) is used when registered; the service also answers without it at a lower limit.
+- A key list kept elsewhere (a tracker page) is kept in step from this list, not from release notes.
 
 ## Which route
 
@@ -39,6 +52,7 @@ GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
   [ -f "$d/scripts/gmap_common.py" ] && echo "$(grep -o '"version": *"[0-9.]*' "$d/.claude-plugin/plugin.json" 2>/dev/null | tr -dc 0-9.) $d"; done | sort -V | tail -1 | cut -d' ' -f2-)
 [ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-mapping-acropolisdocs: plugin root not found" >&2; false; }
 GP=${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
+python3 "$GMAP_ROOT/scripts/credentials.py" services [--keyless]      # no credential folder needed: the library's list
 python3 "$GMAP_ROOT/scripts/credentials.py" --dir "$HOME/mnt/<credential folder>" status
 python3 "$GMAP_ROOT/scripts/credentials.py" --dir "$HOME/mnt/<credential folder>" add census
 python3 "$GMAP_ROOT/scripts/credentials.py" --dir "$HOME/mnt/<credential folder>" check census [--probe --confirm-probe api.census.gov]
@@ -68,8 +82,9 @@ python3 "$GMAP_ROOT/scripts/modules.py" read credential-broker        # any modu
 
 | Subcommand | MCP tool | What to tell the person |
 |---|---|---|
+| `services [--keyless]` | `credentials_services` | 3.5.0: every service the plugin takes a key for (name, other names, host, how the key is sent, sign-up, free limits, probe yes/no, optional); with `--keyless` (`include_keyless=true`) the entries that need no key too |
 | `status` | `credentials_status` | Each credential's name, host, class, status (unchecked, ready, rejected, expired, missing), last check, review date, whether the file is private, and an old key file still waiting to be deleted after a rotation |
-| `add NAME [--class browser]` | `credentials_add` | The file path to open, the sign-up address (Census: https://api.census.gov/data/key_signup.html), then "run check". For a name the library does not know, ask for the host and how the key is sent (`query:NAME`, `header:NAME`, `header:NAME:PREFIX` when the service wants a word before the key such as `header:Authorization:OAuth`, `bearer`, `basic`, `path` when the key sits in the address path at `{key}`; for a service that wants a username and a key, `kind=userkey` and `user=header:NAME,key=header:NAME`, and the file holds `username:token` on one line; for the person's own PostGIS database, `inject=postgres:database=NAME,user=NAME` with optional `port`, `sslmode` and `schema`, the host as their computer or network names it, and the file holds the password of a read-only role). For a token that ends pass `expires=YYYY-MM-DD`; never ask for the key. **NASA Earthdata (3.2.0): one token for every archive.** `add earthdata` registers ONE bearer token that goes to CMR and every DAAC (LP DAAC, NSIDC, LAADS, GES DISC, PO.DAAC, ORNL, ASF), never one per host; when `earthdata-lpdaac`, `earthdata-nsidc`, `earthdata-laads` or the like are registered it takes their token over (the same token, or the one that ends last) with its end date, and says they can be removed. Then `check earthdata --probe` with `confirm_probe=cmr.earthdata.nasa.gov`. `also_hosts=` adds exact hosts to any credential |
+| `add NAME [--class browser]` | `credentials_add` | The file path to open, the sign-up address (Census: https://api.census.gov/data/key_signup.html), then "run check". For a name the library does not know (check `services` and the "did you mean" names first), ask for the host and how the key is sent (`query:NAME`, `header:NAME`, `header:NAME:PREFIX` when the service wants a word before the key such as `header:Authorization:OAuth`, `bearer`, `basic`, `path` when the key sits in the address path at `{key}`; for a service that wants a username and a key, `kind=userkey` and `user=header:NAME,key=header:NAME`, and the file holds `username:token` on one line; for the person's own PostGIS database, `inject=postgres:database=NAME,user=NAME` with optional `port`, `sslmode` and `schema`, the host as their computer or network names it, and the file holds the password of a read-only role). For a token that ends pass `expires=YYYY-MM-DD`; never ask for the key. **NASA Earthdata (3.2.0): one token for every archive.** `add earthdata` registers ONE bearer token that goes to CMR and every DAAC (LP DAAC, NSIDC, LAADS, GES DISC, PO.DAAC, ORNL, ASF), never one per host; when `earthdata-lpdaac`, `earthdata-nsidc`, `earthdata-laads` or the like are registered it takes their token over (the same token, or the one that ends last) with its end date, and says they can be removed. Then `check earthdata --probe` with `confirm_probe=cmr.earthdata.nasa.gov`. `also_hosts=` adds exact hosts to any credential |
 | `check NAME [--probe]` | `credentials_check` | The yes/no answers, or the exact fix (a chmod line, or an icacls line by SID on Windows; `fix=true` applies it). A probe sends one small request to the registered test address: ask "send one test request to api.census.gov with your key?" and pass the host back as `confirm_probe` only on a yes |
 | `rotate NAME` then `rotate NAME --finish` | `credentials_rotate` | Revoke the old key at the service first if it may have leaked; paste the new key into `NAME.next.key`; finish checks it and switches; the old file is kept for the person to delete (status reminds after 7 days) |
 | `remove NAME` | `credentials_remove` | The registry entry and profile references are gone; the files are listed for the person to delete (deleted only when they ask) |

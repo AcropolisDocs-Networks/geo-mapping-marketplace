@@ -1,6 +1,6 @@
 id: ref.public-service.world.weather.visual-crossing
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: Visual Crossing Weather (history and forecast)
 summary: Worldwide weather history, forecasts and alerts by place from the Visual Crossing Timeline API, with a free key.
@@ -38,16 +38,40 @@ tags:
 use_when:
 - Weather on a past date at a venue or site (history is on the free tier, per the comparison read earlier).
 avoid_when:
-- The editions and terms pages were not read (2026-11-07); free limits, commercial use and key parameter are unconfirmed.
+- 'The free plan: 1,000 records a day, and the linked credit near the data.'
 delivery:
-  mode: user-supplied
-  note: The Timeline API at weather.visualcrossing.com answered 400 without a key on 2026-11-07, asking anonymous requests to accept gzip; the key parameter
-    was not confirmed.
+  sample:
+    request: current
+    params:
+      place: London
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: visual-crossing
+    aliases:
+    - visualcrossing
+    kind: apikey
+    class: secret
+    host: weather.visualcrossing.com
+    inject:
+      query: key
+    reject:
+      status:
+      - 401
+    signup_url: https://www.visualcrossing.com/sign-up/
+    probe: https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/London?include=current
+    free: true
+    limits: 'Free plan: 1,000 records a day, commercial use allowed with the linked credit (editions page, read 2026-11-15).'
+  requests:
+    current: https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{place}?include=current&unitGroup=metric
+    days: https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{place}?include=days&unitGroup=metric
+  note: The Timeline API with the key as the query parameter key (Timeline API documentation, read 2026-11-22); a made-up key answered 401 "Invalid API
+    key" on 2026-11-22.
 source:
   publisher: Visual Crossing Corporation
   product: Timeline Weather API
   url: https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Phoenix
-url_verified_on: '2026-11-15'
+url_verified_on: '2026-11-22'
 license:
   class: restricted
   redistribute_ok: false
@@ -58,8 +82,8 @@ license:
     by Visual Crossing'' with a link must appear near the data.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-15'
-  verify_by: '2027-02-15'
+  reviewed_on: '2026-11-22'
+  verify_by: '2027-02-22'
   changelog:
   - rev: 1
     date: '2026-11-07'
@@ -67,3 +91,7 @@ maintenance:
   - rev: 2
     date: '2026-11-15'
     note: 'Active (1.17.0): the editions page read: Free plan 1,000 records a day, commercial use allowed, the linked credit required on the free plan.'
+  - rev: 3
+    date: '2026-11-22'
+    note: 'Fetched by the plugin (3.5.0): current conditions and daily values by place through library_request with cred:visual-crossing (query key); 401
+      for a made-up key on 2026-11-22.'

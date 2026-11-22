@@ -1,6 +1,6 @@
 id: ref.public-service.ca-on.transit.octranspo
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: OC Transpo (Ottawa) GTFS and GTFS-realtime
 summary: Ottawa bus and O-Train schedules (GTFS, public since 2008) and GTFS-realtime for registered developers.
@@ -36,21 +36,48 @@ tags:
   quality:
   - authoritative
 use_when:
-- An Ottawa O-Train or bus map from the GTFS file the person downloads.
+- Live Ottawa O-Train and bus positions or trip updates (GTFS-realtime) with the person's own OC Transpo subscription key (map-credentials add octranspo);
+  the static GTFS file the person downloads for routes and stops.
 avoid_when:
-- Feed addresses and key delivery are not in the developers page's text (2026-11-07); contact octranspo-dev@ottawa.ca for GTFS-RT.
+- 'The static GTFS address refuses automated requests (HTTP 403, 2026-11-15): download it in a browser and supply it.'
 - 'Accuracy guarantees: OC Transpo states it cannot guarantee accuracy or completeness.'
+- 'The feeds are labelled beta in their addresses (2026-11-22): check the developer portal if they move.'
 delivery:
-  mode: user-supplied
+  sample:
+    request: positions
+  mode: service
   format: GTFS (zip); GTFS-realtime (protobuf)
-  note: 'Static GTFS: https://www.octranspo.com/files/google_transit.zip (listed on open.ottawa.ca as ''OC Transpo Schedules''); it refuses automated requests
-    (HTTP 403 from the build session and the owner''s computer, 2026-11-15), so download it in a browser and supply it. GTFS-realtime: register as a developer
-    through octranspo-dev@ottawa.ca; the developers page publishes no key header or limits.'
+  requires_credential:
+    name: octranspo
+    aliases:
+    - oc-transpo
+    kind: apikey
+    class: secret
+    host: nextrip-public-api.azure-api.net
+    inject:
+      header: Ocp-Apim-Subscription-Key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://nextrip-public-api.developer.azure-api.net/
+    probe: https://nextrip-public-api.azure-api.net/octranspo/gtfs-rt-vp/beta/v1/VehiclePositions
+    free: true
+    limits: Not published on the developer pages (2026-11-22); the portal sets them per subscription.
+  requests:
+    positions: https://nextrip-public-api.azure-api.net/octranspo/gtfs-rt-vp/beta/v1/VehiclePositions
+    trips: https://nextrip-public-api.azure-api.net/octranspo/gtfs-rt-tp/beta/v1/TripUpdates
+  read:
+    format: file
+    suffix: .pb
+  note: 'GTFS-realtime vehicle positions and trip updates through the NexTrip public API (Azure API Management): the key goes in the header Ocp-Apim-Subscription-Key,
+    as the gateway names it in its 401 (2026-11-22; a made-up key answered 401 "invalid subscription key"). Static GTFS: https://www.octranspo.com/files/google_transit.zip
+    refuses automated requests, so it is supplied as a file.'
 source:
   publisher: City of Ottawa, OC Transpo
   product: GTFS and GTFS-realtime
   url: https://www.octranspo.com/en/plan-your-trip/travel-tools/developers
-url_verified_on: '2026-11-15'
+url_verified_on: '2026-11-22'
 vintage:
   current: current GTFS
   cadence: irregular
@@ -64,8 +91,8 @@ license:
     purposes; OC Transpo does not guarantee accuracy. No separate terms page or attribution wording is published.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-15'
-  verify_by: '2027-02-15'
+  reviewed_on: '2026-11-22'
+  verify_by: '2027-02-22'
   changelog:
   - rev: 1
     date: '2026-11-07'
@@ -75,3 +102,7 @@ maintenance:
     date: '2026-11-15'
     note: 'Active (1.17.0): the developers page re-read (commercial use for registered developers, no other terms published); the static feed address found
       on open.ottawa.ca, a browser download.'
+  - rev: 3
+    date: '2026-11-22'
+    note: 'Fetched by the plugin (3.5.0): GTFS-realtime positions and trip updates with cred:octranspo (header Ocp-Apim-Subscription-Key, named by the gateway);
+      401 without a key and with a made-up key on 2026-11-22.'

@@ -2,6 +2,18 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-22
+
+- `ref.public-service.ca-bc.transit.translink` rev 3: Fetched by the plugin (3.5.0): the static GTFS (keyless) and GTFS-realtime positions, trip updates and alerts with cred:translink (query apikey); 403 without a key and with a made-up key on 2026-11-22.
+- `ref.public-service.ca-on.transit.octranspo` rev 3: Fetched by the plugin (3.5.0): GTFS-realtime positions and trip updates with cred:octranspo (header Ocp-Apim-Subscription-Key, named by the gateway); 401 without a key and with a made-up key on 2026-11-22.
+- `ref.public-service.fr.weather.meteo-france` rev 2: 3.5.0: add also accepts meteofrance and registers it as cred:meteo-france.
+- `ref.public-service.uk.coverage.ofcom-api` rev 2: 3.5.0: add also accepts ofcom and registers it as cred:ofcom-mobile.
+- `ref.public-service.uk.transit.tfl` rev 2: 3.5.0: the optional app_key as cred:tfl (query app_key), used when registered and left out when not; a made-up key answered 429 "Invalid app_key is provided." on 2026-11-22.
+- `ref.public-service.uk.weather.metoffice-datahub` rev 3: Fetched by the plugin (3.5.0): the site-specific hourly, three-hourly and daily point forecasts through library_request with cred:metoffice-datahub (header apikey); 401 without a key and with a made-up key on 2026-11-22.
+- `ref.public-service.us-wa.transit.onebusaway-pugetsound` rev 1: Added (3.5.0): the key the owner registered by hand as pugetsound-oba (host api.pugetsound.onebusaway.org, query key) now has its entry; 401 "permission denied" without a key and with a made-up one on 2026-11-22.
+- `ref.public-service.us.telecom.fcc-ecfs` rev 1: Added (3.5.0): the key the owner registered by hand as fcc-ecfs (host publicapi.fcc.gov) now has its entry; 403 API_KEY_MISSING without a key and API_KEY_INVALID with a made-up one on 2026-11-22.
+- `ref.public-service.world.weather.visual-crossing` rev 3: Fetched by the plugin (3.5.0): current conditions and daily values by place through library_request with cred:visual-crossing (query key); 401 for a made-up key on 2026-11-22.
+
 ## 2026-11-21
 
 - `ref.map-type.what-if-walk` rev 1: Active (3.4.0): the Day 21 what-if (fountains only 49% of street length 10+ min away, with restaurants 10%) as a map type.

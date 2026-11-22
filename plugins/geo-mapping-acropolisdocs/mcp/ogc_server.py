@@ -305,10 +305,19 @@ def credentials_status() -> dict:
 
 @mcp.tool()
 @st.masked
+def credentials_services(include_keyless: bool = False) -> dict:
+    """3.5.0: every service the plugin's library takes a person's own key for: the name to give credentials_add, other names add also accepts,
+    the host, how the key is sent, the key class, the sign-up address, free-tier limits, whether credentials_check can probe it, and whether the
+    key is optional. include_keyless=true also lists the active library entries that need no key. Use it before telling anyone a service is
+    not in the plugin, and to keep a list of keys in step with the plugin. Nothing about the person's own keys (that is credentials_status)."""
+    return st.credentials_services(include_keyless)
+
+@mcp.tool()
+@st.masked
 def credentials_add(name: str, credential_class: str = "", confirm_restricted: bool = False, host: str = "", inject: str = "", kind: str = "", expires: str = "",
                     also_hosts: str = "", adopt: bool = True) -> dict:
     """Register a credential and create its EMPTY private file in the person's credential folder (the folder too, made private). For a service the library
-    knows (census, maptiler, carto-positron, nasa-firms, mapillary) the host and how the key is sent come from the library; otherwise give host= and inject=
+    knows (any name credentials_services lists, or one of its aliases) the host and how the key is sent come from the library; otherwise give host= and inject=
     (query:NAME, header:NAME, header:NAME:PREFIX for a scheme word before the key such as header:Authorization:OAuth, bearer, basic, or path when the key sits
     at {key} in the address path; for a username plus a key, kind=userkey and inject="user=header:NAME,key=header:NAME", the file then holding username:token).
     expires=YYYY-MM-DD is the day a token ends (an Earthdata token lasts 60 days); runs refuse it after that day.

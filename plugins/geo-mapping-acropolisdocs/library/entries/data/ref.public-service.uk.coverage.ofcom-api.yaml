@@ -1,6 +1,6 @@
 id: ref.public-service.uk.coverage.ofcom-api
 type: public-service
-rev: 1
+rev: 2
 status: active
 title: Ofcom mobile coverage API (UK, by postcode)
 summary: Ofcom's mobile coverage for every address in a postcode, per operator (EE, Three, O2, Vodafone), data and voice, outdoor and indoor, with the person's
@@ -41,7 +41,8 @@ avoid_when:
 crs: EPSG:4326
 delivery:
   sample:
-    params: {postcode: SW1A1AA}
+    params:
+      postcode: SW1A1AA
   mode: service
   requires_credential:
     name: ofcom-mobile
@@ -58,6 +59,8 @@ delivery:
     free: true
     limits: '"Basic: 100 calls/minute, 50,000 requests/month" (Ofcom API product page, read 2026-11-20)'
     note: The mobile coverage key is separate from the broadband key and needs Ofcom's approval
+    aliases:
+    - ofcom
   request: https://api-proxy.ofcom.org.uk/mobile/coverage/{postcode}
 source:
   publisher: Ofcom
@@ -77,7 +80,7 @@ license:
   note: 'Ofcom''s FOI answer of August 2026: the API terms permit use in a commercial client-facing deliverable; bulk extraction is limited.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-20'
+  reviewed_on: '2026-11-22'
   verify_by: '2027-02-20'
   check:
     kind: http_head
@@ -87,3 +90,6 @@ maintenance:
   - rev: 1
     date: '2026-11-20'
     note: 'Added (3.1.0): endpoint, header and plans from the API documentation and Ofcom''s FOI answer, read 2026-11-20.'
+  - rev: 2
+    date: '2026-11-22'
+    note: '3.5.0: add also accepts ofcom and registers it as cred:ofcom-mobile.'

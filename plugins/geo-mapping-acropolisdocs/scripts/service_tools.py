@@ -736,6 +736,11 @@ def credentials_status(store=None) -> dict:
     return _cred_result(cr.status(store or cred_store()))
 
 
+def credentials_services(include_keyless: bool = False, store=None) -> dict:
+    import credentials as cr
+    return _cred_result(cr.services((store or cred_store()).entries(), include_keyless=bool(include_keyless)))
+
+
 def credentials_add(name: str, credential_class: str = "", confirm_restricted: bool = False, host: str = "", inject: str = "", kind: str = "", expires: str = "",
                     store=None, also_hosts: str = "", adopt: bool = True) -> dict:
     import credentials as cr

@@ -162,6 +162,8 @@ def credential_for(entry: dict, url: str, store=None):
     if not cr.covers(str(b.get("host") or ""), cr.family_of(None, b), host):      # 3.2.0: or a host of the credential's family
         raise FetchError(f"{entry['id']}: the credential '{b.get('name')}' is declared for {b.get('host')}, but the request goes to {host}", gc.EXIT_REFUSED, "MAP-CRED-013")
     try:
+        if b.get("optional") and (store or cr.Store()).get(str(b["name"])) is None:
+            return None                     # 3.5.0: an optional key (TfL's app_key) that is not registered: the request goes without one
         return cr.resolve(f"cred:{b['name']}", store=store, host=host, block=b)
     except cr.CredentialError as ex:
         raise FetchError(ex.findings[0]["message"], gc.EXIT_LINT if ex.rule in ("MAP-CRED-002", "MAP-CRED-003") else gc.EXIT_REFUSED, ex.rule)

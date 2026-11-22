@@ -1,6 +1,6 @@
 id: ref.public-service.uk.transit.tfl
 type: public-service
-rev: 1
+rev: 2
 status: active
 title: Transport for London Unified API
 summary: London Underground, bus, rail and bike data from TfL's Unified API (lines, stops and stations, status, arrivals), keyless at low volume; an app_key
@@ -40,12 +40,13 @@ use_when:
 - Stations and stops of a London line or mode, or line status, on a London site or venue map.
 - A London transit layer when no GTFS feed is supplied.
 avoid_when:
-- 'A busy or repeated pull without a key: register and subscribe to the data plan, then send app_key as a query parameter.'
 - 'Outside London: TfL covers London only.'
+- 'A busy or repeated pull without a key: register the optional key (map-credentials add tfl).'
 delivery:
   sample:
     request: line-status
-    params: {mode: tube}
+    params:
+      mode: tube
   mode: service
   protocol: rest-json
   request: https://api.tfl.gov.uk/StopPoint/Mode/{mode}
@@ -53,13 +54,33 @@ delivery:
     line-status: https://api.tfl.gov.uk/Line/Mode/{mode}/Status
     stops: https://api.tfl.gov.uk/StopPoint/Mode/{mode}
     route: https://api.tfl.gov.uk/Line/{line}/Route/Sequence/outbound
-  note: 'Line status for the tube answered without a key on 2026-11-07. With a key: register on api-portal.tfl.gov.uk, subscribe to the 500-requests data
-    plan, and send app_key as a query parameter (app_id is no longer needed). The plugin sends no key for TfL today.'
+  note: 'Line status for the tube answered without a key on 2026-11-07 and 2026-11-22. With a key (optional): register on api-portal.tfl.gov.uk, subscribe
+    to the data plan, and the plugin sends it as app_key (app_id is no longer needed). A made-up app_key answered 429 "Invalid app_key is provided." on
+    2026-11-22, which is why 429 counts as a rejection only with that text.'
+  requires_credential:
+    name: tfl
+    kind: apikey
+    class: secret
+    host: api.tfl.gov.uk
+    inject:
+      query: app_key
+    optional: true
+    reject:
+      status:
+      - 401
+      - 403
+      - 429
+      body:
+      - Invalid app_key
+    signup_url: https://api-portal.tfl.gov.uk/signup
+    probe: https://api.tfl.gov.uk/Line/Mode/tube/Status
+    free: true
+    limits: Keyless at a low rate; a free key on the 500-requests-a-minute data plan raises it (api-portal.tfl.gov.uk, read 2026-11-07).
 source:
   publisher: Transport for London
   product: TfL Unified API
   url: https://api-portal.tfl.gov.uk/
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-22'
 vintage:
   current: live
   cadence: live
@@ -73,8 +94,8 @@ license:
     usual one, to be confirmed against those terms.
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
-  verify_by: '2027-02-07'
+  reviewed_on: '2026-11-22'
+  verify_by: '2027-02-22'
   check:
     kind: http_get
     url: https://api.tfl.gov.uk/Line/Mode/tube/Status
@@ -84,3 +105,7 @@ maintenance:
     date: '2026-11-07'
     note: 'Seed (reference library additions, P2): the API portal read (app_key query parameter, data plan) and line status answered without a key on 2026-11-07;
       transport data terms not read.'
+  - rev: 2
+    date: '2026-11-22'
+    note: '3.5.0: the optional app_key as cred:tfl (query app_key), used when registered and left out when not; a made-up key answered 429 "Invalid app_key
+      is provided." on 2026-11-22.'

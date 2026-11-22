@@ -1,0 +1,100 @@
+id: ref.public-service.us-wa.transit.onebusaway-pugetsound
+type: public-service
+rev: 1
+status: active
+title: OneBusAway Puget Sound API (stops, arrivals, live vehicles)
+summary: Puget Sound transit stops, real-time arrivals and vehicle positions for King County Metro, Sound Transit and the other regional agencies from the
+  OneBusAway Puget Sound server, with the person's own key.
+tags:
+  geography:
+  - us-wa
+  level:
+  - site
+  - line
+  domain:
+  - transport
+  use_for:
+  - site-map
+  - context-basemap
+  avoid_for:
+  - engineering-grade
+  scale:
+  - regional
+  - metro
+  - local
+  audience:
+  - any
+  confidentiality:
+  - public
+  freshness:
+  - live
+  tier:
+  - T2
+  license_class:
+  - restricted
+  quality:
+  - authoritative
+use_when:
+- Stops near a Seattle-area site, live vehicles of one agency, or arrivals at a stop, with the person's own key (cred:pugetsound-oba).
+avoid_when:
+- 'A key is given by the Puget Sound OneBusAway team on request, not by a sign-up form: ask through Sound Transit''s Open Transit Data contact.'
+- 'Schedules and route shapes: the agencies'' GTFS files (ref.public-service.us-wa.transit.sound-transit) carry those.'
+delivery:
+  sample:
+    request: agencies
+  mode: service
+  protocol: rest-json
+  requires_credential:
+    name: pugetsound-oba
+    aliases:
+    - onebusaway-pugetsound
+    - oba-pugetsound
+    kind: apikey
+    class: secret
+    host: api.pugetsound.onebusaway.org
+    inject:
+      query: key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://soundtransit.org/help-contacts/business-information/open-transit-data-otd
+    probe: https://api.pugetsound.onebusaway.org/api/where/agencies-with-coverage.json
+    free: true
+    limits: No quota published (2026-11-22).
+  requests:
+    agencies: https://api.pugetsound.onebusaway.org/api/where/agencies-with-coverage.json
+    stops: https://api.pugetsound.onebusaway.org/api/where/stops-for-location.json?lat={lat}&lon={lon}&radius={radius}
+    vehicles: https://api.pugetsound.onebusaway.org/api/where/vehicles-for-agency/{agency}.json
+    arrivals: https://api.pugetsound.onebusaway.org/api/where/arrivals-and-departures-for-stop/{stop}.json
+  read:
+    records: data.list
+    requests:
+      arrivals:
+        records: data.entry.arrivalsAndDepartures
+  note: 'The OneBusAway REST API with the key as the query parameter key; without a key and with a made-up key the server answered 401 "permission denied"
+    on 2026-11-22. Agency ids: 1 King County Metro, 40 Sound Transit.'
+source:
+  publisher: Sound Transit and King County Metro (OneBusAway Puget Sound)
+  product: OneBusAway REST API
+  url: https://developer.onebusaway.org/api/where
+url_verified_on: '2026-11-22'
+vintage:
+  current: live
+  cadence: live
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: null
+  bulk_ok: false
+  attribution_text: 'Transit data: OneBusAway Puget Sound.'
+  note: The key is given under the agencies' Transit Data Terms of Use; commercial use not read (2026-11-22).
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-22'
+  verify_by: '2027-02-22'
+  changelog:
+  - rev: 1
+    date: '2026-11-22'
+    note: 'Added (3.5.0): the key the owner registered by hand as pugetsound-oba (host api.pugetsound.onebusaway.org, query key) now has its entry; 401 "permission
+      denied" without a key and with a made-up one on 2026-11-22.'

@@ -1,6 +1,6 @@
 id: ref.public-service.ca-bc.transit.translink
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: TransLink (Metro Vancouver) GTFS and GTFS-realtime
 summary: Metro Vancouver bus, SkyTrain, SeaBus and West Coast Express schedules (GTFS) and real-time feeds from TransLink's open API, with a free key.
@@ -36,20 +36,50 @@ tags:
   quality:
   - authoritative
 use_when:
-- A Vancouver SkyTrain or bus map from the GTFS file, once the person has downloaded it or registered for a key.
+- A Vancouver SkyTrain or bus map from the static GTFS (no key), or live vehicle positions, trip updates and alerts with the person's own TransLink key
+  (map-credentials add translink).
 avoid_when:
-- 'Key delivery is unconfirmed: the GTFS and GTFS-realtime pages give no address or parameter in their text (2026-11-07).'
+- More than 1,000 real-time requests a day on one key.
 - 'The older RTTI API: TransLink says it is deprecated.'
 delivery:
-  mode: user-supplied
+  sample:
+    request: positions
+  mode: service
   format: GTFS (zip); GTFS-realtime (protobuf)
-  note: 'Static GTFS needs no key: https://gtfs-static.translink.ca/gtfs/google_transit.zip (16 MB, updated 2026-11-13). Real-time needs an API key: write
-    to TransLink with the organisation and intended use; an approved key allows 1,000 requests a day.'
+  requires_credential:
+    name: translink
+    kind: apikey
+    class: secret
+    host: gtfsapi.translink.ca
+    inject:
+      query: apikey
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://developer.translink.ca/
+    probe: https://gtfsapi.translink.ca/v3/gtfsalerts
+    free: true
+    limits: 1,000 requests a day per key (Open API Terms of Use, read 2026-11-15).
+  requests:
+    gtfs: https://gtfs-static.translink.ca/gtfs/google_transit.zip
+    positions: https://gtfsapi.translink.ca/v3/gtfsposition
+    trips: https://gtfsapi.translink.ca/v3/gtfsrealtime
+    alerts: https://gtfsapi.translink.ca/v3/gtfsalerts
+  read:
+    format: file
+    suffix: .pb
+    requests:
+      gtfs:
+        suffix: .zip
+        keyless: true
+  note: 'Static GTFS needs no key (another host, sent without it). Real-time: gtfsposition, gtfsrealtime and gtfsalerts with the key as apikey (GTFS-realtime
+    page, read 2026-11-22); without a key and with a made-up key the API answered 403 on 2026-11-22. The .pb file is read by gtfs.py vehicles.'
 source:
   publisher: TransLink
   product: Open API (GTFS static and real-time)
   url: https://www.translink.ca/about-us/doing-business-with-translink/app-developer-resources
-url_verified_on: '2026-11-15'
+url_verified_on: '2026-11-22'
 vintage:
   current: current GTFS
   cadence: irregular
@@ -63,8 +93,8 @@ license:
     use of TransLink''s names or marks; a fee charged to end users may bring further terms; ended on 10 days'' notice.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-15'
-  verify_by: '2027-02-15'
+  reviewed_on: '2026-11-22'
+  verify_by: '2027-02-22'
   changelog:
   - rev: 1
     date: '2026-11-07'
@@ -74,3 +104,7 @@ maintenance:
     date: '2026-11-15'
     note: 'Active (1.17.0): the Open API Terms of Use read (the disclaimer, 1,000 requests a day per key, redistribution allowed, no use of the marks);
       the static GTFS answers without a key.'
+  - rev: 3
+    date: '2026-11-22'
+    note: 'Fetched by the plugin (3.5.0): the static GTFS (keyless) and GTFS-realtime positions, trip updates and alerts with cred:translink (query apikey);
+      403 without a key and with a made-up key on 2026-11-22.'
