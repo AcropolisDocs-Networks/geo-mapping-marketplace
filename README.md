@@ -1,6 +1,6 @@
 # acropolisdocs-maps: maps for Claude
 
-The marketplace for **geo-mapping-acropolisdocs** 3.3.1, built for Claude Cowork: cartographic maps from a request or your own geodata (print maps as SVG,
+The marketplace for **geo-mapping-acropolisdocs** 3.3.2, built for Claude Cowork: cartographic maps from a request or your own geodata (print maps as SVG,
 PDF and PNG, interactive web maps, data conversion and analysis, public data services, travel-time areas and terrain).
 
 ## Install (Claude Cowork)
