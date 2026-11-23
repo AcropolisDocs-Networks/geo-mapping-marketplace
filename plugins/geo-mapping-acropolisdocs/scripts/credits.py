@@ -178,8 +178,14 @@ def consolidated(plan, label: str = "Sources") -> tuple[str, dict]:
     import provenance as pv
     groups: dict[str, dict] = {}
     for it in items(plan):
-        g = groups.setdefault(it.org.lower(), {"org": it.org, "pub": it.pub, "products": [], "required": [], "vias": [], "kinds": []})
-        g["products"] += [p for p in it.products if p not in g["products"]]
+        # 3.7.0 (B16, Day 23 issue 16): two layers whose required wording is the same ("NYC Open Data") are one credit, and a layer whose wording
+        # replaces its own name keeps that name as a product: "NYC Open Data (Restaurant Inspections, Parks Properties)", where the second
+        # layer used to drop out of the line
+        replaced = bool(it.required) and not _same_party(it.org, it.required)
+        key = (it.required if replaced else it.org).lower()
+        g = groups.setdefault(key, {"org": it.org, "pub": it.pub, "products": [], "required": [], "vias": [], "kinds": []})
+        own = ([it.org] if replaced and not it.products else []) + list(it.products)
+        g["products"] += [p for p in own if p not in g["products"]]
         if it.required and it.required not in g["required"]:
             g["required"].append(it.required)
         if it.via and it.via not in g["vias"]:

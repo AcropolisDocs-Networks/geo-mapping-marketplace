@@ -91,3 +91,12 @@ attribution from it; the unmatched ids go in the reply so the person can fix tho
 How many rows geocoded of how many, with which provider; the match-quality counts; the unmatched rows by id; the attribution line the map must
 carry; and the next step (`map-create` with the GeoPackage, or `/geo-mapping-acropolisdocs:map-run program-map` for a tracker). When the gate refused the table, say which column
 set it saw and what to change: declare the purpose, or drop the person-name columns.
+
+## Venues by name (3.7.0)
+
+A stadium, arena, station, airport or landmark known by its name, not its address: the server's `geocode_venues` (names separated by `;`,
+`kind`, `country` as an ISO code, `bbox` to keep the right one). Wikidata answers first, with no key; a name with several fitting items comes
+back `ambiguous` with its candidates: ask the person which, never pick. `osm=true` also asks OpenStreetMap (Nominatim) for the names Wikidata
+missed, a customization (the one acknowledgment). On the command line: `scripts/venue_search.py --names "MetLife Stadium;BC Place" --kind stadium`.
+The credit goes on the map: Wikidata (CC0), and OpenStreetMap when it answered.
+

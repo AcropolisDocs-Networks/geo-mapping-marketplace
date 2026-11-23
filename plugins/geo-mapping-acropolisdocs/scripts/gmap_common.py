@@ -102,6 +102,96 @@ def workdir(create: bool = False) -> Path:
     return p
 
 
+# ------------------------------------------------------------------------------------------------------------- 3.7.0: the person's own folder
+# Spec 3.7.0 Parts A and D: what is the person's (their brand packs, their default brand, their own data sources and service profiles, the
+# terms acknowledgment, their licence answers) is written to ONE folder that every project reads, like the credential folder, instead of the
+# .geo-mapping/ of whichever folder a session happened to run in. A project's own .geo-mapping/ is still read first, so a client project can
+# carry its own brand; `--here` (or scope=project) writes there on purpose.
+
+def ephemeral_home() -> bool:
+    """True when the home folder does not last: a Claude Cowork session's Linux VM ($HOME=/sessions/<id>, the person's folders under
+    $HOME/mnt). There the folder that lasts is the project folder, and the person's own folder is kept by the plugin's data server on their
+    computer (the user_settings tool brings it into a project)."""
+    if os.environ.get("GEO_MAPPING_USER"):
+        return False
+    try:
+        h = Path.home()
+    except RuntimeError:
+        return True
+    return str(h).replace("\\", "/").startswith("/sessions/") and (h / "mnt").is_dir()
+
+
+def user_folder(create: bool = False) -> Path:
+    """The person's own folder: ~/.geo-mapping (%USERPROFILE%\\.geo-mapping). GEO_MAPPING_USER stands in for it in tests. While
+    GEO_MAPPING_HOME is set (tests, spikes) and GEO_MAPPING_USER is not, it is that working folder, as before; in a session whose home does
+    not last (ephemeral_home) it is the working folder too, the one that lasts there."""
+    u = os.environ.get("GEO_MAPPING_USER")
+    if u:
+        p = Path(u)
+    elif os.environ.get("GEO_MAPPING_HOME") or ephemeral_home():
+        p = workdir()
+    else:
+        try:
+            p = Path.home() / WORKDIR_NAME
+        except RuntimeError:
+            p = workdir()
+    if create:
+        p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def user_config() -> dict:
+    """The person's config.yaml in their own folder ({} when there is none or it cannot be read). Keys: credentials_dir (read by
+    credentials.default_dir as before), sources_dir, brands_dir."""
+    p = user_folder() / "config.yaml"
+    if not p.is_file():
+        return {}
+    try:
+        d = load_yaml(p) or {}
+    except Exception:  # noqa: BLE001 - an unreadable config is no config
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
+def _config_dir(key: str, default: Path) -> Path:
+    v = user_config().get(key)
+    return Path(os.path.expanduser(str(v))) if v else default
+
+
+def user_sources_dir(create: bool = False) -> Path:
+    """Where the person's own data sources are kept: `sources_dir:` in config.yaml, else <user folder>/sources (spec 3.7.0 section 3)."""
+    p = _config_dir("sources_dir", user_folder() / "sources")
+    if create:
+        p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def user_brands_dir(create: bool = False) -> Path:
+    """Where the person's own brand packs are written: `brands_dir:` in config.yaml, else <user folder>/brands (spec 3.7.0 Part D)."""
+    p = _config_dir("brands_dir", user_folder() / BRANDS_DIRNAME)
+    if create:
+        p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def settings_places(name: str) -> list[Path]:
+    """Where a per-person setting file or folder NAME is read, first match wins: the working folder's .geo-mapping/, the folder a tool call
+    named, then the person's own folder (and, outside tests, ~/.geo-mapping). Duplicates removed."""
+    out = [workdir() / name, outputs_dir() / name, user_folder() / name]
+    if not os.environ.get("GEO_MAPPING_HOME") and not os.environ.get("GEO_MAPPING_USER"):
+        try:
+            out.append(Path.home() / WORKDIR_NAME / name)
+        except RuntimeError:
+            pass
+    seen, uniq = set(), []
+    for p in out:
+        k = str(p)
+        if k not in seen:
+            seen.add(k)
+            uniq.append(p)
+    return uniq
+
+
 _OUTPUTS: "contextvars.ContextVar[Path | None]" = contextvars.ContextVar("gmap_outputs", default=None)
 
 
@@ -301,7 +391,8 @@ def user_brand_roots() -> list[Path]:
     project), the working folder's .geo-mapping/brands/, the folder a tool call named, then your own ~/.geo-mapping/brands/."""
     roots = [Path(x) for x in (os.environ.get("GEO_MAPPING_BRANDS") or "").split(os.pathsep) if x.strip()]
     roots += [workdir() / BRANDS_DIRNAME, outputs_dir() / BRANDS_DIRNAME]
-    if not os.environ.get("GEO_MAPPING_HOME"):                 # tests and the persistence spike see only their own folder
+    roots += [user_brands_dir()]                               # 3.7.0: brands_dir in config.yaml, else <your folder>/brands (Part D)
+    if not os.environ.get("GEO_MAPPING_HOME") and not os.environ.get("GEO_MAPPING_USER"):   # tests and the persistence spike see only their own folder
         try:
             roots.append(Path.home() / WORKDIR_NAME / BRANDS_DIRNAME)
         except RuntimeError:                                   # no home folder for this process

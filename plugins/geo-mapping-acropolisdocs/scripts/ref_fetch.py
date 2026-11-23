@@ -84,6 +84,10 @@ def cached_path(entry: dict, variant: str | None = None) -> Path | None:
 def source_url(entry: dict, variant: str | None) -> tuple[str, bool]:
     """(url, hash_applies). The `source.file_sha256` describes the entry's main URL only, never a per-variant URL."""
     d = entry.get("delivery") or {}
+    if variant and isinstance(d.get("files"), dict):          # 3.7.0 (C7): named files of one entry (TeleGeography: cable, landing)
+        if variant not in d["files"]:
+            raise FetchError(f"{entry['id']} has the files {', '.join(d['files'])}; '{variant}' is not one", gc.EXIT_USAGE)
+        return str(d["files"][variant]), False
     if variant:
         t = d.get("url_template")
         if not t:
@@ -286,7 +290,7 @@ def find_entry(entry_id: str) -> dict:
     hits = [e for e in rl.all_entries("all") if e.get("id") == entry_id]
     if not hits:
         raise FetchError(f"no entry '{entry_id}'", gc.EXIT_USAGE)
-    return hits[-1] if len(hits) > 1 and hits[-1].get("_scope") == "local" else hits[0]
+    return rl.pick(hits)                     # 3.7.0: local, then the person's own sources (user), then shipped
 
 
 TOOLS = ("census_query", "fcc_bdc", "hist_fetch", "cds_retrieve", "overture_io", "geoboundaries", "noaa_normals")
@@ -733,9 +737,15 @@ def fetch(entry: dict, variant: str | None = None, refresh: bool = False, opener
     credential always goes that way, with the key added at send time."""
     import geo_io
     if entry.get("status") != "active":
+        if entry.get("_scope") == "user":
+            raise FetchError(f"your source {entry['id']} is a draft ({entry.get('_src_changed') or 'not tested yet'}): test it first with map-sources test "
+                             f"{entry['id']}", gc.EXIT_REFUSED, "MAP-SRC-010")
         raise FetchError(f"{entry['id']} is {entry.get('status')}; only active entries are fetched", gc.EXIT_REFUSED)
     if (entry.get("delivery") or {}).get("mode") != "fetch":
         raise FetchError(f"{entry['id']} is delivered as {(entry.get('delivery') or {}).get('mode')}, not by fetch", gc.EXIT_USAGE)
+    import licence_ack as la                               # 3.7.0 (C7): a third party's licence is asked before its data is fetched
+    if la.required(entry) and la.current(entry["id"]) is None:
+        raise FetchError(f"MAP-LIC-018: {la.refusal(entry)}", gc.EXIT_REFUSED, "MAP-LIC-018")
     if not (entry.get("url_verified_on")):
         raise FetchError(f"{entry['id']} has no verified URL", gc.EXIT_REFUSED)
     url, hash_applies = source_url(entry, variant)

@@ -2,6 +2,12 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-23
+
+- `ref.boundary.world.country.ne10` rev 1: 3.7.0: Natural Earth admin-0 at 1:10m, fetched once into the library cache (4.7 MB zip, sha256 checked), read for source.detail 10m.
+- `ref.boundary.world.country.ne50` rev 1: Bundled payload built and verified (M1).
+- `ref.infrastructure.world.submarine-cable.telegeography` rev 3: Fetched (3.7.0, Day 22 issue 7): the public cable-geo.json (756 KB) and landing-point-geo.json (362 KB) answered HTTP 200 on 2026-11-23; delivery.mode fetch with delivery.files {cable, landing}. The licence pop-up still runs before the first fetch or map (licence_ack), so the rights question stays the person's.
+
 ## 2026-11-22
 
 - `ref.infrastructure.world.cell.opencellid` rev 3: 3.6.0: check --probe tests the token on the cell API (getInArea, one cell, key=), so the twice-a-day downloads are not spent; 401 "API Key not known" for a made-up token on 2026-11-22.

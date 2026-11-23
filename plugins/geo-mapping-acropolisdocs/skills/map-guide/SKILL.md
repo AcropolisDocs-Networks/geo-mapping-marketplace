@@ -24,6 +24,7 @@ words, give them the line to type:
 | to know whether this computer can make maps, or why a build cannot start | `/geo-mapping-acropolisdocs:map-doctor` |
 | to know why a map failed in this session | `/geo-mapping-acropolisdocs:map-trace` |
 | to add a dataset to the library or check entries for staleness | `/geo-mapping-acropolisdocs:reference-curate` |
+| to add a data source of their own (an API, a file, tiles) with their own key, for every project | `/geo-mapping-acropolisdocs:map-sources` |
 | where this session's tokens went | `/geo-mapping-acropolisdocs:map-token-use` |
 
 `/geo-mapping-acropolisdocs:brand` (or `/geo-mapping-acropolisdocs:geo-set-brand`) lists your brands, adds a brand pack, makes one from a name, a colour and a logo, and sets the default map brand.

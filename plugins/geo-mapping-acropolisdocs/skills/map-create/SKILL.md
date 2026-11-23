@@ -61,7 +61,7 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the
 | `mapspec-reference`      | **before writing or changing a MapSpec**: every field, the roles and symbols, and worked examples |
 | `transit-maps`           | for a transit map from a GTFS feed |
 | `map-ground-global`      | for a metro or city map that needs detailed land and water, and for any map outside the United States |
-| `map-build-options`      | for a layer over 50,000 features, side panels and the fit, or a style pack (antique, blueprint, classical, editorial, monochrome, sketch) |
+| `map-build-options`      | for a layer over 50,000 features, panels and the fit, a style pack, or a 3.7.0 line (stack, strip, Socrata, Spilhaus) |
 | `map-env-probe`          | when `env_probe.py` stops the build (tier, packages, two editions installed) |
 | `regions`                | **for every map**: the `region:` block |
 | `h3-grids`               | for data on the H3 grid (FCC mobile hexagons) |
@@ -71,7 +71,8 @@ Exit 0 built; 3 a BLOCK finding (nothing is withheld unless `--strict`, which de
 ## Order of work
 
 **A fresh cloud workspace has no map packages**: the build's first line installs them. Elsewhere run `doctor.py --fix --quick` once, first
-(one pip step, wheels first); never `pip install -r requirements-dev.txt`. On the person's own computer, ask before installing.
+(one pip step); never `pip install -r requirements-dev.txt`. On the person's own computer, ask before installing.
+In Cowork call `user_settings` (`op=bring`, `work_folder=<project>`) once per folder first.
 
 0. **Name the region** (`regions`): write `region:` (US-WA, "Idaho Panhandle", a file), run `region.py --place ...` once, say which
    definition was used; never build one from FIPS codes.
@@ -89,7 +90,7 @@ Exit 0 built; 3 a BLOCK finding (nothing is withheld unless `--strict`, which de
      between places → op `flow_lines` (recipes: gallery `dot-density`, `density-surface`, `flow-lines`);
    - sites or events → `role: points`; a measure at each site → `role: proportional`; roads or paths → `role: lines`;
    - a grid of values (a GeoTIFF: signal, population per cell) → `role: raster`; terrain → `hillshade` or `contour`; footprints → `role: buildings`.
-   **Routing note.** A plain site map (where the sites are, what kind each is) is built here. A site list with azimuth and band columns whose
+   **Routing note.** A plain site map (where sites are, of what kind) is built here. A site list with azimuth and band columns whose
    reader should see sector footprints goes to the coverage-map pipeline (`/geo-mapping-acropolisdocs:map-run coverage-map`): it draws the wedges, applies
    coordinate privacy and words them as sectors, not coverage. A tracker with a status per location goes to `/geo-mapping-acropolisdocs:map-run program-map`; a client table to roll
    up by admin area (state, county, province, district) goes to `/geo-mapping-acropolisdocs:map-run market-map`; one map per market goes to `map-atlas`. Say which door you are taking in one phrase.
@@ -129,5 +130,5 @@ remain, a note when the legend or scale bar moved or was hidden and why). Then t
 result) and every line of `map_text.callout`, as written ("Map text: N findings (not blocking)" and one line per finding with its suggested fix);
 these never count against the three and never block. Then the message check the same way (every line of `story.callout`). Change supplied text only when the person says so. Offer one next step: `map-restyle` for a look change, `map-export` for another size.
 Say a summary line `relief missing: <reason>` first. From the cloud workspace, hand back only the map files (a DEM is in `refetch`).
-Files are named `<brand prefix><id>_<template>_v<YYYYMMDD>.<ext>`. A provenance sidecar (`.provenance.json`) is written beside the map; send it only if asked.
+Files are `<brand prefix><id>_<template>_v<YYYYMMDD>.<ext>`, with a `.provenance.json` beside them (send it only if asked).
 A map to pan, zoom and click is `webmap-create` (one HTML file). To show how the map was made, turn on `methods_page` and send its one-page Data and Methods file. A map told in steps (a story, a carousel) is finished here, then `map-story`.

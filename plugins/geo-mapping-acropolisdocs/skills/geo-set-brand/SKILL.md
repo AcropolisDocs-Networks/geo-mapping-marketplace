@@ -24,6 +24,8 @@ python3 "$GMAP_ROOT/scripts/set_brand.py" add <pack folder or brand.json> [--def
 python3 "$GMAP_ROOT/scripts/set_brand.py" export <slug> --out <folder>   # copy an added pack, to share it or keep it with a project
 python3 "$GMAP_ROOT/scripts/set_brand.py" template --out <folder>        # a starter brand.json to edit by hand, then `add`
 python3 "$GMAP_ROOT/scripts/set_brand.py" remove <slug>              # an added pack only; never the shipped brand
+python3 "$GMAP_ROOT/scripts/set_brand.py" set <slug> --here         # a default for this project only (the default is your own folder)
+python3 "$GMAP_ROOT/scripts/set_brand.py" adopt --slug <slug> [--default]   # keep an edit made to the shipped brand as your own pack
 ```
 
 ## Making a brand with the person
@@ -37,14 +39,22 @@ python3 "$GMAP_ROOT/scripts/set_brand.py" remove <slug>              # an added 
 Without a logo the pack gets a plain placeholder mark; say so, and run `new` again with `--logo FILE.svg --replace` when they have one.
 A full brand file in the AcropolisDocs brand registry format (`schemas/brand.schema.json`) is added with `add`; `template` writes a starter.
 
-## Where packs are kept
+## Where packs are kept (3.7.0)
 
-`new` and `add` write to this project's `.geo-mapping/brands/<slug>/`, which every map built in this folder finds. `--home` writes to your own
-`~/.geo-mapping/brands/` instead (found from every project on a computer where the map scripts run), and `--to DIR` to a folder of your choice:
-name that folder in the `GEO_MAPPING_BRANDS` environment variable to keep one pack library for all projects. In a cloud or desktop session
-the working folder is the one that lasts. So that a brand follows the person anyway, the plugin's data server keeps a library on their own
-computer: its `brand_copy` tool with `direction=to_library` saves a project's pack there, `brand_library` lists it, and `brand_copy` (to_project)
-brings a pack into a new project. Offer `to_library` once after making a brand, and look in the library before asking for a brand again.
+`new`, `add` and `set` write to **your own folder**: packs to `~/.geo-mapping/brands/` (or `brands_dir:` in `~/.geo-mapping/config.yaml`), the
+default to `~/.geo-mapping/user-defaults.yaml`. Every project reads it and a plugin update never touches it. A project's own
+`.geo-mapping/` is read first: `--here` keeps a pack or a default for this project only (a client project with its own brand). `--to DIR`
+keeps a pack in a folder of your choice; name that folder in `brands_dir:` so maps find it. `list` says where the default came from.
+
+**Never edit the shipped brand** inside the installed plugin: an update restores it and the edit is lost. `/geo-mapping-acropolisdocs:map-doctor` and the map plan warn
+when the shipped brand was edited (MAP-BRAND-018); `adopt --slug NAME [--default]` keeps the edit as the person's own pack.
+
+In a **Cowork session** the session's home does not last, so the folder that lasts is the project, and the plugin's data server keeps your
+own folder on your computer: after making a brand, `brand_copy direction=to_library` saves the pack there and `brand_default slug=<slug>`
+makes it the default for every project. At the start of map work in a folder, `user_settings work_folder=<folder> op=bring` brings your
+default, its pack, your acknowledgment, licence answers and your own sources into the project (once per folder; again to refresh).
+`brand_library` lists your packs; look there before asking for a brand again. A map whose default cannot be found here says so
+(MAP-BRAND-017) instead of quietly using the shipped brand.
 
 ## Modules
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ref-library: the one access layer to the reference library (spec 9.3): get, list, index, lint and select.
 
-    ref_library.py get ID [--scope shipped|local|all]
+    ref_library.py get ID [--scope shipped|user|local|all]
     ref_library.py search WORDS... [--limit N] [--format json|text]     # 1.14.0: entries ranked by the words (id, title, summary, publisher, tags)
     ref_library.py list [--type T] [--status S] [--tag facet=value ...] [--scope ...]
     ref_library.py index [--scope local]            # writes workdir/library/index.yaml
@@ -43,13 +43,35 @@ def local_lib() -> Path:
     return gc.workdir() / "library"
 
 
+def user_lib() -> Path:
+    """3.7.0 (spec Part A): the person's own data sources, read from every project (sources_dir: in config.yaml, else <your folder>/sources)."""
+    return gc.user_sources_dir()
+
+
 def all_entries(scope: str = "all") -> list[dict]:
+    """Entries in read order shipped, user, local; a later scope's entry with the same id stands in for an earlier one (ref_fetch.find_entry,
+    tile_registry.entry_for). A user source's status is what its last test says (user_sources.effective): an entry changed since it was
+    tested reads as a draft (MAP-SRC-006)."""
     out = []
     if scope in ("shipped", "all"):
         out += ll.load_entries(shipped_lib() / "entries", "shipped")
+    if scope in ("user", "all"):
+        ul = user_lib()
+        if not (ul.exists() and local_lib().exists() and ul.resolve() == local_lib().resolve()):
+            import user_sources as us
+            for e in ll.load_entries(ul / "entries", "user"):
+                e = us.effective(e)
+                out.append(e)
+                out += us.overriding_copies(e)          # D2: overrides: ref.<id> stands in for that shipped entry
     if scope in ("local", "all"):
         out += ll.load_entries(local_lib() / "entries", "local")
     return out
+
+
+def pick(hits: list[dict]) -> dict:
+    """Of the entries that share one id, the one that is used: local, then user, then shipped."""
+    rank = {"local": 0, "user": 1, "shipped": 2}
+    return sorted(hits, key=lambda e: rank.get(e.get("_scope"), 3))[0]
 
 
 def public(e: dict) -> dict:
@@ -173,7 +195,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("op", choices=["get", "list", "index", "lint", "select", "add", "verify", "report", "apply", "search"])
     ap.add_argument("id", nargs="*")
-    ap.add_argument("--scope", choices=["shipped", "local", "all"], default="all")
+    ap.add_argument("--scope", choices=["shipped", "user", "local", "all"], default="all")
     ap.add_argument("--type")
     ap.add_argument("--status")
     ap.add_argument("--tag", action="append")

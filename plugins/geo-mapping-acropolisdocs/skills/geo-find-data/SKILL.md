@@ -102,6 +102,10 @@ shared?), the vintage, and how to get it. One next step: build the map with it, 
 (`ref_library.py add --file FILE`) reads what it can verify, asks for the rest, and writes the draft into the local overlay. Offer that as the
 second step, not the first; a draft is never chosen for a map until the person activates it.
 
+3.7.0: an **API, a file address, a tile address or a Socrata dataset** the library does not have, which the person will use again, becomes
+**their own source** instead (`/geo-mapping-acropolisdocs:map-sources`: `source_add from_url=...`), kept in their own folder for every project and
+tested once with their key. Say plainly which finds are the plugin's library entries and which would be the person's own sources.
+
 ## Data-source tools (1.3.0)
 
 - **OpenStreetMap by tag** (3.4.0): `osm_fetch` (Overpass: tags or a query, a box; busy answers retried, mirrors in turn; run on the person's

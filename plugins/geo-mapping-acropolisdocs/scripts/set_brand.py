@@ -11,8 +11,15 @@
     set_brand.py template --out DIR                       write a starter brand.json to edit, then `add` it
     set_brand.py remove SLUG                              remove a pack you added (never the shipped brand)
 
-    --to DIR / --home (with new, add)                     keep the pack in DIR, or in your own ~/.geo-mapping/brands/, instead of this
-                                                          project's .geo-mapping/brands/
+    set_brand.py adopt --slug NAME [--name "My brand"] [--default] [--replace]
+                                                          3.7.0: keep an edit made to the shipped brand inside the plugin (which an
+                                                          update restores) as your own pack NAME
+
+    3.7.0 (Part D): a pack and the default are written to YOUR OWN folder (~/.geo-mapping/brands/ and ~/.geo-mapping/user-defaults.yaml, or
+    brands_dir: in ~/.geo-mapping/config.yaml), which every project reads and an update never touches. A project's own .geo-mapping/ is read
+    first, so --here keeps a pack or a default for this project only. --to DIR keeps a pack in DIR; --home is the older spelling of the default.
+    In a Cowork session the folder that lasts is the project: the plugin's data server keeps your own copy on your computer (brand_copy,
+    brand_default, user_settings).
 
 The older forms still work: `--show` is `list`, `--set SLUG` is `set SLUG`.
 
@@ -34,15 +41,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import brandlib as bl  # noqa: E402
 import gmap_common as gc  # noqa: E402
 
-DEFAULTS_FILE = "user-defaults.yaml"
+DEFAULTS_FILE = bl.DEFAULTS_FILE
 
 
 def _dest(a) -> Path:
     if getattr(a, "to", None):
         return Path(a.to).expanduser()
-    if getattr(a, "home", False):
-        return Path.home() / gc.WORKDIR_NAME / gc.BRANDS_DIRNAME
-    return gc.workdir(create=True) / gc.BRANDS_DIRNAME
+    if getattr(a, "here", False):
+        return gc.workdir(create=True) / gc.BRANDS_DIRNAME
+    return gc.user_brands_dir(create=True)              # 3.7.0: your own folder by default (--home is the same)
 
 
 def _found_from(dest: Path) -> bool:
@@ -64,24 +71,66 @@ def listing(m: dict) -> dict:
         "your_default": cur, "your_default_source": src,
         "effective_default": cur if cur in here else m["default_content_brand"],
         "added_packs_are_looked_for_in": [str(r) for r in gc.user_brand_roots()],
+        "your_default_from": str(bl.default_file()) if bl.default_file() else None,          # 3.7.0
+        "packs_are_written_to": str(gc.user_brands_dir()),
+        **({"warning": bl.edit_findings(m)[0]["message"]} if bl.edit_findings(m) else {}),
         # the pre-1.7.0 keys, kept for callers that read them
         "bundled": {s: bl.brand_name(s) for s in here}, "edition_default": m["default_content_brand"],
         "user_default": cur, "user_default_source": src,
     }
 
 
-def store_default(slug: str) -> Path:
-    wd = gc.workdir(create=True)
+def store_default(slug: str, here: bool = False) -> Path:
+    """3.7.0: the default goes to your own folder (every project reads it), or with here=True to this project's .geo-mapping/ only."""
+    wd = gc.workdir(create=True) if here else gc.user_folder(create=True)
     (wd / DEFAULTS_FILE).write_text(f"# Written by geo-set-brand at the user's request. Changes only the default map brand.\ndefault_brand: {slug}\n", encoding="utf-8")
     return wd / DEFAULTS_FILE
 
 
-def cmd_set(slug: str, m: dict) -> int:
+def cmd_set(slug: str, m: dict, here: bool = False) -> int:
     if slug not in bl.available(m):
         print(f"There is no brand '{slug}' here. {bl.available_note(m)}", file=sys.stderr)
         return gc.EXIT_USAGE
-    f = store_default(slug)
-    print(json.dumps({"default_brand": slug, "stored_in": str(f), "note": "Existing maps keep the brand written in their MapSpec."}, indent=2))
+    f = store_default(slug, here)
+    out = {"default_brand": slug, "stored_in": str(f), "for": "this project only" if here else "every project (your own folder)",
+           "note": "Existing maps keep the brand written in their MapSpec."}
+    if not here and (gc.workdir() / DEFAULTS_FILE).is_file() and (gc.workdir() / DEFAULTS_FILE) != f:
+        out["also"] = f"this project has its own default ({gc.workdir() / DEFAULTS_FILE}), which wins here: set it with --here, or delete that file"
+    if gc.ephemeral_home():
+        out["keep_it"] = "in a Cowork session, also save it on your computer: brand_default (and brand_copy to_library for the pack)"
+    print(json.dumps(out, indent=2))
+    return gc.EXIT_OK
+
+
+def cmd_adopt(a, m: dict) -> int:
+    """3.7.0: the shipped brand as edited inside the plugin, kept as the person's own pack under a new short name."""
+    import brand_pack as bp
+    eds = bl.shipped_brand_edits(m)
+    house = m["house_brand"]
+    src = gc.plugin_root() / gc.BRANDS_DIRNAME / house
+    brand = json.loads((src / "brand.json").read_text(encoding="utf-8"))
+    brand.setdefault("identity", {})["slug"] = a.slug
+    if a.name:
+        brand["identity"]["name"] = a.name
+    dest = _dest(a)
+    pack_dir = dest / a.slug
+    if pack_dir.exists() and not a.replace:
+        print(f"a brand named '{a.slug}' is already here ({pack_dir}); use --replace to update it", file=sys.stderr)
+        return gc.EXIT_USAGE
+    pack_dir.mkdir(parents=True, exist_ok=True)
+    if (src / "map-tokens.yaml").is_file():                # its overrides: block (colours set by hand) is carried into the new pack
+        shutil.copyfile(src / "map-tokens.yaml", pack_dir / "map-tokens.yaml")
+    res = bp.write_pack(brand, dest, bl.house_accreditation(m), source={"kind": "user", "from": "adopt", "edited_files": [Path(e["file"]).name for e in eds]},
+                        reserved=tuple(m["brands_bundled"]), replace=True)
+    out = {"adopted": res["slug"], "name": res["name"], "folder": res["dir"], "from": str(src),
+           "edited_files": [Path(e["file"]).name for e in eds] or None,
+           "note": ("the shipped brand was not edited; the pack is a copy of it to change as your own" if not eds else
+                    "your edit is kept in this pack; the shipped brand is left as it is, and the next update restores it"),
+           "use_it": f"brand: {res['slug']} in a MapSpec, or set {res['slug']} to make it your default"}
+    if a.default:
+        out["default_brand"] = res["slug"]
+        out["stored_in"] = str(store_default(res["slug"], getattr(a, "here", False)))
+    print(json.dumps(out, indent=2))
     return gc.EXIT_OK
 
 
@@ -90,10 +139,11 @@ def _finish(res: dict, a, m: dict, dest: Path) -> int:
            "colours_adjusted_for_maps": [f"{s['mode']} {s['token']}: {s['from']} -> {s['to']} ({s['reason']})" for s in res["substitutions"]],
            "use_it": f"name it in a request (\"in the {res['name']} brand\"), put `brand: {res['slug']}` in a MapSpec, or make it your default with `set {res['slug']}`"}
     if not _found_from(dest):
-        out["note"] = (f"{dest} is not one of the folders maps look in. Set GEO_MAPPING_BRANDS to it, or add the pack again without --to.")
+        out["note"] = (f"{dest} is not one of the folders maps look in. Set brands_dir: in ~/.geo-mapping/config.yaml to it, or add the pack again without --to.")
+    out["kept_in"] = "this project only" if getattr(a, "here", False) else ("your own folder (every project)" if not getattr(a, "to", None) else str(dest))
     if a.default:
         out["default_brand"] = res["slug"]
-        out["stored_in"] = str(store_default(res["slug"]))
+        out["stored_in"] = str(store_default(res["slug"], getattr(a, "here", False)))
     print(json.dumps(out, indent=2))
     return gc.EXIT_OK
 
@@ -185,6 +235,7 @@ def main(argv=None) -> int:
     sub.add_parser("list")
     p = sub.add_parser("set")
     p.add_argument("slug")
+    p.add_argument("--here", action="store_true", help="this project only (the default is your own folder, for every project)")
     for name in ("new", "add"):
         p = sub.add_parser(name)
         if name == "add":
@@ -203,7 +254,15 @@ def main(argv=None) -> int:
         p.add_argument("--replace", action="store_true", help="update a pack of the same name")
         g = p.add_mutually_exclusive_group()
         g.add_argument("--to", metavar="DIR")
-        g.add_argument("--home", action="store_true")
+        g.add_argument("--home", action="store_true", help="your own folder (the default since 3.7.0)")
+        g.add_argument("--here", action="store_true", help="this project's .geo-mapping/brands/ only")
+    p = sub.add_parser("adopt")
+    p.add_argument("--slug", required=True)
+    p.add_argument("--name")
+    p.add_argument("--default", action="store_true")
+    p.add_argument("--replace", action="store_true")
+    p.add_argument("--here", action="store_true")
+    p.add_argument("--to", metavar="DIR")
     p = sub.add_parser("export")
     p.add_argument("slug")
     p.add_argument("--out", required=True)
@@ -218,8 +277,8 @@ def main(argv=None) -> int:
             print(json.dumps(listing(m), indent=2))
             return gc.EXIT_OK
         if a.cmd == "set":
-            return cmd_set(a.slug, m)
-        return {"add": cmd_add, "new": cmd_new, "export": cmd_export, "template": cmd_template, "remove": cmd_remove}[a.cmd](a, m)
+            return cmd_set(a.slug, m, a.here)
+        return {"add": cmd_add, "new": cmd_new, "export": cmd_export, "template": cmd_template, "remove": cmd_remove, "adopt": cmd_adopt}[a.cmd](a, m)
     except bl.BrandError as e:
         print(str(e), file=sys.stderr)
         return gc.EXIT_USAGE

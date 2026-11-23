@@ -8,6 +8,20 @@ Descriptions and recipes for the data, styles and map types this plugin can use,
 - **Generated, do not edit:** `index.yaml`, `CHANGELOG.md`.
 - **Services:** an entry with `delivery.mode: service` names a shipped, read-only service profile (`delivery.profile`, a file in `profiles/` beside `library/`) and a layer path under it; `service_query.py fetch --profile P --layer L` pulls it. A working-folder profile with the same name overrides the shipped one.
 
+## Your own sources (3.7.0)
+
+A source the plugin does not ship is a person's own: one entry file in their sources folder (`sources_dir:` in `~/.geo-mapping/config.yaml`,
+else `~/.geo-mapping/sources/entries/data/`), read by every project in the order local, user, shipped. It is made and kept with the
+`map-sources` skill (`source_add`, `source_test`, ...; `scripts/user_sources.py` on the command line). Differences from a shipped entry:
+the id starts `user.` (MAP-SRC-001); `type` is a data type; `delivery.mode` is `service`, `fetch` or `user-supplied`, never `bundled`; a
+service needs a `delivery.sample`; the maintainer fields (`maintenance.owner`, `reviewed_on`, `verify_by`, `url_verified_on`) are written by
+the tools. Only `source_test` sets `status: active`, after one answer; the last test is kept in `tests/<id>.yaml` beside the entries, and a
+change to the request, the reader or the credential block reads as a draft again (MAP-SRC-006). `overrides: ref.<id>` makes an active
+source stand in for that shipped entry. A good one can be promoted into the shipped library with the steps below (its id renamed `ref.`).
+
+A Socrata dataset is `delivery.protocol: socrata` with `socrata: {domain, dataset, location, format}`; `scripts/socrata.py` builds the SoQL
+from plain options (select, where, group, within_box, within_polygon, order, limit).
+
 ## Geography vocabulary (tags.yaml version 2, M13)
 
 The `geography` facet is a hierarchy, and every value names its `parent`:

@@ -669,6 +669,18 @@ VECTOR_SCHEMAS = {
 }
 
 
+def style_id_findings(st: dict) -> list[dict]:
+    """3.7.0 (B14, Day 23 issue 14): MAP-WEB-046 (BLOCK) for a layer id that appears twice in the style. MapLibre refuses such a style
+    without an error in the console, so the page stays a blank water colour."""
+    from collections import Counter
+    c = Counter(str(l.get("id")) for l in st.get("layers") or [])
+    dup = sorted(k for k, n in c.items() if n > 1)
+    if not dup:
+        return []
+    return [{"id": "MAP-WEB-046", "severity": "BLOCK", "detail": dup,
+             "message": f"the page's map style has the layer id {', '.join(dup[:4])} more than once; MapLibre would refuse the style and draw nothing"}]
+
+
 def vector_base_layers(t: dict, src: str, visible: bool, group: str, schema: str | None) -> list[dict]:
     """The basemap layers for a vector tile source in its own schema (Protomaps when the schema is not named)."""
     sc = VECTOR_SCHEMAS.get(schema or "")

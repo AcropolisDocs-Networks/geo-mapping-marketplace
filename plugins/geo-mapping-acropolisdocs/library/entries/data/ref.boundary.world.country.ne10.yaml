@@ -1,0 +1,55 @@
+id: ref.boundary.world.country.ne10
+type: boundary
+rev: 1
+status: active
+title: World countries, 10m (Natural Earth)
+summary: The most detailed Natural Earth country polygons, at the same resolution as the bundled 10m ocean, so country outlines and
+  water match on national and regional maps.
+tags:
+  geography: [world]
+  level: [country]
+  domain: [general]
+  use_for: [context-basemap, choropleth, locator-inset, join-key]
+  avoid_for: [engineering-grade, legal-boundary, site-precision, parcel-level]
+  scale: [national, regional, state]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A national or regional map that shows country outlines beside the 10m ocean, so land and water share one resolution.', A
+    map of a small country or an island state.]
+avoid_when: [A whole-world map on one page; the 50m or 110m countries draw faster and read the same at that scale., The map needs legal
+    or surveyed boundaries; use the national mapping agency's.]
+join: {key: ISO_A3_EH, type: string, width: 3, note: 'Use ISO_A3_EH, not ISO_A3: Natural Earth stores -99 in ISO_A3 for France, Norway
+    and a few others.'}
+crs: EPSG:4326
+distinct_from:
+- id: ref.boundary.world.country.ne110
+  why: The same Natural Earth countries at another resolution; pick by the map's scale (110m world, 50m continents and small states, 10m national).
+- id: ref.boundary.world.country.ne50
+  why: The same Natural Earth countries at another resolution; pick by the map's scale (110m world, 50m continents and small states, 10m national).
+- id: ref.boundary.world.historical.basemaps
+  why: These are today's countries; historical-basemaps holds the polities of a past year.
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  size_mb: 4.7
+  features: 258
+  columns: [NAME, ADMIN, SOVEREIGNT, ADM0_A3, ISO_A2_EH, ISO_A3_EH, CONTINENT, SUBREGION, POP_EST, LABEL_X, LABEL_Y, MIN_LABEL, MAX_LABEL, NE_ID]
+  note: 3.7.0 fetched once into the library cache (ref_fetch), not bundled, so the plugin stays under its size budget; source.detail 10m on the
+    110m countries reads it once it is cached.
+source: {publisher: Natural Earth, product: 'Admin 0 - Countries, 10m', url: 'https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_0_countries.zip',
+  file_sha256: ce1ac7036499a0edd641fbc093cd209a98f96a49d2eca8480aaacad35138a7f6}
+url_verified_on: 2026-11-02
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-23
+  verify_by: 2027-11-23
+  check: {kind: feature_count_and_hash, features: 258, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-23, note: "3.7.0: Natural Earth admin-0 at 1:10m, fetched once into the library cache (4.7 MB zip, sha256 checked), read for source.detail 10m."}

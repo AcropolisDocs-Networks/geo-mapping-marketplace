@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 214 entries (212 active); basemap-provider 18, boundary 37, boundary-derived 2, context 16, crosswalk 1, gazetteer 8, infrastructure 16, map-type 13, palette 2, public-service 55, statistic 24, symbol-set 1, template 6, terrain 15.
+Library: 216 entries (214 active); basemap-provider 18, boundary 39, boundary-derived 2, context 16, crosswalk 1, gazetteer 8, infrastructure 16, map-type 13, palette 2, public-service 55, statistic 24, symbol-set 1, template 6, terrain 15.
 
 ### Usable now
 
@@ -47,7 +47,9 @@ Library: 214 entries (212 active); basemap-provider 18, boundary 37, boundary-de
 | `ref.boundary.us.zcta.cb2020-500k` | US ZIP Code Tabulation Areas, 2020 vintage, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2020 (decennial) | downloaded on first use | public-domain | GEOID20 (string, 5 chars) |
 | `ref.boundary.world.admin.gadm41` | GADM 4.1 (administrative areas worldwide, restricted licence) | GADM (University of California, Davis), 4.1 (July 2022) | you supply the file | restricted | GID_1 (string) |
 | `ref.boundary.world.country.geoboundaries` | geoBoundaries (administrative boundaries worldwide) | geoBoundaries (William & Mary geoLab), current gbOpen release (CAN ADM1 represents 2023) | downloaded on first use | attribution | shapeISO (string) |
+| `ref.boundary.world.country.ne10` | World countries, 10m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain | ISO_A3_EH (string, 3 chars) |
 | `ref.boundary.world.country.ne110` | World countries, 110m (Natural Earth) | Natural Earth 5.1.1 | bundled (0.15 MB) | public-domain | ISO_A3_EH (string, 3 chars) |
+| `ref.boundary.world.country.ne50` | World countries, 50m (Natural Earth) | Natural Earth 5.1.1 | bundled (0.57 MB) | public-domain | ISO_A3_EH (string, 3 chars) |
 | `ref.boundary.world.division.overture` | Overture Maps divisions (administrative areas) | Overture Maps Foundation, 2026-10-21.0 | you supply the file | share-alike | id (string) |
 | `ref.boundary.world.historical.awmc` | Ancient World Mapping Center geodata (Roman Empire extents, provinces, roads) | Ancient World Mapping Center (University of North Carolina at Chapel Hill), repository master (static layers) | downloaded on first use | share-alike | None (none) |
 | `ref.boundary.world.historical.basemaps` | historical-basemaps - world political boundaries by century (A. Ourednik) | André Ourednik and contributors, repository master | downloaded on first use | share-alike | NAME (string) |
@@ -95,7 +97,7 @@ Library: 214 entries (212 active); basemap-provider 18, boundary 37, boundary-de
 | `ref.infrastructure.world.cell.opencellid` | OpenCelliD cell tower database (crowd-sourced) | Unwired Labs (OpenCelliD project), daily export (per-MCC files refreshed daily) | downloaded on first use | share-alike | mcc,mnc,lac,cell (string) |
 | `ref.infrastructure.world.osm.geofabrik` | OpenStreetMap extracts by state or country (Geofabrik) | Geofabrik GmbH (OpenStreetMap data), daily extracts | you supply the file | share-alike |  |
 | `ref.infrastructure.world.road.ne10` | Roads worldwide, 1:10,000,000 (Natural Earth) | Natural Earth, 5.1.x (naciscdn.org current file, downloaded 2026-11-04) | downloaded on first use | public-domain |  |
-| `ref.infrastructure.world.submarine-cable.telegeography` | Submarine cable systems and landing points (TeleGeography Submarine Cable Map) | TeleGeography | you supply the file | licensed |  |
+| `ref.infrastructure.world.submarine-cable.telegeography` | Submarine cable systems and landing points (TeleGeography Submarine Cable Map) | TeleGeography | downloaded on first use | licensed |  |
 | `ref.public-service.ca-bc.transit.translink` | TransLink (Metro Vancouver) GTFS and GTFS-realtime | TransLink, current GTFS | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.ca-on.transit.octranspo` | OC Transpo (Ottawa) GTFS and GTFS-realtime | City of Ottawa, OC Transpo, current GTFS | web service, your own key needed (/geo-mapping-acropolisdocs:map-credentials) | restricted |  |
 | `ref.public-service.ca-qc.transit.stm` | STM Montréal GTFS (bus and métro) | Société de transport de Montréal, current GTFS | downloaded on first use | attribution |  |

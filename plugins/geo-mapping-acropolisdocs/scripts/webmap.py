@@ -1703,6 +1703,7 @@ def _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, c
         if pstack:                                     # 1.10.0: the pack's label face on every label the engine draws
             nl = wml.use_pack_stack(st, pstack["stack"])
             notes.append(f"labels drawn by the map engine are in the pack's label face ({pstack['stack']}; {nl} label layer(s))")
+        findings += wml.style_id_findings(st)          # 3.7.0 (B14): a repeated layer or source id makes MapLibre refuse the whole style
         texts = wml.style_texts(st, collections, tiles_text)
         ranges = wml.glyph_ranges_for(texts)
         if vector_base and any(b["mode"] in ("vector", "vector-file") for b in base_defs):
@@ -1788,7 +1789,7 @@ def _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_
                      for b in base_defs],
         "searchField": search_field, "searchNames": bool(tsearch and names_on), "imperial": True, "downloadName": f"{plan.spec['id']}.geojson",
         "names": {"id": NAMES_ID, "on": names_on, "tier": names_stats.get("tier")}, "featureLabels": feature_labels, "labelZoom": label_zoom,
-        "imagePanes": images > 0, "units": measure_units(spec_in, wgs), "time": time_cfg, "compare": compare_cfg,
+        "imagePanes": images > 0, "units": measure_units(spec_in, wgs), "time": time_cfg, "compare": compare_cfg, "locale": gl.plan_locale(plan),
         "legend": export_legend(blocks), "searchIndex": search_idx, "searchPacked": {k: f"gmap-search-{k}" for k in search_packed},
         "tokens": {**{k: t[k] for k in ("label", "land", "water", "legend_bg", "legend_frame", "frame", "emphasis", "background")},
                    "label_halo": t.get("label_halo") or t["background"]},             # 2.3.0: the halo of the story's marks, as in print

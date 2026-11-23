@@ -31,6 +31,12 @@ python3 "$GMAP_ROOT/scripts/atlas.py" plan  MAP.yaml --layer market --field NAME
 python3 "$GMAP_ROOT/scripts/atlas.py" build MAP.yaml --layer market --field NAME --out ./atlas
 ```
 
+## Your own settings in a Cowork session (3.7.0)
+
+Before the first build in a folder, call the plugin server's `user_settings` with `work_folder=<the project folder>` and `op=bring` (once per
+folder): it brings the person's default brand and its pack, their terms acknowledgment, licence answers and their own data sources into the
+project, where the build reads them. Without it the plan warns MAP-BRAND-017 and uses the shipped brand. Outside Cowork nothing is needed.
+
 ## Modules
 
 These are this plugin's reference pages, not skills: read one with the line below when its row applies. The Skill tool cannot load them.

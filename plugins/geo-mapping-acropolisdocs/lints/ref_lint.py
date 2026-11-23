@@ -87,8 +87,10 @@ def lint_plan(plan, entries: list[dict], tags: dict, types: dict, today: dt.date
         p = l.provenance or {}
         if p.get("library_ref") != e["id"] or p.get("library_rev") != e.get("rev"):
             out.append(finding("MAP-REF-008", "BLOCK", f"{label}: provenance does not record library_ref and library_rev", {"have": {k: p.get(k) for k in ("library_ref", "library_rev")}}))
-        if e.get("_scope") == "local" and e["id"] in shipped_ids:
-            out.append(finding("MAP-REF-009", "WARN", f"{label}: a local entry supersedes the shipped entry of the same id; the QA report names it", e["id"]))
+        if e.get("_scope") in ("local", "user") and e["id"] in shipped_ids:
+            out.append(finding("MAP-REF-009", "WARN", f"{label}: a{' local' if e.get('_scope') == 'local' else ' user'} entry supersedes the shipped entry of the same id; the QA report names it", e["id"]))
+        if e.get("_scope") == "user" and e.get("overrides") in shipped_ids:
+            out.append(finding("MAP-REF-009", "WARN", f"{label}: your own source {e['id']} stands in for the shipped {e['overrides']} (overrides:); the QA report names it", e["overrides"]))
         sup = [s for s in rs._list(e.get("supersedes")) if s in shipped_ids]
         if e.get("_scope") == "local" and sup:
             out.append(finding("MAP-REF-009", "WARN", f"{label}: the local entry supersedes {', '.join(sup)}; the QA report names it", sup))

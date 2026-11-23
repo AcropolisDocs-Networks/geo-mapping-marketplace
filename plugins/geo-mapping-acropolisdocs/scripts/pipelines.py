@@ -974,7 +974,8 @@ def stage_flythrough(c: Ctx) -> dict:
     out = Path(c.options.get("out") or c.outdir or Path(c.inputs["page"]).parent)
     r = fl.run(c.inputs["page"], out, mode=_fly_mode(c.options), layer=c.options.get("path"), duration=float(c.options.get("duration") or 32),
                fps=float(c.options.get("fps") or 25), size=str(c.options.get("size") or "1280x720"), marker=c.options.get("marker"),
-               hud_on=str(c.options.get("hud") or "on") != "off", quality=q, resume=bool(c.options.get("resume", True)), gl=str(c.options.get("gl") or "auto"))
+               hud_on=str(c.options.get("hud") or "on") != "off", quality=q, resume=bool(c.options.get("resume", True)), gl=str(c.options.get("gl") or "auto"),
+               camera=c.options.get("camera"), lookahead_m=c.options.get("lookahead_m"), smooth_m=c.options.get("smooth_m"), rail_m=c.options.get("rail_m"))
     for f_ in r.get("files") or []:
         c.add_file(Path(f_), "video")
     return {"ok": bool(r.get("ok")), "summary": f"{q} flythrough: {r.get('done', 0)} frames drawn, {r.get('skipped', 0)} kept, "
@@ -1885,7 +1886,8 @@ REGISTRY = {
         "title": "Flythrough video", "purpose": "A video flown over a 3D web page (a path, the story's chapters or an orbit): a draft first, the final after you confirm.",
         "inputs": {"page": "path to the 3D web page (.html)"},
         "options": {"path": "line layer to follow", "chapters": "bool", "orbit": "bool", "duration": "seconds (32)", "fps": "25", "size": "1280x720|1920x1080|1080x1350",
-                    "marker": "layer", "hud": "on|off", "quality": "draft|final", "resume": "bool (true)", "gl": "auto|gpu|llvmpipe|swiftshader", "out": "folder"},
+                    "marker": "layer", "hud": "on|off", "quality": "draft|final", "resume": "bool (true)", "gl": "auto|gpu|llvmpipe|swiftshader", "out": "folder",
+                    "camera": "street|neighbourhood|city (3.7.0)", "lookahead_m": "metres ahead in view (1500)", "smooth_m": "metres of smoothing (400)", "rail_m": "metres"},
         "params": {"confirm_final": "bool: the draft was looked at; render the final"},
         "plan": plan_flythrough, "stages": [("flythrough", "Capture, composite the HUD and credits, encode", stage_flythrough)], "delivers": False,
     },
@@ -2021,9 +2023,48 @@ def plan(pipeline: str, inputs: dict, options: dict | None = None) -> dict:
             pass
     manifest = {"manifest_version": 1, "pipeline": pipeline, "pipeline_version": PIPELINE_VERSION, "inputs": inp, "input_hashes": hashes, "options": opt,
                 "stages": [{"id": s[0], "what": s[1]} for s in reg["stages"]], "edition": edition_id(), "cost": cost}
-    mid = hashlib.sha256(canon(manifest).encode()).hexdigest()
+    # 3.7.0 (B9, Day 23 issue 9): the token is the hash of what the run will do (pipeline, inputs by content, options, edition), never of the
+    # cost card: a flythrough's estimate is measured from a warm-up and changed with every plan, so its confirmation could never match.
+    mid = hashlib.sha256(canon({k: v for k, v in manifest.items() if k != "cost"}).encode()).hexdigest()
+    _remember_cost(mid[:12], cost)
     return {"ok": True, "pipeline": pipeline, "manifest": manifest, "manifest_id": mid, "confirm_token": mid[:12], "cost": cost, "cost_text": cost_text(cost),
             "findings": fs, "message": f"{reg['title']}: {reg['purpose']} Cost: {cost_text(cost)}. To go ahead, run again with confirm token {mid[:12]}."}
+
+
+def _plans_dir() -> Path:
+    # in the temporary folder, not the work folder: a plan changes nothing the person keeps (only the estimate it showed, for B9)
+    import tempfile
+    return Path(tempfile.gettempdir()) / "geo-mapping-plans"
+
+
+def _remember_cost(token: str, cost: dict) -> None:
+    """The estimate shown with a token, kept so that run can say when a new estimate has moved a long way (B9)."""
+    try:
+        d = _plans_dir()
+        f = d / f"{token}.json"
+        if not f.is_file():
+            d.mkdir(parents=True, exist_ok=True)
+            f.write_text(json.dumps({"est_seconds": cost.get("est_seconds"), "cost_text": cost_text(cost)}), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _estimate_moved(token: str, cost: dict) -> str | None:
+    """None, or the sentence to ask again with when the estimate changed by more than half either way since the plan was shown."""
+    try:
+        old = json.loads((_plans_dir() / f"{token}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    a, b = old.get("est_seconds"), cost.get("est_seconds")
+    if not (isinstance(a, (int, float)) and isinstance(b, (int, float))) or a <= 0:
+        return None
+    if b > 1.5 * a or b < 0.5 * a:
+        try:
+            (_plans_dir() / f"{token}.json").write_text(json.dumps({"est_seconds": b, "cost_text": cost_text(cost)}), encoding="utf-8")
+        except OSError:
+            pass
+        return f"the estimate moved from {old.get('cost_text')} to {cost_text(cost)} since the plan was shown; confirm again with the same token to go ahead"
+    return None
 
 
 def run(pipeline: str, inputs: dict, options: dict | None = None, *, confirm: str | None = None, params: dict | None = None, http=None) -> dict:
@@ -2035,6 +2076,9 @@ def run(pipeline: str, inputs: dict, options: dict | None = None, *, confirm: st
     if confirm != p["confirm_token"]:
         return {"ok": False, "findings": [finding("MAP-RUN-001", "BLOCK", "the confirmation does not match this plan (an input or option changed since the plan was shown); plan again")],
                 "plan": {k: p[k] for k in ("manifest_id", "confirm_token", "cost_text")}}
+    moved = _estimate_moved(p["confirm_token"], p["cost"])
+    if moved:
+        return {"ok": False, "findings": [finding("MAP-RUN-001", "BLOCK", moved)], "plan": {k: p[k] for k in ("manifest_id", "confirm_token", "cost_text")}}
     reg = REGISTRY[pipeline]
     mid = p["manifest_id"]
     base = run_root() / f"{pipeline}-{mid[:8]}"
@@ -2139,6 +2183,15 @@ def kv(items: list[str] | None) -> dict:
     return out
 
 
+LIST_INPUTS = {"files", "layers"}
+CLI_INPUTS = {"spec", "src", "files", "profile", "layers", "capture", "sites", "table", "tracker", "coordinates", "outputs", "page", "dataset", "request", "file_id"}
+
+
+def cli_gaps() -> list[str]:
+    """3.7.0 (B1): the inputs a registered pipeline declares that have no named flag (each is still reachable with --input KEY=VALUE)."""
+    return sorted({f"{p}:{k}" for p, r in REGISTRY.items() for k in (r.get("inputs") or {}) if k not in CLI_INPUTS})
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("op", choices=["list", "plan", "run", "show"])
@@ -2154,6 +2207,11 @@ def main(argv=None) -> int:
     ap.add_argument("--tracker", help="program tracker (program-map)")
     ap.add_argument("--coordinates", help="venue coordinates table (program-map)")
     ap.add_argument("--outputs", help="a map-trace outputs list (map-evaluate)")
+    ap.add_argument("--page", help="3.7.0 (B1): the 3D web page (flythrough)")
+    ap.add_argument("--dataset", help="a CDS dataset id (cds-retrieve)")
+    ap.add_argument("--request", help="a request YAML (cds-retrieve)")
+    ap.add_argument("--file-id", dest="file_id", help="a file id (fcc-bdc-fetch)")
+    ap.add_argument("--input", action="append", default=[], help="3.7.0 (B1): KEY=VALUE for any input the pipeline declares (list inputs comma-separated)")
     ap.add_argument("--option", action="append", default=[], help="key=value (out, to, formats, data_package ...)")
     ap.add_argument("--param", action="append", default=[], help="key=value, not part of the plan (apply, confirm_total)")
     ap.add_argument("--confirm")
@@ -2167,7 +2225,10 @@ def main(argv=None) -> int:
         return 0 if r["ok"] else 3
     inputs = {k: v for k, v in {"spec": a.spec, "src": a.src, "profile": a.profile, "capture": a.capture,
                                 "sites": a.sites, "table": a.table, "tracker": a.tracker, "coordinates": a.coordinates, "outputs": a.outputs,
+                                "page": a.page, "dataset": a.dataset, "request": a.request, "file_id": a.file_id,
                                 "files": a.files.split(",") if a.files else None, "layers": a.layers.split(",") if a.layers else None}.items() if v}
+    for k, v in kv(a.input).items():                 # 3.7.0 (B1): any declared input, so none is unreachable from the command line
+        inputs[k] = [x.strip() for x in str(v).split(",") if x.strip()] if k in LIST_INPUTS else v
     opts = kv(a.option)
     if a.op == "plan":
         r = plan(a.pipeline, inputs, opts)

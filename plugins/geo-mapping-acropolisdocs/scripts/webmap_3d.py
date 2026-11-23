@@ -836,7 +836,7 @@ def style_3d(st: dict, *, t: dict, s3: dict, defs: list[dict], dem: dict | None,
     start3d = s3["start"] == "3d"
     layers = st["layers"]
     first_data = next((i for i, l in enumerate(layers) if (l.get("metadata") or {}).get("gm:role") not in ("bundled", "basemap", "basemap-label")), len(layers))
-    first_sym = next((i for i, l in enumerate(layers) if l.get("type") == "symbol"), len(layers))
+    first_sym = next((i for i in range(first_data, len(layers)) if layers[i].get("type") == "symbol"), len(layers))   # 3.7.0 (B14): the first label after the data
     under, over = [], []
     if dem:
         src = {"type": "raster-dem", "tiles": ["gmdem://{z}/{x}/{y}"], "tileSize": DEM_TILE_PX, "encoding": "terrarium", "minzoom": dem["zmin"],
@@ -859,7 +859,7 @@ def style_3d(st: dict, *, t: dict, s3: dict, defs: list[dict], dem: dict | None,
         layers[:] = [l for l in layers if not ((l.get("metadata") or {}).get("gm:layer") == relief_id and (l.get("metadata") or {}).get("gm:role") == "image")]
         st["sources"].pop(f"img-{relief_id}", None)
         first_data = next((i for i, l in enumerate(layers) if (l.get("metadata") or {}).get("gm:role") not in ("bundled", "basemap", "basemap-label")), len(layers))
-        first_sym = next((i for i, l in enumerate(layers) if l.get("type") == "symbol"), len(layers))
+        first_sym = next((i for i in range(first_data, len(layers)) if layers[i].get("type") == "symbol"), len(layers))   # 3.7.0 (B14): the first label after the data
     for lid in list(extruded) + [f"mast-{k}" for k in masts]:       # 1.16.0 (Day 15 issue 2): tiles no finer than EXTRUDE_MAXZOOM
         s = st["sources"].get(lid if lid.startswith("mast-") else f"data-{lid}")
         if s and s.get("type") == "geojson":

@@ -172,9 +172,21 @@ def with_defaults(profile: dict) -> dict:
     return p
 
 
+def user_services_dir(create: bool = False) -> Path:
+    """3.7.0 (D7): your own service profiles, kept in your own folder so a saved GeoServer or ArcGIS profile follows you across projects."""
+    d = gc.user_folder() / "services"
+    if create:
+        d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def path_of(name: str) -> Path:
-    """The working-folder path of a profile (where `save` writes and `delete` removes)."""
-    return services_dir() / f"{name}.yaml"
+    """Where a profile is: the project's .geo-mapping/services/ when it has one of that name, else your own folder's (where `save` writes a
+    new profile, 3.7.0)."""
+    p = services_dir() / f"{name}.yaml"
+    if p.is_file():
+        return p
+    return user_services_dir() / f"{name}.yaml"
 
 
 def shipped_dir() -> Path:
@@ -222,7 +234,7 @@ def load(name: str) -> dict:
         y = gc.load_yaml(s)
         if _shipped_ok(y):
             return with_defaults(y)
-    raise FileNotFoundError(f"no service profile '{name}' in {services_dir()} and none shipped under that name; save one first (service_registry.py save)")
+    raise FileNotFoundError(f"no service profile '{name}' in {services_dir()} or {user_services_dir()} and none shipped under that name; save one first (service_registry.py save)")
 
 
 def _row(y: dict, stem: str, shipped: bool, overrides: bool = False) -> dict:
@@ -237,15 +249,23 @@ def _row(y: dict, stem: str, shipped: bool, overrides: bool = False) -> dict:
 
 def list_profiles() -> list[dict]:
     """Working-folder profiles first (a working-folder profile hides the shipped one of the same name), then the shipped ones."""
-    d = services_dir()
     rows, seen = [], set()
-    for p in sorted(d.glob("*.yaml")) if d.is_dir() else []:
-        try:
-            y = gc.load_yaml(p)
-        except Exception:  # noqa: BLE001
-            continue
-        seen.add(p.stem)
-        rows.append(_row(y, p.stem, False, overrides=is_shipped(p.stem)))
+    dirs = [services_dir()]
+    if user_services_dir().resolve() != services_dir().resolve():
+        dirs.append(user_services_dir())
+    for i, d in enumerate(dirs):
+        for p in sorted(d.glob("*.yaml")) if d.is_dir() else []:
+            if p.stem in seen:
+                continue
+            try:
+                y = gc.load_yaml(p)
+            except Exception:  # noqa: BLE001
+                continue
+            seen.add(p.stem)
+            row = _row(y, p.stem, False, overrides=is_shipped(p.stem))
+            if i == 1:
+                row["scope"] = "user"
+            rows.append(row)
     sd = shipped_dir()
     for p in sorted(sd.glob("*.yaml")) if sd.is_dir() else []:
         if p.stem in seen:
@@ -270,7 +290,7 @@ def save(profile: dict, confirm_host: str | None) -> tuple[Path | None, list[dic
     stored = {k: v for k, v in profile.items() if k != "host_confirmed_on"}
     stored["host_confirmed_on"] = dt.date.today().isoformat()
     p = path_of(profile["profile"])
-    services_dir(True)
+    p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(yaml.safe_dump(stored, sort_keys=False), encoding="utf-8")
     try:                                                     # 0.23.0: a service you add is a customization; say so in plain words, never block on it
         import customizations as cz

@@ -384,8 +384,71 @@ def with_layers(cams: list[dict], mode: str, ctx: dict) -> list[dict]:
     return cams
 
 
+CAMERA_PRESETS = {"street": (900.0, 300.0), "neighbourhood": (1500.0, 400.0), "neighborhood": (1500.0, 400.0), "city": (4000.0, 800.0)}
+
+
+def camera_distances(camera: str | None, lookahead_m, smooth_m, rail_m) -> tuple[float, float, float | None]:
+    """3.7.0 (B11, Day 23 issue 11): (lookahead_m, smooth_m, rail_m) from a preset (street 900 m, neighbourhood 1,500 m, city 4,000 m) and
+    any distance given; the defaults are the 1.x values (1,500 m ahead, 400 m smoothing)."""
+    la, sm = CAMERA_PRESETS.get(str(camera or "neighbourhood").lower(), CAMERA_PRESETS["neighbourhood"]) if camera else (1500.0, 400.0)
+    if camera and str(camera).lower() not in CAMERA_PRESETS:
+        raise FlyError(f"camera is one of {', '.join(k for k in CAMERA_PRESETS if k != 'neighborhood')}", gc.EXIT_USAGE)
+    la = float(lookahead_m) if lookahead_m not in (None, "") else la
+    sm = float(smooth_m) if smooth_m not in (None, "") else sm
+    if not (50 <= la <= 50_000 and 0 <= sm <= 20_000):
+        raise FlyError("lookahead_m is 50 to 50,000 m and smooth_m 0 to 20,000 m", gc.EXIT_USAGE)
+    return la, sm, (float(rail_m) if rail_m not in (None, "") else None)
+
+
+def organizations(credits: str) -> str:
+    """The credit line with the products left out: "NYC Open Data (Restaurant Inspections, Parks Properties) · MTA" -> "NYC Open Data · MTA"."""
+    prev, t = None, str(credits or "")
+    while prev != t:
+        prev, t = t, re.sub(r"\s*\([^()]*\)", "", t)
+    return re.sub(r"\s{2,}", " ", t).strip()
+
+
+def fit_credits(credits: str, wh, tokens: dict, title, date_text) -> tuple[str, str | None]:
+    """3.7.0 (B13, Day 23 issue 13): the credits shortened in steps until they fit the band, before anything blocks: the full line, then the
+    organizations without their products, then the organizations on two lines. -> (text for the band, a note of what was shortened or None)."""
+    if not credits:
+        return credits, None
+    from PIL import Image
+    blank = Image.new("RGB", tuple(wh), (255, 255, 255))
+
+    def fits(text):
+        return hud(blank.copy(), title=None, lines=[], credits=text, tokens=tokens, info={}, date_text=date_text)[1]["credits"]
+    if fits(credits):
+        return credits, None
+    orgs = organizations(credits)
+    if orgs and orgs != credits and fits(orgs):
+        return orgs, f"the credits were shortened to their organizations to fit the {wh[0]} px band: {orgs}"
+    parts = [x.strip() for x in re.split(r"\s*[·;|]\s*|,\s+(?=[A-Z©])", orgs or credits) if x.strip()]
+    if len(parts) > 1:
+        half = (len(parts) + 1) // 2
+        two = " · ".join(parts[:half]) + "\n" + " · ".join(parts[half:])
+        if fits(two):
+            return two, f"the credits were set on two lines of organizations to fit the {wh[0]} px band"
+    return credits, None
+
+
+def hud_hash(*, title, credits, date_text, hud_on, logo, tl, wh, tokens) -> str:
+    """Everything the HUD draws on a frame (B12): a change to any of it composites the frame again."""
+    import hashlib
+    lb = b""
+    if logo is not None:
+        try:
+            lb = logo.tobytes()
+        except Exception:  # noqa: BLE001
+            lb = repr(logo).encode()
+    blob = json.dumps({"title": title, "credits": credits, "date": date_text, "hud": bool(hud_on), "tl": tlm.dumps(tl)[:20000], "wh": list(wh),
+                       "tokens": tokens, "logo": hashlib.sha256(lb).hexdigest()}, sort_keys=True, default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()[:16]
+
+
 def cameras(mode: str, n: int, ctx: dict, *, size, layer: str | None = None, pitch: float | None = None, smooth_m: float = 400.0,
-            lookahead_m: float = 1500.0, fps: float = 25.0, steady_s: float = STEADY_S, max_turn: float = MAX_TURN, tl: dict | None = None) -> list[dict]:
+            lookahead_m: float = 1500.0, fps: float = 25.0, steady_s: float = STEADY_S, max_turn: float = MAX_TURN, tl: dict | None = None,
+            rail_m: float | None = None) -> list[dict]:
     cfg = ctx["cfg"]
     if mode == "keyframes":
         if not tl or not tl.get("keyframes"):
@@ -396,7 +459,7 @@ def cameras(mode: str, n: int, ctx: dict, *, size, layer: str | None = None, pit
     if mode == "path":
         line, times = line_of(ctx["data"], layer)
         cache: dict = {}
-        cams = [path_camera(i, n, line, pitch=p, size=size, smooth_m=smooth_m, lookahead_m=lookahead_m, times=times, _cache=cache) for i in range(n)]
+        cams = [path_camera(i, n, line, pitch=p, size=size, smooth_m=smooth_m, lookahead_m=lookahead_m, times=times, _cache=cache, rail_m=rail_m) for i in range(n)]
         return steady(cams, fps, steady_s=steady_s, max_turn=max_turn)
     if mode == "slider":
         T = cfg.get("time") or {}
@@ -476,21 +539,26 @@ def hud(img, *, title: str | None, lines: list[str], credits: str, tokens: dict,
         df = ImageFont.truetype(str(_inter_ttf(400)), size)
         dw = (d.textlength(date_text, font=df) + 24 * k) if date_text else 0.0
         cf = df
-        while credits and size >= max(7, int(8 * k)):
+        clines = [x for x in str(credits or "").split("\n") if x.strip()][:2]       # 3.7.0 (B13): one line, or two
+
+        def widest(font):
+            return max((d.textlength(x, font=font) for x in clines), default=0.0)
+        while clines and size >= max(7, int(8 * k)):
             cf = ImageFont.truetype(str(_inter_ttf(400)), size)
-            if d.textlength(credits, font=cf) <= W - 32 * k - dw:
+            if widest(cf) <= W - 32 * k - dw:
                 break
             size -= 1
-        fits = (not credits) or d.textlength(credits, font=cf) <= W - 32 * k - dw
+        fits = (not clines) or widest(cf) <= W - 32 * k - dw
         if not fits and date_text:                   # the credits come first: the date steps aside when both do not fit
             date_text, dw = None, 0.0
             cf = df
-            fits = d.textlength(credits, font=cf) <= W - 32 * k
+            fits = widest(cf) <= W - 32 * k
         if fits:
-            band = int(max(size, cred_size if not credits else size) * 1.9)
+            band = int(max(size, cred_size if not clines else size) * 1.9 + max(0, len(clines) - 1) * size * 1.3)
             d.rectangle([0, H - band, W, H], fill=bg)
-            if credits:
-                d.text((int(16 * k), H - band + int(size * 0.45)), credits, font=cf, fill=ink)
+            if clines:
+                for j, x in enumerate(clines):
+                    d.text((int(16 * k), H - band + int(size * 0.45) + int(j * size * 1.3)), x, font=cf, fill=ink)
                 placed["credits"] = True
             if date_text:
                 df = ImageFont.truetype(str(_inter_ttf(400)), size)
@@ -500,8 +568,9 @@ def hud(img, *, title: str | None, lines: list[str], credits: str, tokens: dict,
     return Image.alpha_composite(im, over).convert("RGB"), placed
 
 
-def date_line(tl: dict) -> str | None:
-    """The timeline's date: auto (today, or GMAP_FIXED_DATE, written "16 November 2026"), a text of its own, or off."""
+def date_line(tl: dict, locale: str | None = None) -> str | None:
+    """The timeline's date: auto (today, or GMAP_FIXED_DATE), a text of its own, or off. 3.7.0 (B12): written by geo_locale.date_text in the
+    page's locale, the way the print map writes it ("November 22, 2026" in en-US); with no locale given, "16 November 2026" as before."""
     import datetime as _dt
     import os
     v = tl.get("date", "auto")
@@ -511,6 +580,9 @@ def date_line(tl: dict) -> str | None:
         return str(v)
     fixed = os.environ.get("GMAP_FIXED_DATE")
     day = _dt.date.fromisoformat(fixed) if fixed else _dt.date.today()
+    if locale:
+        import geo_locale as gl
+        return gl.date_text(day, locale)
     return f"{day.day} {day.strftime('%B')} {day.year}"
 
 
@@ -690,7 +762,8 @@ def plan(n_frames: int, sec_per_frame: float | None) -> dict:
 def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, duration: float = 32.0, fps: float = 25.0, size: str = "1280x720",
         marker: str | None = None, hud_on: bool = True, quality: str = "final", resume: bool = False, gl: str = "auto", frames: int | None = None,
         title: str | None = None, warmup_only: bool = False, capture_factory=None, steady_s: float = STEADY_S, max_turn: float = MAX_TURN,
-        timeline=None, poster: str | None = None, web_mb: float = WEB_MB, hooks: dict | None = None, audio=None) -> dict:
+        timeline=None, poster: str | None = None, web_mb: float = WEB_MB, hooks: dict | None = None, audio=None,
+        lookahead_m: float | None = None, smooth_m: float | None = None, rail_m: float | None = None, camera: str | None = None) -> dict:
     """Capture, composite and encode. `frames` overrides duration x fps (tests). Returns the report: files, frames done and skipped, the seconds
     a frame took, the findings (MAP-OUT-013 from the read-back, MAP-OUT-020 when a credit could not be placed)."""
     import map_brand
@@ -729,7 +802,12 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
     findings: list[dict] = []
     try:
         ctx = cap.context()
-        cams = with_periods(cameras(mode, n, ctx, size=wh, layer=layer, fps=fps, steady_s=steady_s, max_turn=max_turn, tl=tl), mode, ctx, layer)
+        # 3.7.0 (B10, Day 23 issue 10): a draft's cameras are computed at the FINAL size and shifted once below; computing them at the draft's
+        # own pixels and then shifting again framed three times the final's area.
+        cam_size = SIZES[size] if (quality == "draft" and size in SIZES) else wh
+        la, sm, rm = camera_distances(camera, lookahead_m, smooth_m, rail_m)          # 3.7.0 (B11): how close the path camera rides
+        cams = with_periods(cameras(mode, n, ctx, size=cam_size, layer=layer, fps=fps, steady_s=steady_s, max_turn=max_turn, tl=tl,
+                                    lookahead_m=la, smooth_m=sm, rail_m=rm), mode, ctx, layer)
         cams = with_layers(cams, mode, ctx)
         notes = []
         if quality == "draft" and size in SIZES and SIZES[size][0] != wh[0]:
@@ -738,7 +816,7 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
             dz = math.log2(wh[0] / float(SIZES[size][0]))
             cams = [({**c, "zoom": float(c["zoom"]) + dz} if isinstance(c.get("zoom"), (int, float)) else c) for c in cams]
             notes.append(f"draft: zooms {dz:+.0f} so the {wh[0]} px draft shows the {SIZES[size][0]} px final's field of view")
-        date_text = date_line(tl)
+        date_text = date_line(tl, str(ctx["cfg"].get("locale") or "en-US"))
         if hooks and hooks.get("frame"):
             cams = [{**c, "t": round(i / fps, 4)} for i, c in enumerate(cams)]
         if tl.get("grow"):                               # 1.19.0 (Day 16 issue 16): the layer's blocks rise through their moments
@@ -773,23 +851,40 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
         tokens = ctx["cfg"].get("tokens") or {}
         credits = str(ctx.get("credits") or "").strip()
         title = title if title is not None else str(ctx.get("title") or ctx["cfg"].get("title") or "") or None
-        done, skipped, times = 0, 0, []
+        done, skipped, recomposited, times = 0, 0, 0, []
         frames_rec = dict(man.get("frames") or {}) if man.get("size") == list(wh) else {}
         upto = min(n, WARMUP) if warmup_only else n
-        tl_key = tlm.dumps(tl)[:4000] if (tl["story"] or tl["counters"]) else ""
+        # 3.7.0 (B12, Day 23 issue 12): a frame is stored twice: as the page drew it (raw_*.png, keyed by its camera) and with the HUD on it
+        # (frame_*.png, keyed by the camera and everything the HUD draws: title, credits, date, logo, timeline, size). A resume after a credit
+        # changed composites the raw frames again without drawing them again; nothing old is kept by mistake.
+        band_credits, band_note = fit_credits(credits, wh, tokens, title if hud_on else None, date_text if hud_on else None)   # 3.7.0 (B13)
+        if band_note:
+            notes.append(band_note)
+            if quality == "draft" or "two lines" in band_note:
+                findings.append({"id": "MAP-OUT-020", "severity": "WARN" if quality == "draft" else "INFO", "message": band_note})
+        hud_key = hud_hash(title=title, credits=band_credits, date_text=date_text, hud_on=hud_on, logo=logo, tl=tl, wh=wh, tokens=tokens)
+        from PIL import Image
+        import io
         for i in range(upto):
-            h = camera_hash({**cams[i], "_tl": tl_key, "_logo": bool(logo)})
+            cam_h = camera_hash(cams[i])
             fp = fdir / f"frame_{i:05d}.png"
-            if resume and frames_rec.get(str(i)) == h and fp.is_file():
+            rp = fdir / f"raw_{i:05d}.png"
+            rec = frames_rec.get(str(i))
+            rec = rec if isinstance(rec, dict) else {}
+            if resume and rec.get("cam") == cam_h and rec.get("hud") == hud_key and fp.is_file():
                 skipped += 1
                 continue
             t0 = time.monotonic()
-            png = cap.frame(cams[i], bool(marker) or mode == "path")
-            from PIL import Image
-            import io
-            im = Image.open(io.BytesIO(png)).convert("RGB")
-            if im.size != tuple(wh):
-                im = im.resize(wh)
+            if resume and rec.get("cam") == cam_h and rp.is_file():
+                im = Image.open(rp).convert("RGB")
+                recomposited += 1
+            else:
+                png = cap.frame(cams[i], bool(marker) or mode == "path")
+                im = Image.open(io.BytesIO(png)).convert("RGB")
+                if im.size != tuple(wh):
+                    im = im.resize(wh)
+                im.save(rp)
+                done += 1
             lines = []
             if mode == "path":
                 lines.append(f"{cams[i]['distance_m'] / 1000:.1f} km")
@@ -799,11 +894,12 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
                     lines.append(str(labs[cams[i]["time"]]))
             info = {"band_px": 0, "top_px": 0}
             if hud_on or credits:
-                im, placed = hud(im, title=title if hud_on else None, lines=lines if hud_on else [], credits=credits, tokens=tokens, info=info,
+                im, placed = hud(im, title=title if hud_on else None, lines=lines if hud_on else [], credits=band_credits, tokens=tokens, info=info,
                                  date_text=date_text if hud_on else None)
                 if credits and not placed["credits"] and not any(f["id"] == "MAP-OUT-020" for f in findings):
-                    findings.append({"id": "MAP-OUT-020", "severity": "BLOCK",
-                                     "message": f"the provider credits ({credits[:80]}...) could not be placed on the frame at {wh[0]} x {wh[1]}; a larger size carries them"})
+                    findings.append({"id": "MAP-OUT-020", "severity": "WARN" if quality == "draft" else "BLOCK",
+                                     "message": f"the provider credits ({credits[:80]}...) could not be placed on the frame at {wh[0]} x {wh[1]}, even as two lines "
+                                                "of organizations; a larger size carries them" + (" (a draft is written anyway)" if quality == "draft" else "")})
             if hud_on:                                  # 1.16.0: the logo, the story line and the counters
                 im, _pl = tlm.paint(im, i / fps, tl, tokens, font_path=font_tl, logo=logo, bottom_px=info["band_px"], top_px=info["top_px"])
             errs = cap.errors() if hasattr(cap, "errors") else []
@@ -812,14 +908,15 @@ def run(page_html, out_dir, *, mode: str = "orbit", layer: str | None = None, du
                                  "message": f"the page reported an error while frame {i} was drawn (MapLibre raises a bad layer or filter as an event, so it "
                                             f"would pass silently): {errs[0][:200]}"})
             im.save(fp)
-            frames_rec[str(i)] = h
-            done += 1
+            frames_rec[str(i)] = {"cam": cam_h, "hud": hud_key}
             times.append(time.monotonic() - t0)
             if done % 10 == 0:
                 man_p.write_text(json.dumps({"size": list(wh), "fps": fps, "mode": mode, "frames": frames_rec}, indent=1), encoding="utf-8")
         man_p.write_text(json.dumps({"size": list(wh), "fps": fps, "mode": mode, "frames": frames_rec}, indent=1), encoding="utf-8")
         spf = round(sum(times) / len(times), 2) if times else None
-        rep = {"ok": True, "frames": n, "done": done, "skipped": skipped, "sec_per_frame": spf, "gl": getattr(cap, "gl", gl), "renderer": renderer, "notes": notes, "size": list(wh), "fps": fps,
+        if recomposited:
+            notes.append(f"{recomposited} frame(s) kept as drawn and composited again: their HUD or credits changed since they were made")
+        rep = {"ok": True, "frames": n, "done": done, "skipped": skipped, "recomposited": recomposited, "sec_per_frame": spf, "gl": getattr(cap, "gl", gl), "renderer": renderer, "notes": notes, "size": list(wh), "fps": fps,
                "frames_dir": str(fdir), "files": [], "findings": findings, "credits": credits, "estimate": plan(n, spf)}
         if warmup_only:
             return rep
@@ -892,12 +989,17 @@ def main(argv=None) -> int:
     ap.add_argument("--on-frame", metavar="FRAME.js", help="1.19.0: JavaScript run before each frame (map, cam: the frame's camera, its t in cam.t)")
     ap.add_argument("--web-mb", type=float, default=WEB_MB, help="1.19.0: a final MP4 over this many MB also gets a _web.mp4 copy under it (0: none)")
     ap.add_argument("--audio", metavar="FILE", help="2.0.0: your own narration or sound file (mp3, m4a, wav ...), laid under the video from its first frame")
+    ap.add_argument("--camera", choices=("street", "neighbourhood", "city"), help="3.7.0 (B11): how close the path camera rides (900, 1,500 or 4,000 m ahead)")
+    ap.add_argument("--lookahead-m", type=float, help="3.7.0: metres ahead the path camera keeps in view (default 1,500)")
+    ap.add_argument("--smooth-m", type=float, help="3.7.0: metres the line is smoothed over (default 400)")
+    ap.add_argument("--rail-m", type=float, help="3.7.0: metres the camera's rail is averaged over (default the larger of the two)")
     a = ap.parse_args(argv)
     mode = "path" if a.path else "chapters" if a.chapters else "slider" if a.slider else "keyframes" if a.keyframes else "orbit"
     try:
         rep = run(a.page, a.out, mode=mode, layer=a.path, duration=a.duration, fps=a.fps, size=a.size, marker=a.marker, hud_on=a.hud == "on",
                   quality=a.quality, resume=a.resume, gl=a.gl, warmup_only=a.warmup, steady_s=a.steady, max_turn=a.max_turn,
-                  timeline=a.timeline or a.keyframes, poster=a.poster, web_mb=a.web_mb, audio=a.audio,
+                  timeline=a.timeline or a.keyframes, poster=a.poster, web_mb=a.web_mb, audio=a.audio, camera=a.camera,
+                  lookahead_m=a.lookahead_m, smooth_m=a.smooth_m, rail_m=a.rail_m,
                   hooks={k: Path(v).read_text(encoding="utf-8") for k, v in (("ready", a.on_ready), ("frame", a.on_frame)) if v} or None)
     except FlyError as ex:
         print(f"flythrough: {ex}", file=sys.stderr)

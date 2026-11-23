@@ -679,6 +679,7 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
         rep.setdefault("drawn", {})[l.id] = n
         if merge:
             rep.setdefault("compact", {})[l.id] = "one path per class"
+        g.append(small_feature_points(plan, l, geoms, keep, rep))    # 3.7.0 (C6): too small to see -> a point in its own colour
     elif l.kind == "line":
         page = _page_simplify(plan, l, frame)
         src_gdf = _parallel_lines(plan, l, frame, rep) if l.symbol.get("parallel") else l.gdf
@@ -854,10 +855,7 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
             casings: list[str] = []
             fills: list[str] = []
             if l.cls is not None:
-                for ci in list(range(l.cls.k)) + [-1]:
-                    sel = np.where(vis & (assigned == ci))[0]
-                    if not len(sel):
-                        continue
+                for ci, sel in stack_groups(l, assigned, vis, rep):        # 3.7.0 (B2): the draw order inside the layer (symbol.stack)
                     col = t["no_data"] if ci == -1 else l.colors[ci]
                     shp = shape if (ci == -1 or not l.class_shapes) else l.class_shapes[ci]
                     symbols(col, shp, sel)
@@ -876,6 +874,98 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
     g.append(ld.layer_patterns(l, frame, t, to_sheet))                     # hatch over patterned classes (M15); "" for most layers
     g.append("</g>")
     return "".join(g)
+
+
+STACK_CHUNKS = 8
+SMALL_FEATURE_MM = 0.8       # 3.7.0 (C6, Day 22 issue 6): a data polygon smaller than this across on the sheet is also drawn as a point
+SMALL_POINT_MM = 1.6
+SMALL_ROLES = ("choropleth", "polygons")
+
+
+def small_feature_points(plan, l, geoms, keep, rep: dict) -> str:
+    """A data polygon (an island state at world scale) whose drawing is under SMALL_FEATURE_MM across is also drawn as a SMALL_POINT_MM
+    dot in its class colour, at a point inside it, so it is seen (the 1:110m world misses Cabo Verde and Curacao; the 50m adds them, and they
+    are specks). Reported with the names (MAP-CART-042, INFO). `symbol.small_points: false` turns it off."""
+    import shapely
+    if l.role not in SMALL_ROLES or (l.symbol or {}).get("small_points") is False or not keep.any():
+        return ""
+    idx = np.flatnonzero(keep)
+    b = shapely.bounds(geoms[idx])
+    span = np.maximum(b[:, 2] - b[:, 0], b[:, 3] - b[:, 1])
+    tiny = idx[np.isfinite(span) & (span < SMALL_FEATURE_MM)]
+    if not len(tiny):
+        return ""
+    t = plan.tokens
+    assigned = np.asarray(l.cls.assigned) if l.cls is not None and len(l.cls.assigned) == len(l.gdf) else None
+    out = []
+    for i in tiny.tolist():
+        ci = int(assigned[i]) if assigned is not None else None
+        col = (t["no_data"] if ci == -1 else l.colors[ci]) if ci is not None else (l.fill or t["emphasis"])
+        pt = shapely.point_on_surface(geoms[i])
+        out.append(f'<circle cx="{sd.num(pt.x)}" cy="{sd.num(pt.y)}" r="{sd.num(SMALL_POINT_MM / 2)}" fill="{col}" stroke="{t["background"]}" stroke-width="0.12"/>')
+    name_col = next((c for c in ("NAME", "name", "ADMIN", "NAME_EN") if c in l.gdf.columns), None)
+    names = [str(l.gdf.iloc[i][name_col]) for i in tiny.tolist()] if name_col else []
+    rep.setdefault("small_points", {})[l.id] = {"count": int(len(tiny)), "names": names[:40]}
+    return f'<g data-small-points="{sd.esc(l.id)}">' + "".join(out) + "</g>"
+
+
+def carried_keys(els: dict) -> set[str]:
+    """3.7.0 (B5): the layers whose key a figure on the map carries: elements.strip's stack layer (unless key: false), and any figure's
+    carries_key list."""
+    out: set[str] = set()
+    st = els.get("strip") or {}
+    if st.get("layer") and st.get("on", True) is not False and st.get("key", True) is not False and (st.get("stack") or {}).get("layer"):
+        out.add(str(st["stack"]["layer"]))
+    for it in ((els.get("figures") or {}).get("items") or []):
+        out |= {str(x) for x in (it.get("carries_key") or [])}
+    return out
+
+
+def stack_groups(l, assigned, vis, rep: dict | None = None) -> list[tuple[int, "np.ndarray"]]:
+    """3.7.0 (B2, Day 23 issue 2): the order a classed point layer's classes are drawn in, bottom first, as (class index, point indices).
+
+    `symbol.stack`: a list of class labels bottom to top (classes it leaves out go under them, in key order); `shuffle` (a seeded random
+    interleave of every class, in a few slices each, so a build is repeatable); `key` (the key's order, last on top: the order before 3.7.0);
+    `auto` (the default for categorical points, D10): the class with most points at the bottom, the fewest on top. A class named in
+    `classification.background` (or symbol.background) is always drawn first, and the points with no class under everything. The legend
+    keeps the key's order."""
+    k = l.cls.k
+    counts = {ci: int((vis & (assigned == ci)).sum()) for ci in list(range(k)) + [-1]}
+    labels = list(l.cls.labels or [])
+    sym = l.symbol or {}
+    mode = sym.get("stack", "auto" if l.cls.kind == "categorical" else "key")
+    bg_names = list((l.spec.get("classification") or {}).get("background") or sym.get("background") or [])
+    bg = [labels.index(str(x)) for x in bg_names if str(x) in labels]
+    if isinstance(mode, list):
+        listed = [labels.index(str(x)) for x in mode if str(x) in labels]
+        order = [ci for ci in range(k) if ci not in listed] + listed
+        why = "as listed in symbol.stack"
+    elif mode == "key":
+        order = list(range(k))
+        why = None
+    elif mode == "shuffle":
+        order = list(range(k))
+        why = "shuffled (seeded)"
+    else:
+        order = sorted(range(k), key=lambda ci: (-counts[ci], ci))
+        why = "largest class at the bottom" if order != list(range(k)) else None
+    order = [-1] + [ci for ci in bg if ci in order] + [ci for ci in order if ci not in bg] if mode != "key" else order + [-1]
+    groups = [(ci, np.where(vis & (assigned == ci))[0]) for ci in order]
+    groups = [(ci, sel) for ci, sel in groups if len(sel)]
+    if mode == "shuffle":
+        rng = np.random.default_rng(int(sym.get("seed", 7)))
+        head = [(ci, sel) for ci, sel in groups if ci == -1 or ci in bg]
+        parts = []
+        for ci, sel in groups:
+            if ci == -1 or ci in bg:
+                continue
+            idx = rng.permutation(sel)
+            parts += [(ci, chunk) for chunk in np.array_split(idx, min(STACK_CHUNKS, len(idx))) if len(chunk)]
+        rng.shuffle(parts)
+        groups = head + parts
+    if why and rep is not None:
+        rep.setdefault("stacking", {})[l.id] = why + (f"; drawn first: {', '.join(labels[ci] for ci in bg)}" if bg else "")
+    return groups
 
 
 def _points_overlap(x, y, d_mm: float) -> bool:
@@ -1225,6 +1315,9 @@ def draw_basemap(plan: mp.Plan, frame: lo.Frame, ground_opacity: float = 1.0) ->
     for b in plan.basemap:
         if b["kind"] == "tiles":
             out.append(draw_tiles(plan, frame, b))
+            continue
+        if b["kind"] == "ground_image":                   # 3.7.0 (C5): a projection with cuts: the ground by inverse projection
+            out.append(image_markup(frame, b["ground"], "gm-base gm-base-ground"))
             continue
         if b["kind"] == "hillshade":                      # relief: above the land, countries and states; under the lakes and every layer (M12)
             out.append(image_markup(frame, b["image"], "gm-base gm-relief", data_layer=b.get("layer_id")))
@@ -1691,7 +1784,8 @@ def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
             b["counts"] = own
         elif counts_default and "counts" not in b:
             b["counts"] = counts_default
-    findings += lg.check_blocks(blocks, [l.spec | {"role": l.role, "_named_on_map": getattr(l, "direct_block", None) is not None} for l in plan.layers], classified)
+    _carried = carried_keys(els)
+    findings += lg.check_blocks(blocks, [l.spec | {"role": l.role, "_named_on_map": getattr(l, "direct_block", None) is not None or l.id in _carried} for l in plan.layers], classified)
     legend_on = on("legend")
     legend_fit = None
     if blocks and legend_on:
@@ -1716,8 +1810,14 @@ def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
         for n in legend_fit["notes"]:
             rep.setdefault("notes", []).append(n)
     elif blocks and not legend_on:
-        findings.append(f("MAP-CART-005", "BLOCK" if any(b["kind"] in ("classes", "categories") for b in blocks) else "INFO",
-                          "the legend is off but the map has classed or categorical layers; turn it on, or confirm the labels carry the meaning"))
+        carried = carried_keys(els)                         # 3.7.0 (B5, Day 23 issue 5): a figure or the strip may carry a layer's key
+        rest = [b for b in blocks if b.get("layer") not in carried]
+        if rest:
+            findings.append(f("MAP-CART-005", "BLOCK" if any(b["kind"] in ("classes", "categories") for b in rest) else "INFO",
+                              "the legend is off but the map has classed or categorical layers; turn it on, or confirm the labels carry the meaning"
+                              + (f" (the key of {', '.join(sorted(carried))} is carried by a figure; not of {', '.join(sorted({str(b.get('layer')) for b in rest}))})" if carried else "")))
+        else:
+            findings.append(f("MAP-CART-005", "INFO", f"the legend is off; the key of {', '.join(sorted(carried))} is carried by a figure on the map"))
 
     # ---- confidentiality
     conf = [l.id for l in plan.layers if l.confidentiality == "client-confidential"]
@@ -2194,6 +2294,16 @@ def _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rec
                               "sun_off_deg": sc["profile"].get("sun_off_deg")}
         except Exception as ex:  # noqa: BLE001 - a section never stops a map
             findings.append(f("MAP-SPEC-005", "WARN", f"the section could not be drawn ({str(ex)[:200]}); the map was built without it"))
+    st_cfg = els.get("strip") or {}
+    if st_cfg.get("on", bool(st_cfg.get("layer"))) and st_cfg.get("layer"):
+        import route_strip as rs_                            # 3.7.0 (B4, Day 23 issue 4): a line's stops drawn straight, with stacked bars
+        try:
+            sp = rs_.for_map(plan, st_cfg, map_rect, float(fonts["label"]))
+            fg_cfg["items"] = list(fg_cfg.get("items") or []) + [sp["figure"]]
+            rep.setdefault("notes", []).extend(sp["notes"])
+            rep["strip"] = sp["info"]
+        except rs_.StripError as ex:
+            findings.append(f("MAP-SPEC-005", "WARN", f"the strip could not be drawn ({ex}); the map was built without it"))
     if fg_cfg.get("items"):
         fg_svg, fg_rects, fg_fs, fg_notes = mex.place_figures(plan, map_rect, placed, fg_cfg, plan.spec_path.parent)
         co_svg += fg_svg
@@ -2498,6 +2608,9 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
         if field_ not in l.gdf.columns:
             raise mp.PlanError(f"labels: layer '{l.id}' has no field '{field_}'", gc.EXIT_USAGE)
         size = float(lb.get("size", pt))
+        if size < floor:                                  # 3.7.0 (B3, Day 23 issue 3; D11): drawn at the sheet's minimum, and said, never dropped
+            stats.setdefault("raised", {})[l.id] = {"asked_pt": size, "drawn_pt": floor, "sheet": tpl["kind"]}
+            size = floor
         gdf = l.gdf
         cands = []
 
@@ -2838,6 +2951,12 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
     from shapely.geometry import box as sbox
     t = plan.tokens
     cfg = {**mp.names_config(plan.spec), "_message": plan.spec.get("message")}
+    import interrupted as _cut
+    if cfg["on"] and _cut.is_cut(plan.crs) and "names" not in plan.spec and "on" not in ((plan.spec.get("elements") or {}).get("names") or {}):
+        # 3.7.0 (C5): in a projection with cuts the bundled names (water and admin areas above all) land on the wrong side of a cut; they are
+        # off unless the MapSpec asks for them (names: {on: true})
+        plan.notes.append("names: the place and water names are off in a projection with cuts (names: {on: true} turns them on)")
+        return "", {"on": False, "why": "projection with cuts"}
     stats: dict = {"on": cfg["on"]}
     import treatments as trm
     glyphs = "place_glyphs" in (getattr(plan, "treatments", None) or {})     # 1.4.0 (R2-TREAT): town glyphs in place of the dots
@@ -3230,6 +3349,16 @@ def plan_scale_denominator(frame: lo.Frame, plan: mp.Plan) -> float:
 
 # ---------------------------------------------------------------------------------------------------------------- inset
 INSET_MAX_ZOOM_OUT = 5.0     # default: the locator shows at most 5 times the main map's extent (on its longer side)
+METRO_SPAN_KM = 60.0         # 3.7.0 (B6): a window narrower than this gets the metro locator
+METRO_MIN_ZOOM = 5.0         # the metro locator is at least this many times the window across
+
+
+def _geodesic_span_km(wgs) -> float:
+    """The longer side of a lon/lat box, in km (great-circle along the middle parallel and meridian)."""
+    import math
+    x0, y0, x1, y1 = wgs
+    lat = math.radians((y0 + y1) / 2)
+    return max(abs(x1 - x0) * 111.32 * math.cos(lat), abs(y1 - y0) * 110.57)
 INSET_BOX_SHARE_HIDE = 0.25  # auto: hide the locator when the main map would fill more than this share of its area
 
 
@@ -3532,7 +3661,40 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
         return None
     mbox = (float(px.min()), float(py.min()), float(px.max()), float(py.max()))
     state = None
-    if unit_like and cfg.get("state_outline", True) is not False:
+    # 3.7.0 (B6, Day 23 issue 6): a metro-scale map (its window under METRO_SPAN_KM across) gets the metro locator, the counties around it at
+    # about five times its span, not its whole state: a 20 km city strip inside New York State read as a dot in a state outline
+    span_km = _geodesic_span_km(wgs)
+    # The metro needs a layer of units below the state: the US counties are bundled; elsewhere (no admin-2 layer yet) the locator keeps the
+    # admin-1 unit or the country, as before 3.7.0
+    metro = span_km < METRO_SPAN_KM and "state_outline" not in cfg and asked == "auto" and ctx == "us_states"
+    if metro:
+        try:
+            cz = mp.load_ref_layer("ref.boundary.us.county.cb")[0]
+            czl = _locator_layer(cz, crs, cx, cy)
+            wpoly = Polygon(np.column_stack([px, py]))
+            wpoly = wpoly if wpoly.is_valid else wpoly.buffer(0)
+            touch = czl[czl.geometry.intersects(wpoly)]
+            if not len(touch):
+                raise ValueError("no county under the window")
+            srcs.append(cz)
+            gdfs.append(czl)
+            # framed on the counties the window touches, with their neighbours, and at least METRO_MIN_ZOOM times the window across, so the
+            # box reads as a place in a metro area (a 13 km Phoenix window in Maricopa County, a 20 km Queens strip with the boroughs round it)
+            main = touch.iloc[int(np.argmax([g.intersection(wpoly).area for g in touch.geometry]))]
+            ug = touch.geometry.union_all()
+            ub = list(ug.bounds)
+            mx_, my_ = (mbox[0] + mbox[2]) / 2, (mbox[1] + mbox[3]) / 2
+            half = METRO_MIN_ZOOM * max(mbox[2] - mbox[0], mbox[3] - mbox[1]) / 2
+            ub = [min(ub[0], mx_ - half), min(ub[1], my_ - half), max(ub[2], mx_ + half), max(ub[3], my_ + half)]
+            nm = str(main.get("NAMELSAD") or main.get("NAME") or "")
+            state = {"name": nm, "geometry": ug, "label_geometry": main.geometry, "bounds": tuple(float(v) for v in ub), "iso": "US",
+                     "col": "GEOID", "values": {str(v) for v in touch["GEOID"]}, "metro": True}
+            more = f" and {len(touch) - 1} more" if len(touch) > 1 else ""
+            plan.notes.append(f"locator: the window is {span_km:.0f} km across (under {METRO_SPAN_KM:.0f} km), so the inset shows the metro "
+                              f"area around it ({nm}{more} with the counties around), not the whole state")
+        except Exception:  # noqa: BLE001 - without the counties the locator is the state, as before
+            metro = False
+    if unit_like and cfg.get("state_outline", True) is not False and not metro:
         wpoly = Polygon(np.column_stack([px, py]))
         wpoly = wpoly if wpoly.is_valid else wpoly.buffer(0)
         st = _state_around(gdfs[0], wpoly, name_col)
@@ -3607,7 +3769,8 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
             if not d:
                 continue
             if (state and not state.get("country") and state.get("col", name_col) in near.columns
-                    and str(near[state.get("col", name_col)].iloc[i]) == state.get("value", state["name"])):
+                    and (str(near[state.get("col", name_col)].iloc[i]) in state["values"] if state.get("values")
+                         else str(near[state.get("col", name_col)].iloc[i]) == state.get("value", state["name"]))):
                 focus.append(d)
             else:
                 paths.append(d)
@@ -3625,7 +3788,7 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
     if state:
         import shapely
         from shapely.geometry import box as sbox
-        sgeom, _ = to_sheet([state["geometry"]], fr, True)
+        sgeom, _ = to_sheet([state.get("label_geometry", state["geometry"])], fr, True)
         if sgeom[0] is not None:
             p = shapely.point_on_surface(sgeom[0].intersection(sbox(0, 0, w, h)))
             label = {"text": mp.upper_name(state["name"]), "x": float(p.x), "y": float(p.y)}
@@ -3638,7 +3801,9 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
            "window": [round(v, 1) for v in win], "max_zoom_out": round(float(zoomed_out or factor), 2), "regional_zoom_out": zoomed_out,
            "zoom_out": round(((win[2] - win[0]) / max(mbox[2] - mbox[0], 1e-9)) if (mbox[2] - mbox[0]) >= (mbox[3] - mbox[1])
                              else ((win[3] - win[1]) / max(mbox[3] - mbox[1], 1e-9)), 2)}
-    if state and ctx == "us_states":
+    if state and state.get("metro"):
+        pass                                               # said when the counties were read
+    elif state and ctx == "us_states":
         plan.notes.append(f"locator: the map lies inside {state['name']}, so the inset shows the whole state with its neighbours")
     elif state and state.get("country"):
         plan.notes.append(f"locator: the map lies inside {state['name']}, so the inset shows the whole country with its neighbours")
@@ -3649,6 +3814,7 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
         plan.notes.append(f"locator: the map lies inside {state['name']} (a {word} of {cn}), so the inset shows the whole {word} with its neighbours")
     if zoomed_out:
         plan.notes.append(f"locator: a regional map, so the inset is zoomed out {zoomed_out:g} times onto North America to keep the box small enough to read")
+    out["metro"] = bool(metro)
     return out
 
 
@@ -3816,7 +3982,7 @@ def draw_inset(inset: dict, x: float, y: float, t: dict, visible: tuple | None =
             r = Rect(lab["x"] - tw / 2, ly - th * 0.8, lab["x"] + tw / 2, ly + th * 0.3)
             if r.x0 < 1.0 or r.x1 > w - 1.0 or r.y0 < 1.0 or r.y1 > h - 1.0:
                 continue
-            if box_rect and r.hits(box_rect.grown(0.4)):
+            if box_rect and r.hits(box_rect.grown(1.0)):
                 continue
             ok.append((ly, r))
         inside = _inside_outline(inset.get("focus"), [r for _, r in ok])      # M16: on a tall frame the box covers the middle of the state;

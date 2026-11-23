@@ -21,6 +21,8 @@ python3 "$GMAP_ROOT/scripts/doctor.py"                 # human report
 python3 "$GMAP_ROOT/scripts/doctor.py" --json          # machine report
 python3 "$GMAP_ROOT/scripts/doctor.py" --fix --all     # install what is missing (ask first)
 python3 "$GMAP_ROOT/scripts/doctor.py" --fix --quick   # a fresh cloud workspace: what a map needs, one pip step, 10 minutes at most
+python3 "$GMAP_ROOT/scripts/doctor.py" --settings     # 3.7.0: your own folder, your sources, your brand and default, an edited shipped brand
+python3 "$GMAP_ROOT/scripts/doctor.py" --move-settings --yes   # copy the settings found in this project into your own folder (ask first)
 ```
 
 ## Modules

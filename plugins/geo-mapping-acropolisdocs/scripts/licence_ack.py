@@ -69,9 +69,7 @@ def required(entry: dict | None) -> dict | None:
 
 
 def _dirs() -> list[Path]:
-    out = [gc.workdir() / FOLDER, gc.outputs_dir() / FOLDER]
-    if not os.environ.get("GEO_MAPPING_HOME"):
-        out.append(Path.home() / gc.WORKDIR_NAME / FOLDER)
+    out = gc.settings_places(FOLDER)                   # 3.7.0: project, the named folder, then your own folder
     seen, uniq = set(), []
     for p in out:
         k = str(p.resolve()) if p.exists() else str(p)
@@ -185,7 +183,7 @@ def acknowledge(entry: dict, uses: list[str], *, how: str = "pop-up", licence_re
         except ValueError as ex:
             raise AckError(f"valid_until must be a date (YYYY-MM-DD): {ex}") from ex
     ref = re.sub(r"[\r\n]+", " ", str(licence_ref or ""))[:120]
-    folder = where or (gc.outputs_dir(create=True) / FOLDER)
+    folder = where or (gc.user_folder(create=True) / FOLDER)    # 3.7.0 (Part D): your own folder, read from every project
     folder.mkdir(parents=True, exist_ok=True)
     p = folder / _name(entry["id"])
     rec = {"acknowledged": True, "entry": entry["id"], "provider": a["provider"], "product": a.get("product") or entry.get("title"),
@@ -195,9 +193,16 @@ def acknowledge(entry: dict, uses: list[str], *, how: str = "pop-up", licence_re
         rec["licence_ref"] = ref
     if valid_until:
         rec["valid_until"] = valid_until
-    p.write_text("# The person's own statement that they hold this provider's licence for these uses (licence_ack.py, 1.15.0).\n"
-                 + yaml.safe_dump(rec, sort_keys=False, width=200), encoding="utf-8")
-    return {**rec, "stored_in": str(p)}
+    body = ("# The person's own statement that they hold this provider's licence for these uses (licence_ack.py, 1.15.0).\n"
+            + yaml.safe_dump(rec, sort_keys=False, width=200))
+    p.write_text(body, encoding="utf-8")
+    out = {**rec, "stored_in": str(p)}
+    o = gc._OUTPUTS.get()
+    if where is None and o is not None and (o / FOLDER).resolve() != folder.resolve():      # a copy in the named project, which a build there reads
+        (o / FOLDER).mkdir(parents=True, exist_ok=True)
+        (o / FOLDER / _name(entry["id"])).write_text(body, encoding="utf-8")
+        out["project_copy"] = str(o / FOLDER / _name(entry["id"]))
+    return out
 
 
 def withdraw(entry_id: str) -> dict:

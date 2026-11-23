@@ -4,6 +4,13 @@ description: "Run a map pipeline after confirming its cost: map or web map build
 ---
 Start the pipeline the person named. The pipelines are `map-build`, `webmap-build`, `map-qa`, `data-refresh`, `format-batch`, `service-harvest`, `service-refresh`, `coverage-map`, `market-map`, `program-map`, `network-analysis`, `map-atlas-run`, `reference-refresh`, `climate-fetch` (a Copernicus CDS job), `fcc-fetch` (an FCC BDC file over 100 MB), `flythrough` (a video flown over a 3D web page: a draft first, the final after you confirm), `map-evaluate` (grades finished maps from their pictures for improving the plugin, observe only: it never changes a map) and `move-data` (2.6.0: files fetched on the person's computer and staged here, unzipped into the work folder's data/ in one step with sizes and hashes recorded); with no name, list them and ask which.
 
+3.7.0: every input a pipeline declares is reachable from the command line: `--page`, `--dataset`, `--request`, `--file-id`, or
+`--input KEY=VALUE`. The confirm token covers the inputs and options only (a flythrough's estimate no longer changes it); when an estimate
+moves by more than half, `run` says so and asks again with the same token. A flythrough takes `camera=street|neighbourhood|city` (900,
+1,500 or 4,000 m kept in view) or `lookahead_m`, `smooth_m`, `rail_m`; its draft frames the same ground as the final; a resume after a
+credit or title change composites the frames again without drawing them again; credits shorten to their organizations (then two lines)
+before a draft would stop.
+
 Each pipeline's guide is a module, not a skill: read it with the line below before planning (never with the Skill tool, which has no
 pipeline skills to load).
 

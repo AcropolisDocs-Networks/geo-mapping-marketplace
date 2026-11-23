@@ -343,6 +343,13 @@ entries:
   rev: 3
   tags_digest: 9f422644e00a
   entry_digest: bc8322927371
+- id: ref.boundary.world.country.ne10
+  file: entries/data/ref.boundary.world.country.ne10.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 9298ea7b8011
+  entry_digest: 28d1caccdd8f
 - id: ref.boundary.world.country.ne110
   file: entries/data/ref.boundary.world.country.ne110.yaml
   type: boundary
@@ -350,6 +357,13 @@ entries:
   rev: 2
   tags_digest: 7c3414d259c5
   entry_digest: bfaef0f655ab
+- id: ref.boundary.world.country.ne50
+  file: entries/data/ref.boundary.world.country.ne50.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 646ee9fca63f
+  entry_digest: e30a68af9e89
 - id: ref.boundary.world.division.overture
   file: entries/data/ref.boundary.world.division.overture.yaml
   type: boundary
@@ -683,9 +697,9 @@ entries:
   file: entries/data/ref.infrastructure.world.submarine-cable.telegeography.yaml
   type: infrastructure
   status: active
-  rev: 2
+  rev: 3
   tags_digest: f523d79301c9
-  entry_digest: 1fd10c186c6b
+  entry_digest: 5f83e4d77558
 - id: ref.map-type.carrier-choice-h3
   file: entries/method/ref.map-type.carrier-choice-h3.yaml
   type: map-type

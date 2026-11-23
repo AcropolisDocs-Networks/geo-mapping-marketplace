@@ -47,9 +47,7 @@ HOWS = ("asked", "key added", "older mapspec")
 def _candidates() -> list[Path]:
     """Where an acknowledgment may be: the working folder's .geo-mapping/, the folder a tool call named, and (outside tests) the person's own
     ~/.geo-mapping/, which is where the plugin's server on their computer keeps settings."""
-    out = [gc.workdir() / FILE, gc.outputs_dir() / FILE]
-    if not os.environ.get("GEO_MAPPING_HOME"):
-        out.append(Path.home() / gc.WORKDIR_NAME / FILE)
+    out = gc.settings_places(FILE)                     # 3.7.0: project, the named folder, then your own folder
     seen, uniq = set(), []
     for p in out:
         k = str(p.resolve()) if p.exists() else str(p)
@@ -129,7 +127,7 @@ def acknowledge(how_: str = "asked", where: Path | None = None) -> dict:
     if how_ not in HOWS:
         raise ValueError(f"how is one of {', '.join(HOWS)}")
     import yaml
-    p = where or (gc.workdir(create=True) / FILE)
+    p = where or (gc.user_folder(create=True) / FILE)     # 3.7.0 (Part D): your own folder, read from every project
     p.parent.mkdir(parents=True, exist_ok=True)
     today = (os.environ.get("GMAP_FIXED_DATE") or dt.date.today().isoformat())[:10]
     body = ("# Written by map-services when you said yes to the statement below. Delete this file, or run map-services withdraw, to take it back.\n"

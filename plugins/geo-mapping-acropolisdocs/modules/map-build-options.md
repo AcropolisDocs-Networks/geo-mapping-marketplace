@@ -2,7 +2,7 @@
 name: map-build-options
 description: >
   KNOWLEDGE MODULE - read by map-create. Limits for large layers, panels and how the map is fitted around its
-  elements, and style packs: what each pack is and how one is chosen at the start of a build.
+  elements, style packs: what each pack is and how one is chosen at the start of a build, and the 3.7.0 MapSpec lines that replace hand work.
 ---
 
 # map-build-options
@@ -47,3 +47,28 @@ A helper script of your own (a box drawn into the map, a wrapper around a plugin
 the skills' first line does, and never keeps a path from an earlier call: a plugin update moves the synced folder (`...~g2`) mid-session.
 A figure that belongs on the map goes in `elements.figures` (1.19.0), so every rebuild draws it again instead of losing it; a terrain
 cross-section is `elements.section` (1.20.0), drawn from the map's own DEM and sun.
+
+## MapSpec lines that replace hand work (3.7.0)
+
+- **Draw order of categorical points:** the class with most points is drawn first and the smallest on top (`symbol.stack: auto`, the
+  default), so a minority is never buried under the majority. `stack: [label, ...]` bottom to top, `stack: shuffle` (seeded), `stack: key`
+  (the old order); a class in `classification.background: [label]` is always drawn first. The legend keeps the key's order.
+- **Labels below the sheet's minimum** (10 pt on a slide, 6 pt in print) are drawn at the minimum with a MAP-CART-007 warning, not dropped.
+- **A route strip:** `elements.strip: {on: true, layer: STOPS, label_field, line: LINE | order_field, stack: {layer: POINTS, join | max_m},
+  callout_field, marks: [{between: [A, B], text}], title, position | rect_mm}` draws the line straight with one stacked bar per stop in the
+  points layer's own colours, and carries that layer's key, so `legend: {on: false}` is fine. A hand-made figure can say so with
+  `elements.figures.items[].carries_key: [layer]`.
+- **The locator** of a map under 60 km across shows the metro area around it, not the whole state (`state_outline: true` asks for the state).
+- **Foreign keys** (a stop_id on restaurants) are not reported as duplicates when another layer has that column as its `id_field`, or a join
+  or the strip names it; `foreign_keys: [col]` on a layer says so directly.
+- **Socrata open data** (city portals): a library entry or your own source with `protocol: socrata`; `library_request` takes `select`,
+  `where` (field op value; ...), `group`, `within_box`/bbox, `within_polygon=FILE`, `order`, `limit` and writes the SoQL itself.
+- **An OpenStreetMap basemap file** for any window, no tile cap: `basemap_extract` (plan first: it states the size), then
+  `basemap: {provider: pmtiles, source: pmtiles:FILE}`. A capped provider's plan offers it (MAP-TILE-005).
+
+- **Ocean and cable maps:** `crs: {display: spilhaus}` (PROJ 9.6 or later; `/geo-mapping-acropolisdocs:map-doctor` checks it) or `goode`. The ground is drawn by
+  inverse projection, line layers are split where they cross a cut (the count is reported), a polygon layer gets MAP-CRS-012.
+- **Small countries at world scale:** the 1:110m countries layer gains the 65 small states and territories from the
+  bundled 1:50m layer (`fill_small: false` leaves them out); `source.detail: 50m | 10m` reads the finer outlines (10m is fetched once).
+  A country too small to see is drawn as a dot in its class colour and listed (MAP-CART-042).
+- **Venues by name:** `geocode_venues` (stadium, arena, station, airport, landmark) from Wikidata; an ambiguous name returns candidates.

@@ -76,6 +76,52 @@ def brand_name(slug: str) -> str:
     return load_pack(slug)["brand"]["identity"]["name"]
 
 
+DEFAULTS_FILE = "user-defaults.yaml"
+SYNC_MARK = "user-settings.yaml"
+
+
+def default_file() -> Path | None:
+    """3.7.0 (Part D): the default-brand file that applies: this project's .geo-mapping/user-defaults.yaml first (a client project can carry
+    its own), then the person's own folder (~/.geo-mapping/user-defaults.yaml), where `set` writes. None when there is neither."""
+    for f in gc.settings_places(DEFAULTS_FILE):
+        try:
+            if f.is_file() and (gc.load_yaml(f) or {}).get("default_brand"):
+                return f
+        except Exception:  # noqa: BLE001 - an unreadable file is not a default
+            continue
+    return None
+
+
+def shipped_brand_edits(manifest: dict | None = None) -> list[dict]:
+    """3.7.0 (Part D item 5): shipped brand files that differ from the build (brand.json or map-tokens.yaml edited inside the installed plugin).
+    An update restores them, so such an edit is lost: `set_brand.py adopt` keeps it as the person's own pack."""
+    import hashlib
+    try:
+        m = manifest or gc.build_manifest()
+    except FileNotFoundError:
+        return []
+    out = []
+    for a in m.get("brand_assets") or []:
+        d = gc.plugin_root() / gc.BRANDS_DIRNAME / a["brand"]
+        for name, key in (("brand.json", "brand_json_sha256"), ("map-tokens.yaml", "tokens_sha256")):
+            f = d / name
+            if not f.is_file() or not a.get(key):
+                continue
+            if hashlib.sha256(f.read_bytes()).hexdigest() != a[key]:
+                out.append({"brand": a["brand"], "file": str(f)})
+    return out
+
+
+def edit_findings(manifest: dict | None = None) -> list[dict]:
+    eds = shipped_brand_edits(manifest)
+    if not eds:
+        return []
+    slug = eds[0]["brand"]
+    return [{"id": "MAP-BRAND-018", "severity": "WARN", "detail": [e["file"] for e in eds],
+             "message": f"the shipped brand '{slug}' was edited inside the plugin ({', '.join(Path(e['file']).name for e in eds)}): the next update restores it and "
+                        f"the edit is lost. Keep it as your own pack: set_brand.py adopt --slug NAME (or {brand_command()} adopt), then use NAME"}]
+
+
 def user_default(manifest: dict) -> tuple[str | None, str | None]:
     """The per-user default brand.
 
@@ -84,8 +130,8 @@ def user_default(manifest: dict) -> tuple[str | None, str | None]:
     """
     if manifest.get("brand_selection", "selectable") != "selectable":
         return None, None
-    f = gc.workdir() / "user-defaults.yaml"
-    if f.is_file():
+    f = default_file()
+    if f is not None:
         try:
             v = (gc.load_yaml(f) or {}).get("default_brand")
         except Exception:  # noqa: BLE001
@@ -112,13 +158,23 @@ def resolve(manifest: dict, spec_brand: str | None = None, request_brand: str | 
     if named:
         return {"brand": need(named), "rule": "named", "source": "request" if request_brand else "mapspec"}
     default, src = user_default(manifest)
+    where = str(default_file()) if src == "file" and default_file() else ("the plugin option default_brand" if src == "user-config" else None)
     if default:
         if default in here:
-            return {"brand": default, "rule": "user_default", "source": src}
-        # a stored default that is not here (its pack was removed, or lives in another project) is ignored, with a note, never an error
-        return {"brand": manifest["default_content_brand"], "rule": "edition_default",
-                "source": "manifest", "note": f"stored default '{default}' is not available here"}
-    return {"brand": manifest["default_content_brand"], "rule": "edition_default", "source": "manifest"}
+            return {"brand": default, "rule": "user_default", "source": src, "from": where}
+        # a stored default that is not here (its pack was removed, or lives in another project) is ignored, never an error; 3.7.0: said as a warning
+        return {"brand": manifest["default_content_brand"], "rule": "edition_default", "source": "manifest", "from": where,
+                "note": f"stored default '{default}' is not available here",
+                "findings": [{"id": "MAP-BRAND-017", "severity": "WARN", "detail": where,
+                              "message": f"your default brand '{default}' (set in {where}) is not found here, so this map uses {manifest['default_content_brand']}. "
+                                         f"Bring the pack into this project (brand_copy to_project, or user_settings) or add it again"}]}
+    out = {"brand": manifest["default_content_brand"], "rule": "edition_default", "source": "manifest", "from": None}
+    if gc.ephemeral_home() and not (gc.workdir() / SYNC_MARK).is_file():
+        out["findings"] = [{"id": "MAP-BRAND-017", "severity": "WARN", "detail": None,
+                            "message": "no default brand is set in this project, and your own settings on your computer (brand, default, sources) were "
+                                       f"not brought into it: this map uses {manifest['default_content_brand']}. Run the user_settings tool with this "
+                                       "folder once to bring them in"}]
+    return out
 
 
 def house_accreditation(manifest: dict | None = None) -> dict:

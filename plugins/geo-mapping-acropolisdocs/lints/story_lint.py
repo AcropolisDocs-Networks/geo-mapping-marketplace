@@ -223,9 +223,26 @@ def suggestions(plan, subj: list) -> list[dict]:
             s = map_emphasis.suggest_highlight(msg, l)
         except Exception:  # noqa: BLE001 - a column the reader cannot search: no suggestion
             s = None
+        if s and named_elsewhere(plan, l, (s.get("highlight") or {}).get("in")):
+            continue                                     # 3.7.0 (B7): "69 St" in the message is a stop's label, not a value of this layer
         if s:
             out.append({"layer": l.id, **s})
     return out
+
+
+def named_elsewhere(plan, l, vals) -> bool:
+    """3.7.0 (B7, Day 23 issue 7): True when every value the message named is the label text of another labelled layer (the stops' names),
+    so the message speaks of that layer's features, not of this layer's values."""
+    if not vals:
+        return False
+    texts: set[str] = set()
+    for lb in plan.spec.get("labels") or []:
+        if lb.get("layer") == l.id or not lb.get("field"):
+            continue
+        other = next((x for x in plan.layers if x.id == lb.get("layer")), None)
+        if other is not None and lb["field"] in other.gdf.columns:
+            texts |= {str(v).strip().lower() for v in other.gdf[lb["field"]].dropna().tolist()}
+    return bool(texts) and all(str(v).strip().lower() in texts for v in vals)
 
 
 def _yaml(d: dict) -> str:

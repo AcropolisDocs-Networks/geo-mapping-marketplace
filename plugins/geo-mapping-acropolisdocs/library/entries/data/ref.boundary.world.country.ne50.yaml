@@ -1,0 +1,57 @@
+id: ref.boundary.world.country.ne50
+type: boundary
+rev: 1
+status: active
+title: World countries, 50m (Natural Earth)
+summary: Medium-resolution country polygons, every sovereign state and dependency including the small island states the 110m layer leaves
+  out (Cape Verde, Curacao, Malta, Singapore).
+tags:
+  geography: [world]
+  level: [country]
+  domain: [general]
+  use_for: [context-basemap, choropleth, locator-inset, atlas, join-key]
+  avoid_for: [engineering-grade, legal-boundary, site-precision, parcel-level]
+  scale: [world, national]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: [A world or continental map whose data includes small island states or micro-states that the 110m countries leave out., A
+    regional map of several countries where the 110m outlines look too coarse.]
+avoid_when: [The map is of one country or a part of one; use the 10m countries or a national boundary source., 'Borders are disputed
+    or politically sensitive for the audience; Natural Earth draws de facto boundaries, so check the client''s policy first.', The map
+    needs legal or surveyed boundaries.]
+join: {key: ISO_A3_EH, type: string, width: 3, note: 'Use ISO_A3_EH, not ISO_A3: Natural Earth stores -99 in ISO_A3 for France, Norway
+    and a few others.'}
+crs: EPSG:4326
+distinct_from:
+- id: ref.boundary.world.country.ne110
+  why: The same Natural Earth countries at another resolution; pick by the map's scale (110m world, 50m continents and small states, 10m national).
+- id: ref.boundary.world.country.ne10
+  why: The same Natural Earth countries at another resolution; pick by the map's scale (110m world, 50m continents and small states, 10m national).
+- id: ref.boundary.world.historical.basemaps
+  why: These are today's countries; historical-basemaps holds the polities of a past year.
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_50m_countries.parquet
+  sha256: c41f35ebb987feca4a50d31c7c8f27e43359e6c8d26f5de02f22cebc84066b38
+  size_mb: 0.57
+  format: GeoParquet (zstd)
+  features: 242
+  columns: [NAME, ADMIN, SOVEREIGNT, ADM0_A3, ISO_A2_EH, ISO_A3_EH, CONTINENT, SUBREGION, POP_EST, LABEL_X, LABEL_Y, MIN_LABEL, MAX_LABEL,
+    NE_ID]
+source: {publisher: Natural Earth, product: 'Admin 0 - Countries, 50m', url: 'https://naciscdn.org/naturalearth/50m/cultural/ne_50m_admin_0_countries.zip',
+  file_sha256: 5fed433373581fa648920435f937d95f2d3c0200e067409c6478dcdf1b853139}
+url_verified_on: 2026-11-02
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-23
+  verify_by: 2027-11-23
+  check: {kind: feature_count_and_hash, features: 242, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-23, note: Bundled payload built and verified (M1).}

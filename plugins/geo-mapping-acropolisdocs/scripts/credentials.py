@@ -585,7 +585,7 @@ def services(entries: list[dict] | None = None, include_keyless: bool = False) -
         b = entry_block(e)
         if not (b and b.get("name")):
             if include_keyless and e.get("status") == "active" and e.get("type") not in ("map-type", "palette", "template", "symbol-set"):
-                keyless.append({"entry": e.get("id"), "title": e.get("title"), "type": e.get("type")})
+                keyless.append({"entry": e.get("id"), "title": e.get("title"), "type": e.get("type"), **({"scope": "user"} if e.get("_scope") == "user" else {})})
             continue
         n = str(b["name"])
         row = keyed.get(n)
@@ -598,9 +598,13 @@ def services(entries: list[dict] | None = None, include_keyless: bool = False) -
                     "sent_as": _inject_text(b.get("inject")) or ("bearer" if b.get("kind") == "bearer" else None),
                     "class": b.get("class", "secret"), "browser_ok": "browser" in (b.get("class_allowed") or [b.get("class", "secret")]),
                     "signup_url": b.get("signup_url"), "free": b.get("free"), "limits": b.get("limits"), "probe": bool(b.get("probe")) or _has_sample(e),
-                    "optional": bool(b.get("optional")), "lifetime_days": b.get("lifetime_days")}
-    rows = list(keyed.values())
+                    "optional": bool(b.get("optional")), "lifetime_days": b.get("lifetime_days"),
+                    "scope": "user" if e.get("_scope") == "user" or e.get("_overrides_from") else "shipped"}      # 3.7.0: your own sources, apart
+    rows = [r for r in keyed.values() if r["scope"] == "shipped"]
+    mine = [r for r in keyed.values() if r["scope"] == "user"]
     out = {"ok": True, "count": len(rows), "services": rows,
+           **({"your_sources": mine, "your_sources_note": "keys for your own data sources (map-sources): the plugin does not support or vouch for these; "
+               "you accepted their terms with each provider"} if mine else {}),
            "how": f"Register any of these with /{_prefix()}:map-credentials add NAME (an alias works too and is registered under NAME). A service that is "
                   "not listed needs host= and inject= with add."}
     if include_keyless:

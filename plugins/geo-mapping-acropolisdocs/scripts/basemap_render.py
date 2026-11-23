@@ -48,6 +48,7 @@ R = 6378137.0
 ORIGIN = math.pi * R
 CAPS = {"T1": 25, "T2": 100}
 BULK_FACTOR = 4                 # a provider that does not allow bulk use gets a quarter of the cap
+PMTILES_OFFER_DPI = 150         # 3.7.0 (B15): below this, a capped print basemap's plan offers the PMTiles route
 HARD_CAP = 400
 SMALL_MAP_MM = 120.0       # 3.4.0: a map this narrow (an inset) should print its tiles at SMALL_MAP_DPI at least
 SMALL_MAP_DPI = 150
@@ -326,6 +327,12 @@ def plan_render(spec_path, provider: str | None = None, *, tier: str = "T1", max
     elif g["limited_by_cap"]:
         fs.append(finding("MAP-WEB-011", "WARN", f"the tile cap ({cap}) limits the basemap to zoom {g['z']}; zoom {g['ideal_zoom']} would suit this map ({g['detail']}). The background will look softer than the data; "
                           "raise the cap only if the provider's terms allow it, or use your own tile file"))
+    if g["limited_by_cap"] and (g.get("paper_dpi") or 999) < PMTILES_OFFER_DPI and provider not in ("pmtiles", "protomaps"):
+        # 3.7.0 (B15, Day 23 issue 15): said in the same answer: an OpenStreetMap extract has no cap, any zoom, and the OSM credit
+        fs.append(finding("MAP-TILE-005", "INFO", f"the cap holds this background to about {g.get('paper_dpi')} dpi on paper. An OpenStreetMap basemap file has no "
+                          "cap and reaches any zoom: basemap_extract (the window, max_zoom 14) makes one from the Protomaps daily build, then "
+                          "basemap: {provider: pmtiles, source: pmtiles:FILE} draws it as the ground in your brand's colours (credit: © OpenStreetMap contributors, ODbL)",
+                          {"route": "basemap_extract", "max_zoom": 14}))
     if g.get("clamped_from") is not None:
         fs.append(finding("MAP-TILE-002", "WARN", f"zoom {g['clamped_from']} is outside the source's range ({min_zoom} to {max_zoom}); zoom {g['z']} is used. "
                           "Past its maximum a source has no tiles (blank squares); below its minimum it has none either"))

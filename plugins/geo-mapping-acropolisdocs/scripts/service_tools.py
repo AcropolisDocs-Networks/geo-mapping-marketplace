@@ -727,8 +727,11 @@ def services_acknowledge(confirm: bool = False) -> dict:
     if not confirm:
         return {"ok": False, "findings": [{"id": "MAP-SVC-001", "severity": "BLOCK", "message": "show the person the statement and record it only after they say yes, "
                                            "with confirm=true", "detail": None}], "statement": cz.STATEMENT}
-    where = gc.outputs_dir(create=True) / cz.FILE
-    return {"ok": True, **cz.acknowledge("asked", where=where), "statement": cz.STATEMENT}
+    rec = cz.acknowledge("asked")                     # 3.7.0 (Part D): your own folder, read from every project
+    o = gc._OUTPUTS.get()
+    if o is not None and (o / cz.FILE).resolve() != Path(rec["stored_in"]).resolve():     # and a copy in the named project, which a build there reads
+        rec["project_copy"] = cz.acknowledge("asked", where=o / cz.FILE)["stored_in"]
+    return {"ok": True, **rec, "statement": cz.STATEMENT}
 
 
 def credentials_status(store=None) -> dict:
@@ -782,7 +785,21 @@ def library_fetch(entry_id: str, variant: str = "", level: str = "", refresh: bo
     except rf.FetchError as e:
         kind = {gc.EXIT_USAGE: "usage", gc.EXIT_LINT: "lint", gc.EXIT_REFUSED: "refused", gc.EXIT_SERVICE: "service"}.get(e.code, "service")
         return fail(kind, e.rule or ("MAP-SVC-001" if kind == "usage" else "MAP-SVC-013"), str(e))
+    _copy_user_source(entry_id)
     return {"ok": True, **res}
+
+
+def _copy_user_source(entry_id: str) -> None:
+    """3.7.0: a fetch of the person's own source into a named work folder also leaves a copy of the source there, so a map built in that
+    folder (in a Cowork session, by scripts that cannot see the person's own folder) knows it."""
+    try:
+        import ref_fetch as rf
+        import user_sources as us
+        e = rf.find_entry(entry_id)
+        if e.get("_scope") == "user":
+            us.copy_to_project(e)
+    except Exception:  # noqa: BLE001 - the copy is a convenience; the fetch stands
+        pass
 
 
 def library_tool_fetch(entry_id: str, params: dict, refresh: bool = False, store=None, http=None) -> dict:
@@ -1347,7 +1364,9 @@ def library_request_tool(entry_id: str, request: str = "", params: str = "", bbo
             params = ",".join(f"{k}={v}" for k, v in {**smp["params"], **_kv(params)}.items())
         if plan_only:
             return lr.plan(entry_id, request or None, _kv(params), bbox or None, file or None)
-        return lr.run(entry_id, request or None, _kv(params), bbox or None, file or None, bool(refresh), http=http, store=store or cred_store())
+        res = lr.run(entry_id, request or None, _kv(params), bbox or None, file or None, bool(refresh), http=http, store=store or cred_store())
+        _copy_user_source(entry_id)
+        return res
     except (lr.RequestError,) as ex:
         kind = "usage" if ex.code == gc.EXIT_USAGE else "refused" if ex.code == gc.EXIT_REFUSED else "service"
         return fail(kind, ex.rule or "MAP-SVC-013", str(ex), **ex.extra)
@@ -1370,3 +1389,296 @@ def earthdata_subset_tool(short_name: str = "", concept_id: str = "", version: s
         return ed.harmony_submit(http=http, store=store or cred_store(), **kw)
     except ed.EarthdataError as ex:
         return _ed_fail(ex)
+
+
+# ---------------------------------------------------------------------------------------------------------------- 3.7.0: your own data sources
+def _src(res: dict) -> dict:
+    if not res.get("ok") and "error_kind" not in res:
+        ids = [f["id"] for f in res.get("findings") or [] if f.get("severity") == "BLOCK"]
+        res["error_kind"] = ("consent" if res.get("needs_consent") else "answers" if res.get("needs_answers") else
+                             "service" if "MAP-CRED-008" in ids or "MAP-SVC-013" in ids else "refused" if any(i in ("MAP-SRC-005", "MAP-SRC-007", "MAP-CRED-013") for i in ids) else "lint")
+    return res
+
+
+def source_add_tool(entry=None, from_url: str = "", type_: str = "", answers=None, replace: bool = False, confirm_host: str = "", store=None) -> dict:
+    import user_sources as us
+    if isinstance(entry, str) and entry.strip():
+        try:
+            import yaml
+            entry = yaml.safe_load(entry)
+        except Exception:  # noqa: BLE001
+            return _src({"ok": False, "findings": [{"id": "MAP-SRC-003", "severity": "BLOCK", "message": "entry is a source as an object (or YAML text)", "detail": None}]})
+    if isinstance(answers, str) and answers.strip():
+        try:
+            answers = json.loads(answers)
+        except ValueError:
+            return _src({"ok": False, "findings": [{"id": "MAP-SRC-003", "severity": "BLOCK", "message": "answers is an object of the answers (JSON)", "detail": None}]})
+    return _src(us.add(entry if isinstance(entry, dict) else None, from_url, type_, answers if isinstance(answers, dict) else None, bool(replace),
+                       confirm_host, store=store or cred_store()))
+
+
+def source_test_tool(entry_id: str, confirm_host: str = "", params: str = "", http=None, store=None) -> dict:
+    import user_sources as us
+    h = http or oh.SafeHTTP(resolver=RESOLVER, limits={"timeout_s": 60, "max_bytes": oh.CEILING["max_bytes"], "retries": 1})
+    return _src(us.test(entry_id, confirm_host, _kv(params), http=h, store=store or cred_store()))
+
+
+def source_list_tool(include_drafts: bool = True, store=None) -> dict:
+    import user_sources as us
+    return us.listing(bool(include_drafts), store=store or cred_store())
+
+
+def source_get_tool(entry_id: str) -> dict:
+    import user_sources as us
+    return _src(us.get(entry_id))
+
+
+def source_remove_tool(entry_id: str, delete_file: bool = False) -> dict:
+    import user_sources as us
+    return _src(us.remove(entry_id, bool(delete_file)))
+
+
+def source_export_tool(entry_ids: str, out: str) -> dict:
+    import user_sources as us
+    ids = [x.strip() for x in str(entry_ids or "").split(",") if x.strip()]
+    if not ids or not str(out or "").strip():
+        return fail("usage", "MAP-SRC-003", "give entry_ids (comma-separated) and out (a file path for the pack)")
+    try:
+        return us.export(ids, Path(out))
+    except us.SourceError as ex:
+        return _src({"ok": False, "findings": ex.findings})
+
+
+def source_import_tool(file: str = "", from_project: str = "") -> dict:
+    import user_sources as us
+    try:
+        return _src(us.import_(file, from_project))
+    except (OSError, ValueError) as ex:
+        return fail("usage", "MAP-SRC-003", f"the pack could not be read: {type(ex).__name__}")
+
+
+# ---------------------------------------------------------------------------------------------------------------- 3.7.0 (Part D): your settings
+BROUGHT = "# Brought from your own folder by user_settings (3.7.0). Bring again to refresh; a file without this line is the project's own.\n"
+
+
+def _settings_of(base: Path) -> dict:
+    """What a .geo-mapping folder holds of the person's settings: packs, the default brand, the acknowledgment, licence answers, sources."""
+    import brandlib as bl
+    import customizations as cz
+    import licence_ack as la
+    packs = sorted(d.name for d in (base / gc.BRANDS_DIRNAME).iterdir() if d.is_dir() and (d / "PACK.json").is_file()) if (base / gc.BRANDS_DIRNAME).is_dir() else []
+    dflt = None
+    f = base / bl.DEFAULTS_FILE
+    if f.is_file():
+        try:
+            dflt = (gc.load_yaml(f) or {}).get("default_brand")
+        except Exception:  # noqa: BLE001
+            dflt = None
+    lic = sorted(p.stem for p in (base / la.FOLDER).glob("*.yaml")) if (base / la.FOLDER).is_dir() else []
+    return {"folder": str(base), "brand_packs": packs, "default_brand": dflt, "acknowledgment": (base / cz.FILE).is_file(), "licences": lic}
+
+
+def _brought(text: str) -> bool:
+    return text.startswith(BROUGHT)
+
+
+def user_settings_tool(work_folder: str, op: str = "status", replace: bool = False) -> dict:
+    """status: your own folder's settings beside the project's. bring: copy your default brand (and its pack), the acknowledgment, licence
+    answers and your active sources into WORK/.geo-mapping, so maps built there (in a Cowork session, by scripts that cannot see your own
+    folder) use them; a copy is marked and refreshed by the next bring, and a project's own setting is never overwritten. keep: copy the
+    project's packs, default, acknowledgment and licence answers into your own folder (an existing one only with replace=true)."""
+    import shutil
+    import brand_pack as bp
+    import brandlib as bl
+    import customizations as cz
+    import licence_ack as la
+    if op not in ("status", "bring", "keep"):
+        return fail("usage", "MAP-SVC-001", "op is status, bring or keep")
+    try:
+        proj = check_work_folder(work_folder) / gc.WORKDIR_NAME
+    except ValueError as ex:
+        return fail("usage", "MAP-SVC-001", str(ex))
+    mine = gc.user_folder()
+    mine_brands = gc.user_brands_dir()
+    srcs = []
+    try:
+        import user_sources as us
+        srcs = [r["id"] for r in us.listing(store=None)["sources"] if r["status"] == "active"]
+    except Exception:  # noqa: BLE001
+        srcs = []
+    yours = {**_settings_of(mine), "brand_packs": sorted(d.name for d in mine_brands.iterdir() if d.is_dir() and (d / "PACK.json").is_file()) if mine_brands.is_dir() else [],
+             "brands_folder": str(mine_brands), "sources_active": srcs}
+    if op == "status":
+        return {"ok": True, "yours": yours, "project": _settings_of(proj),
+                "brought_on": (gc.load_yaml(proj / bl.SYNC_MARK) or {}).get("brought_on") if (proj / bl.SYNC_MARK).is_file() else None}
+    did: list[str] = []
+    skipped: list[str] = []
+    try:
+        m = gc.build_manifest()
+    except FileNotFoundError:
+        m = {"brands_bundled": [], "house_brand": None}
+    if op == "bring":
+        proj.mkdir(parents=True, exist_ok=True)
+        d = yours.get("default_brand")
+        pf = proj / bl.DEFAULTS_FILE
+        if d:
+            if pf.is_file() and not _brought(pf.read_text(encoding="utf-8")):
+                skipped.append(f"default brand: the project has its own ({(gc.load_yaml(pf) or {}).get('default_brand')}), kept")
+            else:
+                pf.write_text(BROUGHT + f"default_brand: {d}\n", encoding="utf-8")
+                did.append(f"default brand {d}")
+        for slug in ([d] if d and d not in m.get("brands_bundled", []) else []):
+            src = mine_brands / slug
+            dst = proj / gc.BRANDS_DIRNAME / slug
+            if (src / "PACK.json").is_file() and (not dst.exists() or replace):
+                try:
+                    bp.install(src, proj / gc.BRANDS_DIRNAME, bl.house_accreditation(m), reserved=tuple(m.get("brands_bundled", [])), replace=True)
+                    did.append(f"brand pack {slug}")
+                except bp.PackError as ex:
+                    skipped.append(f"brand pack {slug}: {ex}")
+        if (mine / cz.FILE).is_file() and not (proj / cz.FILE).is_file():
+            shutil.copyfile(mine / cz.FILE, proj / cz.FILE)
+            did.append("the terms acknowledgment")
+        if (mine / la.FOLDER).is_dir():
+            for f in sorted((mine / la.FOLDER).glob("*.yaml")):
+                t = proj / la.FOLDER / f.name
+                if not t.is_file():
+                    t.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(f, t)
+                    did.append(f"licence answer {f.stem}")
+        for sid in srcs:
+            try:
+                import ref_fetch as rf
+                import user_sources as us
+                with gc.outputs_in(proj.parent):
+                    us.copy_to_project(rf.find_entry(sid))
+                did.append(f"source {sid}")
+            except Exception:  # noqa: BLE001
+                skipped.append(f"source {sid}")
+        import yaml
+        (proj / bl.SYNC_MARK).write_text(BROUGHT + yaml.safe_dump({"brought_on": dt.date.today().isoformat(), "brought": did}, sort_keys=False), encoding="utf-8")
+        return {"ok": True, "brought": did, "skipped": skipped, "into": str(proj)}
+    # keep
+    mine.mkdir(parents=True, exist_ok=True)
+    ps = _settings_of(proj)
+    for slug in ps["brand_packs"]:
+        if slug in m.get("brands_bundled", []):
+            continue
+        if (mine_brands / slug).exists() and not replace:
+            skipped.append(f"brand pack {slug}: already in your folder")
+            continue
+        try:
+            bp.install(proj / gc.BRANDS_DIRNAME / slug, mine_brands, bl.house_accreditation(m), reserved=tuple(m.get("brands_bundled", [])), replace=True)
+            did.append(f"brand pack {slug}")
+        except bp.PackError as ex:
+            skipped.append(f"brand pack {slug}: {ex}")
+    if ps["default_brand"]:
+        f = mine / bl.DEFAULTS_FILE
+        if f.is_file() and not replace and (gc.load_yaml(f) or {}).get("default_brand") != ps["default_brand"]:
+            skipped.append(f"default brand: yours is {(gc.load_yaml(f) or {}).get('default_brand')} (replace=true to make it {ps['default_brand']})")
+        else:
+            f.write_text(f"# Written by user_settings keep (3.7.0). Changes only the default map brand.\ndefault_brand: {ps['default_brand']}\n", encoding="utf-8")
+            did.append(f"default brand {ps['default_brand']}")
+    if ps["acknowledgment"] and not (mine / cz.FILE).is_file():
+        shutil.copyfile(proj / cz.FILE, mine / cz.FILE)
+        did.append("the terms acknowledgment")
+    for stem in ps["licences"]:
+        t = mine / la.FOLDER / f"{stem}.yaml"
+        if not t.is_file():
+            t.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(proj / la.FOLDER / f"{stem}.yaml", t)
+            did.append(f"licence answer {stem}")
+    return {"ok": True, "kept": did, "skipped": skipped, "in": str(mine),
+            "note": "the project's own copies are left where they are; delete them yourself once you no longer need them there"}
+
+
+def brand_default_tool(slug: str, work_folder: str = "") -> dict:
+    """Make a brand your default for every project, kept in your own folder on this computer. A pack that is only in the named project is
+    copied into your own brands folder first."""
+    import brand_pack as bp
+    import brandlib as bl
+    if not isinstance(slug, str) or not gc.BRAND_SLUG.match(slug):
+        return fail("usage", "MAP-SVC-001", "slug is a brand's short name: lower-case letters, digits and hyphens")
+    m = gc.build_manifest()
+    mine_brands = gc.user_brands_dir()
+    copied = None
+    if slug not in m["brands_bundled"] and not (mine_brands / slug / "PACK.json").is_file():
+        if not (work_folder or "").strip():
+            return fail("usage", "MAP-SVC-001", f"there is no pack '{slug}' in your own brands folder ({mine_brands}); name the project that has it with work_folder=")
+        try:
+            src = check_work_folder(work_folder) / gc.WORKDIR_NAME / gc.BRANDS_DIRNAME / slug
+        except ValueError as ex:
+            return fail("usage", "MAP-SVC-001", str(ex))
+        if not (src / "PACK.json").is_file():
+            return fail("usage", "MAP-SVC-001", f"there is no pack '{slug}' in that project or in your own brands folder")
+        try:
+            copied = bp.install(src, mine_brands, bl.house_accreditation(m), reserved=tuple(m["brands_bundled"]), replace=False)["dir"]
+        except bp.PackError as ex:
+            return fail("usage", "MAP-SVC-001", str(ex))
+    f = gc.user_folder(create=True) / bl.DEFAULTS_FILE
+    f.write_text(f"# Written by brand_default at the user's request (3.7.0). Changes only the default map brand.\ndefault_brand: {slug}\n", encoding="utf-8")
+    out = {"ok": True, "default_brand": slug, "stored_in": str(f), "for": "every project",
+           "next": "bring it into a project with user_settings op=bring (a Cowork session's builds read the project folder)"}
+    if copied:
+        out["pack_copied_to"] = copied
+    return out
+
+
+# ---------------------------------------------------------------------------------------------------------------- 3.7.0 (B17): an OSM basemap file
+def basemap_extract_tool(bbox: str = "", layer: str = "", max_zoom: int = 14, op: str = "plan", build: str = "latest", source: str = "",
+                         name: str = "", cap_mb: float = 200.0, http=None) -> dict:
+    """plan: the tiles and the exact size of an OpenStreetMap basemap file for the window, from the build's directories only. extract: the
+    file, into WORK_FOLDER/basemap/<name>-z<zoom>.pmtiles with a record beside it. GET with a Range header on the build's host only."""
+    import pmtiles_extract as pe
+    if op not in ("plan", "extract"):
+        return fail("usage", "MAP-SVC-001", "op is plan or extract")
+    try:
+        if layer and not bbox:
+            import geopandas as gpd
+            p = Path(layer)
+            g = gpd.read_parquet(p) if p.suffix == ".parquet" else gpd.read_file(p)
+            if g.crs is not None:
+                g = g.to_crs(4326)
+            b = [float(v) for v in g.total_bounds]
+        else:
+            b = [float(v) for v in str(bbox).split(",")]
+        if len(b) != 4:
+            raise ValueError
+    except (ValueError, OSError):
+        return fail("usage", "MAP-SVC-001", "give bbox=W,S,E,N in degrees, or layer= a file of the window's features")
+    h = http or oh.SafeHTTP(resolver=RESOLVER, limits={"timeout_s": 120, "max_bytes": pe.MAX_RANGE * 2, "retries": 2})
+    try:
+        if op == "plan":
+            p = pe.public(pe.plan(b, int(max_zoom), source=source, build=build, http=h))
+            p["next"] = f"show the person the size ({p['mb']} MB, {p['tiles']} tiles), then op=extract"
+            return p
+        out_dir = gc.outputs_dir(create=True).parent / "basemap" if gc._OUTPUTS.get() is not None else gc.outputs_dir(create=True) / "basemap"
+        stem = re.sub(r"[^a-z0-9-]+", "-", (name or "osm-basemap").lower()).strip("-") or "osm-basemap"
+        r = pe.extract(b, out_dir / f"{stem}-z{int(max_zoom)}.pmtiles", int(max_zoom), source=source, build=build, cap_mb=float(cap_mb), http=h)
+        return r                                         # in_work_folder adds relative_path and vm_path
+    except pe.ExtractError as ex:
+        return fail("refused" if ex.rule == "MAP-TILE-006" else "service", ex.rule, str(ex))
+
+
+# ---------------------------------------------------------------------------------------------------------------- 3.7.0 (C8): venues by name
+def geocode_venues_tool(names: str, kind: str, country: str = "", bbox: str = "", osm: bool = False, output_format: str = "gpkg", http=None) -> dict:
+    import venue_search as vs
+    lst = [x.strip() for x in str(names or "").split(";") if x.strip()]
+    if not lst:
+        return fail("usage", "MAP-SVC-001", "names is the venue names separated by ;")
+    if osm:
+        import customizations as cz
+        if not cz.acknowledged():
+            return fail("refused", "MAP-SVC-001", cz.needed("Nominatim (OpenStreetMap) venue search", "use Wikidata alone (osm=false)"))
+    try:
+        b = [float(v) for v in bbox.split(",")] if bbox else None
+        res = vs.search(lst, kind, country=country or None, bbox=b, osm=bool(osm), http=http)
+    except (vs.VenueError, ValueError) as ex:
+        return fail("usage", getattr(ex, "rule", "MAP-SVC-001"), str(ex))
+    except oh.ServiceError as ex:
+        return fail("service", ex.rule or "MAP-SVC-013", str(ex))
+    if res["counts"]["exact"]:
+        ext = ".geojson" if output_format == "geojson" else ".gpkg"
+        out = gc.outputs_dir(create=True).parent / "data" / "venues" / f"venues-{kind}{ext}" if gc._OUTPUTS.get() is not None else gc.outputs_dir(create=True) / f"venues-{kind}{ext}"
+        res["file"] = str(vs.to_points(res, out))
+    return res

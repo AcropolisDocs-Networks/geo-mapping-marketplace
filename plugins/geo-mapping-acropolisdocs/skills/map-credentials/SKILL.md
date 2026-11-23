@@ -32,6 +32,8 @@ how the key is sent, sign-up address and free limits. `include_keyless=true` add
 - An alias is registered under the library's own name (MAP-CRED-015): say which name it was registered as, because maps use `cred:NAME`.
 - A key marked `optional` (TfL) is used when registered; the service also answers without it at a lower limit.
 - A key list kept elsewhere (a tracker page) is kept in step from this list, not from release notes.
+- 3.7.0: keys for the person's **own** data sources (`/geo-mapping-acropolisdocs:map-sources`) are listed apart, under `your_sources`: the plugin does not support or vouch
+  for those services. `add NAME` finds a name from the person's own sources as well as the library's.
 
 ## Which route
 

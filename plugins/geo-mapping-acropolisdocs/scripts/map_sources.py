@@ -89,9 +89,12 @@ def _entries() -> dict:
     if _ENTRIES["key"] == key:
         return _ENTRIES["by_id"]
     out: dict = {}
+    by: dict = {}
     for e in rl.all_entries("all"):
-        if "id" in e and (e["id"] not in out or e.get("_scope") == "local"):
-            out[e["id"]] = e
+        if "id" in e:
+            by.setdefault(e["id"], []).append(e)
+    for k, hits in by.items():                    # 3.7.0: local, then the person's own sources, then shipped
+        out[k] = rl.pick(hits)
     _ENTRIES.update(key=key, by_id=out)
     return out
 

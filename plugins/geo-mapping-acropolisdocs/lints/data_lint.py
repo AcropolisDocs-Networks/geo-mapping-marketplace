@@ -141,12 +141,15 @@ def check_coordinates(gdf) -> list[dict]:
 ID_LIKE = re.compile(r"(^|_)(id|fid|gid|objectid|geoid|fips|code|key)$", re.I)
 
 
-def check_duplicates(gdf, id_field: str | None = None) -> list[dict]:
+def check_duplicates(gdf, id_field: str | None = None, foreign: set | None = None) -> list[dict]:
+    """3.7.0 (B7, Day 23 issue 7): `foreign` names columns that hold another layer's key (a stop_id on restaurants): repeats there are by
+    design, so they are not checked."""
     import shapely
     out = []
     if gdf.empty:
         return out
-    cols = [id_field] if id_field else [c for c in gdf.columns if c != _geom_col(gdf) and ID_LIKE.search(str(c))]
+    foreign = {str(x) for x in (foreign or set())}
+    cols = [id_field] if id_field else [c for c in gdf.columns if c != _geom_col(gdf) and ID_LIKE.search(str(c)) and str(c) not in foreign]
     for c in cols:
         if c in gdf.columns:
             vals = gdf[c].dropna()
@@ -324,7 +327,8 @@ def check_territories(gdf, name_field: str | None = None, density_field: str | N
     return out
 
 
-def lint_data(gdf, *, assumed: bool = False, display_crs=None, null_threshold: float = NULL_RATIO_WARN, id_field: str | None = None) -> list[dict]:
+def lint_data(gdf, *, assumed: bool = False, display_crs=None, null_threshold: float = NULL_RATIO_WARN, id_field: str | None = None,
+              foreign: set | None = None) -> list[dict]:
     """The MAP-DATA checks that need only the data. id_field (or the reader's gdf.attrs['id_field'], which gtfs.py sets) names the one key
     column the duplicate check reads; without it every id-like column is checked (a zone or agency id is shared by design, so name the key)."""
     out = []
@@ -332,7 +336,7 @@ def lint_data(gdf, *, assumed: bool = False, display_crs=None, null_threshold: f
     out += check_validity(gdf)
     out += check_null_geometry(gdf, null_threshold)
     out += check_coordinates(gdf)
-    out += check_duplicates(gdf, id_field or (gdf.attrs.get("id_field") if gdf.attrs.get("id_field") in gdf.columns else None))
+    out += check_duplicates(gdf, id_field or (gdf.attrs.get("id_field") if gdf.attrs.get("id_field") in gdf.columns else None), foreign)
     out += check_encoding(gdf)
     out += check_size(gdf)
     out += check_antimeridian_polar(gdf, display_crs)

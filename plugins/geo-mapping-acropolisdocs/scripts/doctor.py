@@ -427,6 +427,85 @@ def fix_quick(rows: list[dict], timeout_s: int = QUICK_TIMEOUT_S, run=subprocess
     return [{"package": r["pip"], "installed": False, "error": err, "quick": True} for r in todo]
 
 
+def check_projections() -> dict:
+    """3.7.0 (C5): whether PROJ here draws the projections with cuts the plugin offers by name (Spilhaus needs PROJ 9.6 or later)."""
+    try:
+        import interrupted as cut
+        why = cut.proj_ok()
+    except Exception as ex:  # noqa: BLE001
+        why = f"{type(ex).__name__}"
+    return {"spilhaus": "ok" if why is None else why, "goode": "ok"}
+
+
+KINDS = (("brand packs", "brands"), ("default brand", "user-defaults.yaml"), ("terms acknowledgment", "customizations.yaml"), ("licence answers", "licences"))
+
+
+def settings_report() -> dict:
+    """3.7.0 (Part D): where your own settings are, what this project holds that your own folder does not, and an edited shipped brand."""
+    import brandlib as bl
+    out = {"ok": True, "your_folder": str(gc.user_folder()), "brands_folder": str(gc.user_brands_dir()), "sources_folder": str(gc.user_sources_dir()),
+           "home_lasts": not gc.ephemeral_home(), "default_brand_from": str(bl.default_file()) if bl.default_file() else None}
+    try:
+        import user_sources as us
+        ls = us.listing(store=None)
+        out["your_sources"] = {"active": sum(1 for r in ls["sources"] if r["status"] == "active"), "drafts": sum(1 for r in ls["sources"] if r["status"] == "draft"),
+                               "due_for_a_test": [r["id"] for r in ls["sources"] if r.get("warn")]}
+    except Exception as ex:  # noqa: BLE001
+        out["your_sources"] = {"error": type(ex).__name__}
+    out["only_in_this_project"] = to_move()
+    out["edited_shipped_brand"] = [f["message"] for f in bl.edit_findings()]
+    if gc.ephemeral_home():
+        out["note"] = ("this session's home does not last (a Cowork VM): your own settings are kept by the plugin's data server on your computer; "
+                       "bring them into a project with the user_settings tool, and keep a project's with user_settings op=keep")
+    elif out["only_in_this_project"]:
+        out["offer"] = "copy these into your own folder so every project finds them: doctor.py --move-settings --yes (after the person says yes)"
+    return out
+
+
+def to_move() -> list[dict]:
+    wd, me = gc.workdir(), gc.user_folder()
+    if wd.resolve() == me.resolve() if wd.exists() and me.exists() else wd == me:
+        return []
+    rows = []
+    for label, name in KINDS:
+        src = wd / name
+        if not src.exists():
+            continue
+        tgt = gc.user_brands_dir() if name == "brands" else me / name
+        if src.is_dir():
+            items = [x.name for x in sorted(src.iterdir()) if not (tgt / x.name).exists()]
+            if items:
+                rows.append({"kind": label, "from": str(src), "items": items})
+        elif not (me / name).exists():
+            rows.append({"kind": label, "from": str(src), "items": [src.name]})
+    return rows
+
+
+def move_settings(yes: bool) -> dict:
+    """Copy (never move) this project's settings that your own folder does not have into it, after the person's one yes."""
+    import shutil
+    rows = to_move()
+    if not rows:
+        return {"ok": True, "copied": [], "note": "nothing to copy: your own folder already has everything this project holds"}
+    if not yes:
+        return {"ok": False, "needs_yes": True, "would_copy": rows, "ask": "copy these settings from this project into your own folder, so every project finds them?"}
+    me = gc.user_folder(create=True)
+    done = []
+    for r in rows:
+        src = Path(r["from"])
+        name = src.name
+        if src.is_dir():
+            for it in r["items"]:
+                s_, d_ = src / it, (gc.user_brands_dir() if name == "brands" else me / name) / it
+                d_.parent.mkdir(parents=True, exist_ok=True)
+                (shutil.copytree if s_.is_dir() else shutil.copyfile)(s_, d_)
+                done.append(str(d_))
+        else:
+            shutil.copyfile(src, me / name)
+            done.append(str(me / name))
+    return {"ok": True, "copied": done, "note": "the project's copies are left where they are; delete them yourself once you no longer need them there"}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", action="store_true")
@@ -443,7 +522,14 @@ def main(argv=None) -> int:
     ap.add_argument("--mcp", choices=["yes", "no", "unknown"], default="unknown", help="whether a call to the plugin's MCP server succeeded in this session")
     ap.add_argument("--credentials-dir", help="the credential folder, when it is connected to this session")
     ap.add_argument("--fonts", help="1.5.0: fetch the pinned Noto fonts for these scripts into the font cache (arab,hebr,deva,beng,thai,hani,jpan,kore,...)")
+    ap.add_argument("--settings", action="store_true", help="3.7.0: your own folder, your sources, your brand and default, an edited shipped brand")
+    ap.add_argument("--move-settings", action="store_true", help="3.7.0: copy the settings found in this project into your own folder (with --yes)")
+    ap.add_argument("--yes", action="store_true", help="with --move-settings: the person said yes")
     a = ap.parse_args(argv)
+    if a.settings or a.move_settings:
+        r = move_settings(a.yes) if a.move_settings else settings_report()
+        print(json.dumps(r, indent=2, default=str))
+        return gc.EXIT_OK if r.get("ok", True) else gc.EXIT_USAGE
     if a.wheelhouse:
         import os
         os.environ["GMAP_WHEELHOUSE"] = a.wheelhouse
@@ -499,6 +585,7 @@ def main(argv=None) -> int:
         "credentials": check_credentials(a.mcp, a.credentials_dir),
         "engines": check_engines(),
         "server_launcher": check_server_launcher(),
+        "projections": check_projections(),
     }
     if a.fix and ({"all", "db"} & set(names)) and report["engines"].get("duckdb", {}).get("installed") and not report["engines"]["duckdb"].get("spatial"):
         report["fixed"] = list(report["fixed"]) + [fix_spatial()]

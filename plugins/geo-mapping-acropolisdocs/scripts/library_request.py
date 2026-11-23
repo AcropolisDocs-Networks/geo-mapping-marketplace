@@ -68,8 +68,13 @@ def _entry(entry_id: str) -> dict:
     except rf.FetchError as ex:
         raise RequestError(str(ex), gc.EXIT_USAGE, "MAP-SVC-001") from None
     if e.get("status") != "active":
+        if e.get("_scope") == "user":                  # 3.7.0: the person's own source answers only after its test
+            raise RequestError(f"your source {entry_id} is a draft ({e.get('_src_changed') or 'not tested yet'}): test it first with "
+                               f"map-sources test {entry_id}", gc.EXIT_REFUSED, "MAP-SRC-010")
         raise RequestError(f"{entry_id} is {e.get('status')}; only active entries are fetched", gc.EXIT_REFUSED, "MAP-LIB-003")
     d = e.get("delivery") or {}
+    if d.get("protocol") == "socrata":
+        return e
     if not (d.get("request") or d.get("requests")):
         raise RequestError(f"{entry_id} records no request the plugin can send" + (f"; it is used through {d['tool']}" if d.get("tool") else
                            "; open its source page to download, then read the file with ref_fetch.py read"), gc.EXIT_USAGE, "MAP-SVC-001")
@@ -547,12 +552,19 @@ def out_paths(entry: dict, name: str, url: str) -> tuple[Path, str]:
 
 
 def run(entry_id: str, request: str | None = None, params: dict | None = None, bbox=None, file: str | None = None, refresh: bool = False,
-        body: dict | None = None, http=None, store=None) -> dict:
+        body: dict | None = None, http=None, store=None, entry: dict | None = None) -> dict:
+    """entry= (3.7.0): the entry itself, used by map-sources test for a draft of the person's own source, which is otherwise not sent."""
     import credentials as cr
     import ogc_http as oh
     import redact
     import ref_fetch as rf
-    e = _entry(entry_id)
+    e = entry if entry is not None else _entry(entry_id)
+    if entry is None and (e.get("delivery") or {}).get("protocol") == "socrata":      # 3.7.0 (B8): a Socrata dataset, by structured options
+        import socrata
+        try:
+            return socrata.run_entry(e, params or {}, bbox, refresh=refresh, http=http, store=store)
+        except socrata.SocrataError as ex:
+            raise RequestError(str(ex), gc.EXIT_SERVICE if ex.rule == "MAP-SVC-013" else gc.EXIT_USAGE, ex.rule) from None
     r = build(e, request, params, bbox, file)
     if r["missing"]:
         raise RequestError(f"{e['id']} ({r['name']}) needs " + ", ".join(r["missing"]) + ": give them as params (k=v, comma-separated)"

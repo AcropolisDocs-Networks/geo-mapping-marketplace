@@ -20,6 +20,7 @@ and records the yes in `.geo-mapping/customizations.yaml`.
 | The FOSSGIS Valhalla router, within the limits the plugin keeps | A data service you save as a profile (said, never refused) |
 | Transit times from your own GTFS feed | A key you register: the key itself is your acceptance of that service's terms, so it needs nothing more |
 | Public services the reference library lists as active | |
+| | A data source of your own (`/geo-mapping-acropolisdocs:map-sources`): keyless ones need the acknowledgment; a keyed one is covered by its key |
 
 Nothing here lifts a refusal that is not about terms: Google Maps and Bing Maps stay refused, entries whose terms are not read yet stay
 unavailable, a third party's licence is asked about in its own pop-up (below), and the privacy gate, the caps and the request limits stay on.

@@ -1,6 +1,6 @@
 id: ref.infrastructure.world.submarine-cable.telegeography
 type: infrastructure
-rev: 2
+rev: 3
 status: active
 title: Submarine cable systems and landing points (TeleGeography Submarine Cable Map)
 summary: Routes of the world's submarine telecom cable systems (in service and planned) and their landing points, as drawn on TeleGeography's free
@@ -45,14 +45,20 @@ avoid_when:
 - 'An openly licensed source is required: OpenStreetMap submarine cables (ODbL) are open but far from complete (about 250,000 of some 2 million
   route km, checked 2026-11-13).'
 delivery:
-  mode: user-supplied
-  note: The licensed data arrives as GeoJSON and JSON through TeleGeography's API (Amazon S3 or SFTP). Save the route and landing-point files and
-    give them as file layers; the plugin fetches nothing from TeleGeography.
+  mode: fetch
+  format: geojson
+  files:
+    cable: https://www.submarinecablemap.com/api/v3/cable/cable-geo.json
+    landing: https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json
+  note: '3.7.0 (Day 22 issue 7): the two public JSON files behind the free map are fetched once into the library cache (variant cable, the
+    routes, is the default; variant landing, the landing points) and kept, after the licence pop-up. A licensed delivery (TeleGeography''s
+    API, Amazon S3 or SFTP) is still given as file layers with provenance.library_entry.'
 source:
   publisher: TeleGeography
   product: Submarine Cable Map
-  url: https://www.submarinecablemap.com/
-url_verified_on: '2026-11-13'
+  url: https://www.submarinecablemap.com/api/v3/cable/cable-geo.json
+  page: https://www.submarinecablemap.com/
+url_verified_on: '2026-11-23'
 crs: EPSG:4326
 vintage:
   current: as delivered (TeleGeography updates the map regularly)
@@ -80,7 +86,7 @@ license:
     commercial_ok and redistribute_ok for them alone. The flags here stay false.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-14'
+  reviewed_on: '2026-11-23'
   verify_by: '2027-05-14'
   changelog:
   - rev: 1
@@ -92,3 +98,8 @@ maintenance:
     note: 'Active (1.15.0): the rights question moves to the person. The first map that uses the entry shows the licence pop-up (provider, terms
       address, the uses their licence covers); their answer, kept in their own .geo-mapping/licences/, decides internal, publication, commercial
       and redistribution for them. No data is bundled or fetched; the file stays theirs (user-supplied, provenance.library_entry).'
+  - rev: 3
+    date: '2026-11-23'
+    note: 'Fetched (3.7.0, Day 22 issue 7): the public cable-geo.json (756 KB) and landing-point-geo.json (362 KB) answered HTTP 200 on 2026-11-23;
+      delivery.mode fetch with delivery.files {cable, landing}. The licence pop-up still runs before the first fetch or map (licence_ack), so
+      the rights question stays the person''s.'

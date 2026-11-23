@@ -72,12 +72,35 @@ def key_env(entry_id: str) -> str:
     return "GEO_MAPPING_KEY_" + entry_id.rsplit(".", 1)[-1].upper().replace("-", "_")
 
 
+def short_name(e: dict) -> str:
+    """3.7.0 (D4): a basemap's name in a MapSpec is read from its entry: provider.short_name, else the last part of its id. The fixed
+    PROVIDER_IDS stay only as the older names (osm, esri, usgs, pmtiles, protomaps, ign)."""
+    sn = (e.get("provider") or {}).get("short_name")
+    return str(sn) if sn else str(e.get("id", "")).rsplit(".", 1)[-1]
+
+
+def provider_ids(entries: list[dict]) -> dict[str, str]:
+    """{name: entry id} for every basemap a MapSpec may name: the older fixed names, every shipped entry's short name, then the person's own
+    basemaps (scope user) under names no shipped provider has (MAP-SRC-008)."""
+    ids = dict(PROVIDER_IDS)
+    for e in sorted((x for x in entries if x.get("type") == "basemap-provider"), key=lambda x: 0 if x.get("_scope") == "shipped" else 1):
+        if e.get("_overrides_from"):
+            continue
+        sn = short_name(e)
+        if sn in ids and e.get("_scope") != "shipped":
+            continue
+        ids.setdefault(sn, e["id"])
+    return ids
+
+
 def entry_for(provider: str, entries: list[dict]) -> dict | None:
-    full = PROVIDER_IDS.get(provider) or (provider if provider.startswith("ref.basemap-provider.") else None)
+    full = (PROVIDER_IDS.get(provider) or provider_ids(entries).get(provider)
+            or (provider if provider.startswith(("ref.basemap-provider.", "user.basemap-provider.")) else None))
     hits = [e for e in entries if e.get("id") == full]
     if not hits:
         return None
-    return next((e for e in hits if e.get("_scope") == "local"), hits[0])
+    import ref_library as rl
+    return rl.pick(hits)
 
 
 def hosts_of(template: str) -> list[str]:
@@ -126,7 +149,7 @@ def resolve(provider: str, entries: list[dict], *, style: str | None = None, aud
     e = entry_for(provider, entries)
     if e is None:
         out.update(ok=False)
-        out["findings"].append(finding("MAP-WEB-011", "BLOCK", f"basemap provider '{provider}' is not in the library; the choices are {', '.join(sorted(PROVIDER_IDS))}, bundled or none"))
+        out["findings"].append(finding("MAP-WEB-011", "BLOCK", f"basemap provider '{provider}' is not in the library; the choices are {', '.join(sorted(provider_ids(entries)))}, bundled or none"))
         return out
     out["entry"] = e["id"]
     out["rev"] = e.get("rev")
@@ -134,6 +157,11 @@ def resolve(provider: str, entries: list[dict], *, style: str | None = None, aud
     if st == "blocked":
         out.update(ok=False)
         out["findings"].append(finding("MAP-WEB-011", "BLOCK", f"{e.get('title')} cannot be used: {(e.get('blocked') or {}).get('why', 'blocked by policy')}", e["id"]))
+        return out
+    if st != "active" and e.get("_scope") == "user":
+        out.update(ok=False)
+        out["findings"].append(finding("MAP-SRC-010", "BLOCK", f"your basemap {e.get('title')} is a draft ({e.get('_src_changed') or 'not tested yet'}): "
+                                       f"test it first with map-sources test {e['id']}", e["id"]))
         return out
     if st != "active":
         out.update(ok=False)
@@ -145,6 +173,12 @@ def resolve(provider: str, entries: list[dict], *, style: str | None = None, aud
     # person accepted its terms to get the key. An older MapSpec's basemap.terms_acknowledged still counts for that map.
     keyed = bool(credential_block(e))
     ack = cz.acknowledged(terms_acknowledged)
+    if e.get("_scope") == "user" and not keyed and not ack:     # 3.7.0: a keyless source of your own is a customization (map-services)
+        out.update(ok=False)
+        out["findings"].append(finding("MAP-WEB-011", "BLOCK", cz.needed(f"your own basemap {e.get('title')}", "use the bundled background"), e["id"]))
+        return out
+    if e.get("_scope") == "user":
+        out["findings"].append(finding("MAP-WEB-011", "INFO", f"{e.get('title')} is your own basemap: used under the terms you accepted with its provider", e["id"]))
     referer = "; a page opened from a file sends no Referer, so the server may refuse the tiles: open it from a web server" if pr.get("referer_required") else ""
     if pr.get("production_ok") is False and not keyed:
         if not ack:
@@ -303,7 +337,8 @@ def main(argv=None) -> int:
     entries = [e for e in rl.all_entries("all") if e.get("type") == "basemap-provider"]
     if a.op == "list":
         rows = []
-        for name in sorted(PROVIDER_IDS):
+        ids = provider_ids(entries)
+        for name in sorted(PROVIDER_IDS) + sorted(n for n, i in ids.items() if i not in PROVIDER_IDS.values()):
             r = resolve(name, entries, audience=a.audience, env={})
             e = entry_for(name, entries)
             cb = credential_block(e) if e else None

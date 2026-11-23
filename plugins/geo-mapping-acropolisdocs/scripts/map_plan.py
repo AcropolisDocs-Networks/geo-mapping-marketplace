@@ -37,7 +37,8 @@ PRESET_BBOX = {          # WGS84 lon/lat boxes for extent.preset
 BASEMAP_REFS = {"countries": "ref.boundary.world.country.ne110", "states": "ref.boundary.us.state.cb20m", "states5m": "ref.boundary.us.state.cb5m",
                 "lakes": "ref.context.world.lakes.ne110", "admin1": "ref.boundary.world.state.ne50",
                 "ocean": "ref.context.world.ocean.ne10", "lakes10": "ref.context.world.lakes.ne10",
-                "admin1_loc": "ref.boundary.world.state.ne10-locator"}      # 1.5.0: the admin-1 locator anywhere (R3-LOC)
+                "admin1_loc": "ref.boundary.world.state.ne10-locator",      # 1.5.0: the admin-1 locator anywhere (R3-LOC)
+                "countries_50": "ref.boundary.world.country.ne50", "countries_10": "ref.boundary.world.country.ne10"}   # 3.7.0 (C6)
 NE10, NE110 = "Natural Earth 1:10m", "Natural Earth 1:110m"   # ground resolutions (MAP-CART-024: land and water always share one)
 FINE_GROUND_MAX_DENOMINATOR = 10_000_000  # finer than this the ground is the 10m ocean cut from the window, not the 110m countries (0.3.0)
 CONTEXT_REFS = {"urban": "ref.context.world.urban.ne10", "lakes": "ref.context.world.lakes.ne10", "rivers": "ref.context.world.rivers.ne10",
@@ -460,11 +461,14 @@ def _library_index() -> dict:
     and again only when an entry file is added, removed or changed. A map build asks for ten or more entries (the basemap, the context
     pack, the names), and each ask used to parse every entry file (M16)."""
     import ref_library as rl
-    dirs = [rl.shipped_lib() / "entries", rl.local_lib() / "entries"]
+    dirs = [rl.shipped_lib() / "entries", rl.local_lib() / "entries", rl.user_lib() / "entries", rl.user_lib() / "tests"]   # 3.7.0: your own sources too
     sig = tuple((str(p), st.st_mtime_ns, st.st_size) for d in dirs if d.is_dir() for p in sorted(d.rglob("*.yaml")) for st in [p.stat()])
     if _LIBRARY_INDEX.get("sig") != sig:
         by_id: dict = {}
         for e in rl.all_entries("all"):
+            if e.get("_overrides_from"):                  # 3.7.0 (D2): your source stands in for the shipped entry it names in overrides:
+                by_id[e.get("id")] = e
+                continue
             by_id.setdefault(e.get("id"), e)
         _LIBRARY_INDEX.clear()
         _LIBRARY_INDEX.update(sig=sig, by_id=by_id)
@@ -496,6 +500,29 @@ def frame_session():
         yield _SESSION
     finally:
         _SESSION = outer
+
+
+NE_COUNTRY_DETAIL = {"110m": "ref.boundary.world.country.ne110", "50m": "ref.boundary.world.country.ne50", "10m": "ref.boundary.world.country.ne10"}
+
+
+def _with_small_countries(gdf):
+    """(the 110m countries with the 50m rows they lack, by ADM0_A3; their names). Each added row has _small_added = True."""
+    import pandas as pd
+    import geopandas as gpd
+    try:
+        g50, _e = load_ref_layer(BASEMAP_REFS["countries_50"])
+    except Exception:  # noqa: BLE001 - an edition without the 50m layer keeps the 110m one as it is
+        return gdf, []
+    if "ADM0_A3" not in gdf.columns or "ADM0_A3" not in g50.columns:
+        return gdf, []
+    extra = g50[~g50["ADM0_A3"].isin(set(gdf["ADM0_A3"]))].copy()
+    if not len(extra):
+        return gdf, []
+    extra = extra.to_crs(gdf.crs) if gdf.crs is not None and extra.crs is not None and extra.crs != gdf.crs else extra
+    extra["_small_added"] = True
+    out = gpd.GeoDataFrame(pd.concat([gdf.assign(_small_added=False), extra[[c for c in gdf.columns if c in extra.columns] + ["_small_added"]]],
+                                     ignore_index=True), geometry=gdf.geometry.name, crs=gdf.crs)
+    return out, sorted(str(x) for x in extra.get("NAME", extra["ADM0_A3"]))
 
 
 def load_ref_layer(entry_id: str, variant=None):
@@ -698,8 +725,27 @@ def load_source(layer: dict, base: Path, window=None):
         if map_sources.service_entry(src.get("id")) is not None:
             return map_sources.load_service_layer(layer, base, window)
     if t == "ref":
-        gdf, e = load_ref_layer(src["id"], src.get("variant"))
+        sid = NE_COUNTRY_DETAIL.get(str(src.get("detail") or "")) if str(src["id"]) == BASEMAP_REFS["countries"] else None
+        try:
+            ent0 = library_entry(str(src["id"]))
+        except PlanError:
+            ent0 = None
+        if ent0 is not None:
+            import licence_ack as la                          # 3.7.0 (C7): a licensed library layer asks its licence before it is drawn
+            if la.required(ent0) and la.current(ent0["id"]) is None:
+                raise PlanError(f"MAP-LIC-018: layer '{layer['id']}': {la.refusal(ent0)}", gc.EXIT_REFUSED)
+        gdf, e = load_ref_layer(sid or src["id"], src.get("variant"))
         notes = []
+        if sid:
+            notes.append({"message": f"countries at {src['detail']} (Natural Earth, source.detail)", "step": f"read {sid} for detail {src['detail']}"})
+        elif str(src["id"]) == BASEMAP_REFS["countries"] and src.get("fill_small", True) is not False:
+            # 3.7.0 (C6, Day 22 issue 6): the 110m countries leave out 65 small states and territories (Cabo Verde, Curacao); they are added
+            # from the 50m layer, and the render draws any that are too small to see as a point in their class colour
+            gdf, added = _with_small_countries(gdf)
+            if added:
+                notes.append({"message": f"{len(added)} small countries the 1:110m layer leaves out were added from the 1:50m layer ({', '.join(added[:6])}"
+                                         f"{' ...' if len(added) > 6 else ''}); too small to see at this scale, they are drawn as points",
+                              "step": f"added {len(added)} small countries from {BASEMAP_REFS['countries_50']}"})
         if src.get("where"):
             # 2.1.0 (Day 19 issue 2): a `where` on a library entry that is a file (not a service) was dropped without a word, and the five
             # boroughs' clip ran against all 3,235 US counties. It is read as a file layer's `where` is (DuckDB, or GDAL for the rest)
@@ -1389,6 +1435,23 @@ def apply_direct_labels(plan: Plan) -> None:
                           "(legend.direct)")
 
 
+def foreign_keys(spec: dict, ly: dict) -> set[str]:
+    """3.7.0 (B7): columns of this layer that hold another layer's key, so repeats in them are by design: every other layer's id_field, the
+    strip's join column, the layer's own join keys, and any it lists itself (foreign_keys:)."""
+    out = {str(x) for x in (ly.get("foreign_keys") or [])}
+    for other in spec.get("layers") or []:
+        if other is not ly and other.get("id_field"):
+            out.add(str(other["id_field"]))
+    j = ly.get("join") or {}
+    for k in ("on", "key", "left", "left_on", "field", "layer_key"):
+        if isinstance(j.get(k), str):
+            out.add(j[k])
+    st = (spec.get("elements") or {}).get("strip") or {}
+    if (st.get("stack") or {}).get("layer") == ly.get("id") and (st.get("stack") or {}).get("join"):
+        out.add(str(st["stack"]["join"]))
+    return out
+
+
 def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, template: str | None = None, spec_edit=None, use_tiles: bool = True, classic_layout: bool = False,
             window: tuple | None = None, direct_labels: bool = True) -> Plan:
     """1.22.0: `direct_labels=False` keeps every layer in the legend (a web page and a slide draw their own keys from the blocks).
@@ -1411,6 +1474,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         raise PlanError(str(ex), gc.EXIT_REFUSED)
     slug = r["brand"]
     pack = bl.load_pack(slug)
+    findings += list(r.get("findings") or []) + bl.edit_findings(manifest)    # 3.7.0 (Part D): a default not found here; an edited shipped brand
     import map_look
     look, look_why = map_look.resolve(spec)              # 0.22.0: auto resolves to a named look from the map's main data
     if look == "dark" and not mode:
@@ -1438,6 +1502,11 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         raise PlanError(str(ex), gc.EXIT_LINT)
     base = spec_path.parent
     crs_spec = spec.get("crs") or {}
+    import interrupted as _cut                             # 3.7.0 (C5): crs: {display: spilhaus | goode} by name
+    if _cut.named(crs_spec.get("display")):
+        if str(crs_spec.get("display")).lower() == "spilhaus" and _cut.proj_ok():
+            raise PlanError(f"MAP-CRS-012: {_cut.proj_ok()}; run map-doctor --fix", gc.EXIT_LINT)
+        crs_spec = dict(crs_spec, display=_cut.named(crs_spec["display"]))
     measure_crs = str(crs_spec["measure"]).strip() if crs_spec.get("measure") else None
     plans: dict[str, LayerPlan] = {}
     loaded: dict[str, object] = {}            # each layer's frame after its own steps, by id: what another layer's ops see (M11)
@@ -1549,7 +1618,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
             name_f = qd.get("name_field") or next((c for c in ("NAME", "name", "utility_name", "Utility") if c in gdf.columns), None)
             findings += [{**f, "layer": lid, "message": f"layer '{lid}': {f['message']}"}
                          for f in dl.check_territories(gdf, name_f, qd.get("density_field"))]
-        for f in dl.lint_data(gdf, assumed=assumed, id_field=ly.get("id_field")):
+        for f in dl.lint_data(gdf, assumed=assumed, id_field=ly.get("id_field"), foreign=foreign_keys(spec, ly)):
             if f["id"] in fixed:
                 continue                      # the op that fixes it ran; its own finding replaces the input's (geo_ops.FIXES)
             if not draw and f["id"] == "MAP-DATA-008":
@@ -1640,6 +1709,9 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     display = cs["display"]
     crs_info = {"display": display, "rationale": cs["rationale"], "name": choice["name"], "equal_area": ce.is_equal_area(display),
                 "antimeridian": choice.get("antimeridian", False)}
+    if (wgs[2] - wgs[0]) > 200 and crs_spec.get("display") in (None, "auto") and any(l.kind == "line" for l in layers) and _cut.proj_ok() is None:
+        # 3.7.0 (C5): a world of lines at sea (cables, shipping, currents) reads as one ocean in Spilhaus, which cuts through the land instead
+        pre_notes.append("crs: a world map of lines; if they are at sea (cables, shipping), crs: {display: spilhaus} keeps the oceans whole")
     elements = spec.get("elements") or {}
     sb_on = (elements.get("scale_bar") or {}).get("on", True) is not False
     vec = [l for l in layers if l.kind != "raster"]          # a raster is warped into the display grid when it is read; the vector checks are not for it
@@ -1659,6 +1731,16 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
             raise PlanError(f"layer '{l.id}' has no coordinate reference system", gc.EXIT_LINT)
         if not l.gdf.crs.equals(display):
             l.transformations.append(f"reprojected from {l.crs_original} to {crs_label(display)}")
+        if l.kind == "line" and _cut.is_cut(display) and len(l.gdf):
+            # 3.7.0 (C5): a projection with cuts: lines densified in lon/lat, projected, and split where a step jumps across a cut
+            l.gdf, n_cut = _cut.split_lines(l.gdf, display, _cut.world_width(display))
+            l.transformations.append(f"densified at {_cut.DENSIFY_DEG} degrees and split at the projection's cuts: {n_cut} of {len(l.gdf)} feature(s) cross one")
+            l.notes.append(f"{n_cut} of {len(l.gdf)} feature(s) cross a cut of the projection and are drawn in parts")
+            continue
+        if l.kind == "polygon" and _cut.is_cut(display) and l.role not in ("context",):
+            findings.append({"id": "MAP-CRS-012", "severity": "WARN", "detail": l.id, "layer": l.id,
+                             "message": f"layer '{l.id}': polygons in a projection with cuts draw wrongly where one crosses a cut; the ground is drawn "
+                                        "by inverse projection, but a data polygon is not: use points, or a projection without cuts"})
         l.gdf = l.gdf.to_crs(display)
     # the layers against each other, now that they share one CRS (MAP-CRS-007); crs.alignment_check: false turns it off
     if crs_spec.get("alignment_check", True) is not False:
@@ -1701,7 +1783,8 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         plan.notes.append(f"measurement CRS pinned to {measure_crs} (crs.measure) for every layer op")
     if str(crs_spec.get("datum_note") or "").strip():
         plan.notes.append(str(crs_spec["datum_note"]).strip())
-    plan.notes.append(f"brand '{slug}' chosen by rule '{r['rule']}'" + (f" ({r['note']})" if r.get("note") else ""))
+    plan.notes.append(f"brand '{slug}' chosen by rule '{r['rule']}'" + (f", default from {r['from']}" if r.get("from") and r["rule"] == "user_default" else "")
+                      + (f" ({r['note']})" if r.get("note") else ""))
     plan.notes += pre_notes
     assign_palette(plan)
     for l in layers:
@@ -2869,6 +2952,35 @@ def load_vector_ground(plan: Plan, path: Path) -> bool:
 
 
 def load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = False, vector_file: Path | None = None) -> None:
+    try:
+        return _load_basemap_any(plan, tiles_rec, explained, vector_file)
+    finally:
+        _cut_ground(plan)
+
+
+def _cut_ground(plan: Plan) -> None:
+    """3.7.0 (C5): in a projection with cuts the ground is one picture made by inverse projection, in place of the vector land and water."""
+    import interrupted as _cut
+    if not _cut.is_cut(plan.crs) or not plan.basemap:
+        return
+    kinds = ("land", "country", "state", "lake", "ocean", "boundary")
+    if not any(b.get("kind") in kinds for b in plan.basemap):
+        return
+    try:
+        rect = lo.rect_of(plan.tpl["map"])
+        img = _cut.ground_image(plan.crs, plan_visible_pad(plan), int(rect.w / 25.4 * 220), plan.tokens["land"], plan.tokens["water"])
+    except Exception as ex:  # noqa: BLE001 - the vector ground stays, with the note
+        plan.notes.append(f"the ground by inverse projection could not be made ({str(ex)[:160]}); the vector ground is drawn")
+        return
+    try:
+        ent = library_entry(BASEMAP_REFS["ocean"])
+    except PlanError:
+        ent = None
+    plan.basemap = [b for b in plan.basemap if b.get("kind") not in kinds] + [{"kind": "ground_image", "ground": img, "entry": ent, "gdf": None}]
+    plan.notes.append(f"ground: drawn by inverse projection at {img['px'][0]} x {img['px'][1]} px from the 1:10m ocean (a projection with cuts)")
+
+
+def _load_basemap_any(plan: Plan, tiles_rec: dict | None = None, explained: bool = False, vector_file: Path | None = None) -> None:
     if _SESSION is None:
         return _load_basemap(plan, tiles_rec, explained, vector_file)
     import map_raster

@@ -41,7 +41,7 @@ PREFERRED_DETAIL = {"world": "generalized", "national": "generalized", "regional
 # An avoid_for term close to (but not equal to) the request: a near miss, penalized and cautioned, not excluded.
 NEAR_MISS = {"site": ("site-precision", "engineering-grade", "parcel-level"), "local": ("site-precision", "parcel-level")}
 DATA_FAMILIES = {"data"}
-SCOPE_ORDER = {"local": 0, "shipped": 1}
+SCOPE_ORDER = {"local": 0, "user": 1, "shipped": 2}       # 3.7.0: the person's own sources between local and shipped; ranking is by fit (D3)
 AUDIENCE_OK = {"internal": {"any", "internal", "external", "regulatory"},
                "external": {"any", "external", "regulatory"},
                "regulatory": {"any", "regulatory"},
@@ -186,10 +186,13 @@ def license_gate(e: dict, req: dict) -> tuple[list[str], list[str]]:
         if external and not lic.get("external_ok"):
             reasons.append(f"license_class=licensed; audience={aud} not permitted" + (" by the uses acknowledged for your licence (withdraw the "
                            "acknowledgment and answer the licence pop-up again if your licence covers publication)" if lic.get("acknowledged") else ""))
-        elif (e.get("delivery") or {}).get("mode") != "user-supplied":
-            reasons.append("license_class=licensed but the entry is not user-supplied (licensed data cannot be bundled or fetched)")
-        else:
+        elif (e.get("delivery") or {}).get("mode") == "bundled" or ((e.get("delivery") or {}).get("mode") != "user-supplied" and not la.required(e)):
+            # 3.7.0 (C7): a licensed entry may be fetched when it carries the licence pop-up (license.acknowledgment); it is never bundled
+            reasons.append("license_class=licensed but the entry is bundled, or fetched without a licence acknowledgment (licensed data is never bundled)")
+        elif (e.get("delivery") or {}).get("mode") == "user-supplied":
             cautions.append("Licensed data: you must supply your own licensed copy; it is never bundled.")
+        else:
+            cautions.append("Licensed data: fetched from the provider's public files for the uses your licence covers; it is never bundled.")
     elif lc == "restricted":
         if external and not lic.get("external_ok"):
             reasons.append(f"license_class=restricted; audience={aud} not permitted")
@@ -412,7 +415,7 @@ def select(entries: list[dict], tags: dict, types: dict, req: dict, today: dt.da
     # local overlay wins over shipped for the same id; the replacement is reported
     by_id: dict[str, dict] = {}
     overridden: list[dict] = []
-    for e in sorted(entries, key=lambda x: SCOPE_ORDER.get(x.get("_scope", "shipped"), 1)):
+    for e in sorted(entries, key=lambda x: SCOPE_ORDER.get(x.get("_scope", "shipped"), 2)):
         if "id" not in e:
             continue
         if e["id"] in by_id:

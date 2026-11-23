@@ -184,9 +184,23 @@ def check_004(plan) -> list[dict]:
     return out
 
 
+def check_042(report: dict) -> list[dict]:
+    """3.7.0 (C6): polygons too small to see at the map's scale, drawn as points too (an island state on a world map)."""
+    out = []
+    for lid, r in ((report or {}).get("small_points") or {}).items():
+        names = ", ".join(r.get("names") or [])
+        out.append(finding("MAP-CART-042", "INFO", f"layer '{lid}': {r['count']} feature(s) too small to see at this scale are drawn as points too"
+                           + (f": {names}" if names else ""), r))
+    return out
+
+
 def check_007(report: dict) -> list[dict]:
     lab = (report or {}).get("labels") or {}
     out = []
+    for lid, r in (lab.get("raised") or {}).items():    # 3.7.0 (B3): a size below the sheet's minimum is drawn at the minimum, and said
+        sheet = "slide" if r.get("sheet") != "print" else "print"
+        out.append(finding("MAP-CART-007", "WARN", f"labels for '{lid}': size {r['asked_pt']:g} is below the {r['drawn_pt']:g} pt {sheet} minimum, so they are "
+                           f"drawn at {r['drawn_pt']:g}; set size: {r['drawn_pt']:g} (or more) to say so in the MapSpec", r))
     for lid, s in (lab.get("layers") or {}).items():
         tot = s["placed"] + s["dropped_collision"] + s["dropped_size"] + s["dropped_outside"]
         if tot >= 8 and (s["dropped_collision"] + s["dropped_size"]) / tot > 0.35:
@@ -511,7 +525,7 @@ def lint_plan(plan, report: dict | None = None, svg: str | None = None) -> list[
         out += fn(plan)
     for fn in (check_009, check_011, check_012, check_024, check_025):
         out += fn(plan, report)
-    out += check_007(report) + check_017(report) + check_019(plan, svg)
+    out += check_007(report) + check_017(report) + check_019(plan, svg) + check_042(report)
     import look_lint                                      # 0.22.0: the visual hierarchy checks (MAP-CART-026 to 032), not under classic
     out += look_lint.lint(plan, report, svg)
     return out
