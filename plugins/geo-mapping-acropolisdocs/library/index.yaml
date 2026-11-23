@@ -662,9 +662,9 @@ entries:
   file: entries/data/ref.infrastructure.world.cell.opencellid.yaml
   type: infrastructure
   status: active
-  rev: 2
+  rev: 3
   tags_digest: 5c277a95f485
-  entry_digest: 061722b9514c
+  entry_digest: 726ad33ce4ff
 - id: ref.infrastructure.world.osm.geofabrik
   file: entries/data/ref.infrastructure.world.osm.geofabrik.yaml
   type: infrastructure
@@ -844,9 +844,9 @@ entries:
   file: entries/data/ref.public-service.dk.mapping.dataforsyningen.yaml
   type: public-service
   status: active
-  rev: 1
+  rev: 2
   tags_digest: b78c9c0103cf
-  entry_digest: ab4917ffd8ef
+  entry_digest: eb6326945d2e
 - id: ref.public-service.dk.weather.dmi
   file: entries/data/ref.public-service.dk.weather.dmi.yaml
   type: public-service
@@ -858,9 +858,9 @@ entries:
   file: entries/data/ref.public-service.es.weather.aemet.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: c2a4816688be
-  entry_digest: b8c5241ec4d6
+  entry_digest: 56a8d3e7d189
 - id: ref.public-service.fi.mapping.nls
   file: entries/data/ref.public-service.fi.mapping.nls.yaml
   type: public-service
@@ -914,9 +914,9 @@ entries:
   file: entries/data/ref.public-service.se.mapping.lantmateriet.yaml
   type: public-service
   status: active
-  rev: 1
+  rev: 2
   tags_digest: 2246e6820b46
-  entry_digest: 9989e6e13546
+  entry_digest: 77722d1fbb56
 - id: ref.public-service.se.weather.smhi
   file: entries/data/ref.public-service.se.weather.smhi.yaml
   type: public-service
@@ -1110,9 +1110,9 @@ entries:
   file: entries/data/ref.public-service.world.router.ors.yaml
   type: public-service
   status: active
-  rev: 2
+  rev: 3
   tags_digest: c48c5f9f2f18
-  entry_digest: eb7985924d13
+  entry_digest: a8fc04977f5f
 - id: ref.public-service.world.router.valhalla-fossgis
   file: entries/data/ref.public-service.world.router.valhalla-fossgis.yaml
   type: public-service

@@ -71,6 +71,10 @@ should be treated as exposed, and point to `/geo-mapping-acropolisdocs:map-crede
 - **MAP-CRED-015 (INFO, 3.5.0).** A library credential's other names (`aliases`, and the per-host names it `replaces`) are accepted by `add` and
   registered under the library's own name: `add meteofrance` registers `cred:meteo-france`, `add ofcom` registers `cred:ofcom-mobile`. Only `add`
   reads aliases; a registered name is matched exactly everywhere else.
+- **Every keyed service has a test (3.6.0, MAP-LIB-017).** `check --probe` sends the entry's `probe` address (GET, or HEAD with `probe_method: HEAD`
+  for a large file; `probe_inject` when that address takes the key under another name, as OpenCelliD's cell API takes `key=` where its downloads
+  take `token=`), or, when the library names none, the entry's own `delivery.sample` through library_request (a POST where the service is
+  asked with one), its answer kept in a temporary folder and removed. A keyed entry with neither fails the library lint.
 - **Optional keys (3.5.0).** A library block with `optional: true` (TfL) is used when it is registered and left out when it is not: the service
   answers without a key at a lower limit.
 - **MAP-SVC-029** (Basic files). Only `netrc:` and `file:` references, as plain paths. The secrets file sits outside the project, output and plugin

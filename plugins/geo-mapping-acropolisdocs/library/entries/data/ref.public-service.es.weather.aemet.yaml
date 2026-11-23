@@ -1,6 +1,6 @@
 id: ref.public-service.es.weather.aemet
 type: public-service
-rev: 2
+rev: 3
 status: active
 title: AEMET OpenData (Spain weather and climate)
 summary: Spanish weather observations, forecasts and climate records from AEMET OpenData, with a free key; reuse requires citing AEMET.
@@ -34,15 +34,14 @@ tags:
   quality:
   - authoritative
 use_when:
-- Station observations or climate values near Spanish sites, once the key delivery is confirmed.
+- Spanish station observations or the station inventory, with the person's own AEMET key (map-credentials add aemet).
 avoid_when:
-- How the key is sent is not stated on the information page (2026-11-07), so the plugin has no credential block for it yet.
 - 'Two steps per request: AEMET answers with a link to the data, which is fetched in a second request.'
 delivery:
-  mode: user-supplied
-  note: 'Request a key with an e-mail address (Obtención de API Key on opendata.aemet.es). The station inventory endpoint answered 200 with an empty body
-    without a key on 2026-11-07. The key is a token sent as api_key (query or header); a wrong key answers HTTP 401 with {"estado": 401}. Each data call
-    answers with a ''datos'' address to fetch the data from.'
+  sample:
+    request: observations
+  mode: service
+  protocol: rest-json
   requires_credential:
     name: aemet
     kind: apikey
@@ -57,6 +56,18 @@ delivery:
     free: true
     limits: No request limits are published; the key is free on request (sign-up page, 2026-11-15).
     note: The key is a token sent by e-mail after the sign-up form; it may also go in a header named api_key.
+    probe: https://opendata.aemet.es/opendata/api/valores/climatologicos/inventarioestaciones/todasestaciones
+  requests:
+    observations: https://opendata.aemet.es/opendata/api/observacion/convencional/todas
+    stations: https://opendata.aemet.es/opendata/api/valores/climatologicos/inventarioestaciones/todasestaciones
+  read:
+    follow: datos
+    follow_hosts:
+    - opendata.aemet.es
+    suffix: -d.json
+  note: 'Each call answers with a datos address on opendata.aemet.es; library_request follows it (without the key) and keeps the JSON file (text in ISO-8859-15).
+    observations: the last hours of every conventional station (idema, lat, lon, ta, prec...); stations: the station inventory. A made-up key answered 401
+    {"estado": 401} on 2026-11-22.'
 source:
   publisher: Agencia Estatal de Meteorología (AEMET)
   product: AEMET OpenData
@@ -75,7 +86,7 @@ license:
     (BOE, 2016-01-05) is free. Ley 18/2015 on reuse applies.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-15'
+  reviewed_on: '2026-11-22'
   verify_by: '2027-02-15'
   changelog:
   - rev: 1
@@ -85,3 +96,7 @@ maintenance:
     date: '2026-11-15'
     note: 'Active (1.17.0): how the key is sent and refused read from the API itself (a wrong api_key answers 401 with estado 401); the reuse condition
       (cite AEMET) read on the sign-up page.'
+  - rev: 3
+    date: '2026-11-22'
+    note: '3.6.0: fetched by the plugin: observations and the station inventory through library_request, following the datos address; check --probe asks
+      for the inventory; 401 for a made-up key on 2026-11-22.'

@@ -568,6 +568,11 @@ def suggest_names(name: str, entries: list[dict] | None = None, n: int = 3) -> l
     return out[:n]
 
 
+def _has_sample(e: dict) -> bool:
+    d = e.get("delivery") or {}
+    return e.get("status") == "active" and isinstance(d.get("sample"), dict) and bool(d.get("request") or d.get("requests"))
+
+
 def services(entries: list[dict] | None = None, include_keyless: bool = False) -> dict:
     """3.5.0: every service in the plugin's library that takes a person's own key: the name to give add, its other accepted names, the host and
     how the key is sent, the key class, the sign-up address, the free-tier limits, whether check --probe can test it, and whether the key is
@@ -586,12 +591,13 @@ def services(entries: list[dict] | None = None, include_keyless: bool = False) -
         row = keyed.get(n)
         if row:
             row["entries"].append(e.get("id"))
+            row["probe"] = row["probe"] or bool(b.get("probe")) or _has_sample(e)
             continue
         keyed[n] = {"name": n, "aliases": [str(a) for a in (b.get("aliases") or [])] + _hostlist(b.get("replaces")), "title": e.get("title"),
                     "entries": [e.get("id")], "status": e.get("status"), "kind": b.get("kind", "apikey"), "host": b.get("host"),
                     "sent_as": _inject_text(b.get("inject")) or ("bearer" if b.get("kind") == "bearer" else None),
                     "class": b.get("class", "secret"), "browser_ok": "browser" in (b.get("class_allowed") or [b.get("class", "secret")]),
-                    "signup_url": b.get("signup_url"), "free": b.get("free"), "limits": b.get("limits"), "probe": bool(b.get("probe")),
+                    "signup_url": b.get("signup_url"), "free": b.get("free"), "limits": b.get("limits"), "probe": bool(b.get("probe")) or _has_sample(e),
                     "optional": bool(b.get("optional")), "lifetime_days": b.get("lifetime_days")}
     rows = list(keyed.values())
     out = {"ok": True, "count": len(rows), "services": rows,
@@ -1587,7 +1593,9 @@ def add(store: Store, name: str, *, cls: str | None = None, restricted: bool = F
     else:
         nxt = [f"Open {win or shown} in your editor (Notepad on Windows), paste {what}, and save." if fresh or not _try(lambda: _read_value(path), "") else
                f"The file {shown} is already there; it was kept as it is.",
-               f"Then run /{_prefix()}:map-credentials check {name}."]
+               (f"Then run /{_prefix()}:map-credentials check {name} --probe: it checks the file and, once you confirm {probe_host}, sends one test "
+                "request with your key, so you know the key works" if (b.get("probe") or (entry and _has_sample(entry))) else
+                f"Then run /{_prefix()}:map-credentials check {name}.")]
     if cls == "browser" and not restricted:
         nxt.append("This is a browser key: restrict it to your web site's domain in the provider's dashboard, then run add again with --confirm-restricted.")
     if exp:
@@ -1657,6 +1665,44 @@ def probe_url(store: Store, name: str, e: dict) -> str | None:
     return url or None
 
 
+def sample_probe_entry(store: Store, name: str, e: dict | None = None) -> dict | None:
+    """3.6.0: the library entry whose own sample request is the credential's test, when the library names no probe address: an active entry
+    with this credential on the registered host, a delivery.sample and a request library_request sends. None otherwise."""
+    for ent in store.entries() if store is not None else library_entries():
+        b = entry_block(ent)
+        if not (b and b.get("name") == name and ent.get("status") == "active"):
+            continue
+        d = ent.get("delivery") or {}
+        if e is not None and (b.get("host") or "").lower() != (e.get("host") or "").lower():
+            continue
+        if isinstance(d.get("sample"), dict) and (d.get("request") or d.get("requests")):
+            return ent
+    return None
+
+
+def _sample_probe(store: Store, name: str, e: dict, entry: dict, probe_host: str, http=None) -> dict:
+    """3.6.0: the test is the entry's own sample request, sent through library_request with the credential (so a service that is asked with a
+    POST, such as a GraphQL or OJP endpoint, is tested the way the plugin uses it). The answer is written to a temporary folder and removed."""
+    import tempfile
+    import gmap_common as g
+    import library_request as lr
+    host = (e.get("host") or "").lower()
+    if (probe_host or "").strip().lower() != host:
+        return {"probed": False, "needs_consent": True, "ask": f"send one small test request to {host} with your '{name}' key (the plugin's sample request for {entry.get('title')})?",
+                "then": f"call again with confirm_probe={host}"}
+    smp = lr.sample(entry)
+    with tempfile.TemporaryDirectory(prefix="gmap-probe-") as tmp, g.outputs_in(tmp):
+        try:
+            r = lr.run(entry["id"], smp.get("request"), smp.get("params"), smp.get("bbox"), smp.get("file"), refresh=True, http=http, store=store)
+        except lr.RequestError as ex:
+            if ex.rule == "MAP-CRED-008" or (store.get(name) or {}).get("status") == "rejected":
+                return {"probed": True, "accepted": False, "request": "sample", "findings": [finding("MAP-CRED-008", "BLOCK", str(ex))]}
+            return {"probed": True, "accepted": None, "request": "sample",
+                    "findings": [finding(ex.rule or "MAP-SVC-013", "WARN", f"the test request did not get an answer that says yes or no: {ex}")]}
+    return {"probed": True, "accepted": True, "request": r.get("send"), "how": f"the sample request of {entry['id']}",
+            "answer": {k: r.get(k) for k in ("rows", "answer") if k in r}}
+
+
 def rejection_text(e: dict) -> str:
     """1.0.2 (F2): what the service refused and where: "HTTP 400 on 2026-11-09 10:05, by a request to https://.../***/ (profile nasa-firms-wfs)"."""
     why = e.get("rejected_why") or "earlier"
@@ -1685,16 +1731,23 @@ def _probe(store: Store, name: str, e: dict, path: Path, probe_host: str, http=N
             cred.close()
     url = probe_url(store, name, e)
     if not url:
+        se = sample_probe_entry(store, name, e)
+        if se is not None:
+            return _sample_probe(store, name, e, se, probe_host, http)
         return {"probed": False, "why": "no probe address is registered for this credential"}
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
     if host != (e.get("host") or "").lower():
         return {"probed": False, "findings": [finding("MAP-CRED-013", "BLOCK", f"the probe address is not on {e.get('host')}; it is not used")]}
     if (probe_host or "").strip().lower() != host:
         return {"probed": False, "needs_consent": True, "ask": f"send one small test request to {host} with your '{name}' key?", "then": f"call again with confirm_probe={host}"}
-    cred = Resolved(name, e.get("kind", "apikey"), host, parse_inject(e.get("inject")), _read_value(path), reject=effective_reject(name, e.get("reject"), None, store), store=store)
+    block, _ = library_defaults(name, store.entries())
+    # 3.6.0: a service whose test address takes the key under another name (OpenCelliD: token= for downloads, key= for the cell API)
+    inj = parse_inject(block["probe_inject"]) if (block or {}).get("probe_inject") and (block or {}).get("host", "").lower() == host else None
+    cred = Resolved(name, e.get("kind", "apikey"), host, inj or parse_inject(e.get("inject")), _read_value(path), reject=effective_reject(name, e.get("reject"), None, store), store=store)
     http = http or oh.SafeHTTP(limits={"timeout_s": 20, "max_bytes": 1_000_000, "retries": 0})
+    method = "HEAD" if str((block or {}).get("probe_method") or "").upper() == "HEAD" else "GET"   # 3.6.0: a large file is tested with HEAD
     try:
-        http.get(url, expect="any", auth=cred)
+        http.get(url, expect="any", auth=cred, method=method)
         return {"probed": True, "accepted": True, "request": oh.redact_url(url) + f" (+ {_inject_shown(cred.inject)})"}
     except oh.ServiceError as ex:
         if getattr(ex, "rejected", False):
@@ -1762,7 +1815,9 @@ def check(store: Store, name: str, *, probe: bool = False, probe_host: str = "",
             # 1.0.2 (F2): the probe is the plugin's own proof that a key works, so a consented probe may clear a rejection the file never caused
             purl = probe_url(store, name, e)
             phost = (urllib.parse.urlsplit(purl).hostname or "").lower() if purl else ""
-            other = bool(purl and e.get("rejected_url") and urllib.parse.urlsplit(str(e["rejected_url"])).path.rstrip("/")
+            if not purl and sample_probe_entry(store, name, e) is not None:      # 3.6.0: the sample request is the test
+                purl, phost = "sample", (e.get("host") or "").lower()
+            other = bool(purl and purl != "sample" and e.get("rejected_url") and urllib.parse.urlsplit(str(e["rejected_url"])).path.rstrip("/")
                          != urllib.parse.urlsplit(shown_url(purl, {"path": True})).path.rstrip("/"))
             told = (f"the file still holds the key the service rejected ({rejection_text(e)}"
                     + (", not by the test address" if other else "") + "); put a new key in it (or run "

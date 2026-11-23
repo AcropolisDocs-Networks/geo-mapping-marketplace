@@ -4,14 +4,19 @@ GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
 ## 2026-11-22
 
+- `ref.infrastructure.world.cell.opencellid` rev 3: 3.6.0: check --probe tests the token on the cell API (getInArea, one cell, key=), so the twice-a-day downloads are not spent; 401 "API Key not known" for a made-up token on 2026-11-22.
 - `ref.public-service.ca-bc.transit.translink` rev 3: Fetched by the plugin (3.5.0): the static GTFS (keyless) and GTFS-realtime positions, trip updates and alerts with cred:translink (query apikey); 403 without a key and with a made-up key on 2026-11-22.
 - `ref.public-service.ca-on.transit.octranspo` rev 3: Fetched by the plugin (3.5.0): GTFS-realtime positions and trip updates with cred:octranspo (header Ocp-Apim-Subscription-Key, named by the gateway); 401 without a key and with a made-up key on 2026-11-22.
+- `ref.public-service.dk.mapping.dataforsyningen` rev 2: 3.6.0: check --probe sends one 64 x 64 GetMap of Copenhagen (GetCapabilities answers with any token); a made-up token answered 403 on 2026-11-22.
+- `ref.public-service.es.weather.aemet` rev 3: 3.6.0: fetched by the plugin: observations and the station inventory through library_request, following the datos address; check --probe asks for the inventory; 401 for a made-up key on 2026-11-22.
 - `ref.public-service.fr.weather.meteo-france` rev 2: 3.5.0: add also accepts meteofrance and registers it as cred:meteo-france.
+- `ref.public-service.se.mapping.lantmateriet` rev 2: 3.6.0: check --probe sends HEAD for one elevation tile on dl1 with the Geotorget login (the file is not downloaded); 401 without a login and with a made-up one on 2026-11-22.
 - `ref.public-service.uk.coverage.ofcom-api` rev 2: 3.5.0: add also accepts ofcom and registers it as cred:ofcom-mobile.
 - `ref.public-service.uk.transit.tfl` rev 2: 3.5.0: the optional app_key as cred:tfl (query app_key), used when registered and left out when not; a made-up key answered 429 "Invalid app_key is provided." on 2026-11-22.
 - `ref.public-service.uk.weather.metoffice-datahub` rev 3: Fetched by the plugin (3.5.0): the site-specific hourly, three-hourly and daily point forecasts through library_request with cred:metoffice-datahub (header apikey); 401 without a key and with a made-up key on 2026-11-22.
 - `ref.public-service.us-wa.transit.onebusaway-pugetsound` rev 1: Added (3.5.0): the key the owner registered by hand as pugetsound-oba (host api.pugetsound.onebusaway.org, query key) now has its entry; 401 "permission denied" without a key and with a made-up one on 2026-11-22.
 - `ref.public-service.us.telecom.fcc-ecfs` rev 1: Added (3.5.0): the key the owner registered by hand as fcc-ecfs (host publicapi.fcc.gov) now has its entry; 403 API_KEY_MISSING without a key and API_KEY_INVALID with a made-up one on 2026-11-22.
+- `ref.public-service.world.router.ors` rev 3: 3.6.0: check --probe sends one short GET directions request in Phoenix with the key in the Authorization header; 401 "Authorization field missing" without a key and 403 with a made-up one on 2026-11-22.
 - `ref.public-service.world.weather.visual-crossing` rev 3: Fetched by the plugin (3.5.0): current conditions and daily values by place through library_request with cred:visual-crossing (query key); 401 for a made-up key on 2026-11-22.
 
 ## 2026-11-21

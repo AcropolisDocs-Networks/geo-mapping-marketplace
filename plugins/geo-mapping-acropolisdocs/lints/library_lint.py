@@ -88,7 +88,7 @@ def load_entries(entries_dir: Path, scope: str) -> list[dict]:
 CRED_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 CRED_HOST = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}\.)+[a-z]{2,63}$")
 CRED_FIELDS = {"name", "kind", "class", "class_allowed", "host", "inject", "reject", "probe", "signup_url", "free", "limits", "shape", "note", "lifetime_days",
-               "hosts", "host_suffixes", "handoff_hosts", "replaces", "aliases", "optional"}    # 3.5.0: other names add accepts; a key the service does not require       # 3.2.0: one credential for a family of hosts (Earthdata)
+               "hosts", "host_suffixes", "handoff_hosts", "replaces", "aliases", "optional", "probe_method", "probe_inject"}    # 3.5.0: other names add accepts; a key the service does not require       # 3.2.0: one credential for a family of hosts (Earthdata)
 _SUFFIX = re.compile(r"^\.(?:[a-z0-9](?:[a-z0-9-]{0,62})\.){2,}[a-z]{2,63}$")
 _HANDOFF = re.compile(r"^\.(?:[a-z0-9](?:[a-z0-9-]{0,62})\.)+[a-z]{2,63}$")
 _KEY_IN_REQUEST = re.compile(r"(?i)[?&](key|api_key|apikey|token|access_token)=(?!\{key\}(?:&|$))|\$[A-Za-z_{]")
@@ -389,6 +389,24 @@ def lint_entries(entries: list[dict], lib: Path, plugin_root: Path | None = None
         if e.get("type") == "map-type" and e.get("status") != "retired" and not any(p in ids and by_id[p].get("type") != "map-type" for p in _as_list(e.get("pairs_with"))):
             findings.append(f("MAP-LIB-015", "INFO", eid, "map-type has no pairing data entry"))
     findings.append(f("MAP-LIB-015", "INFO", "-", f"{sum(len(x['values']) for x in tags['facets'].values()) - len(used)} tag value(s) are used by no entry (coverage, not an error)"))
+    # 017 (3.6.0): every keyed service can be tested when a key is added: an active entry for the credential names a probe address or a
+    # sample request (check --probe sends one of them)
+    keyed: dict[str, list[str]] = {}
+    tested: set[str] = set()
+    for eid, e in by_id.items():
+        d, pr = e.get("delivery") or {}, e.get("provider") or {}
+        b = d.get("requires_credential") if isinstance(d.get("requires_credential"), dict) else pr.get("requires_credential")
+        if not isinstance(b, dict) or e.get("status") != "active" or not b.get("name"):
+            continue
+        keyed.setdefault(b["name"], []).append(eid)
+        if b.get("probe") or (isinstance(d.get("sample"), dict) and (d.get("request") or d.get("requests"))):
+            tested.add(b["name"])
+        if b.get("probe_method") not in (None, "GET", "HEAD"):
+            findings.append(f("MAP-LIB-001", "BLOCK", eid, "requires_credential.probe_method is GET or HEAD"))
+    for n, eids in sorted(keyed.items()):
+        if n not in tested:
+            findings.append(f("MAP-LIB-017", "BLOCK", eids[0], f"the credential '{n}' cannot be tested when a key is added: give requires_credential.probe "
+                                                              "(a small GET or HEAD request) or a delivery.sample request"))
     # 011 generated files match the entries
     if check_index:
         ship = [e for e in entries if e.get("_scope") == "shipped" and "_parse_error" not in e]

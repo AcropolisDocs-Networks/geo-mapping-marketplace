@@ -1,6 +1,6 @@
 id: ref.public-service.se.mapping.lantmateriet
 type: public-service
-rev: 1
+rev: 2
 status: active
 title: 'Lantmäteriet open geodata (Sweden: elevation, laser data, maps)'
 summary: 'Sweden''s national mapping agency''s open data: the 1 m Markhöjdmodell and laser data through a keyless STAC catalogue, the files behind a free
@@ -58,6 +58,8 @@ delivery:
     limits: Free of charge (avgiftsfri) under CC BY 4.0; no quota stated on the pages read 2026-11-20.
     note: 'Lantmäteriet''s guide (read 2026-11-20): order the product (free) in Geotorget, then authenticate with the Geotorget username and password; the
       STAC search is keyless, the data asset answered 401 without a login.'
+    probe: https://dl1.lantmateriet.se/hojd/data/grid/mhm/73_7/m736_78.tif
+    probe_method: HEAD
   catalogue: https://api.lantmateriet.se/stac-hojd/v1/collections/dtm-cog/items (keyless STAC search; the login goes only to dl1.lantmateriet.se)
 source:
   publisher: Lantmäteriet
@@ -77,7 +79,7 @@ license:
     licence is CC-BY-4.0 (the surface model and forest laser data have their own terms).'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-20'
+  reviewed_on: '2026-11-22'
   verify_by: '2027-02-20'
   check:
     kind: http_get
@@ -87,3 +89,7 @@ maintenance:
   - rev: 1
     date: '2026-11-20'
     note: 'Added (3.1.0, a source the 2026-11-07 dive did not reach): the STAC catalogue, its collections and a 401 on a data asset seen on 2026-11-20.'
+  - rev: 2
+    date: '2026-11-22'
+    note: '3.6.0: check --probe sends HEAD for one elevation tile on dl1 with the Geotorget login (the file is not downloaded); 401 without a login and
+      with a made-up one on 2026-11-22.'

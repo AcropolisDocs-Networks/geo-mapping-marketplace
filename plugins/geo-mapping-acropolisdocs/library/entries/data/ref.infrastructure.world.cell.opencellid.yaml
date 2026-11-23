@@ -1,6 +1,6 @@
 id: ref.infrastructure.world.cell.opencellid
 type: infrastructure
-rev: 2
+rev: 3
 status: active
 title: OpenCelliD cell tower database (crowd-sourced)
 summary: Crowd-sourced cell identities (MCC, MNC, LAC/TAC, cell id) with estimated positions and ranges, worldwide, downloaded with a free API key under
@@ -85,7 +85,11 @@ delivery:
     signup_url: https://opencellid.org/register.php
     free: true
     limits: '"Each token will be able to download only twice per day" (OpenCelliD wiki, read 2026-11-20)'
-    note: The token is added at send time and never written to a record
+    note: The token is added at send time and never written to a record. The same token is token= for the downloads and key= for the cell API; check --probe
+      asks the cell API for one cell in a small box in Phoenix (no download is used). A made-up token answered 401 "API Key not known" on 2026-11-22.
+    probe: https://opencellid.org/cell/getInArea?BBOX=33.445,-112.075,33.45,-112.07&format=json&limit=1
+    probe_inject:
+      query: key
 source:
   publisher: Unwired Labs (OpenCelliD project)
   product: OpenCelliD database export
@@ -105,7 +109,7 @@ license:
     and restricted-license because a published map derived from it carries the same licence.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-20'
+  reviewed_on: '2026-11-22'
   verify_by: '2027-05-04'
   check:
     kind: http_head
@@ -119,3 +123,7 @@ maintenance:
   - rev: 2
     date: '2026-11-20'
     note: 'Fetched by the opencellid adapter (3.1.0) with the person''s token: per-MCC files, two downloads a token a day.'
+  - rev: 3
+    date: '2026-11-22'
+    note: '3.6.0: check --probe tests the token on the cell API (getInArea, one cell, key=), so the twice-a-day downloads are not spent; 401 "API Key not
+      known" for a made-up token on 2026-11-22.'
