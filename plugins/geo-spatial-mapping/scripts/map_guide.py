@@ -3,7 +3,7 @@
 
     map_guide.py where [--json]                  the page's path in this edition and whether it is there
     map_guide.py tasks [--goal ID] [--json]      the page's goals and tasks: what you get, the skill or pipeline that makes it, the line to type
-    map_guide.py asks  [--json]                  the everyday asks of the Recipes tab, each with the skill that picks it up
+    map_guide.py asks  [--json]                  the everyday asks of the Main tab's recipes, each with the skill that picks it up
     map_guide.py copy  --to DIR                  copy the page into a folder the person can open (an output or connected folder)
 
 Everything is read from the page tools/build_overview.py wrote into this edition (docs/<plugin>.html), so the guide in the chat says what
