@@ -1,0 +1,52 @@
+{
+  "description": "1.22.0: three hooks in one process per event, for Claude Cowork (Bash in the session workspace, the device shell on a linked computer) and Claude Code. Before a tool call, hooks/dispatch.py runs the timing hook and the pre-export check together (until 1.21.2 they were two entries, so every shell call started two Python processes before it ran); after a call the timing hook runs alone; the credentials reminder runs on a submitted prompt. The shell matchers name PowerShell as well as Bash and the device shell. Each command picks the plugin's own Python on Windows (the private environment setup.cmd builds, else python3) and starts its script through a guarded -c program: a missing script (a plugin updated while a chat is open, or an unexpanded ${CLAUDE_PLUGIN_ROOT}) exits 0, never 2, so it can never refuse a tool call; only the pre-export check's own verdict exits 2. The program drops the working folder from the import path first. Nothing rewrites this file. Hooks act only on this plugin's own calls (MAP-ED-005). hooks/README.md says how to turn one off.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|mcp__.*device_bash|mcp__.*geo-(spatial-)?mapping.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|PowerShell|mcp__.*device_bash|mcp__.*geo-(spatial-)?mapping.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|PowerShell|mcp__.*device_bash|mcp__.*geo-(spatial-)?mapping.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

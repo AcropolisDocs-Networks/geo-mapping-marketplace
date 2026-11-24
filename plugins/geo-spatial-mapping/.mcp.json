@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "geo-spatial-mapping-ogc": {
+      "command": "cmd",
+      "args": ["/c", "${CLAUDE_PLUGIN_ROOT}\\mcp\\launch.cmd"]
+    }
+  }
+}
