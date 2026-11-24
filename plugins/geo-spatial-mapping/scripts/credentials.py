@@ -2229,7 +2229,7 @@ def walk(root: Path, skip: list[Path] | None = None) -> list[str]:
     skip = [Path(s).resolve() for s in (skip or [])]
     for dirpath, dirnames, filenames in os.walk(root):
         d = Path(dirpath)
-        dirnames[:] = [x for x in dirnames if x not in ("__pycache__", ".git") and not any(_under(d / x, s) for s in skip)]
+        dirnames[:] = [x for x in dirnames if x not in ("__pycache__", ".git", "venv", ".venv") and not any(_under(d / x, s) for s in skip)]
         for f in filenames:
             out.append((d / f).relative_to(root).as_posix())
     return sorted(out)
@@ -2257,7 +2257,7 @@ def audit(store: Store, folder: Path | None = None, *, with_values: bool = True)
                         values[n if which == "file" else f"{n} ({which.replace('_', ' ')})"] = v
     if not folder.is_dir():
         return {"ok": False, "findings": [finding("MAP-CRED-006", "BLOCK", f"no folder {folder} to audit")]}
-    rels = walk(folder, skip=[store.root])
+    rels = walk(folder, skip=[store.root, folder / "runtime"])     # 4.0.2: ~/.geo-mapping/runtime holds the Windows environment, not the person's files
     hits = scan_files(folder, rels, values=values, skip_rules=("working folder",))
     fs = [finding("MAP-CRED-006", "BLOCK", f"{h['file']} line {h['line']}: {h['rule']}", {"file": h["file"], "line": h["line"]}) for h in hits]
     return {"ok": not hits, "folder": str(folder), "files_scanned": len(rels), "exact_values_checked": sorted(values), "hits": hits, "findings": fs,

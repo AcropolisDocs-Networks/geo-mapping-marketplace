@@ -1,6 +1,7 @@
 @echo off
 rem Installs the Python packages the bundled data server needs into a private virtual environment (not your system Python), once.
-rem The environment lives in %LOCALAPPDATA%\AcropolisDocs\geo-mapping, so it survives plugin updates and is rebuilt only when mcp\requirements.txt changes.
+rem The environment lives in %USERPROFILE%\.geo-mapping\runtime (4.0.2; it was under %LOCALAPPDATA%, which Windows redirects for the packaged Claude
+rem app), so it survives plugin updates, Claude and a terminal see the same one, and it is rebuilt only when mcp\requirements.txt changes.
 rem 4.0.0: this file finds a Python (findpython.cmd, or python: in %USERPROFILE%\.geo-mapping\config.yaml) and hands over to setup_env.py, which
 rem checks first (write access, the Python, certificate settings, the network), installs, and writes everything it prints to setup.log in that
 rem folder. A failure ends with a cause code and a one-line fix (NO_PYTHON, NO_WRITE, PIP_CERT, PIP_TLS, NO_NETWORK, VENV_LOCKED, IMPORT, PIP).
@@ -12,7 +13,7 @@ rem         setup.cmd /auto     what launch.cmd uses: the same, then waits for a
 setlocal EnableExtensions DisableDelayedExpansion
 set "HERE=%~dp0"
 set "ROOT=%HERE%.."
-set "BASE=%LOCALAPPDATA%\AcropolisDocs\geo-mapping"
+set "BASE=%USERPROFILE%\.geo-mapping\runtime"
 rem 1.6.3: another program's PYTHONHOME or PYTHONPATH (QGIS and ArcGIS set them) would point this Python at the wrong standard library
 set "PYTHONHOME="
 set "PYTHONPATH="

@@ -1,4 +1,4 @@
-# geo-spatial-mapping 4.0.1
+# geo-spatial-mapping 4.0.2
 
 Cartographic maps from a request or your own geodata: print maps (SVG, PDF, PNG), interactive web maps (one self-contained HTML page), data
 conversion and analysis, public data services, travel-time areas and terrain, each checked before it is handed over and each with its sources.
@@ -19,7 +19,7 @@ map packages, the optional extras and Chromium (for web-map checks and flythroug
 
 | Computer | How the data server starts | Where its private environment lives |
 |---|---|---|
-| Windows | `mcp\launch.cmd` (the default in `.mcp.json`) | `%LOCALAPPDATA%\AcropolisDocs\geo-mapping\venv` |
+| Windows | `mcp\launch.cmd` (the default in `.mcp.json`) | `%USERPROFILE%\.geo-mapping\runtime\venv` |
 | macOS | `mcp/launch.sh`, after the one step below | `~/Library/Application Support/AcropolisDocs/geo-mapping/venv` |
 | Linux | `mcp/launch.sh`, after the one step below | `~/.local/share/acropolisdocs/geo-mapping/venv` |
 

@@ -8,7 +8,9 @@ rem 4.0.0 (spec B8): setup never installs into the environment while the server 
 rem started here only when the server's own set is not ready either, so the server is never started from an environment a setup window is changing.
 setlocal EnableExtensions DisableDelayedExpansion
 set "HERE=%~dp0"
-set "BASE=%LOCALAPPDATA%\AcropolisDocs\geo-mapping"
+rem 4.0.2: in your own folder, not under AppData: the Claude app on Windows is a packaged (MSIX) app, and Windows quietly redirects what it
+rem and the programs it starts write under AppData to a private copy, so Claude and a terminal saw two different environments.
+set "BASE=%USERPROFILE%\.geo-mapping\runtime"
 set "VENVPY=%BASE%\venv\Scripts\python.exe"
 set "STAMP=%BASE%\requirements.installed"
 set "FULLSTAMP=%BASE%\full.installed"

@@ -52,7 +52,7 @@ FIXES = {
                 "certificate store, or ask IT for the root certificate as a PEM file and run: pip config set global.cert <file>"),
     "NO_NETWORK": "{detail}. If a proxy is needed, set HTTPS_PROXY (or pip config set global.proxy http://host:port), then run setup again",
     "VENV_LOCKED": "Close Claude (and anything else running Python from {venv}), then run: {repair}",
-    "IMPORT": "The packages installed but do not import: run  \"{venvpy}\" -m pip check  and see the log",
+    "IMPORT": "The packages installed but do not import, so the environment is damaged: run  {repair}  with Claude closed to build it again",
     "PIP": "pip failed: {detail}. The log has the whole message",
 }
 
@@ -65,11 +65,40 @@ def base_dir() -> Path:
     """Where the private environment lives, as paths.sh and setup.cmd say."""
     if os.environ.get("GEO_MAPPING_ENV_HOME"):
         return Path(os.environ["GEO_MAPPING_ENV_HOME"])
-    if is_windows():
-        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "AcropolisDocs" / "geo-mapping"
+    if is_windows():                   # 4.0.2: not under AppData, which Windows redirects for the packaged (MSIX) Claude app
+        return Path(os.environ.get("USERPROFILE") or Path.home()) / ".geo-mapping" / "runtime"
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / "AcropolisDocs" / "geo-mapping"
     return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "acropolisdocs" / "geo-mapping"
+
+
+def old_base_dirs() -> list[Path]:
+    """4.0.2: where the Windows environment lived before, under %LOCALAPPDATA%. The Claude app on Windows is a packaged (MSIX) app, and
+    Windows redirects what a packaged app and the programs it starts write under AppData to a private copy (AppData\\Local\\Packages\\
+    Claude_...\\LocalCache\\Local); a terminal sees the real folder. The two copies drifted apart: installs run from Claude removed files from
+    the real one without writing the new ones back, so setup.cmd in a terminal found pandas half there."""
+    if not is_windows() or os.environ.get("GEO_MAPPING_ENV_HOME"):
+        return []
+    la = os.environ.get("LOCALAPPDATA")
+    return [Path(la) / "AcropolisDocs" / "geo-mapping"] if la else []
+
+
+def remove_old_bases(base: Path, log) -> None:
+    """4.0.2: once the environment in its new place imports, the old one is removed (only going forward), and its AcropolisDocs folder when
+    empty. Run from a terminal it removes the real folder; run from Claude, the app's redirected copy. Best effort: a locked file stays."""
+    for old in old_base_dirs():
+        try:
+            if not old.is_dir() or old.resolve() == base.resolve():
+                continue
+        except OSError:
+            continue
+        shutil.rmtree(old, ignore_errors=True)
+        log(f"Removed the old environment folder {old}" if not old.exists() else
+            f"WARN the old environment folder {old} could not be removed completely (a file is in use); delete it with Claude closed.")
+        try:
+            old.parent.rmdir()
+        except OSError:
+            pass
 
 
 def venv_python(base: Path) -> Path:
@@ -441,8 +470,9 @@ def setup(root: Path, base: Path, *, full: bool = False, repair: bool = False, p
     p = run([str(venvpy), "-c", IMPORTS], capture_output=True, text=True, timeout=300, env=env)
     if p.returncode != 0:
         log.quiet((p.stdout or "") + (p.stderr or ""))
-        raise SetupFail("IMPORT", FIXES["IMPORT"].format(venvpy=venvpy), last_error((p.stderr or "") + (p.stdout or "")))
+        raise SetupFail("IMPORT", FIXES["IMPORT"].format(repair=repair_command(root)), last_error((p.stderr or "") + (p.stdout or "")))
     shutil.copyfile(HERE / "requirements.txt", stamp)
+    remove_old_bases(base, log)
 
     if full:
         log("Installing the full map-building set (only needed to build maps in this computer's own Python; in Cowork maps are built in "

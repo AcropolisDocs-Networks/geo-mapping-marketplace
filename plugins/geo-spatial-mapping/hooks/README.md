@@ -29,7 +29,7 @@ None of the hooks reaches the network. If a hook cannot read what it needs it le
 **The command form (1.17.3).** Each command is
 
 ```
-GMAP_HOOK_PY="${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe"; [ -f "$GMAP_HOOK_PY" ] || GMAP_HOOK_PY=python3; "$GMAP_HOOK_PY" -c "<a short program>" "${CLAUDE_PLUGIN_ROOT}/hooks/<script>.py"
+GMAP_HOOK_PY="${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe"; [ -f "$GMAP_HOOK_PY" ] || GMAP_HOOK_PY=python3; "$GMAP_HOOK_PY" -c "<a short program>" "${CLAUDE_PLUGIN_ROOT}/hooks/<script>.py"
 ```
 
 The first part picks the interpreter: on Windows the plugin's private environment (the one `mcp/setup.cmd` builds), because `python3`

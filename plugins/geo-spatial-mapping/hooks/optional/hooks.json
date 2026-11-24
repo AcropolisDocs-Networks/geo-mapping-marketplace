@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.py\"",
+            "command": "GMAP_HOOK_PY=\"${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.py\"",
             "timeout": 60
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "command": "GMAP_HOOK_PY=\"${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
             "timeout": 10
           }
         ]
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
+            "command": "GMAP_HOOK_PY=\"${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/map_timing.py\"",
             "timeout": 10
           }
         ]
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "GMAP_HOOK_PY=\"${LOCALAPPDATA:-}/AcropolisDocs/geo-mapping/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"",
+            "command": "GMAP_HOOK_PY=\"${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe\"; [ -f \"$GMAP_HOOK_PY\" ] || GMAP_HOOK_PY=python3; \"$GMAP_HOOK_PY\" -c \"import sys;sys.path[:]=[p for p in sys.path if p];import os,runpy;p=sys.argv[1];os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\" \"${CLAUDE_PLUGIN_ROOT}/hooks/credentials_reminder.py\"",
             "timeout": 10
           }
         ]
