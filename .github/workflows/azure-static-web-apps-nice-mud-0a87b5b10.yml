@@ -1,5 +1,10 @@
 name: Azure Static Web Apps CI/CD
 
+# Publishes the plugin's overview page (plugins/geo-spatial-mapping/docs/geo-spatial-mapping.html) to Azure Static Web Apps.
+# Static Web Apps needs an index.html at the root of what it uploads, and the plugin ships its page under its own name, so the job stages
+# a _site folder with the page as index.html (and under its own name, so both links work). The plugin package itself is left as built:
+# each release replaces plugins/geo-spatial-mapping/ wholesale, so a file added there by hand would be removed by the next release.
+
 on:
   push:
     branches:
@@ -15,10 +20,18 @@ jobs:
     runs-on: ubuntu-latest
     name: Build and Deploy Job
     steps:
-      - uses: actions/checkout@v3
+      # v6 runs on Node 24 (v3 targeted Node 20, which the runners no longer support)
+      - uses: actions/checkout@v6
         with:
-          submodules: true
           lfs: false
+      - name: Stage the overview page as the site
+        run: |
+          page=plugins/geo-spatial-mapping/docs/geo-spatial-mapping.html
+          test -s "$page" || { echo "::error::$page is missing or empty"; exit 1; }
+          mkdir -p _site
+          cp "$page" _site/index.html
+          cp "$page" _site/geo-spatial-mapping.html
+          ls -l _site
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -28,9 +41,10 @@ jobs:
           action: "upload"
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
-          app_location: "plugins/geo-spatial-mapping/docs" # App source code path
-          api_location: "" # Api source code path - optional
-          output_location: "/" # Built app content directory - optional
+          app_location: "_site" # the staged page, already final
+          api_location: "" # no API
+          output_location: "" # nothing is built; the app folder is uploaded as it is
+          skip_app_build: true # a single static page: no Oryx build (it found no platform and logged an error)
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:
