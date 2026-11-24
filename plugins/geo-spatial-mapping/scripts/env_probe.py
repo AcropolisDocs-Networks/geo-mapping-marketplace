@@ -8,8 +8,8 @@
 Writes env.json into the working directory. The device bridge and web tools are properties of the
 model's tool list, not of the shell, so the calling skill passes them in.
 
-Single-edition guard (spec 11.5): lists sibling plugin DIRECTORY NAMES that match geo-mapping-*.
-No file inside a sibling is opened. If another edition is present the exit code is 2.
+Single-edition guard (spec 11.5): lists sibling plugin DIRECTORY NAMES that match geo-spatial-mapping*.
+Only a copy's plugin.json is read. If another edition is present the exit code is 2.
 """
 from __future__ import annotations
 
@@ -151,7 +151,7 @@ def _in_plugin_data(p: Path) -> bool:
 
 
 def is_plugin_copy(d: Path) -> bool:
-    """1.21.0 (Day 18 issue 1): a geo-mapping-* folder counts as an installed edition only when it holds the plugin's code: scripts/gmap_common.py
+    """1.21.0 (Day 18 issue 1): a geo-spatial-mapping* folder counts as an installed copy only when it holds the plugin's code: scripts/gmap_common.py
     in the folder itself or one level down (a cache's <name>/<version>/ layout). A data, output or working folder named after the plugin is not one."""
     if _in_plugin_data(d):
         return False
@@ -176,25 +176,50 @@ def manifest_name(d: Path) -> str | None:
         try:
             if f.is_file() and f.stat().st_size < 65536:
                 name = json.loads(f.read_text(encoding="utf-8")).get("name")
-                if isinstance(name, str) and gc.is_edition_name(name):
-                    return name
+                if isinstance(name, str) and name:
+                    return name                 # 4.0.1: whatever it says; installed_editions skips a copy of another plugin
         except (OSError, ValueError, AttributeError):
             continue
     return None
 
 
+def host_stale_dirs(d: Path) -> set[str]:
+    """4.0.1: the folders a Cowork session's synced plugin folder lists as stale in its own manifest.json (`staleDirs`): copies of plugins
+    that were removed or replaced, which the host leaves on disk until the session ends. After the 4.0.0 rename the old
+    geo-mapping-acropolisdocs~g2 stayed there, and the single-copy guard stopped every map build as if both were installed."""
+    f = d / "manifest.json"
+    try:
+        if not f.is_file() or f.stat().st_size > 1_000_000:
+            return set()
+        data = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    stale = {str(x) for x in (data.get("staleDirs") or []) if isinstance(x, str)}
+    live = {str(p.get("name")) for p in (data.get("plugins") or []) if isinstance(p, dict) and p.get("name")}
+    if live:                                   # a plugin folder the host lists as installed is never treated as stale
+        stale -= live
+    return stale
+
+
 def installed_editions(own: str) -> list[str]:
-    """Editions of geo-mapping-* directories next to this plugin: the name in each copy's own manifest (1.22.0), or the folder's name without
+    """Copies of this plugin (geo-spatial-mapping* folders) next to it: the name in each copy's own manifest (1.22.0), or the folder's name without
     a version where a copy has no manifest. Only that one small file is read. 1.21.0 (Day 18 issue 1): the plugins' data folders and folders without the plugin's code are
     skipped (the synced data folder geo-spatial-mapping-synced stopped every map skill in a cloud session)."""
     names = {own}
     for d in scan_dirs():
-        if _in_plugin_data(d):
-            continue
+        if _in_plugin_data(d) or ".trash" in d.parts:
+            continue                                # 4.0.1: the host's .trash holds removed plugins (the old name sat there too)
+        stale = host_stale_dirs(d)
         try:
             for child in d.iterdir():
+                if child.name in stale:
+                    continue                    # 4.0.1: a copy the host itself marks stale (left on disk after a removal) is not installed
                 if gc.is_edition_name(child.name) and child.is_dir() and is_plugin_copy(child):
-                    names.add(manifest_name(child) or edition_of(child.name))      # 1.22.0: the manifest's name first, the folder's as the fallback
+                    name = manifest_name(child) or edition_of(child.name)      # 1.22.0: the manifest's name first, the folder's as the fallback
+                    if gc.is_edition_name(name):                               # 4.0.1: a folder whose manifest names another plugin is not a copy
+                        names.add(name)
         except OSError:
             continue
     return sorted(names)
@@ -420,19 +445,12 @@ def main(argv=None) -> int:
     editions = installed_editions(own)
     others = [e for e in editions if e != own]
     if others:
-        prev = [o for o in others if edition_of(o) in gc.PREVIOUS_NAMES]
-        if prev:                                   # 4.0.0: the plugin was renamed; the old one left installed has every skill and tool again
-            print(f"{', '.join(prev)} is this plugin's previous name and is still installed beside {own}. Remove {', '.join(prev)} "
-                  "(Settings, Plugins in the Claude app; or /plugin uninstall), then restart Claude. Your keys, sources, brand and default "
-                  "brand are kept in your own folder and are not affected.", file=sys.stderr)
-        else:
-            print(f"Two geo-mapping editions are installed: {own} and {', '.join(others)}. "
-                  f"Only one may be installed at a time; uninstall one and try again.", file=sys.stderr)
+        print(f"Two copies of this plugin are installed: {own} and {', '.join(others)}. "
+              f"Only one may be installed at a time; uninstall one and try again.", file=sys.stderr)
         if not a.no_write:
             try:
                 wd = gc.workdir(create=True)
-                guard = {"id": "MAP-BRAND-012", "severity": "BLOCK", "message": (f"{', '.join(prev)} is this plugin's previous name: remove it, then restart Claude"
-                         if prev else f"two geo-mapping editions are installed ({', '.join(editions)}); uninstall one")}
+                guard = {"id": "MAP-BRAND-012", "severity": "BLOCK", "message": f"two copies of this plugin are installed ({', '.join(editions)}); uninstall one"}
                 (wd / "env.json").write_text(json.dumps({"single_edition_ok": False, "editions_installed": editions, "findings": [guard]}, indent=2), encoding="utf-8")
             except OSError:
                 pass

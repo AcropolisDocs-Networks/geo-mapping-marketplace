@@ -44,7 +44,7 @@ st.STICKY = True      # 2.4.0 (I-20): in the server, a work folder one call name
 
 from mcp.server.mcpserver import Context, MCPServer  # noqa: E402
 
-SERVER_NAME = "geo-mapping-ogc"
+SERVER_NAME = "geo-spatial-mapping-ogc"     # 4.0.1: the serverInfo name matches .mcp.json and the stand-in
 # 1.8.0: what ten tools used to repeat in their own descriptions is said once here (about 6,000 characters less in every session's tool list)
 INSTRUCTIONS = (
     "Notes for every tool of this server.\n"

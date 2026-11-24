@@ -8,7 +8,7 @@
                "description_vars", "mcp_server_name"],
   "properties": {
     "profile": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},
-    "plugin_name": {"type": "string", "pattern": "^geo-(spatial-mapping|mapping-[a-z][a-z0-9]*)$"},
+    "plugin_name": {"type": "string", "pattern": "^geo-spatial-mapping(-[a-z][a-z0-9]*)?$"},
     "distribution_filename": {"type": "string", "pattern": "^geo-(spatial-mapping|mapping-[a-z0-9]+)_v\\{version\\}\\.plugin$"},
     "default_content_brand": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},
     "house_brand": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},

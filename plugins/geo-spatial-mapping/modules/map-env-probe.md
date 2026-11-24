@@ -22,7 +22,8 @@ export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-buil
 # install lines too (Day 19). The plugin's folder can move when it updates; find it in each command (the root finder above), never pin it.
 ```
 
-- **Single-edition guard.** The script lists sibling plugin directory NAMES that match `geo-mapping-*`. If another
+- **Single-edition guard.** The script lists sibling plugin directory NAMES that match `geo-spatial-mapping*` (4.0.1: older names are
+  not looked for). If another
   edition is present it exits 2 with one line naming both; every map skill then stops. Two versions of one edition (a folder or package
   named `..._v1.12.0`) are one edition, not two (1.13.0).
 - **A newer copy.** When a folder or `.plugin` package of this edition with a higher version sits beside the plugin, in the working folder or

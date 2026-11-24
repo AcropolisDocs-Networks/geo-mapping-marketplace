@@ -9,8 +9,7 @@ description: >
 # map-doctor
 
 Reports what geo-spatial-mapping can do here. HARD dependencies block maps; SOFT ones give a quietly worse result.
-It also reports the single-edition check: only one copy of this plugin may be installed (4.0.0: `geo-mapping-acropolisdocs` is its previous
-name; installed beside it, it must be removed).
+It also reports the single-edition check: only one copy of this plugin may be installed.
 
 ```bash
 GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"

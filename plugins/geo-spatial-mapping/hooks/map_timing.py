@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """map_timing: measured start, end and failure of the map plugin's own calls, for map-trace (1.17.2).
 
-A hook (Claude Cowork and Claude Code) on PreToolUse, PostToolUse and PostToolUseFailure, with the matcher `Bash|PowerShell|mcp__.*device_bash|mcp__.*geo-(spatial-)?mapping.*`
+A hook (Claude Cowork and Claude Code) on PreToolUse, PostToolUse and PostToolUseFailure, with the matcher `Bash|PowerShell|mcp__.*device_bash|mcp__.*geo-spatial-mapping.*`
 (the shells, the device shell on a linked computer, and this plugin's map server). 1.17.3: PowerShell too, the primary shell of Claude Code
 on Windows; both shells' command lines are read by scripts/shell_calls.py, which map-trace shares. A matcher selects tools, not files, so the hook scopes
 itself: it records a call only when the command runs one of this plugin's scripts or lints with Python, or the tool is this plugin's map

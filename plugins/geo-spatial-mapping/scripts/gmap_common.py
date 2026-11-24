@@ -37,15 +37,12 @@ EXIT_BRAND_OUTSIDE_BUILD = 6
 DOM_PREFIX = "gmap"
 WORKDIR_NAME = ".geo-mapping"
 FONT_FAMILY = "Inter"
-EDITION_GLOB = "geo-*mapping*"        # 4.0.0: geo-spatial-mapping, and the editions before it (geo-mapping-<brand>)
-PREVIOUS_NAMES = ("geo-mapping-acropolisdocs",)     # 4.0.0: the plugin's name until 3.7.0; installed beside it, it must be removed
+EDITION_GLOB = "geo-spatial-mapping*"   # 4.0.1: this plugin's name only; the names before 4.0.0 are not looked for
 
 
 def is_edition_name(name: str) -> bool:
-    """A plugin folder or manifest name that is this plugin, under its name or a name it had before (4.0.0)."""
-    import fnmatch
-    n = str(name or "")
-    return n.startswith("geo-spatial-mapping") or fnmatch.fnmatch(n, "geo-mapping-*")
+    """A plugin folder or manifest name that is this plugin (4.0.1: geo-spatial-mapping only; a copy left under an older name is ignored)."""
+    return str(name or "").startswith("geo-spatial-mapping")
 
 
 def plugin_root() -> Path:

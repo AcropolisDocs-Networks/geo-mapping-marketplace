@@ -1,4 +1,4 @@
-# geo-spatial-mapping 4.0.0
+# geo-spatial-mapping 4.0.1
 
 Cartographic maps from a request or your own geodata: print maps (SVG, PDF, PNG), interactive web maps (one self-contained HTML page), data
 conversion and analysis, public data services, travel-time areas and terrain, each checked before it is handed over and each with its sources.
@@ -10,8 +10,8 @@ formats, the API-key setup and the **Customization** tab (your own brand, style 
 
 Install it in Claude Cowork: **Customize → Plugins → Add → Add marketplace**, enter `AcropolisDocs-Networks/geo-mapping-marketplace` and
 install the plugin from **Discover** (updates: **Check for updates** on the marketplace), or upload the `.plugin` file there. It is saved to
-your Claude account, so chat and Claude Code have it too. Install one `geo-mapping-*` plugin only: if an older edition is still
-installed beside this one, every map skill stops and names both, so remove the old one.
+your Claude account, so chat and Claude Code have it too. Install one copy only: if a second copy of
+`geo-spatial-mapping` is installed beside this one, every map skill stops and names both.
 
 Nothing has to be installed by hand. The first time the plugin starts, its data server builds a private Python environment and installs the
 map packages, the optional extras and Chromium (for web-map checks and flythroughs) by itself; restart the plugin when it says Done. Python

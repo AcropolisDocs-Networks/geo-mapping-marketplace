@@ -121,9 +121,9 @@ class TraceError(Exception):
 # ---------------------------------------------------------------------------------------------------------------- the plugin's own names
 def plugin_name() -> str:
     try:
-        return gc.build_manifest().get("plugin_name") or "geo-mapping"
+        return gc.build_manifest().get("plugin_name") or "geo-spatial-mapping"
     except Exception:  # noqa: BLE001
-        return "geo-mapping"
+        return "geo-spatial-mapping"
 
 
 def _category(desc: str) -> str:
@@ -448,12 +448,12 @@ def classify(call: dict, inv: dict, pname: str, window: str | None, written: dic
     if tool == "Skill":
         sk = str(inp.get("skill") or "")
         base, _, short = sk.rpartition(":")
-        if (base.startswith(("geo-mapping-", "geo-spatial-mapping")) or base == pname) or (not base and short in inv["skills"]):
+        if (base.startswith("geo-spatial-mapping") or base == pname) or (not base and short in inv["skills"]):
             ev.update(lane=short or sk, basis="declared", opens=short or sk)
         else:
             ev["closes"] = True
         return ev
-    if ("geo-mapping" in tool or "geo-spatial-mapping" in tool) and "__" in tool:
+    if "geo-spatial-mapping" in tool and "__" in tool:
         ev.update(lane="ogc-server", basis="server", mcp_tool=tool.rsplit("__", 1)[-1])
         ev["key"] = hashlib.sha1((tool + json.dumps(inp, sort_keys=True)).encode()).hexdigest()[:12]
         ev["target"] = (ev["mcp_tool"], "-")
