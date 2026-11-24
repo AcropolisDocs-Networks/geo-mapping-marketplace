@@ -4,6 +4,8 @@
     region: {admin: US-WA}                         an ISO 3166-1 country (KE) or ISO 3166-2 admin-1 area (US-WA, DE-BY, CA-BC)
     region: {admin: [US-WA, US-OR, CA-BC]}          several, across borders (G-04)
     region: {admin2: {in: US-ID, names: [Bonner, Boundary]}}    admin-2 areas inside one admin-1 area
+    region: "Maricopa County, Arizona"   "Orleans Parish, LA"   "04013"     4.0.3: a US county by its plain name (with its state when
+                                                    the name is in more than one) or its 5-digit FIPS code
     region: {place: "Idaho Panhandle"}              a named region from the gazetteer (data/regions.yaml, and the person's own)
     region: {file: area.gpkg}  {bbox: [W, S, E, N]}  {h3: [cells]}
     any of them with buffer_km: 10
@@ -228,6 +230,33 @@ def _finer_us_counties():
     return _basemap(US_COUNTIES), "US Census cartographic boundary counties (bundled)"
 
 
+COUNTY_WORDS = ("city and borough", "census area", "municipality", "borough", "parish", "county", "city")
+
+
+def _cnorm(s: str) -> str:
+    """4.0.3: a county name compared loosely: case, accents and punctuation aside, and Saint as St (St. Louis County, Saint Louis County)."""
+    return re.sub(r"\bsaint\b", "st", _norm(s))
+
+
+def _bare(s: str) -> str:
+    """A county name without its county word (Maricopa County -> maricopa, Orleans Parish -> orleans)."""
+    n = _cnorm(s)
+    for w in COUNTY_WORDS:
+        if n.endswith(" " + w):
+            return n[: -len(w) - 1].strip()
+    return n
+
+
+def _county_rows(pool, name: str):
+    """4.0.3: the rows of one county name: by its full Census name first (NAMELSAD: Baltimore County, not also Baltimore city), else by the
+    name without its county word."""
+    if "NAMELSAD" in pool.columns:
+        full = pool[pool["NAMELSAD"].map(_cnorm) == _cnorm(name)]
+        if len(full):
+            return full
+    return pool[pool["NAME"].map(_bare) == _bare(name)]
+
+
 def admin2_shape(block: dict, base: Path | None = None, fetch=None):
     parent = str(block.get("in") or "").upper()
     names = [str(n) for n in block.get("names") or []]
@@ -236,11 +265,13 @@ def admin2_shape(block: dict, base: Path | None = None, fetch=None):
     if parent.startswith("US-"):
         cn, src_name = _finer_us_counties()
         pool = cn[cn["STUSPS"] == parent[3:]]
-        key = {_norm(n).replace(" county", ""): n for n in pool["NAME"]}
-        missing = [n for n in names if _norm(n).replace(" county", "") not in key]
+        rows = {n: _county_rows(pool, n) for n in names}
+        missing = [n for n, r in rows.items() if not len(r)]
         if missing:
             raise RegionError(f"region admin2: no county {', '.join(missing)} in {parent} (the Census names are: {', '.join(sorted(pool['NAME'])[:12])}, ...)")
-        hit = pool[pool["NAME"].isin([key[_norm(n).replace(' county', '')] for n in names])]
+        import pandas as pd
+        hit = pd.concat(list(rows.values()))
+        hit = hit[~hit.index.duplicated()]
         return hit.to_crs("EPSG:4326").geometry.union_all(), src_name, hit
     if fetch is None:
         raise RegionError(f"region admin2 outside the United States ({parent}) reads geoBoundaries ADM2: fetch it with "
@@ -389,28 +420,151 @@ def town_place(text: str, *, fetch: bool = True) -> dict | None:
     return None
 
 
+# ---------------------------------------------------------------------------------------------------------------- 4.0.3: a US county by name
+FIPS = re.compile(r"^\d{5}$")
+COUNTRY_WORDS = {"us", "usa", "u s", "u s a", "united states", "united states of america"}
+
+
+def us_state_code(text: str) -> str | None:
+    """'AZ', 'US-AZ' or 'Arizona' -> 'AZ'; None when it is not a US state (or DC, PR)."""
+    t = str(text or "").strip()
+    u = t.upper()
+    if u.startswith("US-"):
+        u = u[3:]
+    if u in US_POSTAL:
+        return u
+    st = _basemap(US_STATES)
+    hit = st[st["NAME"].map(_norm) == _norm(t)]
+    return str(hit["STUSPS"].iloc[0]) if len(hit) else None
+
+
+def county_place(text: str, *, need_word: bool = True) -> dict | None:
+    """4.0.3: a US county named in plain words -> {in: US-XX, names: [Census name], label: "Maricopa County, Arizona"}, else None.
+
+    "Maricopa County", "Maricopa County, Arizona", "Maricopa County, AZ, USA", "Orleans Parish, LA", "Juneau City and Borough", "04013" (FIPS).
+    With need_word (the default) the name must end in a county word (County, Parish, Borough, Census Area, Municipality, or an
+    independent city as the Census names it: "Baltimore city"); without it ("Maricopa, AZ") it is the fallback after a town of that name was
+    not found. A name in several states without its state raises RegionError naming them."""
+    t = str(text or "").strip()
+    cn, _src = _finer_us_counties()
+    if FIPS.match(t):
+        hit = cn[cn["GEOID"].astype(str) == t]
+        if not len(hit):
+            return None
+        row = hit.iloc[0]
+    else:
+        parts = [p.strip() for p in t.split(",") if p.strip()]
+        while len(parts) > 1 and _norm(parts[-1]) in COUNTRY_WORDS:
+            parts.pop()
+        if not parts or len(parts) > 2:
+            return None
+        name = parts[0]
+        if need_word and not any(_cnorm(name).endswith(" " + w) for w in COUNTY_WORDS):
+            return None
+        pool = cn
+        if len(parts) == 2:
+            code = us_state_code(parts[1])
+            if code is None:
+                return None
+            pool = cn[cn["STUSPS"] == code]
+        hit = _county_rows(pool, name) if need_word else pool[pool["NAME"].map(_bare) == _bare(name)]
+        if need_word and _cnorm(name).endswith(" city") and "NAMELSAD" in pool.columns:
+            hit = pool[pool["NAMELSAD"].map(_cnorm) == _cnorm(name)]       # "Carson City" is a town unless the Census names it so
+        if not len(hit):
+            return None
+        if hit["STUSPS"].nunique() > 1:
+            states = sorted(hit["STUSPS"].astype(str).unique())
+            raise RegionError(f"'{t}' is a county in {len(states)} states ({', '.join(states[:12])}{', ...' if len(states) > 12 else ''}): "
+                              f"name the state, as in \"{parts[0]}, {states[0]}\"")
+        if len(hit) > 1:
+            return None                                  # Baltimore (county and city) without the county word: not one county
+        row = hit.iloc[0]
+    st = _basemap(US_STATES)
+    sn = st[st["STUSPS"] == str(row["STUSPS"])]["NAME"]
+    full = str(row.get("NAMELSAD") or row["NAME"])
+    return {"in": f"US-{row['STUSPS']}", "names": [full], "label": f"{full}, {sn.iloc[0] if len(sn) else row['STUSPS']}",
+            "geoid": str(row.get("GEOID") or "")}
+
+
+def admin_by_name(text: str) -> str | None:
+    """4.0.3: a country, US state or other admin-1 area named in plain words -> its ISO code ("Arizona" -> US-AZ, "Kenya" -> KE, "Bavaria" ->
+    DE-BY, "British Columbia" -> CA-BC), else None. 4.0.0 sent such names to the town lookup: "Arizona" became a town in Honduras. A name
+    shared by areas in different places ("Georgia": the country and the US state) raises RegionError naming each code; a country after a comma
+    picks one ("Georgia, US", "Punjab, PK")."""
+    parts = [p.strip() for p in str(text or "").split(",") if p.strip()]
+    if not parts or len(parts) > 2:
+        return None
+    want = _norm(parts[0])
+    if want in COUNTRY_WORDS and len(parts) == 1:
+        return "US"
+    only = None
+    if len(parts) == 2:
+        q = parts[1]
+        only = "US" if _norm(q) in COUNTRY_WORDS else (q.upper() if re.fullmatch(r"[A-Za-z]{2}", q) else None)
+        if only is None:
+            return None
+    codes: dict[str, str] = {}
+    st = _basemap(US_STATES)
+    for _i, row in st[st["NAME"].map(_norm) == want].iterrows():
+        codes[f"US-{row['STUSPS']}"] = f"{row['NAME']} (US state)"
+    a1 = _basemap(ADMIN1)
+    m = (a1["name"].map(_norm) == want) | (a1["name_en"].map(_norm) == want)
+    for _i, row in a1[m].iterrows():
+        c = str(row["iso_3166_2"] or "").upper()
+        if c and not c.startswith("US-") and CODE.match(c):
+            codes.setdefault(c, f"{row['name']} ({row['admin']})")
+    cs = _basemap(COUNTRIES)
+    for _i, row in cs[cs["NAME"].map(_norm) == want].iterrows():
+        c = str(row["ISO_A2_EH"] or "").upper()
+        if re.fullmatch(r"[A-Z]{2}", c):
+            codes.setdefault(c, f"{row['NAME']} (country)")
+    if only:
+        codes = {c: d for c, d in codes.items() if c.split("-")[0] == only}
+    if not codes:
+        return None
+    if len(codes) > 1:
+        opts = "; ".join(f"{d}: {c}" for c, d in sorted(codes.items()))
+        raise RegionError(f"'{text}' names more than one area ({opts}): give the code, as in admin: {sorted(codes)[0]}, or add the "
+                          f"country (\"{parts[0]}, {sorted(codes)[0].split('-')[0]}\")")
+    return next(iter(codes))
+
+
 # ---------------------------------------------------------------------------------------------------------------- resolving
 def resolve(block, base: Path | None = None, *, fetch_admin2=None) -> Region:
     """One region block (or a string: a place name or an admin code) -> Region."""
     if isinstance(block, str):
         block = {"admin": block} if CODE.match(block.strip().upper()) else {"place": block}
+    if isinstance(block, dict) and "admin" in block and isinstance(block["admin"], str) and FIPS.match(block["admin"].strip()):
+        block = {**{k: v for k, v in block.items() if k != "admin"}, "place": block["admin"].strip()}     # 4.0.3: a county FIPS code
     if not isinstance(block, dict) or not any(k in block for k in KEYS):
         raise RegionError(f"region needs one of {', '.join(KEYS)}")
     from shapely.ops import unary_union
     _FALLBACK.clear()
     geoms, sources, notes, members = [], [], [], []
     name, definition = None, None
+    county = None
+    if "place" in block and find_place(str(block["place"]), base) is None:
+        code = admin_by_name(str(block["place"]))           # 4.0.3: "Arizona", "Kenya", "Bavaria": the area, not a town of that name
+        if code is not None:
+            block = {**{k: v for k, v in block.items() if k != "place"}, "admin": code}
     if "place" in block:
         r = find_place(str(block["place"]), base)
         town = None
         if r is None:
+            county = county_place(str(block["place"]))     # 4.0.3: "Maricopa County, Arizona", "Orleans Parish", "04013"
+        if r is None and county is None:
             town = town_place(str(block["place"]))         # 4.0.0 (GSC M-3): a town or city by name (GeoNames), framed with buffer_km
-        if r is None and town is None:
+        if r is None and county is None and town is None and "," in str(block["place"]):
+            county = county_place(str(block["place"]), need_word=False)   # "Yavapai, AZ" when no town has that name (with its state only)
+        if county is not None:
+            name, definition = county["label"], f"{county['names'][0]} ({county['in']}, US Census counties)"
+            block = {**{k: v for k, v in block.items() if k != "place"}, "admin2": {"in": county["in"], "names": county["names"]}}
+        elif r is None and town is None:
             near = [g["name"] for g in gazetteer(base) if _norm(block["place"])[:4] in _norm(g["name"])][:5]
             raise RegionError(f"no named region '{block['place']}' in the gazetteer, and no single town of that name in GeoNames"
                               + (f" (did you mean {', '.join(near)}?)" if near else "")
-                              + "; add it to .geo-mapping/regions.yaml, give admin: codes, or name the town with its state or country "
-                                "(\"Bellevue, US-WA\")")
+                              + "; add it to .geo-mapping/regions.yaml, give admin: codes, name the town with its state or country "
+                                "(\"Bellevue, US-WA\"), or name a US county with its state (\"Maricopa County, AZ\")")
     if "place" in block and town is not None:
         from shapely.geometry import Point
         geoms.append(Point(town["lon"], town["lat"]))
@@ -453,6 +607,8 @@ def resolve(block, base: Path | None = None, *, fetch_admin2=None) -> Region:
         members += [f"{block['admin2']['in']}:{n}" for n in block["admin2"]["names"]]
         name = name or f"{len(block['admin2']['names'])} areas of {block['admin2']['in']}"
         definition = definition or ", ".join(block["admin2"]["names"])
+        if county is not None:
+            notes.append(f"region '{name}': the county {county['names'][0]} ({county['in']}, FIPS {county['geoid']})")
     if "file" in block:
         import geo_io
         p = Path(str(block["file"]))

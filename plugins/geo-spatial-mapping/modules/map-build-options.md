@@ -80,6 +80,8 @@ cross-section is `elements.section` (1.20.0), drawn from the map's own DEM and s
 - **No shadow under a categorical choropleth** by default (`focus: {lift: true}` asks for it): along every class edge it muddied a flat map.
 - **An area layer with no fill** (`role: polygons`) shows only its edges, and its key is drawn as an outline; MAP-CART-043 names the column
   that would make it a categorical choropleth.
+- **A county, state or country as the region (4.0.3):** `region: "Maricopa County, Arizona"` (or `"Maricopa County"`, `"04013"`) is that
+  county's Census outline; `region: "Arizona"` the state, `"Kenya"` the country. A name in several places asks which.
 - **A town as the region:** `region: {place: "Bellevue, WA", buffer_km: 10}` frames 10 km round a town from GeoNames when the gazetteer has
   no region of that name (a state or country after the comma: `US-WA`, `WA`, `DE`; a name found twice needs it). A place the subtitle or the
   region names is labelled like one the message names.

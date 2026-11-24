@@ -1,4 +1,4 @@
-# geo-spatial-mapping 4.0.2
+# geo-spatial-mapping 4.0.3
 
 Cartographic maps from a request or your own geodata: print maps (SVG, PDF, PNG), interactive web maps (one self-contained HTML page), data
 conversion and analysis, public data services, travel-time areas and terrain, each checked before it is handed over and each with its sources.

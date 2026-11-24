@@ -16,9 +16,16 @@ region: {admin: US-WA}                                  # ISO 3166-2 (US-WA, DE-
 region: {admin: [US-WA, US-OR, US-ID, CA-BC]}           # several, across a border: one area
 region: {place: "Idaho Panhandle"}                      # a named region (data/regions.yaml, or your own)
 region: {admin2: {in: US-ID, names: [Bonner, Boundary]}}  # admin-2 areas inside one admin-1 area
+region: "Maricopa County, Arizona"                      # 4.0.3: a US county by name ("Orleans Parish, LA", "Maricopa County", FIPS "04013")
+region: "Arizona"                                       # 4.0.3: a country, US state or admin-1 area by name ("Kenya", "Bavaria", "Georgia, US")
 region: {file: area.gpkg}  |  {bbox: [W, S, E, N]}  |  {h3: [872830828ffffff]}
 region: {place: Cascadia, buffer_km: 10, name: "Cascadia"}
 ```
+
+A place name is read in this order (4.0.3): a named region from the gazetteer; a country, US state or admin-1 area of that name ("Arizona" is
+the state, not the town in Honduras; "Georgia" alone asks: the country GE or US-GA); a US county ("Maricopa County, AZ"; a county name in
+several states asks for the state); a town from GeoNames, framed 10 km round it ("Phoenix, AZ"); last, with its state after a comma, a county
+named without the word County ("Yavapai, AZ").
 
 ```bash
 GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
