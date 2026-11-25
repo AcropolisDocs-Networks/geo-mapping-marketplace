@@ -18,12 +18,12 @@
     }
   ],
   "source_commit": "db9c126fd98eb810490ff3282fef43b929e77661",
-  "content_digest": "214c97adf28908f1b887caeeee629900111045d8cdbf4576f896643fb28201b6",
+  "content_digest": "95f911ff5c4d8b16b68324e6d4f98393c5fa58687e1c85a946e5e31edf8718c4",
   "file_count": 722,
   "library_digest": "0a32d6c061e870f821e701accd150bf05eec8a8296eddeca158e5429b381f15d",
   "library_version": "2026.11.39",
   "mcp_digest": "e1350f312f1ce0a7dbdcf363f3e60e5fd5a15d9311f68302c292abe0a315c4d3",
-  "built_at_utc": "2026-11-25T03:22:05Z",
+  "built_at_utc": "2026-11-25T03:21:51Z",
   "profile_snapshot": {
     "profile": "acropolisdocs",
     "plugin_name": "geo-spatial-mapping",
