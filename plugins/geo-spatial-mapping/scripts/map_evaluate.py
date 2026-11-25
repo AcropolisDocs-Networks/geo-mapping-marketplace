@@ -451,6 +451,17 @@ def blended_weights(rub: dict, primary: str | None, secondary: str | None) -> di
     return out
 
 
+def outcome_criteria_off(outcome: str | None) -> dict:
+    """5.0.0: the criteria that are not scored for a map with this outcome, from the one applicability table the build and the draft
+    readings also read (data/applicability.yaml). {criterion id: reason}."""
+    try:
+        import yaml
+        doc = yaml.safe_load((HERE.parent / "data" / "applicability.yaml").read_text(encoding="utf-8")) or {}
+        return dict(((doc.get("outcomes") or {}).get(str(outcome)) or {}).get("criteria_off") or {})
+    except Exception:  # noqa: BLE001 - no table: every criterion the other rules leave on is scored
+        return {}
+
+
 def applicability(rub: dict, card: dict, frames: int) -> dict:
     """Pass 0 (spec 7.1): which criteria are scored and how much each area counts, fixed before any model sees the picture."""
     w = blended_weights(rub, card.get("outcome"), card.get("secondary"))
@@ -465,8 +476,11 @@ def applicability(rub: dict, card: dict, frames: int) -> dict:
 
     if den and den >= 20_000_000:
         off("ORIENT-2", f"scale about 1:{den:,}: world or continental")
-    if (card.get("has_legend") is False and card.get("data_layers", 0) <= 1) or prim == "evoke":
-        off("READ-2", "no legend and a single data layer" if prim != "evoke" else "an evoke map")
+    by_outcome = outcome_criteria_off(prim)             # 5.0.0: what the map is for decides these, from one table (not from lines here)
+    for cid, why in by_outcome.items():
+        off(cid, f"a map to {prim}: {why}" if prim not in ("evoke",) else f"an evoke map: {why}")
+    if card.get("has_legend") is False and card.get("data_layers", 0) <= 1 and "READ-2" not in by_outcome:
+        off("READ-2", "no legend and a single data layer")
     if den and den <= 500_000:
         off("HON-3", f"scale about 1:{den:,}: city or metro, distortion negligible")
     if card.get("branded") is False:
@@ -475,10 +489,8 @@ def applicability(rub: dict, card: dict, frames: int) -> dict:
         off("MEDIUM-3", "a single still")
     if medium not in ("social", "slide", "video"):
         off("READ-5", f"a {medium} output")
-    if prim == "evoke" or family == "terrain":
-        off("HIER-2", "an evoke map" if prim == "evoke" else "a terrain-only map")
-    if prim in ("locate", "inventory"):
-        off("INFO-1", f"a {prim} map")
+    if family == "terrain" and "HIER-2" not in by_outcome:
+        off("HIER-2", "a terrain-only map")
     crit = criteria(rub)
     na_ids = {x["id"] for x in na}
     scored = [cid for cid, c in crit.items() if w.get(c["area"], 0) > 0 and cid not in na_ids]

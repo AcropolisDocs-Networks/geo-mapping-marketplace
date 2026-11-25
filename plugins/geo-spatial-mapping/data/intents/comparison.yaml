@@ -1,0 +1,13 @@
+# An intent (5.0.0): a named kind of map. One word in the brief in place of a handful of switches, so the switches that belong together
+# move together. `sets` are the MapSpec keys the intent sets (a default changed by an intent is explained); `needs` and `enrich` are data
+# themes (library/themes.yaml); `outcome` is what the map is for unless the brief says otherwise; `checks_off` are findings that do not
+# apply to this kind of map; `roles` suggests a layer role by geometry. gmap brief --intent <name> reads this file.
+intent: comparison
+says: Two to six maps on one sheet, to be read against each other.
+outcome: compare
+sets: {}
+needs: []
+enrich: []
+roles: {}
+checks_off: []
+note: 'A SheetSpec. Panels that share a frame share a projection; with shared.extent: each every panel keeps its own.'

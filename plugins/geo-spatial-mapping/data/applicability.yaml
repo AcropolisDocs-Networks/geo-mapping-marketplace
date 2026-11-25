@@ -1,0 +1,20 @@
+# What applies to which map (5.0.0). Not every check and not every measure fits every map: an inventory is not judged on its story, a map
+# whose look is the point is not asked for a legend or for detailed ground. One table, keyed by what the map is for (`outcome`, in the
+# MapSpec) and read by the build (which findings are left out), by the draft readings (which are shown) and by the map evaluation (which
+# criteria are scored). An intent adds its own `checks_off` (data/intents/).
+#
+#   checks_off     finding ids that do not apply; the build leaves them out and says how many
+#   readings_off   draft readings that do not apply
+#   criteria_off   criteria of the picture rubric that are not scored, with the reason
+applicability_version: 1
+
+outcomes:
+  explain:   {checks_off: [], readings_off: [], criteria_off: {}}
+  compare:   {checks_off: [], readings_off: [], criteria_off: {}}
+  locate:    {checks_off: [MAP-STORY-006], readings_off: [], criteria_off: {INFO-1: "geography is the point of a map to locate things"}}
+  inventory: {checks_off: [MAP-STORY-006, MAP-STORY-001, MAP-STORY-002], readings_off: [first_look], criteria_off: {INFO-1: "geography is the point of an inventory"}}
+  monitor:   {checks_off: [], readings_off: [], criteria_off: {}}
+  explore:   {checks_off: [MAP-STORY-001], readings_off: [thumbnail], criteria_off: {}}
+  sequence:  {checks_off: [], readings_off: [], criteria_off: {}}
+  evoke:     {checks_off: [MAP-CART-005, MAP-STORY-006, MAP-STORY-027], readings_off: [legend, smallest_text],
+              criteria_off: {READ-2: "a map whose look is the point carries no key", HIER-2: "the ground is the subject, or there is none"}}

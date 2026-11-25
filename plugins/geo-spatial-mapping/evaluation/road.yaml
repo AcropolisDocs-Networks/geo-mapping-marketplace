@@ -3,7 +3,7 @@
 # It stands beside the picture rubric (rubric.yaml) and is never blended with it: a picture can score well on a road that broke the rules,
 # and a clean road can end at a map that says nothing. Printed by the map trace for every session that made a map, and written to the
 # trackers beside the plugin's version. Versioned like the picture rubric: a measure added, removed or redefined is a new major version.
-road_version: "0.1"
+road_version: "0.2"
 status: experimental
 
 measures:
@@ -31,6 +31,22 @@ measures:
     name: Steps done outside the plugin
     how: "the session's own programs that read, shaped or fetched map data (each is a candidate op)"
     target: null
+  maps_on_the_road:
+    name: Maps made on the road
+    how: "finished maps a gmap job built (its record sits beside the output folder) / all finished maps; the rest are unmanaged builds"
+    target: "= 1.0"
+  sources_seen:
+    name: Sources in view before one was taken
+    how: "the candidates on the jobs' source sheets, beside the number taken"
+    target: null
+  cold_reads:
+    name: Drafts read cold by a fresh agent
+    how: "jobs whose record holds a cold read / jobs"
+    target: "= 1.0"
+  put_back:
+    name: Defaults put back by the build
+    how: "defaults a job's MapSpec changed with no ask and no intent, which the build drew at their default"
+    target: "= 0"
   result_parsed_by_hand:
     name: Build results read off the console by a script
     how: "session-side failures of a program that read a build's printed result"

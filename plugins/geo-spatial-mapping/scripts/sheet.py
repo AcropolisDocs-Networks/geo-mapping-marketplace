@@ -44,6 +44,7 @@ sys.path.insert(0, str(HERE))
 import gmap_common as gc  # noqa: E402
 import geo_locale as gl  # noqa: E402
 import layout as lo  # noqa: E402
+import policy  # noqa: E402
 
 PANEL_MAX = 6
 CONTACT_MAX = 24
@@ -435,11 +436,14 @@ def compose(sheet: dict, panels: list[dict], tpl: dict, *, contact: bool = False
     lines.append(f"Map produced {gl.plan_date_text(p0, d)}")
     fo = ['<g class="gm-footer">']
     y = ft["y"] + npt * 0.3528 * 1.2
+    # 5.0.0: the logo's side is the standing default's (data/policy.yaml, lower left), the same on a sheet as on one map; the text stands beside it
+    logo_left = bool(logo_svg) and "left" in str(policy.default_of("elements.logo.position") or "lower-left")
+    tx = ft["x"] + (logo_w + 4.0 if logo_left else 0.0)
     for ln in lines:
-        fo.append(sd.text(ft["x"], y, ln, npt, t["label"]))
+        fo.append(sd.text(tx, y, ln, npt, t["label"]))
         y += tm.line_height_mm(npt)
     if logo_svg:
-        fo.append(mr.logo_markup(p0, t["background"], ft["x"] + ft["w"] - logo_w, ft["y"] + 1.0, float(tpl.get("logo_height_mm", 10)))[0])
+        fo.append(mr.logo_markup(p0, t["background"], ft["x"] if logo_left else ft["x"] + ft["w"] - logo_w, ft["y"] + 1.0, float(tpl.get("logo_height_mm", 10)))[0])
     fo.append("</g>")
     out += fo
     title = st.get("text") or sheet["id"]

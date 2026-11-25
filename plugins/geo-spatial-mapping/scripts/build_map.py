@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -169,6 +170,23 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     if unknown:
         raise mp.PlanError(f"formats {', '.join(unknown)} are not map outputs (data packages come with the map-build pipeline); this build writes svg, pdf, png, geopdf, geotiff and html", gc.EXIT_USAGE)
     web = webmap.build_page(spec_path, brand=brand, template=template) if web_fmts else None
+    # 5.0.0: the standing rules act on the loaded MapSpec before it is planned (data/policy.yaml). A named intent's settings are written
+    # where the MapSpec says nothing; the deviations table is taken; and on the road (policy mode enforce) every unexplained deviation is
+    # put back to its default and said. The file is never changed.
+    pol: dict = {"dev": None, "reverted": [], "intent": []}
+    caller_edit = spec_edit
+
+    def spec_edit(spec):                                  # noqa: F811 - wraps the caller's own edit
+        if caller_edit:
+            caller_edit(spec)
+        try:
+            import policy as _policy
+            pol["intent"] = _policy.apply_intent(spec)
+            pol["dev"] = _policy.deviations(spec)
+            pol["applies"] = _policy.applicability(spec)
+            pol["reverted"] = _policy.enforce(spec) if _policy.mode() == "enforce" else []
+        except Exception as ex:  # noqa: BLE001 - the rules never stop a build they cannot read
+            pol["error"] = type(ex).__name__
     if static or web is None:
         # 2.0.0: `spec_edit(spec)` adjusts the loaded MapSpec in memory before it is planned (a story beat: its frame, emphasis and line);
         # the file is never changed, and its folder still resolves the data paths
@@ -197,7 +215,7 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     else:
         plan, rendered = web.plan, web.rendered            # the page's own plan: static scale bar off, bundled basemap
     # write the resolved brand back so a later default change never restyles this map
-    if not plan.spec.get("brand") and spec_edit is None:
+    if not plan.spec.get("brand") and caller_edit is None:       # 5.0.0: the policy's own wrapper is not a caller's edit
         import map_brand
         map_brand.write_spec_brand(Path(spec_path), plan.brand)
     recs = provenance.records(plan) + (web.records if web else [])
@@ -238,6 +256,15 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     result["story"] = story
 
     def finish():
+        for r_ in pol.get("reverted") or []:               # 5.0.0: said once each, never blocking
+            findings.append({"id": "MAP-POL-001", "severity": "INFO", "message": r_["line"], "detail": {"key": r_["key"], "asked_for": r_["value"], "drawn": r_["default"]}})
+        off = (pol.get("applies") or {}).get("checks_off") or set()
+        if off:                                              # 5.0.0: what does not apply to this kind of map is left out, and counted (never a BLOCK)
+            gone = [f for f in findings if f["id"] in off and f.get("severity") != "BLOCK"]
+            if gone:
+                findings[:] = [f for f in findings if f not in gone]
+                result["not_applicable"] = {"count": len(gone), "ids": sorted({f["id"] for f in gone}),
+                                            "why": "outcome " + str(pol["applies"].get("outcome")) + (", intent " + str(pol["applies"]["intent"]) if pol["applies"].get("intent") else "")}
         findings.sort(key=lambda f: (SEV.get(f["severity"], 3), not f.get("degraded"), f["id"]))   # 2.4.0 (T-06): a missing relief leads the warnings
         result["findings"] = findings
         result["degraded"] = list(getattr(plan, "degraded", []) or [])
@@ -246,11 +273,15 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
                              for b in getattr(plan, "basemap", []) or [] if b.get("kind") == "hillshade"
                              and ((b.get("record") or {}).get("terrain") or {}).get("request")]
         result["summary"] = summary_line(result)
-        try:                                                 # 4.2.0: the MapSpec against the standing defaults (data/policy.yaml); a report, never a gate
-            import policy as _policy
-            result["deviations"] = _policy.deviations(plan.spec)
-        except Exception as ex:  # noqa: BLE001 - the table is a report; it never stops a build
-            result["deviations"] = {"line": f"deviations from the defaults: not checked ({type(ex).__name__})", "items": [], "counts": {}}
+        # 4.2.0: the MapSpec against the standing defaults (data/policy.yaml). 5.0.0: taken before the plan, with what was put back
+        dev = pol.get("dev")
+        if dev is None:
+            dev = {"line": f"deviations from the defaults: not checked ({pol.get('error') or 'no MapSpec was planned'})", "items": [], "counts": {}}
+        dev = {**dev, "reverted": pol.get("reverted") or [], "intent_set": pol.get("intent") or []}
+        if dev["reverted"]:
+            dev["line"] = dev["line"] + f"; {len(dev['reverted'])} put back to the default"
+            dev["unexplained_lines"] = [r_["line"] for r_ in dev["reverted"]]
+        result["deviations"] = dev
         gc.ledger_note(outputs=[f for f in result.get("files") or [] if Path(f).is_file()], findings=findings, degraded=result["degraded"])
         result["blocked"] = any(f["severity"] == "BLOCK" for f in findings)
         result["map_text"] = map_text_summary(plan, findings)
@@ -287,6 +318,11 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
             mute_picture()
         result["draft"] = True
         result["dpi"] = pv.DRAFT_DPI
+        if os.environ.get("GMAP_DRAFT_SVG"):               # 5.0.0: a job keeps the draft's SVG beside its record, for the draft's readings (never in the output folder)
+            try:
+                Path(os.environ["GMAP_DRAFT_SVG"]).write_text(rendered.svg, encoding="utf-8")
+            except OSError:
+                pass
         result["files"] = [str(dp)] + ([story["mute_preview"]] if story.get("mute_preview") else [])
         result["notes"] = list(result["notes"]) + ["draft: one picture at 96 dpi; run again without --draft for the SVG, PDF and full-size PNG "
                                                    "(and the reference library checks, which a draft leaves to the full build)"]
@@ -430,7 +466,8 @@ def digest_lines(res: dict, result_file: Path | None = None) -> list[str]:
     if dev.get("line"):
         L.append(dev["line"])
         L += [f"  {x}" for x in (dev.get("unexplained_lines") or [])[:4]]
-    L.append(f"findings: {n['BLOCK']} BLOCK, {n['WARN']} WARN, {n['INFO']} INFO")
+    na = res.get("not_applicable") or {}
+    L.append(f"findings: {n['BLOCK']} BLOCK, {n['WARN']} WARN, {n['INFO']} INFO" + (f"; {na['count']} left out as not applicable ({na['why']})" if na.get("count") else ""))
     shown = [f for f in fs if f.get("severity") in ("BLOCK", "WARN")][:DIGEST_FINDINGS]
     L += [f"  {f.get('id')} {f.get('severity')}: {str(f.get('message') or '')[:200]}" for f in shown]
     L += [str(x) for x in ((res.get("map_text") or {}).get("callout") or [])[:3]]

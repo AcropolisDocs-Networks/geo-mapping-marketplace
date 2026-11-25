@@ -16,6 +16,9 @@ classes and at most 24 maps; say so when the run skipped it (MAP-ATL-010).
 
 ## Flow
 
+**The same road as every map (5.0.0).** Gather the request as `map-create` does: `gmap.py brief` (intent `comparison` for a sheet), `sources` and `choose`,
+`data`, `compose` (the defaults stay unwritten). Then run the series as below; every sheet keeps the same defaults.
+
 1. Find or make the MapSpec first (`map-create`). An atlas repeats a design that already works.
 2. Ask only what the series needs: which layer, which column makes the pages (`field`), and whether each page should **filter** to the value (one vendor's sites) or **focus** on it (all markets drawn, the extent fitted to one). Default to filter for points and sites, focus for areas.
 3. Preview the count and the values: `python3 "$GMAP_ROOT/scripts/atlas.py" plan MAP.yaml --layer ID --field COL [--mode focus]` (no files are written). Show the person how many maps there will be.

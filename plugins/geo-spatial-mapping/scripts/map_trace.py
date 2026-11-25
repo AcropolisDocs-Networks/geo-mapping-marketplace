@@ -97,7 +97,8 @@ REPORT_SCRIPTS = {"map_trace", "session_report", "map_evaluate"}
 # they are counted on their own line (spec I-map-trace 4, as 1.18.1 keeps map-trace from counting itself)
 EVALUATION_CALL = re.compile(r"map_evaluate\.py|pipelines\.py[\"']?\s+(?:plan|run|show)\s+map-evaluate\b")
 # 2.2.0: the scripts that write finished maps; their results name the files a session made (map-evaluate is offered on them)
-OUTPUT_SCRIPTS = {"build_map", "map_export", "webmap", "pipelines", "animate", "events_anim", "heat_anim", "flythrough", "story", "sheet", "external_qa",
+GMAP_BUILD = re.compile(r"""gmap\.py["']?\s+build\b""")          # 5.0.0: a job's build (gmap.py build) writes the finished files; its other verbs write none
+OUTPUT_SCRIPTS = {"gmap", "build_map", "map_export", "webmap", "pipelines", "animate", "events_anim", "heat_anim", "flythrough", "story", "sheet", "external_qa",
                   "atlas", "timeline", "map_restyle", "telecom_maps", "webmap_story", "massing", "section", "profile_chart"}
 OUTPUT_PATH = re.compile(r"""(?:[A-Za-z]:[\\/]|/)[^"'\n\r*?<>|]*?\.(?:png|svg|pdf|html|mp4|gif|webm|jpe?g)(?=["'\s,\]}]|$)""", re.I)
 SPEC_ARG = re.compile(r"""--spec[=\s]+["']?([^"'\s]+\.ya?ml)""")
@@ -1221,8 +1222,10 @@ def session_outputs(calls: list[dict], events: list[dict], records: list[dict], 
     for c, e in zip(calls, events, strict=False):
         if e.get("status") not in ("ok", "degraded") or e.get("evaluation") or not (set(e.get("scripts") or []) & OUTPUT_SCRIPTS):
             continue
-        builds += 1
         cmd = _command(c)
+        if "gmap" in (e.get("scripts") or []) and not (set(e.get("scripts") or []) & (OUTPUT_SCRIPTS - {"gmap"})) and not GMAP_BUILD.search(cmd or ""):
+            continue
+        builds += 1
         run_at = next((m.start() for m in shell_calls.RUN.finditer(cmd)), None) if cmd else None
         eff = shell_calls.effective_dir(cmd, c.get("cwd") or str(default_base), run_at) if cmd else None   # 3.4.0 (F-2): `cd day21 && ...`
         base = Path(eff) if eff else (Path(c.get("cwd")) if c.get("cwd") else default_base)
@@ -1232,7 +1235,13 @@ def session_outputs(calls: list[dict], events: list[dict], records: list[dict], 
         if sm:
             sp = _resolve(sm.group(1), base)
             specs.insert(0, str(sp))
-        spec = next((s for s in specs if Path(s).is_file()), None)
+        if not specs and "gmap" in (e.get("scripts") or []):          # 5.0.0: the job's own MapSpec (its record names it)
+            try:
+                jid = (base / ".geo-mapping" / "jobs" / "current.txt").read_text(encoding="utf-8").strip()
+                specs.append(str(json.loads((base / ".geo-mapping" / "jobs" / jid / "job.json").read_text(encoding="utf-8")).get("spec") or ""))
+            except (OSError, ValueError):
+                pass
+        spec = next((s for s in specs if s and Path(s).is_file()), None)
         before = len(found)
 
         def add(p: Path, how: str):

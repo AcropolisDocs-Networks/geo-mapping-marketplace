@@ -1,0 +1,15 @@
+# An intent (5.0.0): a named kind of map. One word in the brief in place of a handful of switches, so the switches that belong together
+# move together. `sets` are the MapSpec keys the intent sets (a default changed by an intent is explained); `needs` and `enrich` are data
+# themes (library/themes.yaml); `outcome` is what the map is for unless the brief says otherwise; `checks_off` are findings that do not
+# apply to this kind of map; `roles` suggests a layer role by geometry. gmap brief --intent <name> reads this file.
+intent: explore
+says: A web map to pan, zoom and click, with layers and popups.
+outcome: explore
+sets: {}
+needs: []
+enrich:
+- places-names
+- boundaries-admin
+roles: {}
+checks_off: []
+note: webmap-create builds it; the print defaults still decide its frame, its logo and its credits.

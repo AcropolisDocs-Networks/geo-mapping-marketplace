@@ -392,6 +392,16 @@ def town_place(text: str, *, fetch: bool = True) -> dict | None:
         cc, a1 = "US", qual
     elif len(qual) == 2:
         cc = qual
+    elif qual:                                   # 5.0.0: the state or country in words ("Tempe, Arizona", "Lyon, France")
+        try:
+            sc = us_state_code(parts[1])
+            code = ("US-" + sc) if sc else (admin_by_name(parts[1]) or "")
+        except Exception:  # noqa: BLE001 - a name two areas share: the town's own name decides, or nothing does
+            code = ""
+        if code.startswith("US-"):
+            cc, a1 = "US", code[3:]
+        elif code:
+            cc = code.split("-")[0]
     for eid in TOWN_IDS:
         try:
             import map_plan as mp

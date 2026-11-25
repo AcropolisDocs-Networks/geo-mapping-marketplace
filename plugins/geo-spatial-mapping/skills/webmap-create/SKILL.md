@@ -65,7 +65,7 @@ Exit codes are the same as `map-create`: 0 built, 3 a BLOCK finding, 2 a request
 once, before anything else. It installs what a map needs in one pip step, wheels first, within 10 minutes (1.2.0); never `pip install -r
 requirements-dev.txt`, which brings the test stack. On the person's own computer, ask before installing.
 
-1. **Same first steps as `map-create`**: find the message, inspect uploaded files, use the library first, pick the map type from the data, write the MapSpec.
+1. **The same road as every map (5.0.0)**, as in `map-create`: `gmap.py brief` (intent `explore`), `sources`, `data`, `compose` write the MapSpec.
 2. **Decide the page's audience.** `audience:` says who opens the page (`internal`, `external`, `regulatory`, `any`). An unstated audience is treated as public.
    The audience decides which tile providers may be used and whether a confidential layer may go on the page at all.
 3. **Pick the background** (read `tile-provider-registry`). The default is `basemap: {provider: bundled}`: country, admin-1 (state or province) and lake outlines that ship with the plugin.

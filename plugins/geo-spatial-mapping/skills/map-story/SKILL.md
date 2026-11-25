@@ -51,6 +51,9 @@ python3 "$GMAP_ROOT/scripts/modules.py" read story-beats        # any module in 
 
 ## Order of work
 
+**The same road as every map (5.0.0).** Gather the request as `map-create` does: `gmap.py brief` (intent `story`), `sources` and `choose`,
+`data`, `compose` (the defaults stay unwritten). Finish the single map (`gmap.py draft`, `build`), then tell it in beats as below.
+
 1. **The map first.** A story is built on a finished map. If there is none, make it with `map-create` (and `webmap-create` for a page) and
    pass its message check: a beat cannot rescue a map that needs explaining.
 2. **The claim.** One sentence the whole story shows. If the request does not give it, ask once: "What should someone believe after the

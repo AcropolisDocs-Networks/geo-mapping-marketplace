@@ -1,0 +1,34 @@
+# An intent (5.0.0): a named kind of map. One word in the brief in place of a handful of switches, so the switches that belong together
+# move together. `sets` are the MapSpec keys the intent sets (a default changed by an intent is explained); `needs` and `enrich` are data
+# themes (library/themes.yaml); `outcome` is what the map is for unless the brief says otherwise; `checks_off` are findings that do not
+# apply to this kind of map; `roles` suggests a layer role by geometry. gmap brief --intent <name> reads this file.
+intent: art
+says: 'The look is the point: a map with its references taken away on purpose (#30DayMapChallenge ''Is this a map?'').'
+outcome: evoke
+sets:
+  names.on: false
+  context.preset: none
+  basemap.bundled: none
+  elements.legend.on: false
+  elements.scale_bar.on: false
+  elements.north_arrow.on: false
+  elements.inset_map.on: false
+  focus.mask: none
+needs: []
+enrich: []
+roles:
+  polygon: polygons
+  line: lines
+  point: points
+checks_off:
+- MAP-CART-012
+- MAP-GND-002
+- MAP-GND-001
+- MAP-CART-005
+- MAP-CART-020
+- MAP-CART-021
+- MAP-CART-009
+- MAP-STORY-006
+- MAP-STORY-027
+note: 'The title stays in the map and the logo in its lower left: the intent leaves them alone. The source line stays on: a map with no references still
+  says where its data came from. The frame, the theme and the ink are the person''s to ask for.'

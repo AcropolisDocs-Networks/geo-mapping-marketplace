@@ -96,15 +96,7 @@ def _asked(d: dict, key: str, asks: dict) -> str | None:
 
 def intent_sets(spec: dict) -> dict:
     """{key: value} a named intent sets (data/intents/<name>.yaml, 5.0.0); empty when the MapSpec names none or the file is not there."""
-    name = spec.get("intent")
-    if not isinstance(name, str) or not name:
-        return {}
-    p = HERE.parent / "data" / "intents" / f"{name}.yaml"
-    if not p.is_file():
-        return {}
-    import yaml
-    doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    return dict(doc.get("sets") or {})
+    return dict(intent_doc((spec or {}).get("intent")).get("sets") or {})
 
 
 def deviations(spec: dict, policy: dict | None = None) -> dict:
@@ -136,7 +128,135 @@ def deviations(spec: dict, policy: dict | None = None) -> dict:
             f"free choices: {counts['free']}")
     ul = [f"{i['key']}: {_show(i['value'])} was not asked for (the default is {_show(i['default'])}: {i['says']})" for i in items if i["box"] == "unexplained"]
     return {"policy_version": pol.get("policy_version"), "items": items, "free": free, "counts": counts, "line": line, "unexplained_lines": ul,
-            "mode": "report"}
+            "mode": mode()}
+
+
+# ---------------------------------------------------------------------------------------------------------------- 5.0.0: the road enforces
+MODES = ("report", "enforce")
+
+
+def default_of(key: str, policy: dict | None = None):
+    """The standing default's value for one MapSpec key (elements.logo.position -> lower-left), or None when no default names the key.
+    One place for every drawing surface to ask (a map, a sheet, a page), so a default cannot differ between them."""
+    for d in (policy or load()).get("defaults") or []:
+        if key in (d.get("keys") or []):
+            return d.get("value")
+    return None
+
+
+def mode() -> str:
+    """How the build treats an unexplained deviation. `enforce` (a build on the road: gmap sets GMAP_POLICY=enforce, and `policy: enforce` in
+    ~/.geo-mapping/config.yaml makes it so everywhere): the default is drawn and the change is said in one line. `report` (a build run
+    directly, a pipeline, an atlas page, a test): the table alone, as in 4.2.0."""
+    import os
+    v = (os.environ.get("GMAP_POLICY") or "").strip().lower()
+    if v not in MODES:
+        try:
+            import yaml
+            home = os.environ.get("GEO_MAPPING_HOME")
+            cp = (Path(home) if home else Path.home() / ".geo-mapping") / "config.yaml"
+            v = str((yaml.safe_load(cp.read_text(encoding="utf-8")) or {}).get("policy") or "").strip().lower() if cp.is_file() else ""
+        except Exception:  # noqa: BLE001
+            v = ""
+    return v if v in MODES else "report"
+
+
+def _unset(spec: dict, path: str) -> None:
+    parts = path.split(".")
+    cur = spec
+    for part in parts[:-1]:
+        cur = cur.get(part) if isinstance(cur, dict) else None
+        if not isinstance(cur, dict):
+            return
+    if isinstance(cur, dict):
+        cur.pop(parts[-1], None)
+        for alias, real in ((True, "on"), (False, "off")):        # a plain YAML reader's key
+            if parts[-1] == real:
+                cur.pop(alias, None)
+
+
+def _set(spec: dict, path: str, value) -> None:
+    parts = path.split(".")
+    cur = spec
+    for part in parts[:-1]:
+        nxt = cur.get(part)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            cur[part] = nxt
+        cur = nxt
+    cur[parts[-1]] = value
+
+
+def apply_intent(spec: dict) -> list[str]:
+    """Write a named intent's settings into a loaded MapSpec where the MapSpec itself says nothing (in memory; the file is not changed).
+    -> the keys it set. The MapSpec's own value wins: it is then a deviation like any other."""
+    done = []
+    for key, value in intent_sets(spec).items():
+        if lookup(spec, key) is _MISSING:
+            _set(spec, key, value)
+            done.append(key)
+    return done
+
+
+def enforce(spec: dict, policy: dict | None = None) -> list[dict]:
+    """5.0.0 (decision D1): every unexplained deviation is put back to its default in the loaded MapSpec (in memory; the file is not
+    changed). -> what was put back: [{key, value, default, says, line}]. A default the intent set, or one the person asked for, stays."""
+    dev = deviations(spec, policy)
+    isets = intent_sets(spec)
+    out = []
+    for i in dev["items"]:
+        if i["box"] != "unexplained":
+            continue
+        if i["key"] in isets:
+            _set(spec, i["key"], isets[i["key"]])
+            back = isets[i["key"]]
+        else:
+            _unset(spec, i["key"])
+            back = i["default"]
+        if i["key"].startswith("elements.") and i["key"].endswith(".on"):       # an element block needs its `on`
+            _set(spec, i["key"], True if back in (True, "auto") else back)
+        out.append({"key": i["key"], "value": i["value"], "default": back, "says": i["says"],
+                    "line": f"{i['key']}: {_show(i['value'])} was not asked for; drawn as {_show(back)} ({i['says']})"})
+    return out
+
+
+def applicability(spec: dict) -> dict:
+    """What does not apply to this map (data/applicability.yaml by `outcome`, plus the intent's own `checks_off`).
+    -> {outcome, intent, checks_off: set, readings_off: set}."""
+    import yaml
+    spec = spec or {}
+    out = {"outcome": spec.get("outcome"), "intent": spec.get("intent"), "checks_off": set(), "readings_off": set()}
+    try:
+        doc = yaml.safe_load((HERE.parent / "data" / "applicability.yaml").read_text(encoding="utf-8")) or {}
+    except OSError:
+        doc = {}
+    row = (doc.get("outcomes") or {}).get(str(spec.get("outcome") or "")) or {}
+    out["checks_off"] |= set(row.get("checks_off") or [])
+    out["readings_off"] |= set(row.get("readings_off") or [])
+    idoc = intent_doc(spec.get("intent"))
+    out["checks_off"] |= set(idoc.get("checks_off") or [])
+    if not out["outcome"] and idoc.get("outcome"):
+        out["outcome"] = idoc["outcome"]
+        row = (doc.get("outcomes") or {}).get(str(idoc["outcome"])) or {}
+        out["checks_off"] |= set(row.get("checks_off") or [])
+        out["readings_off"] |= set(row.get("readings_off") or [])
+    return out
+
+
+def intents() -> list[dict]:
+    import yaml
+    d = HERE.parent / "data" / "intents"
+    return [yaml.safe_load(p.read_text(encoding="utf-8")) or {} for p in sorted(d.glob("*.yaml"))] if d.is_dir() else []
+
+
+def intent_doc(name) -> dict:
+    if not isinstance(name, str) or not name:
+        return {}
+    p = HERE.parent / "data" / "intents" / f"{name}.yaml"
+    if not p.is_file():
+        return {}
+    import yaml
+    return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
 
 
 def _sets_free(spec: dict, f: str) -> bool:
@@ -163,13 +283,17 @@ def digest(policy: dict | None = None) -> list[str]:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("op", choices=["show", "digest", "check"])
+    ap.add_argument("op", choices=["show", "digest", "check", "intents"])
     ap.add_argument("spec", nargs="?")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     pol = load()
     if a.op == "digest":
         print("\n".join(digest(pol)))
+        return 0
+    if a.op == "intents":
+        for d in intents():
+            print(f"{d.get('intent'):<11} for: {d.get('outcome'):<9} {d.get('says')}")
         return 0
     if a.op == "show":
         if a.json:

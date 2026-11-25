@@ -118,6 +118,12 @@ asks:
 outcome: explain                   # what the map is for: explain | compare | locate | inventory | monitor | explore | sequence | evoke
 ```
 
+`intent` (5.0.0) names the kind of map in one word, so the switches that belong together move together: `site-map`, `choropleth`,
+`network`, `terrain`, `transit`, `coverage`, `comparison`, `story`, `explore`, `art` (`gmap.py intents`). What an intent sets counts as
+explained (`art` turns the names, the context, the bundled ground, the legend, the scale bar, the north arrow and the locator off, and
+leaves out the checks that ask for them). A build run by a job (`gmap.py draft`, `gmap.py build`) draws a default changed with no ask and
+no intent at its default and says so (MAP-POL-001); a direct build only lists it.
+
 `outcome` says what the map is for, from the request: explain (one point), compare (a pattern across places), locate (find things),
 inventory (what is where, exactly), monitor (status at a glance), explore (a web map to dig into), sequence (a story), evoke (the look is the
 point). `secondary_outcome` adds a second. `elements.frame: {on: false}` draws no line round the map; `elements.title.supplied: true` (or

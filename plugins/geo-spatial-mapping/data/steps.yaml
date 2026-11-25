@@ -1,0 +1,71 @@
+# The road every map takes (5.0.0), step by step: what each step is for, the rules that hold in it, and the reference pages to read when a
+# rule names one. `gmap.py rules STEP` prints a step; every gmap command ends with the next step's lines, so the rules arrive with the work.
+# The standing defaults themselves are in policy.yaml; these lines say how to work, not what the defaults are.
+steps_version: 1
+order: [brief, sources, data, compose, draft, build, review]
+
+steps:
+  brief:
+    says: "What was asked: the place, the message, who it is for, what kind of map, what it is for, and what the person asked for that departs from a default."
+    command: 'gmap.py brief --region "<place or codes>" --message "<one sentence>" --intent <intent> [--need <theme> ...] [--ask "<key>=<value> | <their words>" ...]'
+    rules:
+      - "One message, a full sentence. If the request has none, ask one short question and nothing else."
+      - "Pick the intent from the request (gmap.py intents). art is the only way to take the references away in one step."
+      - "Write an ask only for what the person said, in their words. A look you would like is not an ask."
+      - "Text the person supplied (--title, --subtitle, --tagline) is drawn as written."
+      - "Say where the session runs and what it cannot reach before promising data. When a source needs the person's computer, ask to link it; do not swap the source."
+    read: [regions, map-text]
+  sources:
+    says: "Every source that could serve each need, in view, before one is taken."
+    command: "gmap.py sources   then   gmap.py choose <need> <entry id> --why \"<one phrase>\""
+    rules:
+      - "The sheet lists every library source for the need here, with licence, key and where it can be fetched from. Take one from the sheet, or say why none fits (then geo-find-data)."
+      - "When the sheet says to compare, count the candidates in the map's window (gmap.py sources --count) before choosing: the fullest source is rarely the first."
+      - "A source whose licence does not allow the map's audience is not a choice."
+      - "Each 'also available here' line is accepted (gmap.py need add <theme>) or declined (gmap.py need decline <theme> --why ...). Declining is fine; silence is not."
+      - "The person's own file is a source too: gmap.py data file <name> --path <file> --source ... --license ... (ask them for both; never invent them)."
+    read: [ref-library, geodata-sources, tile-licensing]
+  data:
+    says: "Fetch and shape the data through the plugin, so every layer has a record."
+    command: "gmap.py data plan   |   data add <need> --file <f>   |   data derive <name> --op <op> --in <f> --out <f>   |   data step <name> --script <s> --in <f> --out <f>"
+    rules:
+      - "A library layer is fetched by the build itself (source: {type: ref}) or by the data tool the plan names; never by curl or a script of your own."
+      - "Shape data with an op (geo_analyze.py ops lists them): clip, buffer, spatial_join, dissolve, hexbin, voronoi, viewshed, network_distance and the rest."
+      - "When no op does it, write the script and run it as a registered step (data step): its inputs and outputs are recorded, the layer keeps its provenance, and the step is listed as a candidate op."
+      - "Inspect a file the person brought (geo-inspect) before it is mapped."
+    read: [geo-io, crs-engine, raster-data, telecom-geo, site-confidentiality]
+  compose:
+    says: "The MapSpec, written from the defaults, the intent, the brief, the asks and the data. Then the design choices that are yours."
+    command: "gmap.py compose   then   gmap.py set <key>=<value> [--layer <id>] [--asked \"<their words>\"]"
+    rules:
+      - "The defaults are not written: what the MapSpec does not say, the builder decides. Do not add a position, a theme, a look or an on/off switch the person did not ask for."
+      - "Yours to choose: the map type from the data, the classes, the palette role or brand colour of each layer, the labels, the padding."
+      - "A rate or share per area is a choropleth; a count is divided first, or drawn as symbols or dots. Colours are brand tokens, never a hex value."
+      - "The title is subject-led and in Title Case; the subtitle adds one thing. Read map-text before writing either."
+      - "A default changed with no ask is put back by the build and said in one line. If the person does want it, add their words: gmap.py set <key>=<value> --asked \"...\"."
+    read: [mapspec-reference, cartography-principles, classify-and-color, color-accessibility, map-text, map-brand, projections-guide, map-build-options, transit-maps, h3-grids, map-ground-global, basemap-render]
+  draft:
+    says: "Look before you say: a small picture, its readings, and what a stranger reads in it."
+    command: "gmap.py draft   then, when the draft says so, the cold read by a fresh agent and   gmap.py cold --answer <file>"
+    rules:
+      - "Open the draft and the mute picture and say what the map shows. If that is not the message, change the frame, the emphasis or the key, never by adding a callout."
+      - "The readings are measurements, not grades: where the eye lands first, the data's share of the picture, the smallest text, what covers the focus. Act on one that contradicts the message."
+      - "The cold read is made by a fresh agent that sees only the picture. Never answer it yourself and never tell that agent what the map is about."
+      - "Fix a BLOCK by changing the MapSpec. Do not argue with it and do not work around it."
+    read: [message-check, map-layout, legend-builder, label-engine, scalebar-northarrow]
+  build:
+    says: "The finished files, and the build's own account of them."
+    command: "gmap.py build [--formats svg,pdf,png]"
+    rules:
+      - "Read the digest and the result file; never parse the console."
+      - "Lead with the picture and one sentence on what it shows; then at most three findings that change what the person would do; then the map text and message callouts as written."
+      - "Say the deviations line: what was asked, what the intent set, and anything that was put back to its default."
+      - "From the cloud workspace hand back the map files only."
+    read: [provenance-ledger, map-pdf-publisher, map-qa]
+  review:
+    says: "How the map was made, in numbers; then how it reads, graded by fresh agents after the fact."
+    command: "gmap.py review   then   /map-trace"
+    rules:
+      - "The road numbers come from the job's own record. Give them as they are."
+      - "The picture is graded by the map trace, after the map is finished, by agents that did not make it. A grade never changes the map in hand."
+    read: []

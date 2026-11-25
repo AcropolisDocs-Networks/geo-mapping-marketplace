@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import functools
 import json
 import re
 import sys
@@ -79,11 +80,19 @@ def _covers(e: dict, geography: str | None) -> bool:
     geos = [str(g) for g in ((e.get("tags") or {}).get("geography") or [])]
     try:
         import ref_select as rs
-        reg = rs.regions()
-        return rs.geo_cover(geos, geography.lower(), reg) is not None
+        return rs.geo_cover(geos, geography.lower(), _regions()) is not None
     except Exception:  # noqa: BLE001 - without the vocabulary, a plain prefix test
         g = geography.lower()
         return any(x == "world" or g == x or g.startswith(x + "-") or x in ("north-america",) for x in geos)
+
+
+@functools.lru_cache(maxsize=1)
+def _regions() -> dict:
+    import library_lint as ll
+    import ref_library as rl
+    import ref_select as rs
+    tags, _types = ll.load_vocab(rl.shipped_lib())
+    return rs.regions(tags)
 
 
 def candidate(e: dict, audience: str | None = None) -> dict:
@@ -102,7 +111,7 @@ def candidate(e: dict, audience: str | None = None) -> dict:
     if audience == "external" and lic.get("external_ok") is False:
         ok, why = False, "its licence keeps it to internal maps"
     return {"id": eid, "title": e.get("title"), "delivery": mode, "license": lic.get("class"), "key": (cred.get("name") if isinstance(cred, dict) else None),
-            "fetch_from": where, "audience_ok": ok, "audience_note": why, "status": e.get("status"),
+            "fetch_from": where, "needs_computer": where.startswith("the person's computer"), "brings_file": mode == "user-supplied", "audience_ok": ok, "audience_note": why, "status": e.get("status"),
             "geography": (e.get("tags") or {}).get("geography") or [], "scale": (e.get("tags") or {}).get("scale") or []}
 
 

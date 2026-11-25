@@ -1,0 +1,19 @@
+# An intent (5.0.0): a named kind of map. One word in the brief in place of a handful of switches, so the switches that belong together
+# move together. `sets` are the MapSpec keys the intent sets (a default changed by an intent is explained); `needs` and `enrich` are data
+# themes (library/themes.yaml); `outcome` is what the map is for unless the brief says otherwise; `checks_off` are findings that do not
+# apply to this kind of map; `roles` suggests a layer role by geometry. gmap brief --intent <name> reads this file.
+intent: transit
+says: Lines, stops and how far they reach.
+outcome: locate
+sets: {}
+needs:
+- rail-transit
+enrich:
+- roads
+- population
+- routing
+roles:
+  line: lines
+  point: points
+  polygon: polygons
+checks_off: []

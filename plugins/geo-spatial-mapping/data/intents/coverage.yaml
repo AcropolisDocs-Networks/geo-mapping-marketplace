@@ -1,0 +1,20 @@
+# An intent (5.0.0): a named kind of map. One word in the brief in place of a handful of switches, so the switches that belong together
+# move together. `sets` are the MapSpec keys the intent sets (a default changed by an intent is explained); `needs` and `enrich` are data
+# themes (library/themes.yaml); `outcome` is what the map is for unless the brief says otherwise; `checks_off` are findings that do not
+# apply to this kind of map; `roles` suggests a layer role by geometry. gmap brief --intent <name> reads this file.
+intent: coverage
+says: Where a service reaches, by carrier, technology or speed.
+outcome: compare
+sets: {}
+needs:
+- mobile-coverage
+enrich:
+- population
+- cell-sites
+- boundaries-admin
+- roads
+roles:
+  polygon: choropleth
+  point: points
+checks_off: []
+note: 'Reported coverage is the regulator''s or the carrier''s claim: the map says so.'

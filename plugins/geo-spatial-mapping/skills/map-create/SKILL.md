@@ -7,7 +7,8 @@ description: >
 
 # map-create
 
-Turns a request into a finished map. One message in, three files out (SVG master, PDF, PNG), with the findings that matter.
+Turns a request into a finished map (SVG master, PDF, PNG). **Every map takes one road**, and each step prints the rules for the next, so
+the rules arrive with the work: brief, sources, data, compose, draft, build, review.
 
 ```bash
 GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
@@ -15,18 +16,62 @@ GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
   [ -f "$d/scripts/gmap_common.py" ] && echo "$(grep -o '"version": *"[0-9.]*' "$d/.claude-plugin/plugin.json" 2>/dev/null | tr -dc 0-9.) $d"; done | sort -V | tail -1 | cut -d' ' -f2-)
 [ -f "$GMAP_ROOT/scripts/gmap_common.py" ] || { echo "geo-spatial-mapping: plugin root not found" >&2; false; }
 GP=${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
-export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)
-python3 "$GMAP_ROOT/lints/mapspec_lint.py" map.yaml                       # spec check, before any data is read
-python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --draft --digest      # two small pictures to look at first
-python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --formats svg,pdf,png --digest [--strict]
+python3 "$GMAP_ROOT/scripts/gmap.py" brief --region "Tempe, Arizona" --message "<one sentence: what the reader should take away>" \
+        --intent site-map [--need "cell towers" ...] [--ask "theme=dark | <the person's own words>" ...] [--title "..."] [--computer linked|none]
+python3 "$GMAP_ROOT/scripts/gmap.py" sources [--count]     # every library source for each need; then: gmap.py choose <need> <entry id> --why "<one phrase>"
+python3 "$GMAP_ROOT/scripts/gmap.py" data plan             # how each source comes in; data add | file | derive | step record every layer
+python3 "$GMAP_ROOT/scripts/gmap.py" compose               # writes map.yaml from the defaults, the intent, the brief, the asks and the data
+python3 "$GMAP_ROOT/scripts/gmap.py" set <key>=<value> [--layer <id>] [--asked "<their words>"]     # a standing default moves only on the person's word
+python3 "$GMAP_ROOT/scripts/gmap.py" draft                 # lint, two small pictures, the readings, and the cold-read request for a fresh agent
+python3 "$GMAP_ROOT/scripts/gmap.py" build [--formats svg,pdf,png]
+python3 "$GMAP_ROOT/scripts/gmap.py" review                # how the map was made, in numbers
 ```
 
-`--digest` (4.2.0) prints the build in at most 25 lines: the files, the deviations from the defaults, every BLOCK and WARN, the map text and
-message callouts. The whole result is always in `out/<stem>.result.json`: read that file for anything more, and never parse the console.
+`gmap.py intents` lists the kinds of map (site-map, choropleth, network, terrain, transit, coverage, comparison, story, explore, art);
+`gmap.py rules <step>` prints a step's rules again; `gmap.py status` says where a job stands. Exit 0 done; 2 a request it cannot carry out as given;
+3 a BLOCK finding; 4 stop and ask the person (a source needs their computer, a need has no source, a default would change without their word).
+
+## How to walk it
+
+- **Start with the brief, always.** One message, a full sentence; if the request has none, ask one short question ("What should the reader
+  take from this map?") and nothing else. Write an `--ask` only for what the person said, in their words. `--intent art` is the one way to
+  take the references away in one step.
+- **Take sources from the sheet.** It lists every source the library holds for what the thing is, with licence, key and where it can be
+  fetched from. When it says to compare, count first. When the best source needs the person's computer and none is linked, the job stops:
+  ask them; never swap the source yourself. Answer each "also available here" line (add or decline).
+- **Bring data through the door.** A library layer is fetched by the build or by the data tool the plan names. Shape data with an op
+  (`data derive`); when no op does it, write the script and run it with `data step`, so its inputs, outputs and provenance are recorded.
+  Never fetch with curl or draw with a script of your own. Run `geo-inspect` on a file the person brought.
+- **Compose, then choose what is yours**: the map type from the data, the classes, each layer's palette colour, the labels, the padding.
+  What the MapSpec does not say, the builder decides: do not write a position, a theme, a look or an on/off switch nobody asked for.
+  A default changed with no ask is drawn at its default and said in one line.
+- **Look before you say.** Open the draft and the mute picture and say what the map shows; act on a reading that contradicts the message
+  (`message-check`). The cold read is made by a fresh agent that sees only the picture: never answer it yourself.
+- **Fix, do not argue.** A BLOCK is a rule the map breaks: change the MapSpec and draft again. Overrides exist only for MAP-CART-001 and
+  MAP-CART-010 and only with the person's own written reason.
+
+A MapSpec the person already has builds directly; the build still counts its deviations from the defaults, and reports them without
+putting them back. The whole result is always in `out/<stem>.result.json`.
+
+```bash
+export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)
+python3 "$GMAP_ROOT/lints/mapspec_lint.py" map.yaml
+python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --formats svg,pdf,png --digest [--draft] [--strict]
+```
+
+**A fresh cloud workspace has no map packages**: the build's first line installs them. Elsewhere run `doctor.py --fix --quick` once, first;
+never `pip install -r requirements-dev.txt`. On the person's own computer, ask before installing. In Cowork call `user_settings`
+(`op=bring`, `work_folder=<project>`) once per folder first.
+
+**Other doors.** A site list with azimuth and band columns whose reader should see sector footprints goes to
+`/geo-spatial-mapping:map-run coverage-map`; a tracker with a status per location to `/geo-spatial-mapping:map-run program-map`; a client table to
+roll up by admin area (state, county, province, district) to `/geo-spatial-mapping:map-run market-map`; one map per market to `map-atlas`;
+a map to pan, zoom and click to `webmap-create`; a map told in steps is finished here, then `map-story`. Say which door you take in one phrase.
 
 ## Modules
 
-These are this plugin's reference pages, not skills: read one with the line below when its row applies. The Skill tool cannot load them.
+These are this plugin's reference pages, not skills. A step's rules name the pages to read; read one with the line below. The Skill tool
+cannot load them.
 
 ```bash
 GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
@@ -69,77 +114,21 @@ python3 "$GMAP_ROOT/scripts/modules.py" read map-text        # any module in the
 | `regions`                | **for every map**: the `region:` block |
 | `h3-grids`               | for data on the H3 grid (FCC mobile hexagons) |
 
-Exit 0 built; 3 a BLOCK finding (nothing is withheld unless `--strict`, which deletes the files); 2 a request this release cannot do.
-
-## Order of work
-
-**A fresh cloud workspace has no map packages**: the build's first line installs them. Elsewhere run `doctor.py --fix --quick` once, first
-(one pip step); never `pip install -r requirements-dev.txt`. On the person's own computer, ask before installing.
-In Cowork call `user_settings` (`op=bring`, `work_folder=<project>`) once per folder first.
-
-0. **Name the region** (`regions`): write `region:` (US-WA, "Idaho Panhandle", a file), run `region.py --place ...` once, say which
-   definition was used; never build one from FIPS codes.
-1. **Find the message.** A map says one thing. If the request does not, ask one short question ("What should the reader take from this map?") and
-   nothing else. Write it as the MapSpec `message`: a full sentence, not "Map".
-2. **Inspect before mapping.** Run `geo-inspect` on any uploaded file (CRS, geometry, fields). Do not map data that reports "do not map as is".
-3. **Use the library first, by what the thing is** (4.2.0): `python3 "$GMAP_ROOT/scripts/themes.py" show "cell towers" --geography us-az
-   --audience external` lists every source the library holds for a theme (cell sites, roads, buildings, elevation, population, water ...),
-   with its licence, the key it needs and where it can be fetched from. When a theme says to compare, count each candidate in the map's
-   window before choosing, and say which one was taken and why the others were not. A source in the cloud workspace's reach is not the
-   same as the best source: when the best one needs the person's computer, say so and ask, before swapping it for another.
-   Then the region's adapters from `catalog_search --region`. Ask `ref_library.py select --geography ... --level ... --use-for ... --scale ... --audience ...` for the layer that fits
-   (the `ref-library` module has every option). A layer is used as `source: {type: ref, id: <entry id>}`. Say which entry was chosen and why in one phrase. Entries that are not
-   `active` are never used. Exit 4 ("no reference entry fits") hands over to `geo-find-data`; ask for a file if the web has nothing usable. A table the person
-   supplies is joined on the entry's join key: read the key column as text, keep leading zeros. A service entry (FEMA flood zones, HIFLD cellular towers,
-   FCC CMAs): `mapspec-reference` ("Sources") for it, a `where` filter, geocoded addresses and H3 data.
-4. **Pick the map type from the data**, never from habit:
-   - a rate or share per area → `role: choropleth` with `value_field` (normalized: per capita, per household, per sq mi, a percent);
-   - a count per area → divide first, or proportional symbols, or dots (op `dot_density`); many points → op `density_surface`; movement
-     between places → op `flow_lines` (recipes: gallery `dot-density`, `density-surface`, `flow-lines`);
-   - sites or events → `role: points`; a measure at each site → `role: proportional`; roads or paths → `role: lines`;
-   - a grid of values (a GeoTIFF: signal, population per cell) → `role: raster`; terrain → `hillshade` or `contour`; footprints → `role: buildings`.
-   **Routing note.** A plain site map (where sites are, of what kind) is built here. A site list with azimuth and band columns whose
-   reader should see sector footprints goes to the coverage-map pipeline (`/geo-spatial-mapping:map-run coverage-map`): it draws the wedges, applies
-   coordinate privacy and words them as sectors, not coverage. A tracker with a status per location goes to `/geo-spatial-mapping:map-run program-map`; a client table to roll
-   up by admin area (state, county, province, district) goes to `/geo-spatial-mapping:map-run market-map`; one map per market goes to `map-atlas`. Say which door you are taking in one phrase.
-5. **Write the MapSpec** (read `mapspec-reference` first), lint it, then build with
-   `--draft`. **Show it before you say it** (the `message-check` module): open the mute picture and say what it shows; if that is not the
-   `message`, change the frame, the emphasis or the key, never by adding a callout, and draft again. Then build the finished set. Show the PNG with a one-line caption, then the findings. Write the title and subtitle
-   yourself by the `map-text` module (read it first): a subject-led title in Title Case (*Link Light Rail Walksheds, Seattle*), a subtitle that
-   adds one thing (the key number, the scope or the measure); a finding-led title only when the person asks. Text the person supplies is drawn
-   as written.
-6. **Keep the defaults; record an ask.** `mapspec-reference` lists them (`policy.py show`). Change one only when the person asked, and
-   write their words in `asks:` beside the change. The digest's deviations line counts the changes with no ask as unexplained: put the
-   default back, or ask the person. Write `outcome:` from the request (what the map is for).
-7. **Fix, do not argue.** A BLOCK finding is a rule the map breaks. Change the spec and rebuild. Overrides exist only for MAP-CART-001 and
-   MAP-CART-010 and only with the person's own written reason (`override: {MAP-CART-001: "reason"}` on the layer).
-
 ## Rules the builder enforces (so do not work around them)
 
-- **Colors come from the brand tokens only.** Never write a hex color or a color name. Use palette roles (`brand_sequential`, `brand_diverging`
-  with a `midpoint`, `brand_categorical`, `brand_neutral`) or token references such as `@brand.accent`.
-- **Data uses the whole brand palette, never the page or text colors.** Give each data layer its own palette color: `@brand.accent`,
-  `@brand.categorical.0` to `.7`, or `@brand.status.success|warning|danger` for a status meaning. Or leave the color out: each line or point
-  layer that names none gets the next palette color no other layer shows (named colors, class colors and the proportional accent are skipped),
-  so no two layers share one. Outline polygons, edges, dashes and label-only points are in `mapspec-reference` ("Symbols"). `@brand.label`, `.background`, `.land`, `.water`, `.frame`,
-  `.legend_bg`, `.legend_frame` and `.no_data` are for the page and text, not data (MAP-CART-015); in the dark theme `label` is white. Two layers
-  whose colors cannot be told apart get MAP-CART-016, and a line or point layer weaker than 3:1 on the land gets MAP-A11Y-007: pick another palette color.
-- **Inter, or the brand pack's own licensed typeface** (`brand font`). Text is live and embedded.
-- **No visible house credit.** The accreditation lives in file metadata only. A brand pack that requires a trademark line has it shown in the footer.
-- **Every layer needs provenance**: a source, a license and a date (`retrieved_at`, `date` or `vintage`). A library layer supplies all three; a file the person brought needs
-  `provenance: {source: ..., license: ..., retrieved_at: YYYY-MM-DD}`, and MAP-LIC-001 blocks the map without it. Ask the person for the source and license; never invent them.
-  Client-confidential layers need the confidentiality banner on.
-- **The library is checked against the audience.** A layer whose license does not allow the map's audience, or that is draft, blocked or retired, is a BLOCK (MAP-REF-002, -004).
+- **Colors come from the brand tokens only**: palette roles (`brand_sequential`, `brand_diverging` with a `midpoint`, `brand_categorical`,
+  `brand_neutral`) or token references such as `@brand.accent`, `@brand.categorical.0` to `.7`, `@brand.status.success|warning|danger`.
+  Never a hex color or a color name. Page and text tokens (`@brand.label`, `.background`, `.land`, `.water`, `.frame`) are not for data.
+- **Every layer needs provenance**: a source, a license and a date. A library layer supplies all three; the job records them for a file
+  the person brought (ask them for the source and license; never invent them). MAP-LIC-001 blocks a map without it.
+- **The library is checked against the audience**: a layer whose license does not allow the map's audience, or that is not `active`, is a BLOCK.
 - **No private individuals' locations**, no API keys and no internal host names in outputs.
-- Legend text never goes below 6 pt (print) or 10 pt (slides); the builder says when a template is too small instead of shrinking it.
-- **Hierarchy.** Layers the `message` names draw full, the rest recede (`emphasis:`, `highlight:`); a key number is a callout `figure` (`mapspec-reference`).
+- **Inter, or the brand pack's own licensed typeface.** No visible house credit. Legend text never goes below 6 pt (print) or 10 pt (slides).
 
 ## Tell the person
 
-Lead with the result: the PNG and one sentence on what the map shows. Then at most three findings that change what they would do (BLOCKs fixed, WARNs that
-remain, a note when the legend or scale bar moved or was hidden and why). Then the map text: the title and subtitle drawn (`map_text` in the build
-result) and every line of `map_text.callout`, as written ("Map text: N findings (not blocking)" and one line per finding with its suggested fix);
-these never count against the three and never block. Then the message check the same way (every line of `story.callout`). Change supplied text only when the person says so. Offer one next step: `map-restyle` for a look change, `map-export` for another size.
-When the build's summary says relief was left out, say that line first, before the picture. From the cloud workspace, hand back only the map files (a DEM is in `refetch`).
-Files are `<brand prefix><id>_<template>_v<YYYYMMDD>.<ext>`, with a `.provenance.json` beside them (send it only if asked).
-A map to pan, zoom and click is `webmap-create` (one HTML file). To show how the map was made, turn on `methods_page` and send its one-page Data and Methods file. A map told in steps (a story, a carousel) is finished here, then `map-story`.
+Lead with the result: the PNG and one sentence on what the map shows. Then the deviations line (what was asked, what the intent set,
+anything put back to its default). Then at most three findings that change what they would do. Then the map text and the message check,
+every callout line as written; these never block. When the build's summary says relief was left out, say that line first. Change supplied
+text only when the person says so. Offer one next step: `map-restyle` for a look change, `map-export` for another size. From the cloud
+workspace hand back only the map files. Files are `<brand prefix><id>_<template>_v<YYYYMMDD>.<ext>`, with a `.provenance.json` beside them.

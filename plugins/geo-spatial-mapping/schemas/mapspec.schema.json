@@ -114,6 +114,10 @@
         {"type": "object", "additionalProperties": {"type": "string"}}
       ]
     },
+    "intent": {
+      "enum": ["site-map", "choropleth", "network", "terrain", "transit", "coverage", "comparison", "story", "explore", "art"],
+      "description": "5.0.0: the kind of map (data/intents/): one word that sets the switches that belong together, names the data themes the map usually needs and says which checks do not apply. art is a map with its references taken away on purpose (no names, context, ground, legend, scale bar, north arrow or locator; the title and the logo stay). A default an intent sets is an explained deviation."
+    },
     "outcome": {
       "enum": ["explain", "compare", "locate", "inventory", "monitor", "explore", "sequence", "evoke"],
       "description": "4.2.0: what the map is for, in the eight words of the evaluation rubric: explain (one point), compare (a pattern across places), locate (find or place things), inventory (what is where, exactly), monitor (status at a glance), explore (a web map to dig into), sequence (a story over beats or time), evoke (the look is the point). The map evaluation reads it instead of guessing."
