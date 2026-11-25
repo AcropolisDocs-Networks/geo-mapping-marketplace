@@ -413,6 +413,7 @@ def main(argv=None) -> int:
     ap.add_argument("--refresh", action="store_true")
     ap.add_argument("--scale", type=float, help="the map's scale denominator with --bbox (default: none, every provider is considered)")
     ap.add_argument("--provider", help="a provider id from data/ground-providers.yaml (default: the finest that covers the window)")
+    ap.add_argument("--layers-only", action="store_true", help="5.0.1: with prepare --spec, fetch the library layers the MapSpec uses and leave the ground alone")
     ap.add_argument("--cap-mb", type=float, help="1.14.0: the most Overture data to read for the window, in MB (default: the library entry's, 300); "
                                                  "a large sound or coast may need more (Puget Sound read about 400)")
     a = ap.parse_args(argv)
@@ -420,6 +421,14 @@ def main(argv=None) -> int:
         print("ground_detail: --cap-mb is between 1 and 5000", file=sys.stderr)
         return gc.EXIT_USAGE
     try:
+        pre = None
+        if a.spec and a.cmd == "prepare":
+            # 5.0.1: the MapSpec's own library layers first. The window is asked from the plan, and the plan stops at a layer that is not
+            # in the cache yet, so prepare never reached the step that fetches it (a MapSpec framed by its region, 5.0.0's road).
+            pre = fetch_spec_layers(a.spec, refresh=a.refresh)
+            if a.layers_only:
+                print(json.dumps({"library_layers": pre}, indent=2, default=str))
+                return gc.EXIT_OK if not any(x["status"] == "failed" for x in pre) else gc.EXIT_SERVICE
         if a.spec:
             win, den = window_of_spec(a.spec)
         elif a.bbox:
@@ -432,7 +441,7 @@ def main(argv=None) -> int:
             with gc.outputs_in(Path(a.spec).resolve().parent) as od:
                 res = prepare_window(win, den, refresh=a.refresh, provider=a.provider, cap_bytes=int(a.cap_mb * 1e6) if a.cap_mb else None)
                 res["cache"] = str(od / "cache")
-                res["library_layers"] = fetch_spec_layers(a.spec, refresh=a.refresh)
+                res["library_layers"] = pre if pre is not None else fetch_spec_layers(a.spec, refresh=a.refresh)
             print(json.dumps(res, indent=2, default=str))
             return gc.EXIT_OK
         if a.cmd == "status":
@@ -454,9 +463,9 @@ def main(argv=None) -> int:
             print(json.dumps({"findings": [{"id": "MAP-GND-003", "severity": "BLOCK", "message": str(ex) + "; nothing more was read"}]}, indent=2))
             print(f"ground_detail: {ex}", file=sys.stderr)
             return gc.EXIT_REFUSED
-        if type(ex).__name__ == "Refused":
+        if type(ex).__name__ in ("Refused", "PlanError"):      # 5.0.1: a plan that cannot be made is said in one line, never a traceback
             print(f"ground_detail: {ex}", file=sys.stderr)
-            return gc.EXIT_REFUSED
+            return getattr(ex, "code", None) or gc.EXIT_REFUSED
         raise
 
 

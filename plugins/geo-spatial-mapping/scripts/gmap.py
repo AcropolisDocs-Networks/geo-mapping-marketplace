@@ -25,7 +25,7 @@ way. A build run by gmap enforces them: a default changed with no ask and no int
 
 Nothing here fetches from the network except `sources --count` (one count request for a service entry, through the plugin's own door) and
 the build's plan step. Exit 0 done; 2 a request it cannot carry out as given; 3 the build was blocked; 4 stopped for the person
-(a source needs their computer, or a need has no source).
+(a source needs their computer, or a need has no source); 5 a library layer of the map could not be fetched.
 """
 from __future__ import annotations
 
@@ -546,7 +546,7 @@ def data_plan(job: dict) -> list[dict]:
         elif mode == "user-supplied":
             plan.append({"need": n["theme"], "how": "bring", "says": f"a file the person brings ({(e.get('delivery') or {}).get('format') or 'see the entry'}), then: gmap.py data add {n['theme']} --file <file>"})
         else:
-            plan.append({"need": n["theme"], "how": "ref", "says": f"drawn as a library layer: the build fetches it once for the map's window and keeps it (source: {{type: ref, id: {n['chosen']}}})"})
+            plan.append({"need": n["theme"], "how": "ref", "says": f"drawn as a library layer (source: {{type: ref, id: {n['chosen']}}}); " + ("gmap.py draft fetches it once and keeps it" if mode == "fetch" else "read for the map's window when the map is drawn" if mode == "service" else "it ships with the plugin" if mode == "bundled" else "read when the map is drawn")})
     return plan
 
 
@@ -770,6 +770,8 @@ def cmd_compose(a) -> int:
     save(job)
     dev = policy.deviations(policy._norm_keys(spec))
     L = [f"MapSpec written: {path}  ({len(spec['layers'])} layer(s): " + ", ".join(f"{ly['id']} as {ly['role']}" for ly in spec["layers"]) + ")", f"  {dev['line']}",
+         *([] if (spec.get("elements") or {}).get("title", {}).get("text") else
+           ['  no title was given: the message would be drawn as the title, and cut if it is long. Write one (map-text): gmap.py set elements.title.text="..."']),
          "  not written, so the builder decides: theme, look, positions, names, context, ground, locator, scale bar, north arrow"]
     out(L + rules_lines("compose") + next_lines("draft"))
     return gc.EXIT_OK
@@ -817,6 +819,54 @@ def cmd_set(a) -> int:
 
 
 # ---------------------------------------------------------------------------------------------------------------- draft, cold read, build
+def prepare_data(job: dict, ground: bool = True) -> tuple[list[str], bool]:
+    """5.0.1: the fetches a map needs before its plan can be made, done by the road itself: every library layer the MapSpec uses that is
+    fetched on demand, and the detailed ground for its window (once a MapSpec; nothing is fetched twice). 5.0.0 said the build would fetch
+    them and the build stopped instead. -> (lines to print, ok). A library layer that cannot be fetched stops the step; the ground never does."""
+    if os.environ.get("GMAP_OFFLINE") == "1":
+        return [], True
+    spec = Path(job["spec"])
+    sha = sha256(spec)
+    if (job.get("prepared") or {}).get("sha") == sha:
+        return [], True
+    import copy
+    doc = copy.deepcopy(policy._norm_keys(gc.load_mapspec(spec)))
+    try:
+        policy.apply_intent(doc)
+    except Exception:  # noqa: BLE001
+        pass
+    bare = str(policy.lookup(doc, "basemap.bundled") or "") == "none" or str(policy.lookup(doc, "basemap.provider") or "") == "none"
+    cmd = [sys.executable, str(HERE / "ground_detail.py"), "prepare", "--spec", str(spec)] + (["--layers-only"] if (bare or not ground) else [])
+    rc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(spec.parent))
+    try:
+        res = json.loads(rc.stdout) if rc.stdout.strip().startswith("{") else {}
+    except ValueError:
+        res = {}
+    L = []
+    layers = res.get("library_layers") or []
+    got = [x for x in layers if x.get("status") == "fetched"]
+    bad = [x for x in layers if x.get("status") == "failed"]
+    if got:
+        L.append("Fetched for the map (kept; not fetched again): " + ", ".join(f"{x.get('layer')} ({x.get('entry')})" for x in got))
+    for x in bad:
+        L.append(f"NOT fetched: {x.get('layer')} ({x.get('entry')}): {x.get('error')}")
+    if res.get("provider"):
+        L.append(f"Ground for the map's window: {res.get('provider')}" + (f" ({res.get('status')})" if res.get("status") else ""))
+    elif rc.returncode != 0 and not bad:
+        tail = (rc.stderr or "").strip().splitlines()[-1:] or ["no reason given"]
+        if "library layer" in tail[0] or rc.returncode == gc.EXIT_REFUSED and "fetched on demand" in tail[0]:
+            bad = [{"error": tail[0]}]
+            L.append(tail[0][:300])
+        else:
+            L.append(f"The detailed ground was not prepared ({tail[0][:200]}); the bundled ground is drawn")
+    ok = not bad
+    if ok:
+        job["prepared"] = {"sha": sha, "at": now(), "layers": [x.get("entry") for x in got], "ground": res.get("provider")}
+    else:
+        L.append("STOP: a library layer of this map could not be fetched from here. Say which one and why; choose another source only on the person's word.")
+    return L, ok
+
+
 def _run_build(job: dict, extra: list[str]) -> tuple[int, dict | None, str]:
     """The plugin's own build as a person would run it (token, lint, build), with the standing rules enforced. -> (exit, result, digest)."""
     spec = Path(job["spec"])
@@ -912,8 +962,13 @@ def cmd_draft(a) -> int:
     job = load(a.job)
     if not job.get("spec"):
         raise JobError("there is no MapSpec yet: gmap.py compose writes it")
+    pl, ok = prepare_data(job, ground=not a.no_ground)
+    if not ok:
+        save(job)
+        out(pl)
+        return gc.EXIT_SERVICE
     code, res, digest = _run_build(job, ["--draft"])
-    L = [digest]
+    L = pl + [digest]
     rec = {"at": now(), "exit": code, "blocked": bool((res or {}).get("blocked"))}
     if res is None:
         job["drafts"].append(rec)
@@ -996,8 +1051,13 @@ def cmd_build(a) -> int:
     job = load(a.job)
     if not job.get("spec"):
         raise JobError("there is no MapSpec yet: gmap.py compose writes it")
+    pl, ok = prepare_data(job)
+    if not ok:
+        save(job)
+        out(pl)
+        return gc.EXIT_SERVICE
     code, res, digest = _run_build(job, ["--formats", a.formats] + (["--strict"] if a.strict else []))
-    L = [digest]
+    L = pl + [digest]
     rec = {"at": now(), "exit": code, "formats": a.formats}
     if res is not None:
         dev = res.get("deviations") or {}
@@ -1179,6 +1239,7 @@ def parser() -> argparse.ArgumentParser:
     st.add_argument("--asked")
     dr = job_arg(sub.add_parser("draft"))
     dr.add_argument("--no-cold", action="store_true")
+    dr.add_argument("--no-ground", action="store_true", help="5.0.1: fetch the map's library layers and leave the detailed ground for later")
     dr.add_argument("--cold", action="store_true", help="ask for a cold read again (the frame or the emphasis changed)")
     co = job_arg(sub.add_parser("cold"))
     co.add_argument("--answer")
