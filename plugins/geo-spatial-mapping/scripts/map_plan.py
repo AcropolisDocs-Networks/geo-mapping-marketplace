@@ -363,6 +363,11 @@ class LayerPlan:
     direct_texts: object = None                 # 1.22.0: one text per feature (or None): the layer or category named on the map in place of its key
     direct_block: dict | None = None            # 1.22.0: the legend block a directly labelled layer gave up (a build puts it back when a name finds no room)
 
+    @property
+    def colour(self) -> str | None:
+        """4.1.0 (Day 24, D24-24): the colour the map draws the layer in, whatever its kind (a line's stroke, an area's or a point's fill)."""
+        return (self.stroke if self.kind == "line" else self.fill) or self.fill or self.stroke
+
 
 @dataclass
 class Plan:
@@ -1486,6 +1491,8 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     except map_style.StyleError as ex:
         raise PlanError(f"{ex.rule}: {ex}", gc.EXIT_LINT)
     tokens = map_style.after_look(style, map_look.apply_tokens(base_tokens, look))      # 0.17.0: generated ramps and the categorical order (auto)
+    if isinstance(tokens, dict) and "emphasis" in tokens and "accent" not in tokens:
+        tokens = {**tokens, "accent": tokens["emphasis"]}        # 4.1.0 (D24-14): @brand.accent is emphasis; the plan's own tokens say so too
     import style_lint
     findings += style_lint.lint_palette(style, pack["tokens"]["modes"])     # MAP-STYLE-005: the pack's colours for this brand
     tpl_value = template or spec.get("template") or "letter-landscape"
@@ -1618,7 +1625,9 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
             name_f = qd.get("name_field") or next((c for c in ("NAME", "name", "utility_name", "Utility") if c in gdf.columns), None)
             findings += [{**f, "layer": lid, "message": f"layer '{lid}': {f['message']}"}
                          for f in dl.check_territories(gdf, name_f, qd.get("density_field"))]
-        for f in dl.lint_data(gdf, assumed=assumed, id_field=ly.get("id_field"), foreign=foreign_keys(spec, ly)):
+        _dsp = crs_spec.get("display")
+        _dsp = _dsp if _dsp not in (None, "", "auto") and not ce.is_web_mercator(_dsp) else None   # 4.1.0 (D24-07): a named projected CRS
+        for f in dl.lint_data(gdf, assumed=assumed, display_crs=_dsp, id_field=ly.get("id_field"), foreign=foreign_keys(spec, ly)):
             if f["id"] in fixed:
                 continue                      # the op that fixes it ran; its own finding replaces the input's (geo_ops.FIXES)
             if not draw and f["id"] == "MAP-DATA-008":
@@ -1652,6 +1661,15 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     placed = [l for l in layers if len(l.gdf)]              # a fetched or service raster has no footprint yet
     # a library service layer is fetched for the window, not fitted to (M13)
     data_layers = [l for l in placed if l.role in DATA_ROLES and l.role not in ("hillshade", "contour") and not (l.entry and l.capture)] or placed
+    # 4.1.0 (Day 24, D24-06): `fit: false` keeps a layer out of the frame. It was honoured only by the layout's fit, so a world cable layer
+    # marked fit: false still framed the whole globe
+    unfit = [l for l in data_layers if (l.spec or {}).get("fit") is False]
+    if unfit:
+        fitted = [l for l in data_layers if (l.spec or {}).get("fit") is not False]
+        if not fitted and mode_e in ("fit_layers", "fit_message"):
+            raise PlanError("every layer says fit: false, so nothing frames the map; mark the layer the map is about fit: true, or give "
+                            "extent: {mode: bbox, bbox: [...]}", gc.EXIT_USAGE)
+        data_layers = fitted or data_layers
     if not data_layers and mode_e in ("fit_layers", "fit_message"):
         raise PlanError("the map's layers have no extent of their own (a service picture or a fetched raster is read for the map's window); "
                         "give extent: {mode: bbox, bbox: [...]} or {mode: place, place: ...}", gc.EXIT_USAGE)
@@ -1726,9 +1744,16 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     if dl.worst([f for f in findings if f["id"].startswith("MAP-CRS")]):
         raise PlanError("the projection has blocking problems:\n" + "\n".join(f"  {f['id']} {f['message']}" for f in findings if f["severity"] == "BLOCK" and f["id"].startswith("MAP-CRS")), gc.EXIT_LINT)
     # ---- reproject and style
+    clip_to = str(crs_spec.get("clip_to") or "auto").lower()
+    if clip_to == "auto":
+        clip_to = "frame" if _cut.has_far_side(display) else "none"
+    far_lines: dict = {}                      # 4.1.0 (D24-08): line layers kept in lon/lat, cut and clipped once the frame is known
     for l in layers:
         if l.gdf.crs is None:
             raise PlanError(f"layer '{l.id}' has no coordinate reference system", gc.EXIT_LINT)
+        if clip_to in ("frame", "hemisphere") and l.kind == "line" and len(l.gdf) and not _cut.is_cut(display):
+            far_lines[l.id] = l.gdf.to_crs(4326) if not l.gdf.crs.is_geographic else l.gdf
+            l.gdf, _n = _cut.split_lines(far_lines[l.id], display, 4.0e7, share=0.05)     # folds (steps over 2,000 km) gone before the frame
         if not l.gdf.crs.equals(display):
             l.transformations.append(f"reprojected from {l.crs_original} to {crs_label(display)}")
         if l.kind == "line" and _cut.is_cut(display) and len(l.gdf):
@@ -1742,6 +1767,16 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
                              "message": f"layer '{l.id}': polygons in a projection with cuts draw wrongly where one crosses a cut; the ground is drawn "
                                         "by inverse projection, but a data polygon is not: use points, or a projection without cuts"})
         l.gdf = l.gdf.to_crs(display)
+        if l.kind == "line" and len(l.gdf):
+            # 4.1.0 (Day 24, D24-10): touching parts of one feature are joined into one line, so a round cap no longer shows a dot at every
+            # join (merged canals, cable systems)
+            import shapely as _sh
+            _g = np.asarray(l.gdf.geometry.values, dtype=object)
+            _m = np.array([x is not None and x.geom_type == "MultiLineString" for x in _g])
+            if _m.any():
+                _g = _g.copy()
+                _g[_m] = _sh.line_merge(_g[_m])
+                l.gdf = l.gdf.set_geometry(list(_g), crs=l.gdf.crs)
     # the layers against each other, now that they share one CRS (MAP-CRS-007); crs.alignment_check: false turns it off
     if crs_spec.get("alignment_check", True) is not False:
         findings += dl.lint_alignment([(l.id, l.gdf, l.kind, bool(l.assumed_crs)) for l in vec], display,
@@ -1762,6 +1797,13 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         extent = tuple(float(v) for v in _gpd.GeoSeries([_BUILD["region"].frame_geometry], crs="EPSG:4326").to_crs(display).total_bounds)
     else:
         extent = project_bbox(wgs, display)
+    if far_lines:
+        for l in layers:
+            if l.id in far_lines:
+                l.gdf, n_ch = _cut.clip_far_side(far_lines[l.id], display, extent, mode=clip_to)
+                if n_ch:
+                    l.transformations.append(f"crs.clip_to {clip_to}: densified at {_cut.DENSIFY_DEG} degrees, split where the projection's far side "
+                                             f"folds back and clipped round the frame ({n_ch} feature(s) changed)")
     tpl = medium_template(tpl, look)                     # 3.4.0 (eval MEDIUM-2): slide and social sheets read from further away
     plan = Plan(spec=spec, spec_path=spec_path, manifest=manifest, brand=slug, brand_name=bl.brand_name(slug), pack=pack, tokens=tokens, mode=mode,
                 tpl=tpl, tpl_name=tpl_name, crs=display, crs_info=crs_info, extent=extent, layers=layers, basemap=[], findings=findings, helpers=helpers,

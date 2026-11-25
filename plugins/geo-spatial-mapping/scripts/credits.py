@@ -155,6 +155,13 @@ def items(plan) -> list[Item]:
     return [i for i in out if i]
 
 
+_FILE_NAME = re.compile(r"\.(pmtiles|mbtiles|gpkg|geojson|parquet|shp|zip|tif|tiff|csv|json|fgb)\b", re.I)
+
+
+def _norm_credit(x: str) -> str:
+    return re.sub(r"\s+", " ", str(x).lower()).strip(" .;")
+
+
 def _same_party(a: str, b: str) -> bool:
     n = lambda x: re.sub(r"[^a-z0-9]+", " ", str(x).lower().replace("©", "")).strip()
     return bool(n(a)) and (n(a) == n(b) or n(a) in n(b) or n(b) in n(a))
@@ -168,6 +175,8 @@ def _display(org: str, pub: dict | None, products: list, required: list, vias: l
     head = "; ".join(required) if required else org
     if not inner:
         return head
+    if head.endswith(")"):           # 4.1.0: required wording stays word for word (MAP-LIC-017); "Census (ACS) (Boundary Files)" is not read twice
+        return f"{head}, {', '.join(inner)}"
     if pub and pub.get("inline") and len(inner) == 1 and not required:
         return f"{head} {inner[0]}"
     return f"{head} ({', '.join(inner)})"
@@ -183,14 +192,29 @@ def consolidated(plan, label: str = "Sources") -> tuple[str, dict]:
         # layer used to drop out of the line
         replaced = bool(it.required) and not _same_party(it.org, it.required)
         key = (it.required if replaced else it.org).lower()
-        g = groups.setdefault(key, {"org": it.org, "pub": it.pub, "products": [], "required": [], "vias": [], "kinds": []})
-        own = ([it.org] if replaced and not it.products else []) + list(it.products)
+        lab = it.required if replaced else it.org
+        if key not in groups:
+            # 4.1.0 (Day 24, D24-11): a credit whose wording names an organization already on the line joins it ("© OpenStreetMap
+            # contributors (ODbL), Protomaps" for the ground and "© OpenStreetMap contributors" for three data layers were three credits)
+            for k, g0 in groups.items():
+                if any(_same_party(x, lab) for x in g0["labels"]):
+                    key = k
+                    break
+        g = groups.setdefault(key, {"org": it.org, "pub": it.pub, "products": [], "required": [], "vias": [], "kinds": [], "labels": []})
+        if lab not in g["labels"]:
+            g["labels"].append(lab)
+        # a layer whose wording replaces its own name keeps that name as a product, unless the name is another known publisher's (the
+        # Day 24 cells, credited to the Census, printed "(© OpenStreetMap contributors)" inside the Census credit)
+        own = ([it.org] if replaced and not it.products and it.pub is None else []) + list(it.products)
+        own = [x for x in own if not _FILE_NAME.search(str(x))]          # a file name ("phoenix-metro-z13.pmtiles") is not a product
         g["products"] += [p for p in own if p not in g["products"]]
         if it.required and it.required not in g["required"]:
             g["required"].append(it.required)
         if it.via and it.via not in g["vias"]:
             g["vias"].append(it.via)
         g["kinds"].append(it.kind)
+    for g in groups.values():                        # the shorter of two wordings one contains is said once, in the longer
+        g["required"] = [r for r in g["required"] if not any(r != q and _norm_credit(r) in _norm_credit(q) for q in g["required"])]
     parts = [_display(g["org"], g["pub"], g["products"], g["required"], g["vias"]) for g in groups.values()]
     kept: list[str] = []
     for p in parts:                                  # a credit that another (required) credit already contains word for word is printed once
@@ -200,7 +224,7 @@ def consolidated(plan, label: str = "Sources") -> tuple[str, dict]:
     appended = []
     norm = lambda s: re.sub(r"\s+", " ", s.strip().rstrip(".").lower())
     for req in pv.required_credit_lines(plan):
-        if norm(req) not in norm(body):
+        if norm(req).rstrip(")") not in norm(body):            # 4.1.0: "Census (ACS, LODES)" is already said in "Census (ACS, LODES, CBF)"
             appended.append(req.rstrip("."))
             body = (body + "; " if body else "") + req.rstrip(".")
     for n in pv.api_notice_lines(plan) + pv.as_of_notes(plan) + pv.method_notes(plan):     # 1.3.0: an API notice and an as-of date; 3.4.0: how a modelled measure was made

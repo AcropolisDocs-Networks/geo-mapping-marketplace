@@ -740,15 +740,36 @@ def op_concave_hull(gdf, p: dict, ctx: Ctx) -> OpResult:
 
 
 def op_voronoi(gdf, p: dict, ctx: Ctx) -> OpResult:
-    """voronoi {clip_layer | bbox, id_field, extend_km}: best-server cells by straight-line distance (geometry only, no propagation model)"""
+    """voronoi {clip_layer | bbox, id_field, extend_km, merge_m, max_km}: best-server cells by straight-line distance (geometry only, no
+    propagation model). 4.1.0 (Day 24, D24-26): merge_m first merges sites closer than that into one (masts of one site), and max_km cuts each
+    cell to that distance round its site (a lone site no longer owns the desert)."""
     import geopandas as gpd
     import shapely
     _require_crs(gdf, "voronoi")
     if _families(gdf) - {"Point"}:
         raise OpsError("voronoi needs a point layer (use centroid first for areas)")
-    n = len(gdf)
     crs, why = measure_crs(gdf, "distance", ctx=ctx)
     m = _in_measure(gdf, crs)
+    merged_note = None
+    if p.get("merge_m"):
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
+        from scipy.spatial import cKDTree
+        mm = to_metres(p["merge_m"], "m", "merge_m")[0]
+        xy = shapely.get_coordinates(m.geometry.values)
+        pr = cKDTree(xy).query_pairs(mm, output_type="ndarray")
+        k, lab = connected_components(coo_matrix((np.ones(len(pr)), (pr[:, 0], pr[:, 1])), shape=(len(m), len(m))), directed=False)
+        if k < len(m):
+            keep = m.reset_index(drop=True).copy()
+            keep["_site"] = lab
+            keep["merged_n"] = keep.groupby("_site")["_site"].transform("size")
+            cx = keep.groupby("_site").geometry.apply(lambda g: shapely.get_coordinates(g.values).mean(axis=0))
+            keep = keep.drop_duplicates("_site").set_index("_site")
+            keep = gpd.GeoDataFrame(keep.drop(columns=[keep.geometry.name]), geometry=gpd.points_from_xy([v[0] for v in cx.loc[keep.index]],
+                                    [v[1] for v in cx.loc[keep.index]]), crs=crs).reset_index(drop=True)
+            merged_note = f"{len(m) - len(keep)} site(s) within {_fmt(mm)} m of another were merged ({len(m)} points, {len(keep)} sites; `merged_n` counts them)"
+            m = keep
+    n = len(m)
     pts = m.geometry.values
     uniq = len(set(shapely.to_wkb(pts)))
     findings = []
@@ -775,14 +796,23 @@ def op_voronoi(gdf, p: dict, ctx: Ctx) -> OpResult:
     cells = cells[~cells.geometry.is_empty]
     # attach the generating point's attributes: the cell that contains each point (a point on a shared edge takes the first cell)
     joined = gpd.sjoin(cells, m, how="inner", predicate="intersects")
-    joined = joined[~joined.index.duplicated(keep="first")].drop(columns=["index_right"])
+    joined = joined[~joined.index.duplicated(keep="first")]
+    if p.get("max_km"):
+        r_m = float(p["max_km"]) * 1000.0
+        sites = m.geometry
+        gcol = _geom_col(cells)
+        joined[gcol] = [c.intersection(sites.loc[i].buffer(r_m, quad_segs=16)) for c, i in zip(joined.geometry.values, joined["index_right"])]
+        joined = joined[~joined.geometry.is_empty]
+    joined = joined.drop(columns=["index_right"])
     out = _back(gpd.GeoDataFrame(joined, geometry=_geom_col(cells), crs=crs), gdf.crs).reset_index(drop=True)
     idf = p.get("id_field")
     if idf and idf not in out.columns:
         raise OpsError(f"id_field '{idf}' is not in the data")
     note = (f"Best-server (Voronoi) cells: each cell is the area closer to its site than to any other, by straight-line distance in {crs}; "
             f"geometry only, with no propagation model, terrain or antenna pattern. {n} site(s) gave {len(out)} cell(s)"
-            + (f", cut to '{clip_name}'" if clip_name else (", cut to the given box" if bbox else ", cut to a box around the sites")) + ".")
+            + (f", cut to '{clip_name}'" if clip_name else (", cut to the given box" if bbox else ", cut to a box around the sites"))
+            + (f", each cut to {float(p['max_km']):g} km round its site" if p.get("max_km") else "") + "."
+            + (f" {merged_note}." if merged_note else ""))
     return OpResult(out, [note], findings, _prov("voronoi", p, n, len(out), crs, clip_layer=clip_name))
 
 
@@ -2094,6 +2124,109 @@ def op_network_nearest(gdf, p: dict, ctx: Ctx) -> OpResult:
                                                 method_note=method, **extra))
 
 
+def op_network_distance(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """network_distance {from: layer | [lon, lat], snap_m: 400, densify_m: 25, join_m: 3, gap_m: 0, speed_kmh, field: dist}: how far along this
+    line layer each line is from the nearest source (4.1.0, Day 24 D24-25: water from Granite Reef Dam through the canals). Each line gets
+    `{field}_start_m` and `{field}_end_m` (its nearest and farthest point along the network) and, with speed_kmh, `arrive_h` (hours to its
+    start). Lines no source reaches have none. gap_m ties a line end to a line it stops short of (a branch drawn a few metres off)."""
+    import geopandas as gpd
+    import network_measure as nm
+    _require_crs(gdf, "network_distance")
+    if set(_families(gdf)) - {"LineString", "LinearRing"}:
+        raise OpsError("network_distance runs on a line layer (canals, pipes, rivers, cable routes, streets)")
+    src = p.get("from") or p.get("sources") or p.get("layer")
+    crs, why = measure_crs(gdf, "distance", ctx=ctx)
+    lines = _in_measure(gdf, crs).reset_index(drop=True)
+    if isinstance(src, (list, tuple)) and len(src) == 2 and all(isinstance(v, (int, float)) for v in src):
+        pts = gpd.GeoSeries.from_xy([float(src[0])], [float(src[1])], crs="EPSG:4326").to_crs(crs)
+        sname = f"{float(src[0]):.5f}, {float(src[1]):.5f}"
+    elif isinstance(src, str):
+        other = ctx.other(src, "network_distance")
+        pts = _in_measure(other, crs).geometry.representative_point()
+        sname = f"'{src}'"
+    else:
+        raise OpsError("network_distance needs from: a point layer's id or [lon, lat]")
+    f = lambda k, d: to_metres(p.get(k, d), "m", k)[0]          # noqa: E731
+    try:
+        res = nm.measure(lines.geometry.values, [(g.x, g.y) for g in pts], snap_m=f("snap_m", 400), densify_m=f("densify_m", 25),
+                         join_m=f("join_m", 3), gap_m=f("gap_m", 0))
+    except nm.NetworkError as ex:
+        raise OpsError(f"network_distance: {ex}") from None
+    lo, hi = nm.feature_ranges(res, len(lines))
+    field = str(p.get("field") or "dist")
+    out = gdf.reset_index(drop=True).copy()
+    out[f"{field}_start_m"] = np.round(lo, 1)
+    out[f"{field}_end_m"] = np.round(hi, 1)
+    notes = [f"Distance along '{ctx.layer_id or 'this layer'}' from {sname} ({res['snapped']} of {res['sources']} source(s) on the network, {res['starts']} line(s) starting there), "
+             f"measured in {crs} ({why}): {res['reached_m'] / 1000:,.1f} of {res['total_m'] / 1000:,.1f} km reached, the farthest point "
+             f"{res['max_m'] / 1000:,.1f} km away" + (f"; {res['gaps']} gap(s) of up to {f('gap_m', 0):g} m bridged" if res["gaps"] else "")]
+    extra = {"reached_km": round(res["reached_m"] / 1000, 2), "max_km": round(res["max_m"] / 1000, 2), "gaps": res["gaps"]}
+    if p.get("speed_kmh"):
+        sp = float(p["speed_kmh"])
+        if sp <= 0:
+            raise OpsError("network_distance: speed_kmh must be above 0")
+        out["arrive_h"] = np.round(lo / 1000.0 / sp, 3)
+        notes.append(f"`arrive_h`: hours to reach each line at {sp:g} km/h (an assumed speed); the farthest point at {res['max_m'] / 1000 / sp:,.1f} h")
+        extra["speed_kmh"] = sp
+    unreached = int(np.isnan(lo).sum())
+    findings = []
+    if unreached:
+        findings.append({"id": "MAP-OPS-016", "severity": "INFO", "message": f"network_distance: {unreached} of {len(lines)} line(s) are on parts no source "
+                         "reaches (gap_m joins lines that stop short of each other)", "detail": {"unreached": unreached}})
+    return OpResult(out, notes, findings, _prov("network_distance", p, len(gdf), len(out), crs, method_note=(
+        "Distance along the mapped lines from the source; modelled, not measured" + (f", at an assumed {p['speed_kmh']} km/h" if p.get("speed_kmh") else "")), **extra))
+
+
+FIBRE_INDEX = 1.468          # light in single-mode fibre travels at c / 1.468: about 204 km per millisecond
+
+
+def light_budget(a, b, rtt_a_ms: float, rtt_b_ms: float, n: float = FIBRE_INDEX, overhead_ms: float = 0.0, segments: int = 720) -> dict:
+    """The places a signal could have passed between two traceroute hops: every point whose path a -> point -> b fits in the one-way time
+    (rtt_b - rtt_a) / 2 at the speed of light in fibre. In the two-point equidistant projection centred on a and b (distances to both are true)
+    that set is an exact ellipse with a and b as foci. -> {crs, polygon (in crs), budget_km, gc_km, ratio, km_per_ms}."""
+    from pyproj import Geod, Transformer
+    from shapely.geometry import Polygon
+    a, b = (float(a[0]), float(a[1])), (float(b[0]), float(b[1]))
+    one_way = (float(rtt_b_ms) - float(rtt_a_ms)) / 2.0 - float(overhead_ms)
+    if one_way <= 0:
+        raise OpsError("light_budget: the far hop's round trip must be longer than the near hop's")
+    kmms = 299792.458 / float(n) / 1000.0
+    budget_m = one_way * kmms * 1000.0
+    crs = (f"+proj=tpeqd +lat_1={a[1]:.6f} +lon_1={a[0]:.6f} +lat_2={b[1]:.6f} +lon_2={b[0]:.6f} +R=6371000 +units=m +no_defs")
+    t = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+    pa, pb = t.transform(*a), t.transform(*b)
+    _, _, gc = Geod(a=6371000, b=6371000).inv(a[0], a[1], b[0], b[1])
+    if budget_m <= gc:
+        raise OpsError(f"light_budget: {one_way:.1f} ms one way covers {budget_m / 1000:,.0f} km, less than the {gc / 1000:,.0f} km between the hops; "
+                       "the round trips or the places are wrong")
+    A = budget_m / 2.0
+    c = abs(pb[0] - pa[0]) / 2.0
+    B = math.sqrt(max(A * A - c * c, 0.0))
+    cx, cy = (pa[0] + pb[0]) / 2.0, (pa[1] + pb[1]) / 2.0
+    th = np.linspace(0, 2 * np.pi, int(segments) + 1)
+    poly = Polygon(zip(cx + A * np.cos(th), cy + B * np.sin(th)))
+    return {"crs": crs, "polygon": poly, "budget_km": budget_m / 1000.0, "gc_km": gc / 1000.0, "ratio": budget_m / gc, "km_per_ms": kmms,
+            "one_way_ms": one_way}
+
+
+def op_light_budget(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """light_budget {a: [lon, lat], b: [lon, lat], rtt_a_ms, rtt_b_ms, n: 1.468, overhead_ms: 0}: the ellipse of every place a packet could have
+    passed between two hops of a traceroute in the time between them (4.1.0, Day 24 D24-27). One polygon in the two-point equidistant CRS
+    centred on the two hops; draw the map in that CRS (crs.display) and the ellipse, even round a pole, is drawn whole."""
+    import geopandas as gpd
+    for k in ("a", "b", "rtt_a_ms", "rtt_b_ms"):
+        if p.get(k) is None:
+            raise OpsError("light_budget needs a and b ([lon, lat] of the two hops) and rtt_a_ms and rtt_b_ms (their round trips)")
+    r = light_budget(p["a"], p["b"], p["rtt_a_ms"], p["rtt_b_ms"], float(p.get("n", FIBRE_INDEX)), float(p.get("overhead_ms", 0)))
+    out = gpd.GeoDataFrame({"budget_km": [round(r["budget_km"], 1)], "gc_km": [round(r["gc_km"], 1)], "ratio": [round(r["ratio"], 3)],
+                            "one_way_ms": [round(r["one_way_ms"], 2)]}, geometry=[r["polygon"]], crs=r["crs"])
+    note = (f"Light budget: {r['one_way_ms']:.1f} ms one way at {r['km_per_ms']:.1f} km per ms (fibre, n = {float(p.get('n', FIBRE_INDEX)):g}) is a path of up "
+            f"to {r['budget_km']:,.0f} km against {r['gc_km']:,.0f} km straight ({r['ratio']:.2f}x); an outer bound, since router and queueing "
+            f"delay only shrink it. Drawn in {r['crs']} (set crs.display to it)")
+    return OpResult(out, [note], [], _prov("light_budget", p, len(gdf), 1, r["crs"], method_note="Reach of light in fibre between two traceroute hops; an outer bound",
+                                           display_crs=r["crs"], budget_km=round(r["budget_km"], 1), gc_km=round(r["gc_km"], 1)))
+
+
 def pd_numeric(s):
     import pandas as pd
     return pd.to_numeric(s, errors="coerce")
@@ -2161,6 +2294,8 @@ OPS = {
     "thin_lines": op_thin_lines,
     "reconcile": op_reconcile,
     "network_nearest": op_network_nearest,
+    "network_distance": op_network_distance,
+    "light_budget": op_light_budget,
 }
 
 NEEDS_LAYER = {"clip", "intersect", "intersection", "union", "difference", "symmetric_difference", "spatial_join", "nearest",
@@ -2279,6 +2414,10 @@ def equivalent(op: str, p: dict, prov: dict | None = None) -> dict:
         "convex_hull": (f"gdf{'.dissolve(by=' + repr(p.get('by')) + ')' if p.get('by') else ''}.convex_hull", f"ST_ConvexHull(ST_Collect(geom)){' GROUP BY ' + str(p.get('by')) if p.get('by') else ''}"),
         "concave_hull": (f"shapely.concave_hull(gdf.to_crs('{crs}').unary_union, ratio={p.get('ratio', 0.3)})", f"ST_ConcaveHull(ST_Collect(geom), {p.get('ratio', 0.3)})"),
         "voronoi": (f"shapely.voronoi_polygons(MultiPoint(gdf.to_crs('{crs}').geometry), extend_to=mask)", "ST_VoronoiPolygons(ST_Collect(geom))"),
+        "network_distance": (f"scipy.sparse.csgraph.dijkstra(graph of gdf.to_crs('{crs}') densified every {p.get('densify_m', 25)} m, indices=sources, min_only=True)",
+                             "pgr_drivingDistance(edges, source, distance) (pgRouting)"),
+        "light_budget": ("Polygon(ellipse with foci a and b and major axis (rtt_b - rtt_a) / 2 x c / n) in +proj=tpeqd of a and b",
+                         "ST_Transform(ellipse built in the two-point equidistant CRS, 4326)"),
         "as_of": (f"gdf[(gdf.start_date <= '{p.get('date')}') & ((gdf.end_date.isna()) | ('{p.get('date')}' < gdf.end_date))]  # partial dates widened first",
                   f"WHERE start_date <= '{p.get('date')}' AND (end_date IS NULL OR '{p.get('date')}' < end_date)"),
         "area": (f"gdf['{fld or 'area'}'] = gdf.to_crs('EPSG:4326').geometry.apply(lambda g: abs(Geod(ellps='WGS84').geometry_area_perimeter(g)[0]))", "ST_Area(geom::geography)"),

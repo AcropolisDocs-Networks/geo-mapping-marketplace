@@ -45,6 +45,10 @@ GP=${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe; if [ -f "$GP" 
    spec) with `SendUserFile`; the `MAP_TRACE_EVENTS:` JSON only if asked. `MAP_TRACE_PDF:` is always printed: a path, or `skipped - <reason>`;
    when it says skipped, say the PDF was not made and why (the map doctor fixes a missing PDF renderer). Without `SendUserFile`, give the paths. Then say, in plain words: how many of the session's calls were the map plugin's, how many failed and their classes, any hotspot or
    iteration loop, and the one or two changes that would save the most time.
+   **Keep the files (4.1.0).** When the run prints `MAP_TRACE_KEEP:`, the files live only in this workspace and are gone when the session
+   ends. If the map's work folder on the person's computer is connected, copy the `.md`, `.json`, `.html` and `.pdf` into its
+   `.geo-mapping/traces/` folder (the device bridge, or run with `--copy-to` when the folder is local) and say where they went. Offer, in one
+   line, to save the Markdown report to the Project as well; save it only on a yes.
 
 5. **Offer the map evaluation (2.2.0).** When the run prints `MAP_TRACE_OUTPUTS:` with a number above 0, the session wrote finished maps,
    and `MAP_TRACE_EVALUATE:` is the cost of grading them from their pictures (outputs, frames, and how many image reads fresh agents will

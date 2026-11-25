@@ -2,6 +2,10 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-24
+
+- `ref.infrastructure.world.cell.opencellid` rev 4: 4.1.0 (Day 24, D24-01): delivery.geometry_columns names the lon and lat columns, so a downloaded MCC file reads as points without the person naming them.
+
 ## 2026-11-23
 
 - `ref.boundary.world.country.ne10` rev 1: 3.7.0: Natural Earth admin-0 at 1:10m, fetched once into the library cache (4.7 MB zip, sha256 checked), read for source.detail 10m.

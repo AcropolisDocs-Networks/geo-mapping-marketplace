@@ -66,6 +66,11 @@ style: {look: auto}                # auto (default) picks focus (areas), clean (
 # 1.19.0 web: extrude: {per_unit_m: 25, value_field: n, unit: collaborator} draws a bar chart (the legend says the scale); extrude.moments:
 #   [c0, ..., c18] keeps values per moment for a flythrough timeline grow: {layer, start, end}; a large extruded grid is dissolved by value
 #   (extrude.dissolve: off tiles it); webmap.relief_colors (48) writes the page relief as a palette PNG; source.widen reads a layer wider
+# 4.1.0: crs.clip_to: auto | frame | hemisphere | none. A projection with a far side (two-point equidistant, orthographic, azimuthal) folds
+#   long lines back across the map; auto (default) cuts them where they jump and clips them to the frame. A layer's fit: false keeps it out of
+#   the frame (every layer fit: false is a PlanError). A ring round a pole in a projected crs.display is drawn whole (MAP-DATA-009 INFO)
+# 4.1.0 web: webmap.size_budget_mb (default 500, 1-2000): the page size that blocks (MAP-WEB-020); above 16 MB it is a file, not an artifact.
+#   A tiled layer that starts above the page's opening zoom is MAP-WEB-047; a period layer is tiled by what one period shows
 # change a MapSpec with map_restyle.py --set (or gmap_common.dump_mapspec): plain PyYAML writes on: back as true: (read as on again since 1.13.0)
 focus: {mask: auto, lift: true}    # auto: a choropleth or grid fades the land around it and sits on a soft shadow; area: <layer id> picks the outline
 #   2.3.0: area may name a point or line layer: the mask opens reach_mm (default 6) around them on the sheet; the lift stays for areas

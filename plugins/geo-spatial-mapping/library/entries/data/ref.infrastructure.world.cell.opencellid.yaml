@@ -1,6 +1,6 @@
 id: ref.infrastructure.world.cell.opencellid
 type: infrastructure
-rev: 3
+rev: 4
 status: active
 title: OpenCelliD cell tower database (crowd-sourced)
 summary: Crowd-sourced cell identities (MCC, MNC, LAC/TAC, cell id) with estimated positions and ranges, worldwide, downloaded with a free API key under
@@ -52,6 +52,9 @@ crs: EPSG:4326
 delivery:
   mode: fetch
   format: CSV (gzip) per MCC or the full database, downloaded with a free API key from the OpenCelliD downloads page
+  geometry_columns:
+    lon: lon
+    lat: lat
   note: '3.1.0: the opencellid adapter fetches the per-MCC files for a region''s countries (data/mcc-mnc.csv names them) with the person''s opencellid token,
     into data/opencellid/ after a cost card; the CSV columns are radio, mcc, net, area, cell, unit, lon, lat, range, samples, changeable, created, updated,
     averageSignal.'
@@ -109,7 +112,7 @@ license:
     and restricted-license because a published map derived from it carries the same licence.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-22'
+  reviewed_on: '2026-11-24'
   verify_by: '2027-05-04'
   check:
     kind: http_head
@@ -127,3 +130,7 @@ maintenance:
     date: '2026-11-22'
     note: '3.6.0: check --probe tests the token on the cell API (getInArea, one cell, key=), so the twice-a-day downloads are not spent; 401 "API Key not
       known" for a made-up token on 2026-11-22.'
+  - rev: 4
+    date: '2026-11-24'
+    note: '4.1.0 (Day 24, D24-01): delivery.geometry_columns names the lon and lat columns, so a downloaded MCC file reads as points without
+      the person naming them.'

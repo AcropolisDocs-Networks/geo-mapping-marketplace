@@ -15,6 +15,8 @@ import re
 import sys
 from pathlib import Path
 
+import numpy as np
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts"))
 import crs_engine as ce  # noqa: E402
@@ -227,13 +229,26 @@ def check_antimeridian_polar(gdf, display_crs=None) -> list[dict]:
     out = []
     if gdf.empty or gdf.crs is None:
         return out
+    # 4.1.0 (Day 24, D24-07): data already in the map's own projected CRS is judged there, not in lon/lat. The light-budget ellipse in a
+    # two-point equidistant map is a plain ellipse; turned into lon/lat it encloses the North Pole and looked like an antimeridian crossing
+    if not gdf.crs.is_geographic and display_crs is not None and _same_crs(gdf.crs, display_crs):
+        return out
     g = gdf if gdf.crs.is_geographic else gdf.to_crs("EPSG:4326")
     ok = ~g.geometry.isna().values & ~g.geometry.is_empty.values
     # Judge each part of a multi-part feature: Alaska has parts on both sides of 180 and is fine; one polygon that spans
     # more than 180 degrees was drawn the long way round.
     parts = shapely.get_parts(g.geometry.values[ok])
     pb = shapely.bounds(parts)
-    wide = int(((pb[:, 2] - pb[:, 0]) > 180).sum())
+    wide_mask = (pb[:, 2] - pb[:, 0]) > 180
+    if wide_mask.any() and display_crs is not None and _projected_display(display_crs):
+        # a ring that winds once round a pole (its longitudes add up to a full turn) is a polar polygon, not a crossing: a projected map
+        # draws it vertex by vertex
+        polar_ok = [i for i in np.flatnonzero(wide_mask) if _encircles_pole(parts[i])]
+        if polar_ok:
+            out.append(finding("MAP-DATA-009", "INFO", f"{len(polar_ok)} polygon(s) go round a pole; kept, because the display CRS "
+                               f"({_crs_name(display_crs)}) draws them whole", len(polar_ok)))
+            wide_mask[polar_ok] = False
+    wide = int(wide_mask.sum())
     if wide:
         out.append(finding("MAP-DATA-009", "BLOCK", f"{wide} geometry part(s) span more than 180 degrees of longitude; they cross the antimeridian and would draw across the whole map. Split them at 180 (ops: [{{op: antimeridian_split}}], or geo-convert --antimeridian-split) or centre the projection on the antimeridian", wide))
     b = shapely.bounds(g.geometry.values)
@@ -242,6 +257,43 @@ def check_antimeridian_polar(gdf, display_crs=None) -> list[dict]:
         if polar:
             out.append(finding("MAP-DATA-009", "BLOCK", f"{polar} feature edge(s) lie beyond 85.06 degrees latitude, which Web Mercator cannot show", polar))
     return out
+
+
+def _same_crs(a, b) -> bool:
+    try:
+        from pyproj import CRS
+        return CRS.from_user_input(a).equals(CRS.from_user_input(b), ignore_axis_order=True)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _projected_display(d) -> bool:
+    try:
+        from pyproj import CRS
+        c = CRS.from_user_input(d)
+        return not c.is_geographic and not ce.is_web_mercator(d)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _crs_name(d) -> str:
+    try:
+        from pyproj import CRS
+        return CRS.from_user_input(d).name
+    except Exception:  # noqa: BLE001
+        return str(d)[:40]
+
+
+def _encircles_pole(part) -> bool:
+    """A polygon ring whose longitude steps (each taken the short way) add up to a full turn goes round a pole."""
+    if getattr(part, "geom_type", "") != "Polygon":
+        return False
+    xy = np.asarray(part.exterior.coords)
+    if len(xy) < 4:
+        return False
+    d = np.diff(xy[:, 0])
+    d = (d + 180.0) % 360.0 - 180.0
+    return abs(abs(float(d.sum())) - 360.0) < 1.0
 
 
 def np_abs(a):

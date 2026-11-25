@@ -79,6 +79,7 @@ class Result:
     dropped_size: int = 0
     dropped_outside: int = 0
     dropped_lines: list = field(default_factory=list)      # 1.2.0 (Day 9 issue 6): names left out only because every free position crossed a line
+    dropped_texts: list = field(default_factory=list)      # 4.1.0 (Day 24, D24-13): what was left out, so a small layer's drop is said by name
 
     @property
     def total(self) -> int:
@@ -86,7 +87,7 @@ class Result:
 
     def as_dict(self) -> dict:
         return {"placed": len(self.placed), "dropped_collision": self.dropped_collision, "dropped_size": self.dropped_size,
-                "dropped_outside": self.dropped_outside}
+                "dropped_outside": self.dropped_outside, "dropped_texts": list(self.dropped_texts[:20])}
 
 
 def _text_rect(text: str, size_pt: float, weight: int, cx: float, cy: float, anchor: str, tracking: float = 0.0) -> tuple[Rect, float, float]:
@@ -178,6 +179,7 @@ def place(cands: list[Candidate], frame: Rect, obstacles: list[Rect], size_pt: f
         w = tm.width_mm(c.text, size_pt, wt) + c.tracking * max(len(c.text) - 1, 0)
         if c.kind == "area" and c.avail_w is not None and w > c.avail_w * 1.6 and c.avail_w < 20:
             res.dropped_size += 1
+            res.dropped_texts.append(c.text)
             continue
         tries: list[tuple[float, float, str]] = []
         if c.kind == "area":
@@ -212,6 +214,7 @@ def place(cands: list[Candidate], frame: Rect, obstacles: list[Rect], size_pt: f
                 res.dropped_outside += 1
             else:
                 res.dropped_collision += 1
+                res.dropped_texts.append(c.text)
                 if line_blocked:
                     res.dropped_lines.append(c.text)
     return res

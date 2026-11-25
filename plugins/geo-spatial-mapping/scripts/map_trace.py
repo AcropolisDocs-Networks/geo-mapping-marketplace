@@ -65,11 +65,11 @@ EXC_LINE = re.compile(r"^([A-Za-z_][\w.]*(?:Error|Exception|Exit|Refusal|Interru
 OPTION = re.compile(r"(?<![\w-])(--[a-z][a-z0-9-]*)")
 SHELL_WRITE = re.compile(r"(?:^|[;&|\n]\s*)(?:cat|tee|printf|echo)\b[^\n|;]*>{1,2}\s*[^&\s]|>{1,2}\s*[\"']?[\w./~$-]+\.(?:ya?ml|json|geojson|py|md|txt|csv|gpkg|svg|html)\b|\bsed\s+-i\b|\b(?:cp|mv|tee)\b\s")
 EXIT_CLASS = {gc.EXIT_USAGE: "usage", gc.EXIT_LINT: "lint-block", gc.EXIT_REFUSED: "refused", gc.EXIT_SERVICE: "service", gc.EXIT_BRAND_OUTSIDE_BUILD: "brand"}
-DISPOSITION = {"plugin-moved": "host", "shell-tail": "shell", "inline-script": "operator", "crash": "product", "dependency": "dependency", "lint-block": "input", "usage": "input", "refused": "input", "brand": "input",
+DISPOSITION = {"plugin-moved": "host", "shell-tail": "shell", "inline-script": "operator", "session-script": "operator", "crash": "product", "dependency": "dependency", "lint-block": "input", "usage": "input", "refused": "input", "brand": "input",
                "service": "environment", "network": "environment", "environment": "environment", "timeout": "environment", "failed": "unclassified"}
 
 
-SESSION_SIDE = ("shell-tail", "inline-script")        # 1.21.0: classes whose failure the session's own command set, not the plugin
+SESSION_SIDE = ("shell-tail", "inline-script", "session-script")     # 1.21.0: classes whose failure the session's own command set; 4.1.0: + its scripts
 
 READING = {"input": "a gate or the input stopped the run (the spec, the data or the arguments); fix the input, not the plugin.",
            "dependency": "a package or native library is missing; run the map doctor (`doctor.py --fix --all`).",
@@ -483,6 +483,10 @@ def classify(call: dict, inv: dict, pname: str, window: str | None, written: dic
         ev["shared"] = list(dict.fromkeys(others))[:4]       # 2.1.0 (Day 19 trace): the call's time is the whole command's
     owner = inv["owners"].get(main)
     lane = window if (window and window in inv["skills"] and owner in (None, window)) else (owner or f"({main})")
+    if how in ("import", "import-file"):
+        # 4.1.0 (Day 24, T-01): the session's own script that imports the plugin's modules (render_cells.py importing events_anim) is the
+        # session's work: its failures and its time are its own, not a crash or a slow call of the module it imports
+        ev["session_script"] = True
     ev.update(lane=lane, basis=how if lane != window else "window", scripts=found, op=_op_after(cmd, main) if how == "path" else None,
               options=sorted(set(OPTION.findall(cmd)))[:12], key=hashlib.sha1(cmd.encode()).hexdigest()[:12], target=(main, ev.get("op") or _op_after(cmd, main) or "-", _target(cmd)))
     return ev
@@ -502,7 +506,8 @@ def json_result(t: str | None) -> dict | None:
 
 
 JSON_KIND = {"lint": "lint-block", "usage": "usage", "input": "usage", "refused": "refused", "service": "service", "network": "network",
-             "timeout": "timeout", "credential": "service", "environment": "environment", "brand": "brand"}
+             "timeout": "timeout", "credential": "service", "environment": "environment", "brand": "brand",
+             "runtime": "crash"}          # 4.1.0 (Day 24, T-02): MAP-SVC-013 is an exception inside the data server (KeyError: 'mcc'): the plugin's
 
 
 def status_of(call: dict, is_last_map_trace: bool) -> str:
@@ -583,7 +588,12 @@ def error_class(text: str) -> tuple[str, str | None, str | None]:
     low = t.lower()
     jr = json_result(t)
     if jr is not None and jr.get("ok") is False:          # 2.4.0 (X-01): the class comes from the result's own error_kind
-        return JSON_KIND.get(str(jr.get("error_kind") or "lint"), "lint-block"), site, exc
+        k = str(jr.get("error_kind") or "lint")
+        if k == "runtime":                                  # 4.1.0 (T-02): the exception's name from the message ("KeyError: 'mcc'")
+            msg = jr.get("message") or next((f.get("message") for f in (jr.get("findings") or []) if isinstance(f, dict)), "") or ""
+            m = re.match(r"\s*([A-Za-z_]\w*(?:Error|Exception))\b", str(msg))
+            return "crash", site or "mcp/ogc_server.py (data server)", exc or (m.group(1) if m else None)
+        return JSON_KIND.get(k, "lint-block"), site, exc
     if HOOK_STOP in t:                                     # 1.17.2: the plugin's own pre-export hook stopped the build before it ran
         return "lint-block", None, None
     if ("no such file or directory" in low or "can't open file" in low) and plugin_moved(t):
@@ -871,10 +881,21 @@ GLUE_LIBS = ("geopandas", "h3", "shapely", "rasterio", "pyogrio", "fiona", "duck
 HAND_FETCH = re.compile(r"(?:curl|wget|Invoke-WebRequest|requests\.get|httpx\.get|urlopen)[^\n]{0,200}?(ImageServer|exportImage|/WCS|GetCoverage|\.tif\b|/downloadFile/)", re.I)
 
 
+# 4.1.0 (Day 24, T-03): what the session's own code did, so each line of "work done outside the plugin" names a candidate feature
+OPS_SEEN = ((r"voronoi_diagram|voronoi_polygons|Voronoi\(", "voronoi"), (r"\.overlay\(|gpd\.overlay", "overlay"),
+            (r"dijkstra|shortest_path|networkx", "network distance"), (r"\+proj=|to_crs\(", "reprojection"),
+            (r"segmentize|interpolate\(", "densify"), (r"cKDTree|query_pairs|query_ball", "nearest-neighbour search"),
+            (r"sjoin|spatial join", "spatial join"), (r"ImageDraw|alpha_composite|ffmpeg", "frame drawing"),
+            (r"CubicSpline|PchipInterpolator|np\.interp", "interpolation through time"), (r"buffer\(", "buffer"),
+            (r"union_all|unary_union|linemerge|line_merge", "merge"), (r"\.clip\(|clip_by_rect|intersection\(", "clip"),
+            (r"tracert|traceroute|ripe\.net|atlas\.ripe", "traceroute"), (r"read_parquet|read_file", "data read"))
+
+
 def outside_work(calls: list[dict], events: list[dict], inv: dict) -> list[dict]:
     """The session's own Python that used geodata libraries or the plugin's modules, and hand fetches of data the plugin fetches, between
     plugin calls: prep.py, an inline heredoc, a curl to an ImageServer. -> [{n, what, libraries}] (names only, never the code)."""
     written: dict[str, set] = {}
+    written_text: dict[str, list] = {}
     plugin_mods = set(inv.get("scripts") or [])
     out = []
     for c, e in zip(calls, events, strict=False):
@@ -884,12 +905,15 @@ def outside_work(calls: list[dict], events: list[dict], inv: dict) -> list[dict]
             libs = {m for m in IMPORT.findall(body) if m in GLUE_LIBS or m in plugin_mods}
             name = Path(str(inp["file_path"])).name
             written.setdefault(name, set()).update(libs)
+            written_text.setdefault(name, []).append(body[:200_000])
             continue
         cmd = _command(c)
-        if not cmd or (e.get("lane") and e.get("scripts")):
+        if not cmd or (e.get("lane") and e.get("scripts") and not e.get("session_script")):
             continue
         libs: set = set()
         what = None
+        if e.get("session_script"):                       # 4.1.0 (T-01): named by its own file, with the plugin modules it imports
+            libs |= {s_ for s_ in (e.get("scripts") or []) if s_ in plugin_mods}
         for m in OTHER_RUN.finditer(shell_calls.normalized(cmd)):
             f = m.group(1)
             if f and Path(f).name in written and Path(f).name not in {f"{s}.py" for s in plugin_mods}:
@@ -903,8 +927,13 @@ def outside_work(calls: list[dict], events: list[dict], inv: dict) -> list[dict]
         hm = HAND_FETCH.search(cmd)
         if hm:
             out.append({"n": e["n"], "what": f"hand fetch ({hm.group(1)})", "libraries": []})
+        if e.get("session_script") and not what:
+            fm = re.search(r"(?:cat\s*>\s*|python3?\s+)([\w./-]+\.py)", cmd)
+            what = Path(fm.group(1)).name if fm else "session script"
         if what and libs:
-            out.append({"n": e["n"], "what": what, "libraries": sorted(libs)})
+            body = cmd + " " + " ".join(written_text.get(what, []))
+            ops = sorted({lab for rx, lab in OPS_SEEN if re.search(rx, body)})
+            out.append({"n": e["n"], "what": what, "libraries": sorted(libs), **({"ops": ops} if ops else {})})
     return out
 
 
@@ -969,6 +998,8 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
              "_key": ev["key"], "_target": ev["target"], "_start": c["start"], "_end": c["end"], "_id": c["id"]}
         if ev.get("shared"):
             e["shared_with"] = ev["shared"]
+        if ev.get("session_script"):
+            e["session_script"] = True
         if ev["lane"] and EVALUATION_CALL.search(_command(c)):
             e.update(lane=None, evaluation=True)                          # 2.2.0: counted on its own line, never as map work
         if "installing them now" in (c["result"] or "") and "env_probe" in (ev["scripts"] or []):
@@ -981,7 +1012,9 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
                 code = EXIT.search(c["result"] or "")
                 if cls == "failed" and ev.get("tail") and code and int(code.group(1)) == 1 and not FINDING.search(c["result"] or ""):
                     cls = "shell-tail"
-                if cls == "crash" and not site:
+                if e.get("session_script") and cls in ("crash", "failed", "usage"):
+                    cls = "session-script"                                   # 4.1.0 (T-01)
+                elif cls == "crash" and not site:
                     # 1.21.0 (Day 18 trace F-1): a traceback with no frame in this plugin is the session's own script (python -c reading the
                     # plugin's output, a JSONDecodeError on an empty line): not a crash of the script the call is named after
                     cls = "inline-script"
@@ -1004,7 +1037,12 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     lo_t, hi_t = (min(times), max(times)) if times else (None, None)
     reminders = sum(1 for r in log if r.get("e") == "reminder" and (not win or lo_t is None or lo_t <= _ms_time(r["t"]) <= hi_t + dt.timedelta(minutes=5)))
     timed = [e for e in mapev if e["status"] not in ("self", "blocked") and not e.get("stopped_by")]     # calls that ran: a stopped one has no time
-    hooks = {"log": bool(log_files), "files": [Path(f).name for f in log_files], "measured": hk["measured"], "map_calls": len(timed),
+    untimed: dict = {}                                   # 4.1.0 (Day 24, T-04): which calls the timing hook did not measure, by tool
+    for e in timed:
+        if not e.get("measured"):
+            k_ = "data server" if e.get("lane") == "ogc-server" else (e.get("tool") or "?")
+            untimed[k_] = untimed.get(k_, 0) + 1
+    hooks = {"untimed": untimed, "log": bool(log_files), "files": [Path(f).name for f in log_files], "measured": hk["measured"], "map_calls": len(timed),
              "stopped": sum(1 for e in mapev if e.get("stopped_by")), "reminders": reminders}
     # --- rework
     retries, loops, reruns = [], [], []
@@ -1094,7 +1132,7 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     recorded = recorded_quality(outputs, calls)
     glue = outside_work(calls, events, inv)
     return {**({"map_quality": recorded} if recorded else {}), "outside_plugin": glue, "outputs_missed": miss, "run_ledger": {"files": [Path(f).name for f in led_files], "rows": len(led_rows), "calls_matched": led_matched},
-            "evaluation_calls": {"calls": len(evals), "seconds": round(sum(e["seconds"] or 0.0 for e in evals), 1)}, "outputs": outputs,"plugin": pname, "version": _version(), "transcript": path.stem, "found_by": how, "files_read": files, "window": win,
+            "evaluation_calls": {"calls": len(evals), "seconds": round(sum(e["seconds"] or 0.0 for e in evals), 1)}, "outputs": outputs,"plugin": pname, "version": _version(), "release": _release_status(), "transcript": path.stem, "found_by": how, "files_read": files, "window": win,
             "first": first.isoformat() if first else None, "last": last.isoformat() if last else None,
             "calls": {"total": len(events), "map": len(mapev), "other": len(events) - len(mapev)},
             "status": {s: sum(1 for e in mapev if e["status"] == s) for s in ("ok", "failed", "degraded", "blocked", "orphan", "self")},
@@ -1109,7 +1147,7 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             "blocked": [_public(e) for e in mapev if e["status"] == "blocked"], "orphans": [e["n"] for e in mapev if e["status"] == "orphan"],
             "retries": retries, "loops": loops, "reruns_after_edit": reruns, "hotspots": hotspots,
             "ledger": dict(sorted(ledger.items(), key=lambda kv: (-{"BLOCK": 2, "WARN": 1, "INFO": 0}.get(kv[1]["severity"], -1), -kv[1]["calls"]))),
-            "slowest": [_public(e) for e in sorted((e for e in mapev if e["seconds"]), key=lambda e: -e["seconds"])[:5]],
+            "slowest": [_public(e) for e in sorted((e for e in mapev if e["seconds"] and not e.get("session_script")), key=lambda e: -e["seconds"])[:5]],
             "runs": [{"pipeline": r.get("pipeline"), "status": r.get("status")} for r in runs][-10:], "run_rework": rework_runs,
             "fix_spec": fix, "events": [_public(e) for e in events]}
 
@@ -1479,6 +1517,16 @@ def fmt_d(s: float | None) -> str:
     return f"{s // 3600}h{(s % 3600) // 60:02d}m"
 
 
+def _release_status() -> dict:
+    """4.1.0 (Day 24, D24-05): the session ran 4.0.1 while 4.0.3 was out. The trace says so, from the doctor's once-a-day release check."""
+    try:
+        import release_check as rc
+        r = rc.check()
+        return {"latest": r.get("latest"), "newer": bool(r.get("newer")), "note": r.get("note")}
+    except Exception:  # noqa: BLE001 - never stops a trace
+        return {"latest": None, "newer": False, "note": None}
+
+
 def bar(n: int, top: int, width: int = 18) -> str:
     return "█" * max(1, round(width * n / top)) if top and n else ""
 
@@ -1486,6 +1534,9 @@ def bar(n: int, top: int, width: int = 18) -> str:
 def text_report(o: dict) -> str:
     L = []
     L.append(f"MAP TRACE  {o['plugin']} {o['version'] or ''}".rstrip())
+    rel = o.get("release") or {}
+    if rel.get("newer"):
+        L.append(f"Release   this session ran {o['version']}; {rel['latest']} is out. Findings below may already be fixed: update first")
     warn = " (a guess: the newest transcript; pass --session <id>)" if o["found_by"] == "NEWEST-FALLBACK" else ""
     L.append(f"Transcript: {o['transcript'][:8]}… found by {o['found_by']}{warn}" + (f" · window {o['window']}" if o["window"] else ""))
     if len(o["files_read"]) > 1:
@@ -1507,6 +1558,9 @@ def text_report(o: dict) -> str:
     h = o["hooks"]
     L.append(f"Hooks     timing {h['measured']} of {h['map_calls']} map call(s) measured" + ("" if h["log"] else " (no timing log)")
              + f" · pre-export check stopped {h['stopped']} build(s) · credentials reminder {h['reminders']} time(s)")
+    if h.get("untimed"):
+        L.append("          not measured: " + ", ".join(f"{k} {v}" for k, v in sorted(h["untimed"].items(), key=lambda kv: -kv[1]))
+                 + " (their time is bounded from the transcript)")
     L.append("")
     L.append("Map lanes (calls)")
     top = max(v["calls"] for v in o["lanes"].values())
@@ -1563,7 +1617,7 @@ def text_report(o: dict) -> str:
         L.append("")
         L.append("Work done outside the plugin (each is a candidate plugin feature)")
         for g in o["outside_plugin"][:10]:
-            L.append(f"  #{g['n']:<5} {g['what'][:40]:<40} {', '.join(g['libraries'])}")
+            L.append(f"  #{g['n']:<5} {g['what'][:40]:<40} {', '.join(g['libraries'])}" + (f"  ({', '.join(g['ops'][:6])})" if g.get("ops") else ""))
     if (o.get("run_ledger") or {}).get("rows"):
         rl = o["run_ledger"]
         L.append(f"Ledger    {rl['rows']} plugin run(s) recorded, {rl['calls_matched']} call(s) matched (exit codes and outputs from the plugin itself)")
@@ -1644,6 +1698,8 @@ def main(argv=None) -> int:
     ap.add_argument("--strict", action="store_true")
     ap.add_argument("--idle-seconds", type=int, default=IDLE_SECONDS)
     ap.add_argument("--no-evaluate", action="store_true", help="2.2.0: do not list the session's outputs or offer the map evaluator")
+    ap.add_argument("--copy-to", metavar="DIR", help="4.1.0 (Day 24, T-04): also copy the report files into DIR (the map's work folder's "
+                    ".geo-mapping/traces), so a later session can read them")
     ap.add_argument("--evaluate-only", action="store_true", help="2.2.0: offer the map evaluator on the outputs of the newest trace of this session, without tracing again")
     a = ap.parse_args(argv)
     if a.op == "find":
@@ -1683,6 +1739,18 @@ def main(argv=None) -> int:
             print(f"MAP_TRACE_HTML: {page_line}")
             print(f"MAP_TRACE_PDF: {pdf_line}")
         print(f"MAP_TRACE_FIXSPEC_PENDING: {sum(1 for f in o['fix_spec'] if f['diagnosis'])}")
+        files = [d / f"{stem}{x}" for x in (".md", ".json", ".html", ".pdf") if (d / f"{stem}{x}").is_file()]
+        if a.copy_to:
+            import shutil
+            dst = Path(a.copy_to)
+            dst.mkdir(parents=True, exist_ok=True)
+            for f_ in files:
+                shutil.copy2(f_, dst / f_.name)
+            print(f"MAP_TRACE_COPIED: {len(files)} file(s) to {dst}")
+        else:
+            # 4.1.0 (T-04): a cloud workspace is gone when the session ends; the files are kept where the map is
+            print(f"MAP_TRACE_KEEP: {len(files)} file(s) live only in {d}; copy them into the work folder's .geo-mapping/traces on the person's "
+                  "computer (or pass --copy-to), and offer, never assume, a copy in the Project")
         if not a.no_evaluate:
             for ln in offer_evaluation(o, d / stem):
                 print(ln)

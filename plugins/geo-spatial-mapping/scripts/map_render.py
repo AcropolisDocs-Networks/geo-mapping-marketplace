@@ -686,6 +686,10 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
         geoms, keep = to_sheet(src_gdf, frame, False, page=page)
         if page:
             _record_page_simplify(l, page, rep)
+        geoms, keep, n_stub = _drop_line_stubs(geoms, keep, float(l.stroke_w_mm or 0.3))
+        if n_stub:
+            # 4.1.0 (Day 24, D24-10): a part shorter than the line is wide draws as a dot (its round cap inside the casing): left out
+            rep.setdefault("line_stubs", {})[l.id] = n_stub
         dash = l.symbol.get("dash")
         # 1.14.0 (Day 11 issue 8): a named dash (dashed, dotted, dash-dot) is turned into numbers, as on polygon edges; 1.13 wrote the
         # name itself into stroke-dasharray, which renderers ignore, so "dashed" drew solid
@@ -710,7 +714,7 @@ def layer_group(plan: mp.Plan, l, frame: lo.Frame, rep: dict, obstacles: list) -
                 if not got:
                     continue
                 w_ = (cw_[max(ci, 0)] if (cw_ and ci is not None) else l.stroke_w_mm) + cas["extra_mm"]
-                g.append(f'<g data-casing="1" fill="none" stroke="{cas["color"]}" stroke-width="{sd.num(w_)}" stroke-linecap="round" '
+                g.append(f'<g data-casing="1" fill="none" stroke="{cas["color"]}" stroke-width="{sd.num(w_)}" stroke-linecap="butt" '
                          f'stroke-linejoin="round"{cop}><path d="{got}"/></g>')
 
         def emit_lines(sel):
@@ -1127,6 +1131,7 @@ def line_nodes_markup(l, geoms, keep, t: dict, rep: dict, auto: bool = False) ->
     widths = l.symbol.get("_widths") or []
     edge = (getattr(l, "casing", None) or {}).get("color") or t["land"]
     at: dict = {}                                     # (x, y) rounded to 0.1 mm -> (width, colour) of the widest line ending there
+    ends: dict = {}                                   # (x, y) -> how many line ends meet there
     for i in np.where(keep)[0]:
         gm = geoms[i]
         if gm is None or gm.is_empty:
@@ -1140,11 +1145,29 @@ def line_nodes_markup(l, geoms, keep, t: dict, rep: dict, auto: bool = False) ->
                 continue
             for x, y in (c[0], c[-1]):
                 k = (round(float(x), 1), round(float(y), 1))
+                ends[k] = ends.get(k, 0) + 1
                 if k not in at or w > at[k][0]:
                     at[k] = (w, col)
         if len(at) > LINE_NODE_MAX:
             rep.setdefault("line_nodes", {})[l.id] = f"not drawn: more than {LINE_NODE_MAX:,} line ends"
             return ""
+    # 4.1.0 (Day 24, D24-10): where exactly two ends meet, one line just continues (a canal split into ways, a cable's segments): no node.
+    # Nodes are the ends (one line) and the junctions (three or more)
+    # ends closer than the line is wide count as one place (two ways that stop a hair apart)
+    keys = list(ends)
+    if keys:
+        from scipy.spatial import cKDTree
+        xy = np.array(keys, dtype=float)
+        tol = max(0.3, 1.5 * float(l.stroke_w_mm or 0.3))
+        tree = cKDTree(xy)
+        meet = {k: sum(ends[keys[j]] for j in tree.query_ball_point(xy[i], tol)) for i, k in enumerate(keys)}
+    else:
+        meet = {}
+    passing = [k for k, n in meet.items() if n == 2]
+    for k in passing:
+        at.pop(k, None)
+    if passing:
+        rep.setdefault("line_nodes_passing", {})[l.id] = len(passing)
     if auto:
         if len(at) > LINE_NODE_AUTO_MAX:
             rep.setdefault("line_nodes", {})[l.id] = f"not drawn: {len(at):,} line ends, more than style.look auto draws ({LINE_NODE_AUTO_MAX})"
@@ -2399,6 +2422,32 @@ def _render_labels(H, W, banner_h, banner_on, blocks, body, border, co_svg, dt_c
         ov.append(sd.text(map_rect.x0 + map_rect.w / 2, map_rect.y0 + banner_h / 2 + fonts["banner"] * PT * 0.35, txt, fonts["banner"], tcol, weight=700, anchor="middle"))
     body += ov
     return body,
+
+
+def _drop_line_stubs(geoms, keep, width_mm: float):
+    """Parts of a line on the sheet shorter than `width_mm` are left out where the line has longer parts (the stubs at a join); a line that
+    is short all through is kept for MAP-CART-039. -> (geoms, keep, parts dropped)."""
+    import shapely
+    from shapely.geometry import MultiLineString
+    out = list(geoms)
+    keep = np.asarray(keep).copy()
+    dropped = 0
+    for i, g in enumerate(out):
+        if not keep[i] or g is None or g.is_empty:
+            continue
+        parts = list(g.geoms) if g.geom_type == "MultiLineString" else [g] if g.geom_type == "LineString" else None
+        if parts is None:
+            continue
+        lens = shapely.length(np.asarray(parts, dtype=object))
+        good = [p for p, ln in zip(parts, lens) if ln >= width_mm]
+        if len(good) == len(parts) or not good:
+            continue                 # a line that is short all through stays: MAP-CART-039 marks it or says so
+        dropped += len(parts) - len(good)
+        if not good:
+            keep[i] = False
+        else:
+            out[i] = good[0] if len(good) == 1 else MultiLineString(good)
+    return (np.asarray(out, dtype=object) if isinstance(geoms, np.ndarray) else out), keep, dropped
 
 
 def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> Rendered:
@@ -3739,8 +3788,21 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
         cbnd = tuple(float(v) for v in gdfs[0].total_bounds)
         win = inset_window(win, cbnd, w / h, 1.0) if (win[2] - win[0] > cbnd[2] - cbnd[0]) else win
         zo = max((win[2] - win[0]) / max(mbox[2] - mbox[0], 1e-9), (win[3] - win[1]) / max(mbox[3] - mbox[1], 1e-9))
-        if "max_zoom_out" in cfg and zo > factor + 1e-6:       # a limit the spec sets wins over the state outline
-            state, win = None, None
+        if "max_zoom_out" in cfg and zo > factor + 1e-6:       # a limit the spec sets wins over the state outline...
+            from shapely.geometry import box as _box
+            lim = inset_window(mbox, tuple(float(v) for v in gdfs[0].total_bounds), w / h, factor)
+            sg = state["geometry"]
+            seen = float(sg.intersection(_box(*lim)).area) / max(float(sg.area), 1e-9)
+            # 4.1.0 (Day 24, D24-09): ...unless it would show less than half of the state the map is in: a metro map with max_zoom_out 5
+            # (the default, written out) showed a nearly empty box: the default limit holds only when 90% of the state still shows. A limit
+            # other than the default, or inset_map.state: false, keeps it regardless
+            if seen >= 0.9 or cfg.get("state") is False or abs(factor - INSET_MAX_ZOOM_OUT) > 1e-9:
+                state, win = None, None
+            else:
+                rep_note = (f"inset_map.max_zoom_out {factor:g} would show {seen:.0%} of {state['name']}; the locator shows the whole of it "
+                            "instead (inset_map.state: false keeps the limit)")
+                if rep_note not in plan.notes:
+                    plan.notes.append(rep_note)
     if win is None:
         win = inset_window(mbox, tuple(float(v) for v in gdfs[0].total_bounds), w / h, factor)
     share = ((mbox[2] - mbox[0]) * (mbox[3] - mbox[1])) / max((win[2] - win[0]) * (win[3] - win[1]), 1e-9)

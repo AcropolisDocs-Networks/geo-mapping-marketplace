@@ -62,7 +62,7 @@ feature counts and fetches nothing.
 
 ## Limits worth knowing
 
-- **Page size.** MAP-WEB-020 warns above 16 MB (an artifact holds no more, and a phone is slow to open it) and blocks above 60 MB. 100,000
+- **Page size.** MAP-WEB-020 warns above 16 MB (an artifact holds no more, and a phone is slow to open it) and blocks above the page budget, `webmap.size_budget_mb` (default 500 MB, for pages that carry large GeoJSON or shapefile data). 100,000
   sites with two short fields make a page of about 6 MB.
 - **Leaflet** draws every feature: above 20,000 MAP-WEB-007 warns; `engine: auto` would use MapLibre instead.
 - **Clusters** are MapLibre only. A tiled point layer's clusters are made at build time, one level per zoom; a GeoJSON one uses MapLibre's own.

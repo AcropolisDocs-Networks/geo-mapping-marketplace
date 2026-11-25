@@ -639,6 +639,9 @@ def ofcom_postcodes(postcodes: list[str], *, auth=None, http=None, limit: int = 
 OCID_URL = "https://opencellid.org/downloads.php?type=mcc&file={mcc}.csv.gz"
 
 
+OCID_DAILY_QUOTA = 2          # 4.1.0: downloads a free OpenCelliD token is allowed a day
+
+
 def mcc_table() -> list[dict]:
     with open(gc.plugin_root() / "data" / "mcc-mnc.csv", encoding="utf-8") as f:
         return list(csv.DictReader(f))
@@ -664,15 +667,67 @@ class OpenCellId(FileAdapter):
     kind = name
     defaults = {"by": "provider", "agg": "count_groups"}
 
-    def listing(self, region, **opts) -> list[dict]:
+    daily_quota = OCID_DAILY_QUOTA
+
+    def mccs(self, region, mcc=None, **opts) -> list[str]:
+        """4.1.0 (Day 24, D24-02): the MCC files for a region, or the ones asked for with mcc=310 (several: mcc=310;311 or 310+311)."""
+        if mcc not in (None, ""):
+            asked = [m for m in re.split(r"[;+| ]+", str(mcc)) if m]
+            bad = [m for m in asked if not re.fullmatch(r"\d{3}", m)]
+            if bad:
+                raise AdapterError(f"mcc must be 3-digit mobile country codes (310, 311); not {', '.join(bad)}", 2)
+            return sorted(set(asked))
         ms = mccs_for(region.countries)
         if not ms:
             raise AdapterError(f"no mobile country code is known for {', '.join(region.countries)}", 4)
-        return [{"name": f"{m}.csv.gz", "url": OCID_URL.format(mcc=m), "bytes": None, "mcc": m} for m in ms]
+        return ms
+
+    def listing(self, region, **opts) -> list[dict]:
+        return [{"name": f"{m}.csv.gz", "url": OCID_URL.format(mcc=m), "bytes": None, "mcc": m} for m in self.mccs(region, **opts)]
 
     def local(self, folder: Path, region, **opts) -> list[Path]:
-        ms = mccs_for(region.countries)
-        return [folder / f"{m}.csv.gz" for m in ms if (folder / f"{m}.csv.gz").is_file()]
+        return [folder / f"{m}.csv.gz" for m in self.mccs(region, **opts) if (folder / f"{m}.csv.gz").is_file()]
+
+    def downloads_today(self, folder: Path) -> int:
+        import datetime as _dt
+        try:
+            log = json.loads((folder / "opencellid.downloads.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return 0
+        today = _dt.date.today().isoformat()
+        return sum(1 for x in log if isinstance(x, dict) and x.get("date") == today)
+
+    def fetch(self, region, folder: Path, *, confirm: bool = False, opener=None, **opts) -> dict:
+        """The files a token may download today come first; the rest wait for tomorrow (OpenCelliD's free token allows
+        OCID_DAILY_QUOTA downloads a day). A file already in the folder is kept and costs nothing."""
+        import datetime as _dt
+        files = self.listing(region, **opts)
+        have = [f for f in files if (folder / f["name"]).is_file()]
+        need = [f for f in files if not (folder / f["name"]).is_file()]
+        left = max(0, self.daily_quota - self.downloads_today(folder))
+        today, later = need[:left], need[left:]
+        card = {"adapter": self.name, "region": region.name, "cost": self.cost({}, files), "folder": str(folder), "licence": self.licence_class,
+                "quota": {"per_day": self.daily_quota, "left_today": left, "kept": [f["name"] for f in have],
+                          "today": [f["name"] for f in today], "later": [f["name"] for f in later]}}
+        if later:
+            card["note"] = (f"an OpenCelliD token downloads {self.daily_quota} files a day: {', '.join(f['name'] for f in today) or 'none'} today, "
+                            f"{', '.join(f['name'] for f in later)} on a later day (run the same fetch again). To take fewer, name them: mcc=310")
+        if not confirm:
+            return {"ok": True, "confirm_needed": True, "card": card}
+        folder.mkdir(parents=True, exist_ok=True)
+        got = [{"path": str(folder / f["name"]), "bytes": (folder / f["name"]).stat().st_size, "kept": True} for f in have]
+        logp = folder / "opencellid.downloads.json"
+        try:
+            log = json.loads(logp.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            log = []
+        for f in today:
+            got.append(download(f["url"], folder / f["name"], auth=self.auth(), opener=opener))
+            log.append({"date": _dt.date.today().isoformat(), "mcc": f["mcc"]})
+            logp.write_text(json.dumps(log[-200:], indent=1), encoding="utf-8")
+        (folder / f"{self.name}.fetch.json").write_text(json.dumps({"adapter": self.name, "region": region.name, "files": got,
+                                                                     "fetched": _dt.date.today().isoformat()}, indent=2), encoding="utf-8")
+        return {"ok": True, "card": card, "files": got, "later": [f["name"] for f in later]}
 
     def table(self, paths, region, radio: str = "all", **opts):
         import pandas as pd

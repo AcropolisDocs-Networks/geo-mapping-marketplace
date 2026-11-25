@@ -81,6 +81,17 @@ def cached_path(entry: dict, variant: str | None = None) -> Path | None:
     return gc.find_cached("cache", "library", cache_name(entry["id"], variant))
 
 
+def fill_template(t: str, variant: str, entry_id: str = "") -> str:
+    """4.1.0 (Day 24, D24-01): put the variant into every named field of a url_template, whatever the field is called ({statefp}, {st},
+    {variant}, {mcc}). Before, only the three state names were filled, so OpenCelliD's `{mcc}` raised a bare KeyError: 'mcc'."""
+    import string
+    fields = [f for _, f, _, _ in string.Formatter().parse(t) if f]
+    bad = [f for f in fields if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", f)]
+    if bad:
+        raise FetchError(f"{entry_id}: the url_template has fields that are not plain names ({', '.join(bad)})", gc.EXIT_LINT)
+    return t.format(**{f: variant for f in fields})
+
+
 def source_url(entry: dict, variant: str | None) -> tuple[str, bool]:
     """(url, hash_applies). The `source.file_sha256` describes the entry's main URL only, never a per-variant URL."""
     d = entry.get("delivery") or {}
@@ -93,8 +104,8 @@ def source_url(entry: dict, variant: str | None) -> tuple[str, bool]:
         if not t:
             raise FetchError(f"{entry['id']} has no per-variant file; fetch it without --variant", gc.EXIT_USAGE)
         if not VARIANT.match(variant):
-            raise FetchError(f"variant '{variant}' is not a plain code such as a state FIPS (04)", gc.EXIT_USAGE)
-        return t.format(statefp=variant, st=variant, variant=variant), False
+            raise FetchError(f"variant '{variant}' is not a plain code such as a state FIPS (04) or an MCC (310)", gc.EXIT_USAGE)
+        return fill_template(t, variant, entry["id"]), False
     url = (entry.get("source") or {}).get("url")
     if not url:
         raise FetchError(f"{entry['id']} records no download URL", gc.EXIT_REFUSED)

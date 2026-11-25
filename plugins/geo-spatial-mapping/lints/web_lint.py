@@ -20,7 +20,7 @@ M14 (both engines unless noted; every check reads the page text back, not the bu
   018 every PMTiles archive embedded in the page opens, holds the layers the page draws from it, and every feature of the source is in it
       at the layer's top zoom; a baked cluster level counts every point once (BLOCK) (MapLibre)
   019 the embedded glyphs cover every character the page's labels draw (WARN) (MapLibre)
-  020 page size and feature caps: over 16 MB WARN (too big to publish as an artifact, slow on a phone), over 60 MB BLOCK; a MapLibre page
+  020 page size and feature caps: over 16 MB WARN (too big to publish as an artifact, slow on a phone), over the page budget BLOCK (webmap.size_budget_mb, default 500 MB); a MapLibre page
       drawing over 100,000 features as GeoJSON WARN (they belong in tiles)
   021 an attribution for every source: each basemap source carries its provider's credit, the bundled background its own, and every data
       layer's credit is in the source note (BLOCK for a basemap, WARN otherwise)
@@ -331,7 +331,7 @@ def lint_file(path) -> list[dict]:
 
 
 MAX_PAGE_WARN = 16 * 1024 * 1024        # an artifact holds at most 16 MB, and a phone takes a while over more
-MAX_PAGE_BLOCK = 60 * 1024 * 1024
+MAX_PAGE_BLOCK = 500 * 1024 * 1024      # 4.1.0 (Day 24, D24-15): was 60 MB; large GeoJSON and shapefile data go into pages (webmap.size_budget_mb)
 MAX_GEOJSON_MAPLIBRE = 100_000
 
 
@@ -542,8 +542,13 @@ def check_size(text: str) -> list[dict]:
     """MAP-WEB-020: page size and feature caps."""
     out = []
     n = len(text.encode("utf-8"))
-    if n > MAX_PAGE_BLOCK:
-        out.append(finding("MAP-WEB-020", "BLOCK", f"the page is {n / 1048576:.0f} MB, over the {MAX_PAGE_BLOCK / 1048576:.0f} MB limit; clip the data to the area needed, keep fewer fields, or deliver the data as a tile file beside the page", n))
+    cfg0 = json_block(text, "gmap-config") or {}
+    try:
+        cap = float(cfg0.get("sizeBudgetMb")) * 1024 * 1024 if cfg0.get("sizeBudgetMb") else MAX_PAGE_BLOCK
+    except (TypeError, ValueError):
+        cap = MAX_PAGE_BLOCK
+    if n > cap:
+        out.append(finding("MAP-WEB-020", "BLOCK", f"the page is {n / 1048576:.0f} MB, over its {cap / 1048576:.0f} MB budget (webmap.size_budget_mb); clip the data to the area needed, keep fewer fields, or deliver the data as a tile file beside the page", n))
     elif n > MAX_PAGE_WARN:
         out.append(finding("MAP-WEB-020", "WARN", f"the page is {n / 1048576:.1f} MB: over the 16 MB an artifact holds, and slow to open on a phone; clip the data or keep fewer fields", n))
     if re.search(r'<html[^>]*\bdata-engine="maplibre"', text):

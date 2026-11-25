@@ -168,11 +168,18 @@ def _tile_index(x, y, z: int):
     return tx, ty
 
 
-def dense_minzoom(gdf3857, kind: str, minzoom: int, maxzoom: int) -> tuple[int, int]:
-    """The lowest zoom from minzoom up at which no tile holds more than the per-tile feature limit, and that tile count."""
+def dense_minzoom(gdf3857, kind: str, minzoom: int, maxzoom: int, group=None) -> tuple[int, int]:
+    """The lowest zoom from minzoom up at which no tile holds more than the per-tile feature limit, and that tile count. `group` (4.1.0, Day 24
+    D24-16): the period of each feature of a layer on the time slider; a tile is judged by what one period shows, since one period is drawn at a
+    time (24 hourly copies of 732 cells started the layer at zoom 11, above the page's own zoom, so it drew nothing)."""
     import numpy as np
     import shapely
     cap = TILE_FEATURES_POINTS if kind == "point" else TILE_FEATURES_SHAPES
+    grp = None
+    if group is not None:
+        _, grp = np.unique(np.asarray(group).astype(str), return_inverse=True)
+        if len(gdf3857) and int(np.bincount(grp).max()) <= cap:
+            return minzoom, int(np.bincount(grp).max())
     if len(gdf3857) <= cap:
         return minzoom, len(gdf3857)
     rp = shapely.point_on_surface(gdf3857.geometry.values) if kind != "point" else shapely.centroid(gdf3857.geometry.values)
@@ -180,7 +187,10 @@ def dense_minzoom(gdf3857, kind: str, minzoom: int, maxzoom: int) -> tuple[int, 
     worst = len(gdf3857)
     for z in range(minzoom, maxzoom + 1):
         tx, ty = _tile_index(xy[:, 0], xy[:, 1], z)
-        _, counts = np.unique(tx * (2 ** z) + ty, return_counts=True)
+        key = tx * (2 ** z) + ty
+        if grp is not None:
+            key = key.astype(np.int64) * (int(grp.max()) + 1) + grp
+        _, counts = np.unique(key, return_counts=True)
         worst = int(counts.max()) if len(counts) else 0
         if worst <= cap:
             return z, worst
@@ -462,7 +472,7 @@ def write_mbtiles(layers: dict, out, minzoom: int = 0, maxzoom: int | str = "aut
 def write_tiles(fmt: str, layers: dict, out, *, minzoom: int = 0, maxzoom: int | str = "auto", simplify: bool = True, attribution: str | None = None,
                 name: str | None = None, description: str | None = None, layer_zooms: dict | None = None, layer_descriptions: dict | None = None,
                 max_bytes: int = DEFAULT_MAX_BYTES, overwrite: bool = True, check: bool = True, mvt_limits: dict | None = None,
-                fixed_zooms: bool = False) -> dict:
+                fixed_zooms: bool = False, period_field: str | None = None) -> dict:
     """Write `layers` ({name: GeoDataFrame}) as one vector tile set. Returns {'path', 'paths', 'format', 'layers': {name: {...}}, 'minzoom',
     'maxzoom', 'bytes', 'notes', 'findings', 'command'}. `layer_zooms` ({name: (min, max)}) overrides the zooms of single layers."""
     if fmt not in DRIVERS:
@@ -498,7 +508,8 @@ def write_tiles(fmt: str, layers: dict, out, *, minzoom: int = 0, maxzoom: int |
             hi, why = auto_maxzoom(g3, kind, lo)
             notes.append(f"layer '{lname}': top zoom {hi} ({why})")
         hi = int(hi)
-        lo2, worst = (lo, 0) if fixed_zooms else dense_minzoom(g3, kind, lo, hi)     # 1.6.0: zooms set by a level-of-detail pyramid stay
+        grp = g3[period_field].to_numpy() if (period_field and period_field in g3.columns) else None
+        lo2, worst = (lo, 0) if fixed_zooms else dense_minzoom(g3, kind, lo, hi, group=grp)     # 1.6.0: zooms set by a level-of-detail pyramid stay
         if lo2 > lo:
             notes.append(f"layer '{lname}' starts at zoom {lo2}, not {lo}: below it one tile would hold {worst:,}+ features and GDAL would thin it")
             lo = lo2

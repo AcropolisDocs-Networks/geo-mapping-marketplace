@@ -45,6 +45,15 @@ A timeline (YAML or JSON; every key optional):
                                      feature event's t may be a real time, and a reveal's times are read through it
   counters: [{format: date, pattern: "%-d %B %Y", position: top-right}]
                                      3.4.0 (#6): a date counter shows the clock's real time at t (no keys needed)
+  values: {layer: cells, columns: [u00, ..., u23], interpolate: cubic, cyclic: true, sparkline: {label: ...}}
+                                     4.1.0 (Day 24): a polygon layer's colour through time, smoothly (motion.py)
+  flow: {layer: canals, from: [lon, lat], gap_m: 120, arrive_s: 20, speed_kmh: 3.24}
+                                     4.1.0 (Day 24): water, traffic or a signal moving along a line layer from its source (motion.py)
+  top: auto | true | false | {layers: [sites]}
+                                     4.1.0: the map's furniture drawn over the moving layers (auto: with values or flow); layers: data
+                                     layers drawn over them too (masts over moving cells)
+  overflow: {px: 30, bottom_px: 12}  4.1.0: moving layers may run past the map frame, fading out
+  counters: [{format: clock | hm}]   4.1.0: a time of day ("4:15 am") or a duration ("23 h 30 min") from the counter's value in hours
   reveal: {layer: buildings, time_field: created, end_field: deleted, class_field: kind, flash_s: 0.6}
                                      3.4.0 (#3): a polygon or point layer appears feature by feature at its time (65,000 buildings): drawn
                                      from an id raster, class colours, each new feature flashing in the label colour, keyed "Just added"
@@ -93,7 +102,7 @@ def load(src, *, duration: float | None = None) -> dict:
     if not isinstance(d, dict):
         raise TimelineError("a timeline is a mapping (story, counters, keyframes, features, end_hold, poster)")
     known = {"duration", "story", "counters", "keyframes", "features", "end_hold", "poster", "poster_hold", "poster_dissolve", "logo", "fade_s",
-             "min_eye_m", "date", "grow", "chart", "clock", "reveal"}
+             "min_eye_m", "date", "grow", "chart", "clock", "reveal", "values", "flow", "top", "overflow"}
     extra = sorted(set(d) - known)
     if extra:
         raise TimelineError(f"unknown timeline key(s): {', '.join(extra)}; the keys are {', '.join(sorted(known))}")
@@ -112,6 +121,18 @@ def load(src, *, duration: float | None = None) -> dict:
     out["keyframes"] = _keyframes(d.get("keyframes") or [], out)
     out["features"] = _features(d.get("features"), out["clock"]) if d.get("features") else None
     out["grow"] = _grow(d["grow"]) if d.get("grow") else None
+    import motion                                     # 4.1.0 (Day 24): values through time, flow along lines, the furniture on top
+    try:
+        out["values"] = motion.load_values(d["values"], dur) if d.get("values") else None
+        out["flow"] = motion.load_flow(d["flow"], dur) if d.get("flow") else None
+        out["overflow"] = motion.load_overflow(d.get("overflow"))
+    except motion.MotionError as ex:
+        raise TimelineError(str(ex)) from None
+    top = d.get("top", "auto")
+    out["top_layers"] = [str(x) for x in (top.get("layers") or [])] if isinstance(top, dict) else []
+    if isinstance(top, dict):                         # {layers: [sites]}: these data layers are drawn over the moving ones as well
+        top = top.get("on", True)
+    out["top"] = bool(out["values"] or out["flow"]) if top in ("auto", None) else bool(top)
     out["findings"] += caption_repeats(out)
     import heat_anim                                  # 2.1.0 (Day 19 video issue 15): bars and a line, the current row marked
     try:
@@ -278,7 +299,7 @@ def _counter(c, i, clock=None) -> dict:
         return {"text": str(c.get("text") or "{v}"), "keys": [(clock[0][1], 0.0), (clock[-1][1], 0.0)], "format": "date",
                 "pattern": str(c.get("pattern") or "%-d %B %Y"), "step": False, "position": pos, "clock": clock,
                 "start": _vt(c.get("start", clock[0][1]), clock), "end": _vt(c["end"], clock) if c.get("end") is not None else math.inf}
-    if isinstance(c, dict) and c.get("source") in ("reveal",) and not c.get("keys"):
+    if isinstance(c, dict) and c.get("source") in ("reveal", "flow") and not c.get("keys"):
         # 3.4.0: a counter of the reveal's features on the map at each moment (filled in by the video once the layer is read)
         c = {**c, "keys": [[0.0, 0.0], [1.0, 0.0]]}
     if not isinstance(c, dict) or not c.get("keys"):
@@ -396,6 +417,20 @@ def counter_value(c: dict, t: float) -> float:
     return keys[-1][1]
 
 
+def clock_text(hours: float, fmt: str) -> str:
+    """4.1.0 (Day 24): format: clock shows hours of the day ("4:15 am", to the quarter hour); format: hm a duration ("23 h 30 min", to ten
+    minutes)."""
+    if fmt == "clock":
+        h = float(hours) % 24
+        hr, mn = int(h), int(round((h - int(h)) * 60 / 15) * 15)
+        if mn == 60:
+            hr, mn = (hr + 1) % 24, 0
+        return f"{hr % 12 or 12}:{mn:02d} {'am' if hr < 12 else 'pm'}"
+    h = max(0.0, float(hours))
+    hr, mn = int(h), int((h - int(h)) * 60) // 10 * 10
+    return f"{hr} h {mn:02d} min"
+
+
 def counters_at(tl: dict, t: float) -> list[tuple[str, str]]:
     """[(text, position)] of the counters showing at t."""
     out = []
@@ -403,6 +438,8 @@ def counters_at(tl: dict, t: float) -> list[tuple[str, str]]:
         if c["start"] <= t < c["end"]:
             if c["format"] == "date":
                 v = strftime_portable(to_real(c["clock"], t), c["pattern"])
+            elif c["format"] in ("clock", "hm"):
+                v = clock_text(counter_value(c, t), c["format"])
             else:
                 v = format(counter_value(c, t), c["format"])
             out.append((c["text"].replace("{v}", v), c["position"]))

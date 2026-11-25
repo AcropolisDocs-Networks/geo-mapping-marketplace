@@ -107,6 +107,25 @@ def _coarsen(key: str, from_unit: str, to_unit: str) -> str:
     raise TimeError(f"cannot read {from_unit} values by {to_unit}")
 
 
+_CLOCK = re.compile(r"^\s*(\d{1,2})(?::(\d{2}))?\s*(?:([ap])\.?\s*m\.?)?\s*$", re.I)
+
+
+def _is_clock(t: str) -> bool:
+    """'9 pm', '12 am', '6:30 am': a clock name (a bare number, or '21:00', which stays a time of the day, is not one)."""
+    m = _CLOCK.match(str(t))
+    return bool(m) and bool(m.group(3)) and 1 <= int(m.group(1)) <= 12
+
+
+def _clock_minutes(t: str) -> int:
+    m = _CLOCK.match(str(t))
+    h, mi, ap = int(m.group(1)), int(m.group(2) or 0), (m.group(3) or "").lower()
+    if ap == "a":
+        h = 0 if h == 12 else h
+    elif ap == "p":
+        h = 12 if h == 12 else h + 12
+    return h * 60 + mi
+
+
 def periods(values, unit: str = "auto", order=None) -> Periods:
     if unit not in UNITS:
         raise TimeError(f"time unit is one of {', '.join(UNITS)}, not '{unit}'")
@@ -136,11 +155,17 @@ def periods(values, unit: str = "auto", order=None) -> Periods:
             m = _QUARTER.match(str(v))
             y, q = (m.group(1), m.group(2)) if m.group(1) else (m.group(4), m.group(3))
             return f"{int(y):04d}-Q{int(q)}"
+    clock = bool(texts) and all(_is_clock(t) for t in texts)
     if kind:
         keys = [None if _isnull(v) else parse(v) for v in vals]
         if unit not in ("auto", kind):
             keys = [None if k is None else _coarsen(k, kind, unit) for k in keys]
             kind = unit
+    elif clock and unit == "auto":
+        # 4.1.0 (Day 24, D24-17): "12 am", "9 pm", "21:00" are named periods of a day, in clock order; pandas read them as today's date at
+        # that hour and the slider showed "20:00" (or every one as "00:00")
+        kind = "period"
+        keys = [None if _isnull(v) else str(v).strip() for v in vals]
     else:
         ts = pd.to_datetime(pd.Series([None if _isnull(v) else v for v in vals], dtype="object"), errors="coerce", format="mixed")
         ok = ts.notna()
@@ -158,7 +183,7 @@ def periods(values, unit: str = "auto", order=None) -> Periods:
                 raise TimeError(f"the time field holds values that are not dates ({', '.join(sorted(set(texts))[:4])}); use unit auto for named periods")
             kind = "period"
             keys = [None if _isnull(v) else str(v).strip() for v in vals]
-    distinct = sorted({k for k in keys if k is not None}, key=(lambda s: _natural(s)) if kind == "period" else None)
+    distinct = sorted({k for k in keys if k is not None}, key=(_clock_minutes if (kind == "period" and clock) else (lambda s: _natural(s)) if kind == "period" else None))
     if order and kind == "period":
         given = [str(x) for x in order]
         distinct = [g for g in given if g in distinct] + [d for d in distinct if d not in given]

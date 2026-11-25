@@ -158,3 +158,37 @@ def world_width(crs) -> float:
     x, y = np.asarray(x), np.asarray(y)
     ok = np.isfinite(x) & np.isfinite(y)
     return float(max(np.ptp(x[ok]), np.ptp(y[ok]))) if ok.any() else 4.0e7
+
+# ---------------------------------------------------------------------------------------------------------------- 4.1.0: projections with a far side
+FAR_SIDE_PROJ = ("tpeqd", "ortho", "nsper", "aeqd", "gnom", "tpers")
+
+
+def has_far_side(crs) -> bool:
+    """4.1.0 (Day 24, D24-08): a projection whose far side folds back across the map (two-point equidistant, orthographic, azimuthal)."""
+    try:
+        from pyproj import CRS
+        s = CRS.from_user_input(crs).to_proj4() or ""
+    except Exception:  # noqa: BLE001
+        s = str(crs or "")
+    return any(f"+proj={p} " in s + " " for p in FAR_SIDE_PROJ)
+
+
+def clip_far_side(gdf_wgs, crs, box, *, mode: str = "frame", share: float = 0.5, margin: float = 0.25):
+    """Lines in lon/lat -> the layer in `crs`, densified at DENSIFY_DEG, split where a step jumps more than share x the frame's width
+    (the far side folding back), and clipped to the frame grown by `margin` on each side. hemisphere also drops what lies past the horizon
+    (non-finite points, which split_lines already drops). -> (GeoDataFrame, features changed)."""
+    import shapely
+    W, S, E, N = (float(v) for v in box)
+    w, h = E - W, N - S
+    g, cut = split_lines(gdf_wgs, crs, w, share=share)
+    clip = (W - margin * w, S - margin * h, E + margin * w, N + margin * h)
+    geoms = np.asarray(g.geometry.values, dtype=object)
+    ok = np.array([x is not None and not x.is_empty for x in geoms])
+    out = geoms.copy()
+    if ok.any():
+        out[ok] = shapely.clip_by_rect(geoms[ok], *clip)
+    changed = int(sum(1 for a, b in zip(geoms, out) if a is not None and b is not None and not a.equals(b))) + cut
+    g = g.copy()
+    g["geometry"] = out
+    keep = np.array([x is not None and not x.is_empty for x in out])
+    return g[keep], changed

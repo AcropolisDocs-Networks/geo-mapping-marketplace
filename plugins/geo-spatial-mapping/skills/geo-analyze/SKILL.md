@@ -63,7 +63,9 @@ MapSpec layer, so a map can carry its own analysis.
 | Fewer vertices | `simplify --tolerance 50 --units m` (disclosed on the map) |
 | Shapes drawn across 180 degrees | `antimeridian_split` (the fix for MAP-DATA-009) |
 | An outline around points | `convex_hull [--by market]`; `concave_hull --ratio 0.3` for a tighter one |
-| Best-server cells | `voronoi [--other market.gpkg]` (cut to the other layer) or `--bbox x0 y0 x1 y1`; one cell per site |
+| Best-server cells | `voronoi [--other market.gpkg]` (cut to the other layer) or `--bbox x0 y0 x1 y1`; one cell per site. `--param merge_m=150` makes masts of one site one cell (`merged_n` counts them); `--param max_km=8` cuts each cell to that reach, so a lone site does not own the desert (4.1.0) |
+| How far along a network from a source (water from a dam, a cable from its landing) | `network_distance --param 'from=[-111.69, 33.52]' [--param gap_m=120] [--param speed_kmh=3.24]` on a line layer (or `from=dam` naming a point layer) → `dist_start_m`, `dist_end_m`, `arrive_h`; `gap_m` ties a branch drawn a few metres short of its canal; lines no source reaches are MAP-OPS-016. Modelled: the map says so (4.1.0) |
+| Where a packet could have gone between two traceroute hops | `light_budget --param 'a=[-74.0, 40.7]' --param 'b=[-0.1, 51.5]' --param rtt_a_ms=2 --param rtt_b_ms=90` → one ellipse in the two-point equidistant CRS of the hops (set `crs.display` to it); light in fibre at c/1.468, an outer bound (4.1.0) |
 | Size of each polygon, length of each line | `area --field area_km2 --units km2|mi2|m2|acres|ha`; `length --field len_mi --units mi` |
 | How many points in each polygon; their total | `count_in --other sites.gpkg [--field sites]`; `sum_in --other sites.gpkg --value tenants` |
 | Population or households inside each footprint | `population_covered --other tracts.gpkg --value households [--mode centroid] [--field hh]` |

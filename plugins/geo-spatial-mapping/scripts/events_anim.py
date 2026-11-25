@@ -355,8 +355,9 @@ def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand:
                 raise EventsError(f"layer '{layer}' must be a point layer that the map draws")
             events_gdf, layer_colour = lp.gdf.copy(), lp.fill
         else:
-            if lp is None or lp.kind != "polygon":
-                raise EventsError(f"the timeline's feature layer '{lid}' must be a polygon layer that the map draws")
+            # 4.1.0 (Day 24, D24-23): a line or point layer may be keyed in the legend only too (the flow's canals, the masts over moving cells)
+            if lp is None or lp.kind not in ("polygon", "line", "point"):
+                raise EventsError(f"the timeline's layer '{lid}' must be a layer that the map draws (polygons, lines or points)")
             extra[lid] = lp
         lay.setdefault("legend", {})["only"] = True
     spec["template"] = cfg["template"]
@@ -390,6 +391,7 @@ def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand:
             im.save(buf, format="PNG")
             png = buf.getvalue()
     base = animate.fit_frame(png, *px, _rgb(obj["plan"].tokens["background"]))
+    obj["plan"]._base_svg, obj["plan"]._base_dpi = obj["rendered"].svg, dpi      # 4.1.0: the furniture drawn again on a transparent sheet
     # the frame's own pixels per inch (the base is fitted to them), not the dpi it was drawn at: the overlays are placed by it
     return base, obj["rendered"].report, obj["plan"], events_gdf, layer_colour, float(cfg["dpi"]) * float(scale), extra
 
@@ -428,8 +430,9 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
     if not layer and not (feats or rv_cfg or tl["story"] or tl["counters"]):
         raise EventsError("give --layer (a point layer of events), or a --timeline with story, counters, features or reveal")
     work = Path(tempfile.mkdtemp(prefix="gm-events-"))
-    base, report, plan, gdf, layer_colour, dpi, extra = build_base(spec_path, layer, size, work, brand, scale,
-                                                                   also=(feats["layer"],) if feats else (), reveal=rv_cfg)
+    vcfg, fcfg = tl.get("values"), tl.get("flow")
+    also = tuple(dict.fromkeys(([feats["layer"]] if feats else []) + ([vcfg["layer"]] if vcfg else []) + ([fcfg["layer"]] if fcfg else [])))
+    base, report, plan, gdf, layer_colour, dpi, extra = build_base(spec_path, layer, size, work, brand, scale, also=also, reveal=rv_cfg)
     n = int(frames or max(2, round(duration * fps)))
     intro_f = min(n - 2, round(intro * fps))
     win = report["map_window"]
@@ -491,6 +494,7 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
                 c["keys"] = [(t_, float(rv.counts(t_).get(c.get("class") or "alive", 0))) for t_ in ts]
                 c["start"] = min(c["start"], 0.0)
     findings = list(tl["findings"])
+    mo = _motion_setup(tl, plan, extra, win, ppm, base.size, duration, findings, fps, n, report)
     bottom_px = max(0, base.size[1] - round(win["rect_mm"][3] * ppm)) + round(base.size[1] * 0.02)
     font_tl = str(fl._inter_ttf(600))
     avoid = [[v * ppm for v in (o or {}).get("rect_mm")] for o in ((report or {}).get("overlays") or {}).values()
@@ -510,6 +514,8 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
         b = pieces.draw(base, tk) if pieces else base
         if rv is not None:
             b = rv.draw(b, tk)
+        if mo:
+            b = _motion_frame(mo, b, tk, plan.tokens, str(fl._inter_ttf(600)))
         fields = None
         if heat:
             b, shown, fields = _heat_frame(ha, heat, b, k, fps, events)
@@ -521,7 +527,8 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
             im, chart_rect = ha.paint_chart(im, tk, chart, t, font_path=font_tl, avoid=avoid, ramp=heat["field"].ramp if heat else None)
         if tl["story"] or tl["counters"]:
             im, _pl = tlm.paint(im, tk, tl, t, font_path=font_tl, logo=None, bottom_px=bottom_px, top_px=round(win["rect_mm"][1] * ppm),
-                                avoid=avoid + ([chart_rect] if chart_rect else []), frame_px=[v * ppm for v in win["rect_mm"]])
+                                avoid=avoid + ([chart_rect] if chart_rect else []) + ([mo["panel"]] if mo and mo.get("panel") else []),
+                                frame_px=[v * ppm for v in win["rect_mm"]])
         im.save(fdir / f"frame_{k:05d}.png")
     if pieces:
         findings += pieces.end_findings((n - 1) / fps)
@@ -533,7 +540,7 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
            "pieces": len(pieces.ids) if pieces else 0, "trail": trail,
            "reveal": ({"layer": rv_cfg["layer"], "features": rv.n, "drawn": rv.drawn, "end": rv.counts((n - 1) / fps)} if rv is not None else None),
            "heat": {k_: v for k_, v in (heat or {}).items() if k_ in ("scale_peak", "sigma_px", "masked", "bandwidth_m", "periods")} or None,
-           "chart": chart_rect,
+           "chart": chart_rect, "motion": ({"notes": mo["notes"], "top": mo["top"] is not None, "overflow": mo.get("overflow")} if mo else None),
            "notes": [f"{len(events):,} events over {n / fps:.1f} s; the map built once at {size} ({base.size[0]} x {base.size[1]} px)"]}
     mp4 = out / f"{stem}.mp4"
     seq_dir, n_out = tlm.assemble(fdir, n, fps, tl)
@@ -548,6 +555,67 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
         rep["findings"].append({"id": "MAP-OUT-013", "severity": "WARN", "message": str(ex)})
     rep["ok"] = not any(f["severity"] == "BLOCK" for f in rep["findings"])
     return rep
+
+
+def _motion_setup(tl, plan, extra, win, ppm, size, duration, findings, fps, n, report=None) -> dict | None:
+    """4.1.0 (Day 24, D24-19 to D24-22): the timeline's values and flow layers, the furniture to draw over them and the overflow mask."""
+    import motion
+    vcfg, fcfg = tl.get("values"), tl.get("flow")
+    if not (vcfg or fcfg or tl.get("top")):
+        return None
+    px = lambda x, y: to_px(x, y, win, ppm)                         # noqa: E731
+    mo: dict = {"notes": [], "values": None, "flow": None, "top": None}
+    try:
+        if vcfg:
+            lp = extra[vcfg["layer"]]
+            if lp.kind != "polygon":
+                raise EventsError(f"values: layer '{vcfg['layer']}' must be a polygon layer")
+            mo["values"] = motion.Values(lp, vcfg, px, size, plan.tokens, float(duration))
+            mo["notes"].append(f"values: layer '{vcfg['layer']}' through {mo['values'].n} steps ({vcfg['interpolate']}"
+                               + (", cyclic" if vcfg["cyclic"] else "") + ")")
+        if fcfg:
+            lp = extra[fcfg["layer"]]
+            if lp.kind != "line":
+                raise EventsError(f"flow: layer '{fcfg['layer']}' must be a line layer")
+            others = {l.id: l for l in plan.layers}
+            mo["flow"] = motion.Flow(lp, fcfg, plan, px, size, plan.tokens, ppm, others)
+            mo["notes"].append(mo["flow"].note)
+            for c in tl.get("counters") or []:          # `source: flow` counters run the real hours since the start (format: hm)
+                if c.get("source") == "flow":
+                    ts = [i_ / fps for i_ in range(0, n, max(1, round(fps / 5)))] + [(n - 1) / fps]
+                    c["keys"] = [(t_, mo["flow"].real_hours(t_)) for t_ in ts]
+                    c["start"] = min(c["start"], 0.0)
+    except motion.MotionError as ex:
+        raise EventsError(str(ex)) from None
+    rect = [v * ppm for v in win["rect_mm"]]
+    mo["rect"] = rect
+    mo["mask"] = motion.overflow_mask(size, rect, tl.get("overflow") or {"px": 0, "bottom_px": 0})
+    mo["overflow"] = tl.get("overflow")
+    if tl.get("top"):
+        mo["top"] = motion.top_layer(getattr(plan, "_base_svg", None) or "", getattr(plan, "_base_dpi", 108), size,
+                                     tl.get("top_layers") or ()) if getattr(plan, "_base_svg", None) else None
+        if mo["top"] is None:
+            findings.append({"id": "MAP-OUT-013", "severity": "INFO", "message": "the map's furniture could not be drawn again on a transparent sheet here, "
+                             "so the moving layers are drawn over it"})
+    mo["avoid"] = [[v * ppm for v in o["rect_mm"]] for k_, o in ((report or {}).get("overlays") or {}).items()
+                   if isinstance(o, dict) and o.get("rect_mm") and k_ in ("legend", "inset", "title", "scale", "logo")]
+    sp = (mo["values"].cfg.get("sparkline") if mo["values"] is not None else None)
+    mo["panel"] = motion.sparkline_rect(size, rect, sp, mo["avoid"]) if sp is not None else None
+    return mo
+
+
+def _motion_frame(mo: dict, b, t: float, tokens: dict, font_path: str):
+    import motion
+    im = b.convert("RGBA")
+    if mo["values"] is not None:
+        im.alpha_composite(motion.masked(mo["values"].overlay(t), mo["mask"]))
+    if mo["flow"] is not None:
+        im.alpha_composite(motion.masked(mo["flow"].overlay(t), mo["mask"]))
+    if mo["top"] is not None:
+        im.alpha_composite(mo["top"])
+    if mo["values"] is not None and mo["values"].cfg.get("sparkline") is not None:
+        im = motion.paint_sparkline(im, t, mo["values"], mo["values"].cfg["sparkline"], tokens, font_path, mo["rect"], mo.get("avoid"))
+    return im.convert("RGB")
 
 
 def _heat_setup(ha, plan, gdf, events, win, ppm, size, tokens, *, trail, periods, bandwidth, n, fps, intro_f, fade) -> dict:

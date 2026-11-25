@@ -206,6 +206,11 @@ def check_007(report: dict) -> list[dict]:
         if tot >= 8 and (s["dropped_collision"] + s["dropped_size"]) / tot > 0.35:
             out.append(finding("MAP-CART-007", "WARN", f"labels for '{lid}': {s['dropped_collision'] + s['dropped_size']} of {tot} could not be placed "
                                "without collisions or below the minimum text size; label fewer features or use a larger template", s))
+        elif s.get("dropped_texts") and tot < 8:
+            # 4.1.0 (Day 24, D24-13): a small layer's label that found no room was left out without a word (the Amsterdam hop)
+            names = ", ".join(f"'{x}'" for x in s["dropped_texts"][:5])
+            out.append(finding("MAP-CART-007", "WARN" if s.get("dropped_collision") else "INFO", f"labels for '{lid}': {names} found no room and {'is' if len(s['dropped_texts']) == 1 else 'are'} not "
+                               "on the map; shorten the text, turn on leaders (labels: leaders: true) or move what covers it", s))
     return out
 
 

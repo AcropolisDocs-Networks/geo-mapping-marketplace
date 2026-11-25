@@ -713,6 +713,12 @@ def _as_time(v):
     return None if pd.isna(ts) else ts
 
 
+def _clock_only(v) -> bool:
+    """A time of day with no date ("9 pm", "21:00"): pandas reads it as today at that hour."""
+    import timekeys
+    return isinstance(v, str) and timekeys._is_clock(v)
+
+
 def time_periods(tcfg: dict, cols: dict[str, dict]) -> dict:
     """The time slider's periods from the `_tv` values of the time layers' features, and each feature's period number `_t` (-1: no value).
     Numbers step by `step` (default 1); dates by instant, second, minute, hour, day, week, month, quarter or year (default auto: month over
@@ -741,7 +747,8 @@ def time_periods(tcfg: dict, cols: dict[str, dict]) -> dict:
         out["labels"] = [fmt(lo + k * step) if step == 1 else f"{fmt(lo + k * step)} to {fmt(lo + (k + 1) * step)}" for k in range(n)]
         key = lambda v: int(math.floor((float(v) - lo) / step))        # noqa: E731
         out["num"] = {"lo": lo, "step": step}
-    elif any(_as_time(v) is None for v in present):
+    elif tcfg.get("order") or any(_as_time(v) is None for v in present) or all(_clock_only(v) for v in present):
+        # 4.1.0 (Day 24, D24-17): "12 am", "2 pm" are names of periods, not today's date at that hour; and an order the spec writes names them
         # 1.3.0 (R1-TIME): named periods ("Phase 1", "Wave 2"): the periods and their order come from timekeys.periods, the reader the print atlas
         # uses, so the same values give the same periods on paper and on the page. Order: webmap.time.order, else the layer's time_order, else
         # natural order (MAP-WEB-042). With an order given, values it does not list are hidden while the slider is on (MAP-WEB-043).
@@ -1566,6 +1573,8 @@ def _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, c
                 pts = d["kind"] == "point"
                 cluster_on = bool(ctl["cluster"]) and pts and n > wml.CLUSTER_MIN_POINTS and not d.get("time")
                 periods = None
+                if not pts and d.get("time") and not d["context"]:      # 4.1.0 (D24-16): lines and areas on the slider are tiled a period at a time
+                    periods = {"cumulative": str((cfg["time"] or {}).get("mode") or "period") == "cumulative"}
                 if bool(ctl["cluster"]) and pts and d.get("time") and not d["context"] and wml.needs_tiles(col):
                     # 1.11.0: a tiled point layer on the time slider is clustered too: one cluster set per period
                     tt = [int(f["properties"].get("_t", -1)) for f in col["features"]]
@@ -1603,6 +1612,12 @@ def _page_names_tiles(base_defs, bbox, bdefs, blocks, brecs, cfg, collections, c
                                                     f"area (under {lod_.KEEP_AREA_MIN:.0%}); raise extrude.merge_gap_m or min_zoom",
                                                     {"layer": d["id"], "zoom": z_ + 1, "area_kept": r_["area_kept"]}))
                     tl["b64"] = wml.b64_file(tl["path"])
+                    if int(tl.get("zmin", zmin_ml)) > zmin_ml:
+                        # 4.1.0 (Day 24, D24-16): never silent: a tiled layer that starts above the page's own zoom is blank until one zooms in
+                        findings.append(finding("MAP-WEB-047", "WARN", f"layer '{d['id']}' shows from zoom {int(tl['zmin']) + 1}; the page opens at "
+                                                f"zoom {zmin_ml + 1}, where it draws nothing until the reader zooms in. Simplify it, clip it, or "
+                                                "set webmap.min_zoom to the layer's zoom", {"layer": d["id"], "starts": int(tl["zmin"]) + 1,
+                                                                                              "page": zmin_ml + 1}))
                     tiles[d["id"]] = tl
                     notes += tl["notes"]
                     notes.append(f"layer '{d['id']}': {n:,} features go into the page as PMTiles ({tl['bytes'] / 1048576:.1f} MB, zooms {tl['zmin'] + 1} to {tl['zmax'] + 1})")
@@ -1767,8 +1782,14 @@ def _page_frame(base_defs, blocks, brecs, cfg, collections, ctl, defs, engine, f
             except ValueError as ex:
                 raise mp.PlanError(str(ex), gc.EXIT_USAGE) from None
         if tw.get("labels"):                              # 1.3.0: {value: label} renames periods for display; a chapter still names the value
-            ren = {str(k): str(v) for k, v in tw["labels"].items()}
-            tdisp = [ren.get(str(lab), d) for lab, d in zip(time_cfg["labels"], tdisp)]
+            ren = {str(k): str(v) for k, v in tw["labels"].items()} if isinstance(tw["labels"], dict) else {}
+            if isinstance(tw["labels"], list):            # 4.1.0: a list names the periods in order
+                ren = {str(lab): str(v) for lab, v in zip(time_cfg["labels"], tw["labels"])}
+            num = time_cfg.get("num")
+            # 4.1.0 (Day 24, D24-17): with step 2 a period is "20 to 22"; its label is found by its first value (20) too
+            starts = ([f"{float(num['lo']) + k * float(num['step']):g}" for k in range(len(time_cfg["labels"]))] if num
+                      else [None] * len(time_cfg["labels"]))
+            tdisp = [ren.get(str(lab), ren.get(st, d) if st is not None else d) for lab, d, st in zip(time_cfg["labels"], tdisp, starts)]
         time_cfg["display"] = tdisp
         if pbk["mode"] == "slider":
             time_cfg["play"] = False
@@ -1787,6 +1808,7 @@ def _page_config_tabs(attributions, base_defs, bbox, bd, bdefs, blocks, bundled_
         "attributions": attributions,
         "basemaps": [{k: v for k, v in b.items() if k in ("id", "mode", "url", "attribution", "maxZoom", "nativeMaxZoom", "nativeMinZoom", "zoomOffset", "tileSize", "host", "wordmark", "treatment")}
                      for b in base_defs],
+        **({"sizeBudgetMb": float((spec_in.get("webmap") or {})["size_budget_mb"])} if (spec_in.get("webmap") or {}).get("size_budget_mb") else {}),
         "searchField": search_field, "searchNames": bool(tsearch and names_on), "imperial": True, "downloadName": f"{plan.spec['id']}.geojson",
         "names": {"id": NAMES_ID, "on": names_on, "tier": names_stats.get("tier")}, "featureLabels": feature_labels, "labelZoom": label_zoom,
         "imagePanes": images > 0, "units": measure_units(spec_in, wgs), "time": time_cfg, "compare": compare_cfg, "locale": gl.plan_locale(plan),

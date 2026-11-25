@@ -74,6 +74,15 @@ description: >
   | drift | settle | recolor, dur, dx_mm, dy_mm, rotate, scale, colour}]}` moves a polygon layer's pieces over the map (keyed in the legend
   only); labels stay upright and one size; pieces that end on top of each other are MAP-OUT-027. With `--events --layer quakes` the same
   timeline adds its story line and counters to the event video. Cut a map into pieces with `ops: [{op: voronoi}]` or `split_by`.
+- **"The load moves through the day", "the cells change colour hour by hour"** (4.1.0): `values: {layer: cells, column_prefix: u (or
+  columns: [u00, ..., u23]), start, end, interpolate: cubic | linear | step, cyclic: true, sparkline: {label}}` recolours a classed polygon
+  layer frame by frame through its own classes (cubic is monotone, cyclic wraps the last step to the first); the sparkline draws the mean
+  of every column with the current moment marked, clear of the story line. A counter `{format: clock}` shows the hour of the day ("4:15 am").
+- **"Water fills the canals", "the signal runs down the fibre"** (4.1.0): `flow: {layer: canals, from: [lon, lat] | a point layer,
+  gap_m, snap_m, start, arrive_s, speed_kmh, dash, front, dry}` fills a line layer from its source along the network (network_distance's
+  measure): the channel is pale until the water reaches it, dashes move downstream and each head glows. A counter `{source: flow, format:
+  hm}` shows the real hours at `speed_kmh` ("+23 h 30 min"). `top: {layers: [sites]}` draws the furniture, labels and the named layers over
+  the moving ones; `overflow: {px: 30}` lets them fade past the map frame (0: cut at it). `also:` takes polygon, line and point layers.
 - **"Check my own render", "QA this video I made"** (1.16.0): `map_export.py --external FILE.mp4 --spec map.yaml [--credits-shown "TEXT"]`
   gives a still or a video made outside the pipeline the build's paper trail: read back (MAP-OUT-013), every credit its sources need found in
   the credits it shows (MAP-OUT-028), colours outside the brand palette (MAP-OUT-029), a provenance sidecar and the hidden accreditation in

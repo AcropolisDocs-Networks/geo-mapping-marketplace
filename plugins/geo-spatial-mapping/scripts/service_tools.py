@@ -1182,10 +1182,30 @@ def osm_fetch_tool(tags: str = "", bbox: str = "", query: str = "", out: str = "
         if not bbox and not query:
             return fail("usage", "MAP-OSM-002", "bbox (W,S,E,N) is needed with tags")
         name = "osm_" + (re.sub(r"[^a-z0-9]+", "_", (tl[0] if tl else "query").lower()).strip("_")[:40] or "query") + ".gpkg"
+        # 4.1.0 (Day 24, D24-04): a relative out= lands in WORK_FOLDER/data/osm/ as the description says (it went to .geo-mapping/), and the
+        # file is also kept under the name `source: {type: osm, tags, bbox}` looks for, so the map reads it without a second Overpass query
         dest = Path(out) if out else gc.data_dir("osm") / name
         if not dest.is_absolute():
-            dest = gc.outputs_dir() / dest
-        return osm.fetch(tl, bbox or None, dest, own_query=query or None, http=http)
+            dest = gc.data_dir("osm") / dest
+        r = osm.fetch(tl, bbox or None, dest, own_query=query or None, http=http)
+        try:
+            import hashlib
+            import shutil
+            b = [float(v) for v in str(bbox).split(",")] if bbox else None
+            q = query or osm.query(tl, b)
+            cache = dest.parent / f"osm_{hashlib.sha256(q.encode()).hexdigest()[:12]}.gpkg"
+            if cache != dest and dest.is_file():
+                shutil.copyfile(dest, cache)
+                if dest.with_suffix(".json").is_file():
+                    shutil.copyfile(dest.with_suffix(".json"), cache.with_suffix(".json"))
+            src = ({"type": "osm", "query": query, **({"bbox": b} if b else {})} if query else {"type": "osm", "tags": tl, "bbox": b})
+            if isinstance(r, dict):
+                r.setdefault("path", str(dest))
+                r["source"] = src
+                r["file_source"] = {"type": "file", "path": str(dest)}
+        except (ValueError, OSError):
+            pass
+        return r
     except osm.OsmError as ex:
         return _tool_fail(ex)
 

@@ -676,9 +676,9 @@ entries:
   file: entries/data/ref.infrastructure.world.cell.opencellid.yaml
   type: infrastructure
   status: active
-  rev: 3
+  rev: 4
   tags_digest: 5c277a95f485
-  entry_digest: 726ad33ce4ff
+  entry_digest: ce722b9c52e0
 - id: ref.infrastructure.world.osm.geofabrik
   file: entries/data/ref.infrastructure.world.osm.geofabrik.yaml
   type: infrastructure

@@ -182,6 +182,11 @@
           "type": "string",
           "description": "Acknowledges that layers and the display CRS use different datums (for example WGS84 points on a NAD83 projection); at least 12 characters, copied into the methods note."
         },
+        "clip_to": {
+          "enum": ["frame", "hemisphere", "none", "auto"],
+          "default": "auto",
+          "description": "4.1.0 (Day 24, D24-08): lines in a projection with a far side (two-point equidistant, orthographic, azimuthal equidistant, near-sided perspective, gnomonic) are densified, split where a step jumps across the map and clipped to the frame (frame) or also cut at the horizon (hemisphere); none leaves them as they are. auto: frame for those projections, none otherwise."
+        },
         "alignment_check": {
           "type": "boolean",
           "default": true,
@@ -575,7 +580,9 @@
                     "dot_density",
                     "density_surface",
                     "flow_lines",
-                    "network_nearest"
+                    "network_nearest",
+                    "network_distance",
+                    "light_budget"
                   ]
                 },
                 "layer": {
@@ -1415,6 +1422,13 @@
           },
           "uniqueItems": true,
           "description": "providers offered by the basemap switcher, first is the default"
+        },
+        "size_budget_mb": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 2000,
+          "default": 500,
+          "description": "4.1.0 (Day 24, D24-15): the largest page the build makes, in MB (MAP-WEB-020 blocks past it; default 500, for pages that embed large GeoJSON or shapefile data). Past 16 MB a WARN says the page is too big to publish as an artifact."
         },
         "relief_colors": {
           "anyOf": [

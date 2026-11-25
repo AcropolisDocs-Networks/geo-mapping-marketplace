@@ -411,9 +411,11 @@ def tile_layer(lid: str, col: dict, kind: str, *, zmin: int, zmax: int, cluster:
                 layers[cn] = cg
                 zooms[cn] = (z, z)
     path = scratch / f"{name}.pmtiles"
+    # 4.1.0 (Day 24, D24-16): a layer on a period slider is judged a period at a time, and its tiles may hold every period's features
+    per_field = "_t" if (periods and not periods.get("cumulative") and kind != "point" and "_t" in gdf.columns) else None
     rep = to.write_pmtiles(layers, path, minzoom=min(z[0] for z in zooms.values()), maxzoom=max(z[1] for z in zooms.values()),
                            simplify=kind != "point", attribution=attribution, name=lid, description=f"layer {lid} of a web map page",
-                           layer_zooms=zooms, check=False)
+                           layer_zooms=zooms, check=False, period_field=per_field, mvt_limits=LOD_MVT_LIMITS if per_field else None)
     if len(rep["paths"]) != 1:
         raise StyleError(f"layer '{lid}': GDAL's tiling call is not reachable here, so the layer cannot go into one PMTiles archive")
     info = {}
@@ -627,6 +629,10 @@ def names_layers(t: dict, admin_color: str, water_color: str, visible: bool) -> 
     return out
 
 
+WATER_QUIET = [["!=", ["get", "kind"], "basin"], ["!=", ["get", "kind_detail"], "basin"], ["!=", ["get", "intermittent"], True],
+               ["!=", ["get", "intermittent"], "yes"]]
+
+
 def protomaps_layers(t: dict, src: str, visible: bool, group: str) -> list[dict]:
     """A quiet basemap from Protomaps vector tiles (schema v4: earth, landuse, water, roads, boundaries, places), in the brand's map colours."""
     vis = "visible" if visible else "none"
@@ -634,7 +640,14 @@ def protomaps_layers(t: dict, src: str, visible: bool, group: str) -> list[dict]
     roads_w = ["interpolate", ["linear"], ["zoom"], 5, 0.3, 10, 0.8, 14, 2.4]
     return [
         {"id": f"{group}--earth", "type": "fill", "source": src, "source-layer": "earth", "layout": {"visibility": vis}, "paint": {"fill-color": t["land"]}, "metadata": m("basemap")},
-        {"id": f"{group}--water", "type": "fill", "source": src, "source-layer": "water", "layout": {"visibility": vis}, "paint": {"fill-color": t["water"]}, "metadata": m("basemap")},
+        # 4.1.0 (Day 24, D24-18): dry basins, intermittent water and the generalized river polygons of the low zooms (the Salt River's dry bed
+        # drew as broad lavender bands across Phoenix) are left out; rivers come in at zoom 10, where their outline is the river's own
+        {"id": f"{group}--water", "type": "fill", "source": src, "source-layer": "water", "layout": {"visibility": vis},
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], *WATER_QUIET, ["!=", ["get", "kind_detail"], "river"]],
+         "paint": {"fill-color": t["water"]}, "metadata": m("basemap")},
+        {"id": f"{group}--water-river", "type": "fill", "source": src, "source-layer": "water", "minzoom": 10, "layout": {"visibility": vis},
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], *WATER_QUIET, ["==", ["get", "kind_detail"], "river"]],
+         "paint": {"fill-color": t["water"]}, "metadata": m("basemap")},
         {"id": f"{group}--minor", "type": "line", "source": src, "source-layer": "roads", "minzoom": 11,
          "filter": ["in", ["get", "kind"], ["literal", ["minor_road", "other"]]], "layout": {"visibility": vis, "line-cap": "round", "line-join": "round"},
          "paint": {"line-color": t["frame"], "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.3, 15, 1.5], "line-opacity": 0.5}, "metadata": m("basemap")},
