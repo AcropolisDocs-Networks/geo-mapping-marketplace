@@ -89,13 +89,24 @@ def main() -> int:
         return 0
     event = event if isinstance(event, dict) else {}
     out = decide(event)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
     if out:
         try:
-            sys.path.insert(0, str(Path(__file__).resolve().parent))
             import hook_log
             hook_log.append(event, {"e": "reminder", "kinds": len(kinds(str(event.get("prompt") or "")))})
         except Exception:                                # noqa: BLE001 - the log never holds back the reminder
             pass
+    # 4.2.0: a message that asks for a map gets the standing map rules, once a session (hooks/map_rules.py); both notes go out as one
+    rules = None
+    try:
+        import map_rules
+        rules = map_rules.decide(event)
+    except Exception:                                    # noqa: BLE001 - the digest never holds back a message
+        rules = None
+    if rules:
+        prior = ((out or {}).get("hookSpecificOutput") or {}).get("additionalContext")
+        out = {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": (prior + "\n\n" if prior else "") + rules}}
+    if out:
         print(json.dumps(out))
     return 0
 

@@ -361,6 +361,11 @@ def _abs_paths(spec: dict, base: Path) -> None:
         el = (spec.get("elements") or {}).get(k)
         if isinstance(el, dict) and el.get("path") and not Path(el["path"]).is_absolute():
             el["path"] = str((base / el["path"]).resolve())
+    # 4.2.0 (Day 25, sheet #2): a figure's SVG is a file beside the spec too; left relative it was looked for in the run folder and dropped
+    figs = (spec.get("elements") or {}).get("figures")
+    for it in (figs.get("items") or []) if isinstance(figs, dict) else []:
+        if isinstance(it, dict) and isinstance(it.get("svg"), str) and it["svg"] and not Path(it["svg"]).is_absolute():
+            it["svg"] = str((base / it["svg"]).resolve())
 
 
 def make_specs(spec_path, disc: dict, out_dir: Path) -> list[dict]:

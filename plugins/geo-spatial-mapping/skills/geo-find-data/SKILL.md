@@ -21,6 +21,7 @@ GP=${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe; if [ -f "$GP" 
 python3 "$GMAP_ROOT/scripts/ref_library.py" select --geography us-az --level county --use-for choropleth --scale state [--audience external]
 python3 "$GMAP_ROOT/scripts/ref_library.py" select --bbox=3.1,6.3,3.7,6.7 --level admin2 --use-for choropleth      # Lagos: the country under the window
 python3 "$GMAP_ROOT/scripts/ref_library.py" get ref.boundary.us.county.cb500k
+python3 "$GMAP_ROOT/scripts/themes.py" show "cell towers" --geography us-az --audience external                    # 4.2.0: every library source for what the thing is, first
 python3 "$GMAP_ROOT/scripts/catalog_search.py" "cell towers Arizona" --sources library,datagov,hub,socrata --limit 5     # the catalogs, library first
 python3 "$GMAP_ROOT/scripts/catalog_search.py" "cell towers Arizona" --sources hub --find-record 1 > find.json           # result 1 as a draft record
 python3 "$GMAP_ROOT/scripts/find_record.py" template > find.json     # or fill one in by hand, then:

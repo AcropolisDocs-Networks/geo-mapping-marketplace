@@ -1,0 +1,158 @@
+# Themes: what a thing is, and every library entry that serves it (4.2.0, first cut).
+#
+# The library's own facets say where an entry applies (geography), at what level, in which broad domain and for which map type. None says
+# what the thing IS, so "cell sites" found the one entry with those words in its title and missed four others. A theme lists them all, in
+# the order to consider them, so the choice of a source is made with every candidate in view.
+#
+#   says      what the theme is, in a line
+#   words     what people call it (a search for any of them finds the theme)
+#   entries   library entry ids without the leading "ref." (a * matches any run of characters), in the order to consider them
+#   compare   true: count each candidate in the map's window before choosing (the sources differ in how complete they are)
+#   note      what to know before choosing
+#   gap       a source the theme needs and the library does not hold yet
+#
+# Rule (library lint, MAP-LIB-016): every active data entry is in at least one theme. `themes.py check` lists the ones that are not, and the
+# themes with fewer than two sources.
+themes_version: 1
+
+themes:
+  cell-sites:
+    says: "Cell sites, masts and towers"
+    words: [cell site, cell sites, cell tower, cell towers, tower, towers, mast, masts, antenna, antennas, base station, site list, solder pads]
+    compare: true
+    entries: [infrastructure.world.cell.opencellid, public-service.world.osm.overpass, infrastructure.us.tower.fcc-asr, infrastructure.us.hifld.cell-tower,
+              infrastructure.us.tower.land-mobile, infrastructure.us.tower.microwave, infrastructure.us.license.fcc-uls, infrastructure.world.osm.geofabrik]
+    note: "They differ widely in how many they hold. HIFLD's layer lists cellular licence locations only (about 60 in the Phoenix metro, Day 25); OpenStreetMap masts there were 878 (Day 24); OpenCelliD holds measured cells, not structures, and is for internal maps (share-alike). None is an operator's site list."
+  spectrum-licences:
+    says: "Spectrum licence areas and licences"
+    words: [spectrum, licence, license, cma, pea, bta, cbrs, pal, licence area, license area, market area]
+    entries: [boundary-derived.us.license-area.fcc, boundary-derived.us.cbrs-pal.fcc, infrastructure.us.license.fcc-uls, infrastructure.ca.license.ised-spectrum]
+  mobile-coverage:
+    says: "Mobile coverage as the regulators publish it"
+    words: [coverage, mobile coverage, 5g coverage, 4g coverage, lte coverage, carrier coverage, signal]
+    compare: true
+    entries: [statistic.us.coverage.fcc-bdc-mobile-h3, public-service.us.broadband.fcc-bdc-api, "statistic.*.coverage.*", public-service.uk.coverage.ofcom-api, statistic.world.speed.ookla]
+    note: "Reported coverage, not measured: say so on the map."
+  broadband:
+    says: "Fixed broadband, adoption and funding"
+    words: [broadband, internet, adoption, bead, digital divide, speed test, speeds]
+    entries: [statistic.us.broadband.fcc-bdc-summary, statistic.us.broadband.bead-ntia, statistic.us.acs5.broadband, statistic.us.acs5.computers,
+              public-service.us.broadband.fcc-bdc-api, statistic.world.speed.ookla, public-service.us.telecom.fcc-ecfs]
+  roads:
+    says: "Roads and streets"
+    words: [road, roads, street, streets, highway, highways, arterial, arterials, freeway, freeways, road network, street grid]
+    compare: true
+    entries: [infrastructure.us.road.tiger-prisec, infrastructure.us.road.tiger-primary, public-service.world.osm.overpass, infrastructure.world.osm.geofabrik,
+              infrastructure.na.road.ne10, infrastructure.world.road.ne10, "public-service.us-*.gis.*"]
+    note: "TIGER names primary and secondary roads and puts every other street in one class; OpenStreetMap's highway tag separates arterials from local streets; the Natural Earth roads are for small scales only."
+    gap: "State DOT functional classes (arterial, collector) are not in the library: Day 25 used Arizona DOT's layer by hand."
+  rail-transit:
+    says: "Rail lines and public transit"
+    words: [rail, railway, railroad, transit, bus, subway, metro, light rail, train, gtfs, stops, stations, ferry]
+    entries: [infrastructure.us.rail.tiger, public-service.world.transit.transitland, public-service.world.transit.navitia, "public-service.*.transit.*", public-service.world.osm.overpass]
+  buildings:
+    says: "Building footprints and heights"
+    words: [building, buildings, footprint, footprints, rooftops, roofs, built form, massing]
+    compare: true
+    entries: [context.world.building.overture, public-service.world.osm.overpass, context.world.building.microsoft, context.world.building.google, infrastructure.world.osm.geofabrik]
+    note: "Overture carries a height for some buildings only; a roof height from lidar is more complete where lidar exists."
+  elevation:
+    says: "Elevation models (bare earth)"
+    words: [elevation, dem, terrain, relief, hillshade, contours, slope, viewshed, line of sight, topography]
+    entries: [terrain.us.dem.3dep, terrain.ca.dem.mrdem, terrain.fr.dem.rge-alti, terrain.jp.dem.gsi, terrain.se.dem.lantmateriet-mhm, terrain.be-vlg.dem.dhmv, terrain.au.dem.ga-lidar-5m,
+              terrain.world.dem.copernicus-glo30, terrain.world.dem.nasadem, terrain.world.dem.opentopography, terrain.world.dem.terrarium, terrain.arctic.dem.arcticdem, terrain.antarctica.dem.rema]
+    note: "Bare earth: buildings and trees are not in these, so a line of sight over them sees more than is there."
+  lidar:
+    says: "Lidar point clouds and surface models"
+    words: [lidar, point cloud, las, laz, dsm, surface model, canopy]
+    entries: [terrain.be-vlg.lidar.dhmv-openlidar, terrain.au.dem.ga-lidar-5m, terrain.world.dem.opentopography]
+    gap: "USGS 3DEP lidar point clouds (the public EPT bucket) and a ground-plus-buildings surface: Day 25 built both by hand."
+  bathymetry:
+    says: "Sea floor depth"
+    words: [bathymetry, depth, sea floor, seafloor, ocean depth]
+    entries: [terrain.world.bathymetry.gebco, terrain.world.dem.terrarium]
+  boundaries-admin:
+    says: "Countries, states, counties, towns"
+    words: [boundary, boundaries, border, borders, country, countries, state, states, county, counties, province, municipality, city limits, admin]
+    entries: ["boundary.us.state.*", "boundary.us.county.*", boundary.us.place.cb500k, boundary.us.cousub.tiger, "boundary.ca.*", "boundary.mx.*", "boundary.fr.*", boundary.uk.lad.ons,
+              boundary.europe.nuts.gisco2024, "boundary.world.country.*", "boundary.world.state.*", boundary.world.admin.gadm41, boundary.world.division.overture]
+  boundaries-statistical:
+    says: "Census and market areas"
+    words: [tract, tracts, block group, zip, zcta, cbsa, metro area, urban area, market, dma, crosswalk]
+    entries: [boundary.us.tract.cb500k, boundary.us.block-group.cb500k, boundary.us.zcta.cb2020-500k, boundary.us.cbsa.cb500k, boundary.us.urban-area.cb2020-500k,
+              crosswalk.us.county-cbsa.omb2023, boundary.us.dma.nielsen]
+  boundaries-land:
+    says: "Public, tribal, military and protected land"
+    words: [tribal, reservation, public land, blm, forest, national forest, park, protected, military, federal land]
+    entries: [boundary.us.aiannh.cb500k, boundary.us.surface-management.blm, boundary.us.protected.pad-us, boundary.us.protected.usfs-forests, boundary.us.military.tiger]
+  boundaries-historical:
+    says: "Borders as of a past date"
+    words: [historical, history, ancient, old borders, as of]
+    entries: ["boundary.world.historical.*"]
+  population:
+    says: "People and where they live"
+    words: [population, people, residents, households, density, jobs, workers, commuting]
+    compare: true
+    entries: [statistic.us.acs5.population, statistic.us.acs5.table, statistic.us.lodes.lehd, statistic.world.population.ghsl, statistic.world.population.worldpop,
+              statistic.world.population.kontur, statistic.world.population.hrsl]
+  income-demographics:
+    says: "Income and household characteristics"
+    words: [income, demographics, poverty, age, households with, computers]
+    entries: [statistic.us.acs5.median-income, statistic.us.acs5.table, statistic.us.acs5.computers, statistic.us.acs5.broadband]
+  water:
+    says: "Rivers, lakes, coasts and canals"
+    words: [water, river, rivers, lake, lakes, stream, streams, canal, canals, coast, coastline, ocean, hydrography, watershed, basin]
+    entries: [context.us.hydrography.nhdplus-hr, context.us.water-area.tiger, context.us.water-linear.tiger, context.world.rivers.ne10, "context.world.lakes.*",
+              context.world.ocean.ne10, context.world.coastline.ne110, public-service.world.osm.overpass]
+  land-ground:
+    says: "Land, land cover and built-up areas"
+    words: [land, land cover, landcover, ground, urban area, built-up, vegetation, nlcd]
+    entries: [context.world.ground.overture, context.world.land.osm-simplified, context.us.landcover.nlcd, context.world.urban.ne10]
+  hazards:
+    says: "Floods, fires, earthquakes and storms"
+    words: [hazard, hazards, flood, floodplain, fire, wildfire, earthquake, storm, storms, risk, resilience]
+    entries: [context.us.hazard.fema-nfhl, public-service.world.hazard.nasa-firms, public-service.world.earthquake.usgs, statistic.us.storm-events.noaa]
+  weather-climate:
+    says: "Weather observations, forecasts and climate records"
+    words: [weather, climate, temperature, rain, rainfall, precipitation, wind, forecast, normals, heat]
+    entries: ["public-service.us.weather.*", public-service.world.weather.open-meteo, "public-service.world.weather.*", "public-service.*.weather.*",
+              public-service.world.climate.copernicus-cds, "statistic.world.climate.*", statistic.us.climate.noaa-normals]
+  night-lights-imagery:
+    says: "Night lights, satellite and street-level pictures"
+    words: [night lights, nightlights, lights at night, black marble, viirs, satellite, imagery, earth observation, street view, street-level]
+    entries: [statistic.world.night-lights.black-marble, public-service.world.earth-observation.nasa-earthdata, basemap-provider.nasa-gibs, public-service.world.street-imagery.mapillary]
+    note: "Black Marble and the other NASA Earthdata products need the person's Earthdata token, which is on their computer, not in the cloud workspace."
+  energy:
+    says: "Power lines, substations and energy statistics"
+    words: [power, energy, transmission, substation, substations, grid, electricity, power lines]
+    entries: [infrastructure.us.energy.transmission-lines, infrastructure.us.energy.substations, public-service.us.energy.eia-opendata]
+  subsea-cables:
+    says: "Submarine cables and landing points"
+    words: [submarine cable, subsea cable, undersea cable, cables, landing point, landing station]
+    entries: [infrastructure.world.submarine-cable.telegeography]
+  places-names:
+    says: "Place names and landforms"
+    words: [place names, names, gazetteer, cities, towns, landforms, peaks, labels]
+    entries: [gazetteer.world.place.ne10, gazetteer.world.place.ne110, gazetteer.world.place.geonames-cities1000, gazetteer.world.place.geonames, gazetteer.world.place.overture,
+              gazetteer.world.place.wof, gazetteer.us.landform.gnis, public-service.world.wikidata]
+  geocoding:
+    says: "Addresses to points"
+    words: [geocode, geocoding, address, addresses]
+    entries: [public-service.us.geocoder.census, public-service.world.geocoder.nominatim, public-service.world.geocoder.geoapify, gazetteer.world.address.openaddresses]
+  routing:
+    says: "Travel times and routes"
+    words: [route, routing, travel time, isochrone, drive time, walk time, walkshed]
+    entries: [public-service.world.router.valhalla-fossgis, public-service.world.router.ors]
+  openstreetmap:
+    says: "OpenStreetMap, by query, by extract and over time"
+    words: [openstreetmap, osm, overpass, ohsome, mapped over time]
+    entries: [public-service.world.osm.overpass, public-service.world.osm.ohsome, infrastructure.world.osm.geofabrik, basemap-provider.osm-standard]
+    note: "Overpass is not reachable from the cloud workspace: it runs through the data tools on the person's computer."
+  basemaps:
+    says: "Tile backgrounds"
+    words: [basemap, base map, tiles, background, street map background]
+    entries: ["basemap-provider.*"]
+  public-gis-portals:
+    says: "State and national GIS portals"
+    words: [state gis, gis portal, open data portal, national mapping, parcel, parcels]
+    entries: ["public-service.us-*.gis.*", "public-service.*.mapping.*", public-service.world.platform.carto]

@@ -3119,6 +3119,12 @@ def _load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = F
         if load_vector_ground(plan, vector_file):
             return
         explained = True
+    if bundled_mode(plan.spec) == "none" and not tiles_rec and prov in ("none", "bundled"):
+        # 4.2.0 (Day 25 #3, #4): basemap.bundled: none leaves the page bare whatever the provider word. Until 4.1.0 it was read only beside
+        # provider: none, so `provider: bundled, bundled: none` still loaded the land, the state lines and the lakes: they were credited in
+        # the source note and the ground-detail checks ran on a map that asked for no ground.
+        plan.notes.append("ground: none (basemap.bundled: none): no bundled land, water, boundary lines or context pack; the map sits on the paper")
+        return
     if prov == "none":
         # The context pack brings the ground with it (0.3.0): roads and city names over page-white, with the sea the same white as the
         # desert, read as nothing. A map that draws any context kind gets the bundled land and water under it; `context: {on: false}`
@@ -3133,9 +3139,6 @@ def _load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = F
         # 1.21.0 (Day 18 issue 3): `provider: none` names no tile provider; the bundled ground under the relief or the context pack is its own
         # choice: basemap.bundled: none leaves the page bare (no land, water, boundary lines or context pack), land drops the boundary lines
         mode = bundled_mode(plan.spec)
-        if mode == "none":
-            plan.notes.append("ground: none (basemap.bundled: none): no bundled land, water, boundary lines or context pack; the map sits on the paper")
-            return
         plan.notes.append("ground: the bundled land and water are drawn under the " + ("context pack" if kinds else "relief") + " (basemap provider is none"
                           + ("; no boundary lines, basemap.bundled: land)" if mode == "land" else "; basemap.bundled: none leaves them out)"))
     if tiles_rec:

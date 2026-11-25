@@ -363,6 +363,12 @@ def family_of(roles: list[str], kind: str, spec: dict | None) -> str:
 def infer_outcome(spec: dict | None, roles: list[str], medium: str, message: str, family: str) -> tuple[str | None, str | None, str]:
     """(primary, secondary, source). Read from the MapSpec's own fields and the picture's kind; never from a field the evaluator added
     (the MapSpec has none, spec I2). None when nothing says: the cold read's guess is used then (MAP-EVAL-007)."""
+    # 4.2.0: the MapSpec says what the map is for (`outcome`, `secondary_outcome`): nothing is guessed when it does. The field is written
+    # when the map is asked for, by the person's request; it is not a field the evaluator added, and the evaluator never writes it.
+    stated = str((spec or {}).get("outcome") or "").strip().lower()
+    if stated in ("explain", "compare", "locate", "inventory", "monitor", "explore", "sequence", "evoke"):
+        second = str((spec or {}).get("secondary_outcome") or "").strip().lower()
+        return stated, (second if second in ("explain", "compare", "locate", "inventory", "monitor", "explore", "sequence", "evoke") and second != stated else None), "mapspec"
     task = " ".join(str(t).lower() for t in (spec or {}).get("task") or [])
     named = [o for o in ("explain", "compare", "locate", "inventory", "monitor", "explore", "sequence", "evoke") if o in task]
     if named:
@@ -1774,7 +1780,7 @@ def recorded_cards(outputs: list[dict], extra: list[str] | None = None) -> dict[
 
 
 def evaluate_mode() -> str:
-    """3.4.0 (F-5): `ask` (default) or `auto`, from GMAP_EVALUATE or `evaluate:` in ~/.geo-mapping/config.yaml (GEO_MAPPING_HOME in tests).
+    """3.4.0 (F-5), 4.2.0: `auto` (the default since 4.2.0), `ask` or `off`, from GMAP_EVALUATE or `evaluate:` in ~/.geo-mapping/config.yaml (GEO_MAPPING_HOME in tests).
     `auto` lets the map-trace skill run the cold and graded reads without asking; they stay fresh agents and observe only."""
     v = os.environ.get("GMAP_EVALUATE")
     if not v:
@@ -1785,7 +1791,220 @@ def evaluate_mode() -> str:
             v = (yaml.safe_load(cp.read_text(encoding="utf-8")) or {}).get("evaluate") if cp.is_file() else None
         except Exception:  # noqa: BLE001
             v = None
-    return "auto" if str(v or "").strip().lower() == "auto" else "ask"
+    v = str(v or "").strip().lower()
+    return v if v in ("ask", "off") else "auto"          # 4.2.0 (decision D12): graded without asking unless the person set ask or off
+
+
+# ---------------------------------------------------------------------------------------------------------------- 4.2.0: records that last
+HANDBACK_KIND = "geo-spatial-mapping evaluation hand-back"
+
+
+def history_key(r: dict) -> tuple:
+    return (str(r.get("output")), str(r.get("at") or r.get("date")), str(r.get("run")))
+
+
+def export_history(out: Path, run: str | None = None, since: str | None = None) -> dict:
+    """4.2.0: the history lines of a run (or since a date) as one small file a cloud session hands back, so its scores outlive it. No picture
+    and no scorecard evidence is in it: the lines the history already keeps, and nothing else."""
+    rows = history()
+    if run:
+        rows = [r for r in rows if r.get("run") == Path(run).name]
+    if since:
+        rows = [r for r in rows if str(r.get("date") or "") >= since]
+    doc = {"kind": HANDBACK_KIND, "version": 1, "plugin_version": plugin_version(), "exported_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+           "lines": rows}
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(doc, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
+    return {"file": str(out), "lines": len(rows)}
+
+
+def import_history(src: Path) -> dict:
+    """4.2.0: add a hand-back file's lines to this working folder's history (the person's computer), each line once."""
+    try:
+        doc = json.loads(src.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as ex:
+        raise EvalError(f"{src} cannot be read as a hand-back file ({type(ex).__name__})", "MAP-EVAL-005") from None
+    if not isinstance(doc, dict) or doc.get("kind") != HANDBACK_KIND or not isinstance(doc.get("lines"), list):
+        raise EvalError(f"{src} is not an evaluation hand-back file (map_evaluate.py export writes one)", "MAP-EVAL-005")
+    have = {history_key(r) for r in history()}
+    hist = evaluations_root(create=True) / "history.jsonl"
+    added = 0
+    with open(hist, "a", encoding="utf-8") as fh:
+        for r in doc["lines"]:
+            if not isinstance(r, dict) or not r.get("output") or history_key(r) in have:
+                continue
+            have.add(history_key(r))
+            fh.write(json.dumps({**r, "imported_from": src.name}, ensure_ascii=False) + "\n")
+            added += 1
+    return {"history": str(hist), "added": added, "already_there": len(doc["lines"]) - added}
+
+
+def tracker_lines(run: str | None = None, rows: list[dict] | None = None) -> list[dict]:
+    """4.2.0: what a tracker entry carries for each scored output: the two numbers, the verdict and the rubric's version, as one line of text."""
+    rows = rows if rows is not None else history()
+    if run:
+        rows = [r for r in rows if r.get("run") == Path(run).name]
+    latest: dict[str, dict] = {}
+    for r in rows:
+        if r.get("output") and (r["output"] not in latest or str(r.get("at")) > str(latest[r["output"]].get("at"))):
+            latest[r["output"]] = r
+    out = []
+    for oid, r in sorted(latest.items()):
+        out.append({"output": oid, "effectiveness": r.get("effectiveness"), "craft": r.get("craft"), "works": r.get("works"), "outcome": r.get("outcome"),
+                    "rubric_version": r.get("rubric_version"), "date": r.get("date"),
+                    "text": f"picture rubric {r.get('rubric_version')}: Effectiveness {r.get('effectiveness')}, Craft {r.get('craft')}, works: {r.get('works')}"
+                            + (f" (outcome {r.get('outcome')})" if r.get("outcome") else "")})
+    return out
+
+
+def sync_owner(anchor_set: Path, owner: Path) -> dict:
+    """4.2.0: bring the owner's score sheet in step with the anchor set: a line for every anchor, scored lines kept as they are, lines of
+    anchors no longer in the set kept at the end under `retired`. The sheet had 22 lines for 30 anchors."""
+    import yaml
+    aset = gc.load_yaml(anchor_set) or {}
+    cur = gc.load_yaml(owner) or {}
+    old = cur.get("scores") or {}
+    ids = [a["id"] for a in aset.get("anchors") or [] if a.get("id")]
+    blank = {"effectiveness": None, "craft": None, "works": None, "kind": None, "areas": {}}
+    scores = {i: (old.get(i) or dict(blank)) for i in ids}
+    retired = {k: v for k, v in old.items() if k not in scores and any(v.get(x) is not None for x in ("effectiveness", "craft", "works"))}
+    head = "".join(ln + "\n" for ln in owner.read_text(encoding="utf-8").splitlines() if ln.startswith("#")) if owner.is_file() else ""
+    doc = {"rubric_version": cur.get("rubric_version") or aset.get("rubric_version_first_scored") or "0.1", "scored_by": cur.get("scored_by") or "owner",
+           "scored_on": cur.get("scored_on"), "scores": scores, **({"retired": retired} if retired else {})}
+    owner.write_text(head + "\n" + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, default_flow_style=None, width=200), encoding="utf-8")
+    return {"anchors": len(ids), "lines": len(scores), "added": sorted(set(ids) - set(old)), "scored": sum(1 for v in scores.values() if v.get("effectiveness") is not None)}
+
+
+# ---------------------------------------------------------------------------------------------------------------- 4.2.0: the owner's scoring page
+SCORING_THUMB_PX = 1100
+SCORING_CSS = """
+.anchor{border-top:1px solid var(--line);padding:22px 0;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:22px}
+.anchor img{width:100%;height:auto;border:1px solid var(--line);background:var(--surface)}
+.anchor .nofile{border:1px dashed var(--line);padding:18px;color:var(--text2)}
+.anchor h3{margin:0 0 4px;font-size:16px}.anchor .pair{color:var(--text2);font-size:12px;margin-bottom:12px}
+.field{margin:10px 0}.field label{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.field input[type=range]{width:100%}.field .val{font-variant-numeric:tabular-nums}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}.seg button{border:1px solid var(--line);background:transparent;color:inherit;padding:5px 10px;border-radius:6px;cursor:pointer;font:inherit;font-size:13px}
+.seg button[aria-pressed=true]{background:var(--a1);color:var(--bg);border-color:var(--a1)}
+.sbar{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.sbar button{border:1px solid var(--a1);background:var(--a1);color:var(--bg);padding:7px 14px;border-radius:6px;cursor:pointer;font:inherit}
+.sbar button.ghost{background:transparent;color:inherit;border-color:var(--line)}
+.scale{font-size:12px;color:var(--text2);margin:6px 0 0}
+@media (max-width:820px){.anchor{grid-template-columns:1fr}}
+"""
+SCORING_JS = r"""
+(function(){
+  var KEY='gm-anchor-scores:'+document.body.dataset.set, st={};
+  try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){st={}}
+  var S=JSON.parse(document.getElementById('seed').textContent||'{}'), seed=S.seed||{};
+  Object.keys(seed).forEach(function(k){if(!st[k])st[k]=seed[k]});
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){};count()}
+  function count(){var n=0,t=0;document.querySelectorAll('.anchor').forEach(function(a){t++;var s=st[a.dataset.id]||{};if(s.effectiveness!=null&&s.craft!=null&&s.works)n++});
+    document.getElementById('count').textContent=n+' of '+t+' scored'}
+  document.querySelectorAll('.anchor').forEach(function(a){
+    var id=a.dataset.id; st[id]=st[id]||{};
+    a.querySelectorAll('input[type=range]').forEach(function(r){
+      var f=r.dataset.f, out=a.querySelector('.val[data-f="'+f+'"]');
+      function show(){out.textContent=st[id][f]==null?'not scored':Number(st[id][f]).toFixed(1)}
+      if(st[id][f]!=null)r.value=st[id][f]; show();
+      r.addEventListener('input',function(){st[id][f]=parseFloat(r.value);show();save()});
+    });
+    a.querySelectorAll('.seg').forEach(function(g){
+      var f=g.dataset.f;
+      function show(){g.querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',String(st[id][f]===b.dataset.v))})}
+      show();
+      g.querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){st[id][f]=(st[id][f]===b.dataset.v?null:b.dataset.v);show();save()})});
+    });
+  });
+  function yaml(){
+    var d=new Date().toISOString().slice(0,10), L=[];
+    String(S.head||'').split('\n').forEach(function(x){if(x)L.push(x)});
+    L.push('','rubric_version: "'+document.body.dataset.rubric+'"','scored_by: owner','scored_on: '+d,'','scores:');
+    document.querySelectorAll('.anchor').forEach(function(a){var s=st[a.dataset.id]||{};
+      function v(x){return x==null||x===''?'null':x}
+      L.push('  '+a.dataset.id+': {effectiveness: '+v(s.effectiveness)+', craft: '+v(s.craft)+', works: '+(s.works?'"'+s.works+'"':'null')+', kind: '+v(s.kind)+', areas: {}}')});
+    return L.join('\n')+'\n';
+  }
+  document.getElementById('save').addEventListener('click',function(){
+    var b=new Blob([yaml()],{type:'text/yaml'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='owner-scores.yaml';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u)});
+  document.getElementById('copy').addEventListener('click',function(){if(navigator.clipboard)navigator.clipboard.writeText(yaml())});
+  count();
+})();
+"""
+
+
+def _thumb_uri(path: Path) -> str | None:
+    """A still as a JPEG data URI at most SCORING_THUMB_PX wide; None for anything that is not a picture Pillow reads."""
+    import base64
+    try:
+        from PIL import Image
+        im = Image.open(path)
+        im.load()
+    except Exception:  # noqa: BLE001
+        return None
+    if im.mode not in ("RGB", "L"):
+        bg = Image.new("RGB", im.size, (255, 255, 255))
+        bg.paste(im.convert("RGBA"), mask=im.convert("RGBA").split()[-1])
+        im = bg
+    if im.width > SCORING_THUMB_PX:
+        im = im.resize((SCORING_THUMB_PX, max(1, round(im.height * SCORING_THUMB_PX / im.width))), Image.LANCZOS)
+    buf = io.BytesIO()
+    im.convert("RGB").save(buf, "JPEG", quality=82, optimize=True)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def scoring_page(anchor_set: Path, owner: Path | None, out: Path, root: Path | None = None) -> dict:
+    """4.2.0 (decision D14): one page to score the anchor set by eye, in place of editing YAML: each anchor's picture, two sliders
+    (Effectiveness, Craft), the works verdict and the kind. Nothing of the evaluator's is on it, so the scores are the owner's own. The
+    page keeps what was entered in the browser, and its Save button downloads `owner-scores.yaml`, to put beside the anchor set."""
+    aset = gc.load_yaml(anchor_set) or {}
+    own = ((gc.load_yaml(owner) or {}).get("scores") or {}) if owner and owner.is_file() else {}
+    base = Path(root) if root else (anchor_set.parent / str(aset.get("root") or "."))
+    rub = load_rubric()
+    parts = [f'<header class="hero"><div class="wrap"><h1>Score the anchor set</h1><p class="lede">{len(aset.get("anchors") or [])} outputs. Score each by eye, before looking at '
+             "any score the map evaluation gave it: Effectiveness (does it do its job for the reader), Craft (is it well made), whether it works, and its kind. "
+             "Mark at least two <b>rough-but-works</b> and two <b>polished-but-empty</b>.</p>"
+             f'<p class="scale">5 {esc(rub["scale"][5])}<br>3 {esc(rub["scale"][3])}<br>1 {esc(rub["scale"][1])}</p></div></header><main class="wrap">',
+             '<div class="sbar"><button id="save">Save owner-scores.yaml</button><button id="copy" class="ghost">Copy as text</button><span id="count"></span>'
+             '<span class="scale">Scores are kept in this browser as you go. Put the saved file in the anchors folder, over the old one.</span></div>']
+    n_pic = 0
+    for a in aset.get("anchors") or []:
+        aid = str(a.get("id"))
+        f = (base / str(a["file"])) if a.get("file") else None
+        uri = _thumb_uri(f) if f is not None and f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp") else None
+        if uri:
+            n_pic += 1
+            pic = f'<img alt="{esc(aid)}" loading="lazy" src="{uri}">'
+        elif f is not None:
+            pic = (f'<div class="nofile">{esc(f.suffix.lstrip(".").upper() or "File")}: open <code>{esc(a["file"])}</code> from the challenge folder to look at it'
+                   + ("" if f.is_file() else " (not found here)") + "</div>")
+        else:
+            pic = '<div class="nofile">No file for this day yet. Leave it unscored, or add the file to the anchor set.</div>'
+
+        def slider(fld, label):
+            return (f'<div class="field"><label>{label} <span class="val" data-f="{fld}"></span></label>'
+                    f'<input type="range" min="1" max="5" step="0.5" value="3" data-f="{fld}" aria-label="{label} for {esc(aid)}"></div>')
+
+        def seg(fld, label, opts):
+            return (f'<div class="field"><label>{label}</label><div class="seg" data-f="{fld}">'
+                    + "".join(f'<button type="button" data-v="{v}">{esc(t)}</button>' for v, t in opts) + "</div></div>")
+        parts.append(f'<section class="anchor" data-id="{esc(aid)}"><div>{pic}</div><div><h3>{esc(aid)}</h3><div class="pair">{esc(a.get("pair") or "")}</div>'
+                     + slider("effectiveness", "Effectiveness") + slider("craft", "Craft")
+                     + seg("works", "Works?", [("yes", "Yes"), ("partly", "Partly"), ("no", "No")])
+                     + seg("kind", "Kind", [("ordinary", "Ordinary"), ("rough-but-works", "Rough but works"), ("polished-but-empty", "Polished but empty")])
+                     + "</div></section>")
+    seed = {k: {x: (({True: "yes", False: "no"}.get(v[x], v[x])) if x == "works" else v[x]) for x in ("effectiveness", "craft", "works", "kind") if v.get(x) is not None}
+            for k, v in own.items() if isinstance(v, dict)}
+    head = "\n".join(ln for ln in (owner.read_text(encoding="utf-8").splitlines() if owner and owner.is_file() else []) if ln.startswith("#"))
+    parts.append("</main>")
+    parts.append('<script type="application/json" id="seed">' + json.dumps({"seed": seed, "head": head}).replace("</", "<\\/") + "</script>")
+    html = _page("Score the anchor set", parts, f"Anchor set {aset.get('anchor_set') or anchor_set.stem}, rubric {rub['rubric_version']}. The owner's own scores; "
+                 "no evaluator score is shown here.", "anchor-scoring")
+    html = html.replace("</style>", SCORING_CSS + "</style>", 1).replace("<body ", f'<body data-set="{esc(aset.get("anchor_set") or anchor_set.stem)}" data-rubric="{esc(rub["rubric_version"])}" ', 1)
+    html = html.replace("</body>", f"<script>{SCORING_JS}</script></body>", 1)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+    return {"page": str(out), "anchors": len(aset.get("anchors") or []), "pictures": n_pic, "bytes": len(html.encode("utf-8"))}
 
 
 # ---------------------------------------------------------------------------------------------------------------- history, trend, anchors, review
@@ -1995,7 +2214,10 @@ def start_run(run_id: str, outputs: list[dict], opts: dict) -> tuple[Path, dict,
 # ---------------------------------------------------------------------------------------------------------------- CLI
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("op", choices=["status", "save", "record", "measure", "trend", "anchors", "review"])
+    ap.add_argument("op", choices=["status", "save", "record", "measure", "trend", "anchors", "review", "export", "import", "tracker", "scoring-page"])
+    ap.add_argument("--root", help="4.2.0, scoring-page: the folder the anchor set's files are in, when it is not where the set says")
+    ap.add_argument("--since", help="4.2.0, export: the history lines from this date (YYYY-MM-DD) on")
+    ap.add_argument("--sync", action="store_true", help="4.2.0, anchors: bring the owner's score sheet in step with the anchor set (no comparison)")
     ap.add_argument("file", nargs="?")
     ap.add_argument("--run")
     ap.add_argument("--read")
@@ -2050,6 +2272,38 @@ def main(argv=None) -> int:
             out = Path(a.out) if a.out else evaluations_root(create=True) / "trend.html"
             out.write_text(trend_html(history(), load_rubric()), encoding="utf-8")
             print(f"MAP_EVAL_TREND: {out}")
+            return gc.EXIT_OK
+        if a.op == "export":                                   # 4.2.0: scores that outlive a cloud session
+            out = Path(a.out or a.file or (evaluations_root(create=True) / "evaluation-handback.json"))
+            r = export_history(out, a.run, a.since)
+            print(json.dumps(r, indent=1))
+            print(f"MAP_EVAL_HANDBACK: {r['file']}")
+            return gc.EXIT_OK
+        if a.op == "import":
+            if not a.file:
+                print("map_evaluate: import needs the hand-back file (map_evaluate.py export writes it)", file=sys.stderr)
+                return gc.EXIT_USAGE
+            print(json.dumps(import_history(Path(a.file)), indent=1))
+            return gc.EXIT_OK
+        if a.op == "tracker":
+            rows = tracker_lines(a.run)
+            print(json.dumps(rows, indent=1))
+            for r in rows:
+                print(f"MAP_EVAL_TRACKER: {r['output']}: {r['text']}")
+            return gc.EXIT_OK
+        if a.op == "scoring-page":
+            if not (a.anchor_set and (a.out or a.file)):
+                print("map_evaluate: scoring-page needs --set anchors.yaml and --out page.html (--owner owner-scores.yaml fills what is scored)", file=sys.stderr)
+                return gc.EXIT_USAGE
+            r = scoring_page(Path(a.anchor_set), Path(a.owner) if a.owner else None, Path(a.out or a.file), Path(a.root) if a.root else None)
+            print(json.dumps(r, indent=1))
+            print(f"MAP_EVAL_SCORING_PAGE: {r['page']}")
+            return gc.EXIT_OK
+        if a.op == "anchors" and a.sync:
+            if not (a.anchor_set and a.owner):
+                print("map_evaluate: anchors --sync needs --set anchors.yaml and --owner owner-scores.yaml", file=sys.stderr)
+                return gc.EXIT_USAGE
+            print(json.dumps(sync_owner(Path(a.anchor_set), Path(a.owner)), indent=1))
             return gc.EXIT_OK
         if a.op == "anchors":
             if not (a.anchor_set and a.owner):

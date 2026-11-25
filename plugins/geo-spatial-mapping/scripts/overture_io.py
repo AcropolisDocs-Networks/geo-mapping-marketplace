@@ -22,6 +22,7 @@ import io
 import json
 import re
 import sys
+import threading
 import urllib.parse
 from pathlib import Path
 
@@ -77,13 +78,55 @@ def _http(http=None):
     return ogc_http.SafeHTTP(limits={"timeout_s": 60, "max_bytes": 200_000_000})
 
 
+_BUDGET_LOCK = threading.Lock()
+FOOTER_THREADS = 6            # 4.2.0 (Day 25 #11): a type's file footers are read side by side, once, then kept
+FILE_BBOX_INDEX = "{typ}.bbox.json"
+
+
+def file_bbox(md) -> list | None:
+    """The box that holds every row group of a file, from its footer's bbox statistics; None when a group has none."""
+    cols = _bbox_cols(md)
+    if cols is None or not md.num_row_groups:
+        return None
+    lo_x = lo_y = float("inf")
+    hi_x = hi_y = float("-inf")
+    for i in range(md.num_row_groups):
+        rg = md.row_group(i)
+        st = {k: rg.column(c).statistics for k, c in cols.items()}
+        if any(s is None or not s.has_min_max for s in st.values()):
+            return None
+        lo_x, hi_x = min(lo_x, st["xmin"].min), max(hi_x, st["xmax"].max)
+        lo_y, hi_y = min(lo_y, st["ymin"].min), max(hi_y, st["ymax"].max)
+    return [float(lo_x), float(lo_y), float(hi_x), float(hi_y)]
+
+
+def _index_read(footer_dir: Path | None, typ: str) -> dict:
+    if footer_dir is None:
+        return {}
+    try:
+        return json.loads((footer_dir / FILE_BBOX_INDEX.format(typ=typ)).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _index_write(footer_dir: Path | None, typ: str, index: dict) -> None:
+    if footer_dir is None:
+        return
+    try:
+        footer_dir.mkdir(parents=True, exist_ok=True)
+        (footer_dir / FILE_BBOX_INDEX.format(typ=typ)).write_text(json.dumps(index), encoding="utf-8")
+    except OSError:
+        pass
+
+
 class Budget:
     def __init__(self, cap: int):
         self.cap, self.used, self.requests = int(cap), 0, 0
 
     def take(self, n: int) -> None:
-        self.used += n
-        self.requests += 1
+        with _BUDGET_LOCK:                                   # 4.2.0: footers are read by several threads
+            self.used += n
+            self.requests += 1
         if self.used > self.cap:
             raise CapExceeded(f"the window needs more than {self.cap / 1e6:,.0f} MB of Overture data (read {self.used / 1e6:,.1f} MB so far)")
 
@@ -202,23 +245,61 @@ def read_window(release: str, typ: str, bbox, *, theme: str = "base", http=None,
     files = files if files is not None else list_files(release, typ, theme=theme, http=h)
     W, S, E, N = (float(v) for v in bbox)
     tables, n_rg, n_files = [], 0, 0
-    for f in files:
-        url = BASE_URL + f["key"]
-        md = None
-        cached = (footer_dir / f"{typ}-{Path(f['key']).name}.meta") if footer_dir else None      # by type: file names can repeat across types
+    # 4.2.0 (Day 25 #11: a buildings read took nine minutes, most of it opening every file of the type one after another to read its footer).
+    # 1. A file whose box, kept from an earlier read (`<type>.bbox.json` beside the footers), misses the window is not opened at all.
+    # 2. The footers still to read are fetched by FOOTER_THREADS threads, each with its own connection, and kept, so they are read once.
+    index = _index_read(footer_dir, typ)
+    known = len(index)
+
+    def cache_of(f):
+        return (footer_dir / f"{typ}-{Path(f['key']).name}.meta") if footer_dir else None      # by type: file names can repeat across types
+
+    def misses(f) -> bool:
+        b = index.get(Path(f["key"]).name)
+        return bool(b) and not (b[0] <= E and b[2] >= W and b[1] <= N and b[3] >= S)
+
+    todo = [f for f in files if not misses(f)]
+    skipped_by_index = len(files) - len(todo)
+
+    def footer(f, hh):
+        cached = cache_of(f)
         if cached is not None and cached.exists():
             try:
-                md = pq.read_metadata(cached)
+                return pq.read_metadata(cached)
             except Exception:  # noqa: BLE001 - a damaged footer copy is read again
-                md = None
-        src = RangeFile(h, url, f["size"], budget, prefix)
-        pf = pq.ParquetFile(pa.PythonFile(src, mode="r"), metadata=md)
-        if md is None and cached is not None:
+                pass
+        pf_ = pq.ParquetFile(pa.PythonFile(RangeFile(hh, BASE_URL + f["key"], f["size"], budget, prefix), mode="r"))
+        if cached is not None:
             cached.parent.mkdir(parents=True, exist_ok=True)
-            pf.metadata.write_metadata_file(str(cached))
-        rgs = row_groups_in(pf.metadata, (W, S, E, N))
+            pf_.metadata.write_metadata_file(str(cached))
+        return pf_.metadata
+
+    need = [f for f in todo if not (cache_of(f) is not None and cache_of(f).exists())]
+    metas: dict = {}
+    if http is None and len(need) > 2:                     # the plugin's own connections: one per thread (a caller's http is used in order)
+        import concurrent.futures as cf
+        local = threading.local()
+
+        def one(f):
+            if not hasattr(local, "h"):
+                local.h = _http(None)
+            return f["key"], footer(f, local.h)
+        with cf.ThreadPoolExecutor(max_workers=FOOTER_THREADS) as ex:
+            for key, md_ in ex.map(one, need):
+                metas[key] = md_
+    for f in todo:
+        url = BASE_URL + f["key"]
+        md = metas.get(f["key"]) or footer(f, h)
+        name = Path(f["key"]).name
+        if name not in index:
+            fb = file_bbox(md)
+            if fb:
+                index[name] = fb
+        rgs = row_groups_in(md, (W, S, E, N))
         if not rgs:
             continue
+        src = RangeFile(h, url, f["size"], budget, prefix)
+        pf = pq.ParquetFile(pa.PythonFile(src, mode="r"), metadata=md)
         n_files += 1
         n_rg += len(rgs)
         names = pf.schema_arrow.names
@@ -232,7 +313,10 @@ def read_window(release: str, typ: str, bbox, *, theme: str = "base", http=None,
             t = t.filter(m)
         if t.num_rows:
             tables.append(t)
-    cost = {"files": n_files, "row_groups": n_rg, "bytes": budget.used, "requests": budget.requests}
+    if len(index) != known:
+        _index_write(footer_dir, typ, index)
+    cost = {"files": n_files, "row_groups": n_rg, "bytes": budget.used, "requests": budget.requests,
+            "files_of_type": len(files), "files_skipped_by_index": skipped_by_index, "footers_read": len(need)}
     if not tables:
         return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs="EPSG:4326"), cost
     t = pa.concat_tables(tables, promote_options="default")
@@ -388,12 +472,15 @@ def main(argv=None) -> int:
     ap.add_argument("--bbox")
     ap.add_argument("--out")
     ap.add_argument("--cap-mb", type=float, default=DEFAULT_CAP / 1e6)
+    ap.add_argument("--no-cache", action="store_true", help="4.2.0: do not keep the files' footers and boxes")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "files":
             print(json.dumps(list_files(a.release, a.type, theme=a.theme), indent=2))
             return gc.EXIT_OK
-        g, cost = read_window(a.release, a.type, [float(v) for v in a.bbox.split(",")], theme=a.theme, cap_bytes=int(a.cap_mb * 1e6))
+        # 4.2.0: the footers and each file's box are kept beside the ground cache, so the second window of a type opens only the files it needs
+        foot = None if a.no_cache else ground_dir(a.release) / "_footers" / a.theme
+        g, cost = read_window(a.release, a.type, [float(v) for v in a.bbox.split(",")], theme=a.theme, cap_bytes=int(a.cap_mb * 1e6), footer_dir=foot)
         if a.out:
             g.to_parquet(a.out)
         print(json.dumps({"features": len(g), **cost}, indent=2))

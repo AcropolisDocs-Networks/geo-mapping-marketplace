@@ -62,7 +62,7 @@
       "additionalProperties": false,
       "description": "0.18.0: the study area stands out. Under style.look auto a choropleth or grid that covers a region turns it on: the land outside the study area fades back (the page colour over it), the study area gets a soft shadow, and names outside it are drawn in a quieter neutral. Off under classic.",
       "properties": {
-        "mask": {"enum": ["auto", true, false], "description": "auto (default): on when a choropleth or grid layer is drawn; true: on (the named area, else the choropleth and grid layers, else, 2.3.0, the primary point and line layers); false: off"},
+        "mask": {"enum": ["auto", true, false, "none", "off", "on"], "description": "auto (default): on when a choropleth or grid layer is drawn; true: on (the named area, else the choropleth and grid layers, else, 2.3.0, the primary point and line layers); false: off. 4.2.0: none and off are read as false and on as true, like the other switches"},
         "area": {"type": "string", "description": "the id of the polygon layer whose outline is the study area (default: the union of the choropleth and grid layers); 2.3.0: or a point or line layer, whose features (the highlighted ones, when it has a highlight) reach_mm round them are the study area"},
         "reach_mm": {"type": "number", "exclusiveMinimum": 0, "maximum": 60, "description": "2.3.0: how far round a point or line subject the study area reaches, in sheet millimetres (default 6)"},
         "lift": {"type": "boolean", "description": "a soft shadow under the study area (default: on for a region, off round a point or line subject)"}
@@ -104,6 +104,23 @@
       "items": {
         "type": "string"
       }
+    },
+    "asks": {
+      "description": "4.2.0: what the person asked for that departs from a default (data/policy.yaml), each with their own words. A default-class setting changed with no entry here is reported as an unexplained deviation in every build. Write the person's words, never a reason of your own.",
+      "oneOf": [
+        {"type": "array", "items": {"type": "object", "required": ["set", "words"], "additionalProperties": false, "properties": {
+          "set": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}], "description": "the MapSpec key the ask explains (theme, elements.title.placement, names.on) or a default's id from the policy"},
+          "words": {"type": "string", "minLength": 2, "description": "what the person said, as they said it"}}}},
+        {"type": "object", "additionalProperties": {"type": "string"}}
+      ]
+    },
+    "outcome": {
+      "enum": ["explain", "compare", "locate", "inventory", "monitor", "explore", "sequence", "evoke"],
+      "description": "4.2.0: what the map is for, in the eight words of the evaluation rubric: explain (one point), compare (a pattern across places), locate (find or place things), inventory (what is where, exactly), monitor (status at a glance), explore (a web map to dig into), sequence (a story over beats or time), evoke (the look is the point). The map evaluation reads it instead of guessing."
+    },
+    "secondary_outcome": {
+      "enum": ["explain", "compare", "locate", "inventory", "monitor", "explore", "sequence", "evoke"],
+      "description": "4.2.0: a second purpose, weighted half as much as the first by the map evaluation"
     },
     "message": {
       "type": "string",

@@ -1354,7 +1354,7 @@ def _sites(a, b):
 
 
 def op_viewshed(gdf, p: dict, ctx: Ctx) -> OpResult:
-    """viewshed {h_m, radius_m, step_deg, target_h_m, k, dem}: the ground visible from each point, as polygons"""
+    """viewshed {h_m, radius_m, step_deg, target_h_m, k, dem, cell_m, max_px}: the ground visible from each point, as polygons (4.2.0: cell_m works it out cell by cell)"""
     import geopandas as gpd
     import terrain as te
     _require_crs(gdf, "viewshed")
@@ -1373,7 +1373,10 @@ def op_viewshed(gdf, p: dict, ctx: Ctx) -> OpResult:
     attrs = a.drop(columns=a.geometry.name).to_dict("records")
     for i, pt in enumerate(a.geometry):
         try:
-            v = te.viewshed(dem, (pt.x, pt.y), h, rad, step, target_h_m=th, k_factor=k)
+            if p.get("cell_m") is not None:          # 4.2.0: cell by cell, at the size asked (a surface with buildings needs it)
+                v = te.viewshed_grid(dem, (pt.x, pt.y), h, rad, cell_m=float(p["cell_m"]), max_px=int(p.get("max_px", 2048)), target_h_m=th, k_factor=k)
+            else:
+                v = te.viewshed(dem, (pt.x, pt.y), h, rad, step, target_h_m=th, k_factor=k, **({"max_px": int(p["max_px"])} if p.get("max_px") else {}))
         except te.TerrainError as ex:
             raise OpsError(f"viewshed: point {i}: {ex}") from None
         rows.append({**attrs[i], "h_m": h, "radius_m": rad, "visible_km2": round(v["visible_area_km2"], 3), "visible_share": round(v["visible_share_of_rays"], 3)})

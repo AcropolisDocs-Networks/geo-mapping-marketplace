@@ -10,7 +10,7 @@
     "template": {"description": "the sheet's template (a name, or custom:WxH); every panel is drawn on it"},
     "brand": {"type": "string"},
     "style": {"type": "object", "properties": {"pack": {"type": "string"}}, "description": "the style pack of the whole sheet (one pack per build; 1.4.0)"},
-    "title": {"type": "object", "additionalProperties": false, "properties": {"text": {"type": "string"}, "subtitle": {"type": "string"}}},
+    "title": {"type": "object", "additionalProperties": false, "properties": {"text": {"type": "string"}, "subtitle": {"type": "string"}, "tagline": {"type": "string", "description": "4.2.0: a slanted line under the subtitle, as on a single map (a series name)"}}},
     "arrangement": {
       "type": "object", "additionalProperties": false,
       "properties": {

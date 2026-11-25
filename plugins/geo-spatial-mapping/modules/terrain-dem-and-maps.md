@@ -49,5 +49,9 @@ a failed fetch leaves the map without relief, with a note (MAP-TER-004), and Ter
 - A hillshade goes **under** everything: the ground, then the hillshade at 30 to 40 percent opacity in the brand's neutrals (never a colour ramp for relief), then context, then the data. It is a context layer: never in the legend, never in the extent, named in the source note with the DEM's credit line.
 - Contours are a context line layer in a muted neutral, index lines heavier and labelled with their height; they do not fight the data's own lines (drop them on a dense route map).
 - An elevation tint (`role: raster` with the brand's sequential ramp) is for a map **about** elevation; under a site or market map use the hillshade alone.
+- **A viewshed by cells (4.2.0).** `terrain.py viewshed --cell 5 [--max-px 4800] [--raster seen.tif] --out seen.geojson` (op: `viewshed
+  {cell_m: 5}`) works the visible ground out cell by cell at the size asked, with rays no more than a cell apart at the edge of the radius,
+  and writes it as a grid (1 visible, 0 not) and as polygons. Use it when the surface holds buildings, where the one-degree rays of the
+  default leave gaps; without `--cell` the grid is still capped at 1,024 a side unless `--max-px` says more.
 - A viewshed or an LOS line layer is data: it goes in the legend ("visible ground", "clear" and "obstructed") and the methods page carries the k-factor, the heights, the DEM and its resolution, and the bare-earth sentence.
 - The source note prints the DEM's attribution text from the fetch record in full; for Terrarium that is the whole block.

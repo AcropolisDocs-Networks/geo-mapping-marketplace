@@ -225,9 +225,28 @@ def suggestions(plan, subj: list) -> list[dict]:
             s = None
         if s and named_elsewhere(plan, l, (s.get("highlight") or {}).get("in")):
             continue                                     # 3.7.0 (B7): "69 St" in the message is a stop's label, not a value of this layer
+        if s and names_the_place(plan, (s.get("highlight") or {}).get("in")):
+            continue                                     # 4.2.0 (Day 25): "the Phoenix metro" is where the map is, not the sites whose city is Phoenix
         if s:
             out.append({"layer": l.id, **s})
     return out
+
+
+def names_the_place(plan, vals) -> bool:
+    """4.2.0 (Day 25 map A): True when every value the message named is a word of the map's own place name (region.name, a place extent, the
+    title), so the message says where the map is and does not single out the features that carry that word in a column."""
+    if not vals:
+        return False
+    spec = plan.spec or {}
+    reg = spec.get("region")
+    ext = spec.get("extent") or {}
+    names = [reg.get("name") if isinstance(reg, dict) else reg, ext.get("place") if isinstance(ext, dict) else None]
+    words: set[str] = set()
+    for n in names:
+        if isinstance(n, str):
+            words.add(n.strip().lower())
+            words |= {w for w in re.findall(r"[^\W\d_]{3,}", n.lower())}
+    return bool(words) and all(str(v).strip().lower() in words for v in vals)
 
 
 def named_elsewhere(plan, l, vals) -> bool:

@@ -39,6 +39,8 @@ REACH_MM = 6.0                                # 2.3.0: the default reach round a
 def config(spec: dict, look: str) -> dict:
     f = dict((spec or {}).get("focus") or {})
     mask = f.get("mask", "auto")
+    if isinstance(mask, str) and mask.lower() in ("none", "off", "on"):      # 4.2.0 (Day 25 #5): the words the other switches take
+        mask = mask.lower() == "on"
     if look == "classic" and mask == "auto":
         mask = False
     return {"mask": mask, "area": f.get("area"), "lift": f.get("lift"), "reach_mm": float(f.get("reach_mm") or REACH_MM)}

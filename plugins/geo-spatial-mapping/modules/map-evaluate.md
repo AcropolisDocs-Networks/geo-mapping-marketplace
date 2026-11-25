@@ -47,6 +47,21 @@ JSON whose page gets the Map quality section (the map trace sets it).
 5. **Report.** Send `report.html` (and the map trace's page again when it was updated). Say, per output, Effectiveness, Craft and the works
    verdict, then the two or three components the backlog names most. Keep the two numbers apart; never blend them into one.
 
+## Since 4.2.0
+
+- **Run without asking.** The map trace runs this evaluation for every map that was handed to the person (one cold read, one graded read),
+  unless the person's config says `evaluate: ask` or `evaluate: off`. Tries that were built and set aside are graded only when asked.
+- **What the map is for** is read from the MapSpec's `outcome` (and `secondary_outcome`) when it has one; the intent card says
+  `outcome_source: mapspec`. Nothing is guessed then.
+- **Scores that last.** `map_evaluate.py tracker --run <run>` prints one line per output for a tracker entry (Effectiveness, Craft, the
+  works verdict, the rubric's version). `map_evaluate.py export --run <run>` writes a small hand-back file with the history lines and no
+  picture; `map_evaluate.py import <file>` adds them to the history on the person's computer, each line once.
+- **The owner's score sheet** is kept in step with the anchor set by `map_evaluate.py anchors --sync --set anchors.yaml --owner
+  owner-scores.yaml` (scored lines are kept as they are).
+- **The road rubric** (`evaluation/road.yaml`, printed by the map trace under `Road`) measures how a map was made: the plugin's share of the
+  work, the layers that came through its door, the defaults changed with no ask. It is reported beside these grades and never blended
+  with them.
+
 ## What the grades are and are not
 
 - **Effectiveness** (story, information added, hierarchy, readability, honesty, orientation) and **Craft** (layout, style, medium fit)

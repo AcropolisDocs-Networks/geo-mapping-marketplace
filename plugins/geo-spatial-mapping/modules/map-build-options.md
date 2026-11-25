@@ -26,7 +26,10 @@ description: >
 Two to six maps on one sheet with one shared frame (a diptych, before and after, shade and heat) are a SheetSpec, built by the same command:
 a file with `sheet_version: 1`, the sheet's `template`, `title`, `arrangement` (columns, rows, gap, captions) and `shared` (extent union, first or
 each; legend shared, each or none; one locator, north arrow, scale bar and Sources line), and `panels` (`spec:` a MapSpec, or `base:` with
-`override:`). Every panel takes the first panel's CRS and the same frame; same-field layers share their classes. Findings MAP-PNL-001 to 007.
+`override:`). Panels that share one frame (extent union or first) take the first panel's CRS; with `shared.extent: each` every panel keeps
+its own (4.2.0: two cities far apart are each drawn north up). Same-field layers share their classes. The sheet's `title` takes a `tagline`
+like a single map's; `locator: each` and `north_arrow: each` draw one in every panel; a panel's `elements.figures` SVG paths are read beside
+its own spec. Findings MAP-PNL-001 to 007.
 The overlay fit (`extent.fit`, default `auto`): the map is moved first, an element whose position is `auto` slides along its edge, and the
 map shrinks only when the elements together still cover more than `extent.fit_cover_pct` (default 5) of the focus area (`focus.area`, else
 the data). `overlay` never shrinks; `shrink` and `style.look: classic` keep the 1.2.0 rule. Report the fit note (MAP-SPEC-009) when there is one.

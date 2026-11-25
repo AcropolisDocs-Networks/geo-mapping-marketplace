@@ -1,0 +1,37 @@
+# The road rubric (4.2.0): how a map was made, measured from the session's own record. No model reads, no pictures.
+#
+# It stands beside the picture rubric (rubric.yaml) and is never blended with it: a picture can score well on a road that broke the rules,
+# and a clean road can end at a map that says nothing. Printed by the map trace for every session that made a map, and written to the
+# trackers beside the plugin's version. Versioned like the picture rubric: a measure added, removed or redefined is a new major version.
+road_version: "0.1"
+status: experimental
+
+measures:
+  inside_share:
+    name: Share of the map work done by the plugin
+    how: "plugin calls / (plugin calls + the session's own data programs and hand fetches the trace names)"
+    target: ">= 0.70"
+  plugin_share_of_session:
+    name: Share of all the session's tool calls that were the plugin's
+    how: "plugin calls / all tool calls"
+    target: null
+  layers_with_record:
+    name: Layers that came through the plugin's door
+    how: "layers whose provenance names a library entry or a service capture, or that an op made / all layers of the finished maps"
+    target: "= 1.0"
+  library_entries_used:
+    name: Library entries the finished maps drew
+    how: "distinct library_ref values in the finished maps' provenance"
+    target: null
+  deviations_unexplained:
+    name: Defaults changed with no ask
+    how: "the unexplained count of each finished map's deviations table (data/policy.yaml), summed"
+    target: "= 0"
+  outside_steps:
+    name: Steps done outside the plugin
+    how: "the session's own programs that read, shaped or fetched map data (each is a candidate op)"
+    target: null
+  result_parsed_by_hand:
+    name: Build results read off the console by a script
+    how: "session-side failures of a program that read a build's printed result"
+    target: "= 0"

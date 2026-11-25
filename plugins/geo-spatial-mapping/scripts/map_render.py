@@ -884,6 +884,20 @@ STACK_CHUNKS = 8
 SMALL_FEATURE_MM = 0.8       # 3.7.0 (C6, Day 22 issue 6): a data polygon smaller than this across on the sheet is also drawn as a point
 SMALL_POINT_MM = 1.6
 SMALL_ROLES = ("choropleth", "polygons")
+SMALL_POINTS_MAX_FEATURES = 500     # 4.2.0 (Day 25 #8): a plain polygon layer larger than this is not a set of named places (3,126 line-of-sight patches were)
+
+
+def small_points_on(l) -> bool:
+    """Whether a layer's too-small polygons are also drawn as dots. `symbol.small_points` true or false decides when written. Unwritten: on for
+    a choropleth (island states at world scale), and for a plain polygon layer only when it is a short list of features that no analysis op
+    made; never for the pieces of a viewshed, a buffer or a grid (4.2.0: Day 25's rooftops in sight came out as polka dots)."""
+    v = (l.symbol or {}).get("small_points")
+    if isinstance(v, bool):
+        return v
+    if l.role == "choropleth":
+        return True
+    spec = l.spec if isinstance(getattr(l, "spec", None), dict) else {}
+    return not spec.get("ops") and len(l.gdf) <= SMALL_POINTS_MAX_FEATURES
 
 
 def small_feature_points(plan, l, geoms, keep, rep: dict) -> str:
@@ -891,7 +905,7 @@ def small_feature_points(plan, l, geoms, keep, rep: dict) -> str:
     dot in its class colour, at a point inside it, so it is seen (the 1:110m world misses Cabo Verde and Curacao; the 50m adds them, and they
     are specks). Reported with the names (MAP-CART-042, INFO). `symbol.small_points: false` turns it off."""
     import shapely
-    if l.role not in SMALL_ROLES or (l.symbol or {}).get("small_points") is False or not keep.any():
+    if l.role not in SMALL_ROLES or not small_points_on(l) or not keep.any():
         return ""
     idx = np.flatnonzero(keep)
     b = shapely.bounds(geoms[idx])
@@ -1870,8 +1884,10 @@ def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
     sb_style = (els.get("scale_bar") or {}).get("style", "alternating")
     sb_style = sb_style if sb_style in SCALE_STYLES else "alternating"
     sb_wanted = bool(on("scale_bar"))
-    inmap = tpl.get("layout") == "in-map"                     # the default layout: title, logo and the other elements sit inside the map frame
-    tbox = title_box(plan, fonts, map_rect, findings) if inmap else None
+    # the default layout: title, logo and the other elements sit inside the map frame. 4.2.0 (Day 25 #1): `overlays` says where the logo and
+    # the other elements go, `layout` only where the title goes, so a title above the map (title.placement: outside) moves nothing else
+    inmap = tpl.get("overlays", tpl.get("layout")) == "in-map"
+    tbox = title_box(plan, fonts, map_rect, findings) if tpl.get("layout") == "in-map" else None
     if legend_fit and legend_fit.get("fits"):
         rep["legend_size_mm"] = [round(float(legend_fit["size"]["width"]), 2), round(float(legend_fit["size"]["height"]), 2)]   # 3.4.0: detail width: legend
     lg_cfg = els.get("legend") or {}
@@ -1885,6 +1901,8 @@ def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
             if tb2 and tb2["w"] <= room + 0.01:
                 tbox = tb2
                 rep.setdefault("notes", []).append("the subtitle wraps beside the legend, so the legend keeps its corner")
+        if tbox["w"] > room and tbox.get("widened"):
+            tbox = title_box(plan, fonts, map_rect, [], one_line=False) or tbox      # 4.2.0: no room for the one-line title: the usual box
     logo_box = None
     logo_beside_scale = bool(inmap and sb_wanted and "position" not in (els.get("scale_bar") or {})
                              and (els.get("logo") or {}).get("position", "lower-left") == "lower-left")
@@ -2366,8 +2384,9 @@ def _render_labels(H, W, banner_h, banner_on, blocks, body, border, co_svg, dt_c
     if lc.get("style") == "sketch":                           # 1.4.0 (R2-TREAT): the drawn lines only; the data outputs are never jittered
         body[i_map:] = [trm.sketch_map("".join(body[i_map:]), lc, spec["id"])]
         rep.setdefault("notes", []).append("line character: sketch (seeded jitter on the drawn lines; the data files keep the true geometry)")
-    body.append(sd.rect(map_rect.x0, map_rect.y0, map_rect.w, map_rect.h, "none", t["frame"], 0.35, 'class="gm-neatline"') if on("neatline") else "")
-    if border:
+    frame_on = (els.get("frame") or {}).get("on", True) is not False      # 4.2.0 (Day 25 #2): elements.frame: {on: false} draws no line round the map
+    body.append(sd.rect(map_rect.x0, map_rect.y0, map_rect.w, map_rect.h, "none", t["frame"], 0.35, 'class="gm-neatline"') if on("neatline") and frame_on else "")
+    if border and frame_on:
         b_svg, b_notes = ornaments.frame_border(fr_style, outer_rect, map_rect, frame, plan.crs, t, max(4.5, float(fonts["label"]) - 1.5),
                                                 (els.get("frame") or {}).get("bars"), sheet=(W, H))
         body.append(b_svg)
@@ -2479,13 +2498,13 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
     if tpl.get("footer_fit") and tpl.get("footer_fit_classic") is False and getattr(plan, "look", "classic") == "classic":
         tpl["footer_fit"] = False                 # 1.0.0: a template fitted since 1.0.0 keeps its fixed footer in the classic look
     if tpl.get("footer_fit") and not tiles_:    # M16: the footer takes what its notes need
-        grown = lo.fit_footer(tpl, draw_footer(plan, tpl, fonts, {}, [], [], logo_in_map=tpl.get("layout") == "in-map")[1]["need_mm"])
+        grown = lo.fit_footer(tpl, draw_footer(plan, tpl, fonts, {}, [], [], logo_in_map=tpl.get("overlays", tpl.get("layout")) == "in-map")[1]["need_mm"])
         if grown:
             rep["footer_fit_mm"] = grown
     elif tpl.get("footer_fit") and getattr(plan, "look", "classic") != "classic":
         # 0.19.0: with a tile basemap too, when the prepared tiles still cover the taller frame (the room a shorter footer frees goes to the map)
         trial = dict(tpl)
-        grown = lo.fit_footer(trial, draw_footer(plan, trial, fonts, {}, [], [], logo_in_map=tpl.get("layout") == "in-map")[1]["need_mm"])
+        grown = lo.fit_footer(trial, draw_footer(plan, trial, fonts, {}, [], [], logo_in_map=tpl.get("overlays", tpl.get("layout")) == "in-map")[1]["need_mm"])
         if grown:
             vis = lo.Frame.fit(lo.rect_of(trial["map"]), plan.extent, float((spec.get("extent") or {}).get("padding_pct", 5))).visible
             im_ = tiles_[0].get("image") or {}
@@ -2496,6 +2515,8 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
                 rep["footer_fit_mm"] = grown
     import ornaments
     fr_style = str((els.get("frame") or {}).get("style") or "single")       # 1.4.0 (R2-ORN): double or bar-border take a band from the map region
+    if (els.get("frame") or {}).get("on", True) is False:
+        fr_style = "single"                                                 # 4.2.0: a frame that is off takes no band either
     border = ornaments.border_mm(fr_style) if frame is None else 0.0
     outer_rect = lo.rect_of(tpl["map"])
     if border:
@@ -2560,7 +2581,7 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
     body, = _render_labels(H, W, banner_h, banner_on, blocks, body, border, co_svg, dt_cfg, dt_rows, dt_size, els, findings, fonts, fr_style, frame, i_map, info, inset, inset_cfg, legend_fit, logo_beside_scale, logo_box, map_rect, na_cfg0, na_size, na_style, obstacles, on, ornaments, outer_rect, placed, plan, point_obstacles, rep, sb_style, spec, t, tbox, tpl, trm, trt)
 
     # ---- title and footer
-    if inmap:
+    if tpl.get("layout") == "in-map":
         title_svg, title_text = "", (tbox["text"] if tbox else "")
     else:
         title_svg, title_text = draw_title(plan, tpl, fonts, findings)
@@ -4083,8 +4104,11 @@ FRAME_LABEL_SCALE = 1.6       # an atlas-by-time page's period (elements.title.f
 LOGO_PAD_MM = 0.0
 
 
+TITLE_ONE_LINE_FRAC = 0.74    # 4.2.0 (Day 25 #10): a title that would wrap may take this share of the map's width to stay on one line
+
+
 @_role("title")
-def title_box(plan: mp.Plan, fonts: dict, map_rect: Rect, findings: list, text_cap_w: float | None = None) -> dict | None:
+def title_box(plan: mp.Plan, fonts: dict, map_rect: Rect, findings: list, text_cap_w: float | None = None, one_line: bool = True) -> dict | None:
     """The title (and subtitle) as a box for the map's upper-left corner: wrapped lines, their size and the box's width and height."""
     el = (plan.spec.get("elements") or {}).get("title") or {}
     if el.get("on") is False:
@@ -4099,6 +4123,15 @@ def title_box(plan: mp.Plan, fonts: dict, map_rect: Rect, findings: list, text_c
     maxw = map_rect.w * frac - 2 * TITLE_PAD_MM
     size = round(float(fonts["title"]) * TITLE_SCALE_IN_MAP * float(el.get("scale") or 1.0), 1)      # 1.4.0: elements.title.scale
     lines, cut = wrap_lines(text, maxw, size, 700, 3)
+    widened = False
+    # under a style pack's own typeface the width is an estimate (its optical size is not instanced): the wider box is for the brand's face only
+    if one_line and len(lines) > 1 and el.get("max_width_pct") is None and text_cap_w is None and tm.face_for("title") is None:
+        # 4.2.0 (Day 25 #10): on a square sheet half the width wrapped a 28-character title ("A Tempe Tower's View Over the Roofs"). A title that
+        # fits on one line in a wider box takes it; the legend's corner is kept by the wrap beside the legend (the caller), when one is there
+        wide = map_rect.w * TITLE_ONE_LINE_FRAC - 2 * TITLE_PAD_MM
+        l1, c1 = wrap_lines(text, wide, size, 700, 1)
+        if len(l1) == 1 and not c1:
+            lines, cut, maxw, widened = l1, False, wide, True
     while cut and size > TITLE_FLOOR_PT:
         size -= 1.0
         lines, cut = wrap_lines(text, maxw, size, 700, 3)
@@ -4134,7 +4167,7 @@ def title_box(plan: mp.Plan, fonts: dict, map_rect: Rect, findings: list, text_c
         findings.append(f("MAP-SPEC-005", "WARN", f"elements.title.halo '{halo}' is not one of {', '.join(TITLE_HALOS)}; glow is used"))
         halo = "glow"
     return {"text": text, "lines": lines, "size": size, "sub": sl, "tag": tl, "sub_pt": sp, "w": w, "h": h, "frame": fl, "frame_pt": fpt, "box": box, "pad": pad,
-            "halo": halo}
+            "halo": halo, "widened": widened}
 
 
 TITLE_HALOS = ("glow", "crisp", "thin", "none")

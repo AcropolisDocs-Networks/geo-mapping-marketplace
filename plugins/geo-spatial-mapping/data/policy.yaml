@@ -1,0 +1,83 @@
+# The map plugin's standing rules, as data (4.2.0). One place: the build's deviations table, the rules digest a map request gets, the guide
+# and (5.0.0) the skills, the layout resolver and the lints read this file, so a rule is changed here and nowhere else.
+#
+# Three classes.
+#   fixed    never changed by a session, by a layout or by an intent. Each names the check that enforces it.
+#   default  the value every map gets. A MapSpec that sets another value has deviated; the deviation is explained by an entry in the
+#            MapSpec's `asks:` (the person's own words) or, from 5.0.0, by a named intent. Anything else is unexplained.
+#   free     the map maker's judgement. Counted, never questioned.
+#
+# 4.2.0 reports deviations and changes nothing. From 5.0.0 an unexplained deviation is drawn at its default and said in one line.
+#
+# A default: `keys` are the MapSpec paths that set it (the first is the one to write), `value` the default, `same` other values that mean
+# the default, `says` the rule in plain words, `serves` the rubric criteria it is there for (evaluation/rubric.yaml).
+policy_version: 1
+
+fixed:
+  - {id: logo-mark, says: "The logo is the brand's small mark only: no spelled-out name, no box behind it, on paper and on the web.", enforced_by: ["the renderer draws the pack's mark and nothing else (print and web)"]}
+  - {id: logo-follows-nothing, says: "One setting never moves another element: a title above the map does not move the logo.", enforced_by: ["layout.apply_layout: the title's place and the other elements' places are separate"]}
+  - {id: inset-north, says: "The locator map's north is the main map's north, in every projection that has one.", enforced_by: [MAP-CART-025]}
+  - {id: one-ground-resolution, says: "Land and water are drawn at one resolution.", enforced_by: [MAP-CART-024]}
+  - {id: data-colours, says: "Data colours come from the brand palette, never the page or text colours and never a hex value.", enforced_by: [MAP-CART-015, MAP-BRAND-001]}
+  - {id: transit-side-by-side, says: "Transit lines that share a street are drawn side by side, never on top of each other.", enforced_by: ["parallel_lines.py offsets lines that share a path"]}
+  - {id: provenance, says: "Every layer has a source, a licence and a date; nothing is invented.", enforced_by: [MAP-LIC-001]}
+  - {id: no-secrets, says: "No key, no private person's location and no internal host name reaches a map, a log or the chat.", enforced_by: [MAP-CRED-010, MAP-SVC-035]}
+
+defaults:
+  - {id: theme, keys: [theme], value: light, says: "Light theme. Dark only when the person asks for it.", serves: [READ-1, STYLE-1]}
+  - {id: title-in-map, keys: [elements.title.placement], value: in-map, says: "The title sits inside the map.", serves: [LAYOUT-3]}
+  - {id: title-corner, keys: [elements.title.position], value: upper-left, says: "The title is in the upper left.", serves: [LAYOUT-3]}
+  - {id: legend-corner, keys: [elements.legend.position], value: upper-right, says: "The legend is in the upper right.", serves: [LAYOUT-3, READ-2]}
+  - {id: logo-corner, keys: [elements.logo.position], value: lower-left, says: "The logo is in the lower left of the map.", serves: [STYLE-5, LAYOUT-3]}
+  - {id: logo-on, keys: [elements.logo.on], value: true, says: "The logo is on.", serves: [STYLE-5]}
+  - {id: inset-corner, keys: [elements.inset_map.position], value: lower-right, says: "The locator map is in the lower right.", serves: [ORIENT-1, LAYOUT-3]}
+  - {id: inset-on, keys: [elements.inset_map.on], value: true, same: [auto], says: "The locator map is drawn when the builder finds it useful.", serves: [ORIENT-1, ORIENT-2]}
+  - {id: north-corner, keys: [elements.north_arrow.position], value: upper-right, says: "The north arrow sits beside the legend.", serves: [ORIENT-2]}
+  - {id: north-on, keys: [elements.north_arrow.on], value: true, same: [auto], says: "The north arrow is on where north means something.", serves: [ORIENT-2]}
+  - {id: scale-corner, keys: [elements.scale_bar.position], value: lower-left, says: "The scale bar sits beside the logo.", serves: [ORIENT-2]}
+  - {id: scale-on, keys: [elements.scale_bar.on], value: true, same: [auto], says: "The scale bar is on where one scale holds.", serves: [ORIENT-2]}
+  - {id: legend-on, keys: [elements.legend.on], value: true, same: [auto], says: "The legend is on.", serves: [READ-2]}
+  - {id: title-on, keys: [elements.title.on], value: true, says: "The title is on.", serves: [STORY-2]}
+  - {id: sources-on, keys: [elements.source_note.on], value: true, says: "The source line is on.", serves: [HON-4]}
+  - {id: frame-on, keys: [elements.frame.on, elements.neatline.on], value: true, says: "The map has its frame line.", serves: [LAYOUT-4]}
+  - {id: names-on, keys: [names.on, elements.names.on], value: true, says: "Place names are on.", serves: [ORIENT-1, ORIENT-3]}
+  - {id: context, keys: [context.preset], value: auto, says: "The context pack is chosen by the builder from the data.", serves: [ORIENT-3, INFO-4]}
+  - {id: context-on, keys: [context.on, elements.context.on], value: true, says: "The context pack is on.", serves: [ORIENT-3]}
+  - {id: ground, keys: [basemap.bundled], value: auto, same: [full, true], says: "The map has ground under it.", serves: [ORIENT-1, HIER-2]}
+  - {id: ground-detail, keys: [basemap.ground_detail], value: true, says: "Detailed ground is used where it is cached.", serves: [STYLE-2]}
+  - {id: look, keys: [style.look], value: auto, says: "The look is chosen by the builder from the data; classic, bold and dark only when asked.", serves: [STYLE-1, HIER-2]}
+  - {id: hierarchy, keys: [style.hierarchy], value: auto, says: "Layers the message names draw full and the rest recede.", serves: [HIER-1, HIER-3, STORY-4]}
+  - {id: style-pack, keys: [style.pack], value: default, says: "The default style pack. Another pack is named at the start, when the person asks for it.", serves: [STYLE-1]}
+  - {id: focus, keys: [focus.mask], value: auto, says: "The study area stands out when the builder finds one.", serves: [HIER-1]}
+  - {id: fit, keys: [extent.fit], value: auto, says: "The map moves before it shrinks; elements may cover up to 5% of the focus.", serves: [LAYOUT-2, LAYOUT-3]}
+  - {id: fit-cover, keys: [extent.fit_cover_pct], value: 5, says: "Elements may cover up to 5% of the map's focus area.", serves: [LAYOUT-3]}
+
+# Free: the keys whose value is the map maker's call. They are counted in the deviations line so the count is honest about what was chosen.
+free:
+  - classification.method
+  - classification.classes
+  - classification.breaks
+  - symbol
+  - palette
+  - extent.padding_pct
+  - extent.mode
+  - crs.display
+  - template
+  - labels
+  - names.places
+  - names.exclude
+  - names.max
+  - terrain
+
+# The digest a map request gets once a session (hooks/credentials_reminder.py), 12 lines at most.
+digest:
+  - "Map rules that hold for every map (geo-spatial-mapping):"
+  - "- Keep the defaults: light theme, title in the map (upper left), legend upper right, logo lower left, locator lower right, names, context and ground on."
+  - "- Change a default only when the person asked for it, and record their words in the MapSpec: asks: [{set: theme, words: \"make it dark\"}]."
+  - "- A default changed with no ask is listed in every build as an unexplained deviation."
+  - "- Data colours from the brand palette only; never a hex value; the logo is the small mark, never moved by another setting."
+  - "- Use the library first (ref_library.py select and search); compare the sources a theme has before taking one (library/themes.yaml)."
+  - "- Fetch through the plugin (a library entry, the data tools, source: {type: ref | osm | h3}) and shape data with ops:, not with a script of your own."
+  - "- Say where the session runs before promising data: the cloud workspace cannot reach OpenStreetMap, Earthdata or a keyed source; the linked computer can."
+  - "- Read the build's digest (build_map.py --digest) and its result file; never parse the console."
+  - "- Title in Title Case, subject-led; the person's own text is drawn as written (elements.title.supplied)."

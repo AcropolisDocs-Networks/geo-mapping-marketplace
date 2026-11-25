@@ -1006,6 +1006,8 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
             e["note"] = "includes the first-run package install"        # 2.1.0 (Day 19 trace): not env_probe's own time
         if ev["lane"]:
             reading = c["tool"] == "Skill" or bool(ev["scripts"] and ev["scripts"][0] in READING_SCRIPTS)
+            if reading:
+                e["reading"] = True          # 4.2.0 (Day 25 trace): the plugin's own instructions, read; never a build's result
             e["findings"] = {} if is_report(e) or reading else findings_in(c["result"] or "")
             if st == "failed":
                 cls, site, exc = error_class(c["result"] or "")
@@ -1028,7 +1030,7 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     log, log_files = read_hook_log(path.stem, records)
     hk = apply_hook_log(events, log)
     for e, c in zip(events, calls, strict=False):           # 2.4.0 (X-04): a build that exited 0 but dropped what the spec asked for
-        if e["status"] == "ok" and e["lane"] and not is_report(e) and DEGRADED_TEXT.search(c["result"] or ""):
+        if e["status"] == "ok" and e["lane"] and not is_report(e) and not e.get("reading") and DEGRADED_TEXT.search(c["result"] or ""):
             e.update(status="degraded", degraded=degraded_items(c["result"] or ""))
     led_rows, led_files = read_ledger(records, *((min(times), max(times)) if times else (None, None)), extra=call_folders(calls))
     led_matched = apply_ledger(events, led_rows)
@@ -1129,6 +1131,12 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     fix = fix_spec(failed, events) + degraded_spec(mapev, start=len(groups_of(failed)) + 1)
     evals = [e for e in events if e.get("evaluation")]
     outputs, miss = session_outputs(calls, events, records, why=True)
+    try:                                                 # 4.2.0: which outputs were handed to the person; the others are tries that were set aside
+        sent = {FORMAT_EXT.sub("", q.name) for q, _n in delivered_files(calls, events)}
+        for x in outputs:
+            x["delivered"] = FORMAT_EXT.sub("", Path(x["path"]).name) in sent
+    except Exception:  # noqa: BLE001
+        pass
     recorded = recorded_quality(outputs, calls)
     glue = outside_work(calls, events, inv)
     return {**({"map_quality": recorded} if recorded else {}), "outside_plugin": glue, "outputs_missed": miss, "run_ledger": {"files": [Path(f).name for f in led_files], "rows": len(led_rows), "calls_matched": led_matched},
@@ -1285,6 +1293,7 @@ def session_outputs(calls: list[dict], events: list[dict], records: list[dict], 
 
 
 COPY_STEM = re.compile(r"_(?:poster|qa|web)$", re.I)
+FORMAT_EXT = re.compile(r"\.(?:png|svg|pdf|mp4|gif|webm|html|jpe?g)$", re.I)
 DELIVERED_EXT = (".png", ".svg", ".pdf", ".mp4", ".gif", ".webm", ".html", ".jpg", ".jpeg")
 OUTPUTS_FOLDER = Path("/mnt/user-data/outputs")
 
@@ -1375,7 +1384,7 @@ def recorded_quality(outputs: list[dict], calls: list[dict]) -> dict | None:
             "report": str(Path(any_card["_file"]).parent / "report.html"), "outputs": rows, "top_components": [], "from": "recorded"}
 
 
-def offer_evaluation(o: dict, stem: Path) -> list[str]:
+def offer_evaluation(o: dict, stem: Path, everything: bool = False) -> list[str]:
     """2.2.0 (map evaluator O2): the outputs list beside the report and a map-evaluate plan for it; the lines to print. Nothing runs here:
     the person sees the cost and says yes first. 2.4.0 (MT-03): finished builds with no output found are never a bare 0: the line says how many
     and why, and the offer is made on those builds' --out folders and specs when they still exist."""
@@ -1394,20 +1403,32 @@ def offer_evaluation(o: dict, stem: Path) -> list[str]:
     mq = o.get("map_quality") or {}
     done = {x["output"] for x in mq.get("outputs") or [] if x.get("recorded")}
     todo = [x for x in o["outputs"] if x["id"] not in done]
+    # 4.2.0 (decision D12): the maps that were handed over are graded; a try that was built and set aside is graded only when asked
+    # (--evaluate-all). Day 25: six outputs were offered (12 reads); two were delivered.
+    handed = {x["id"] for x in o["outputs"] if x.get("delivered")}
+    aside = []
+    if handed and not everything:
+        aside = sorted({x["id"] for x in todo if x["id"] not in handed})
+        todo = [x for x in todo if x["id"] in handed]
     lst = stem.with_suffix(".outputs.json")
     lst.write_text(json.dumps({"session": o["transcript"], "outputs": todo or o["outputs"]}, indent=1), encoding="utf-8")
     n = len({x["id"] for x in o["outputs"]})
     head = f"MAP_TRACE_OUTPUTS: {n} {lst}" + (f" ({len(done)} already scored, read back)" if done else "")
+    note = ([f"MAP_TRACE_EVALUATE_SET_ASIDE: {len(aside)} output(s) were built and not handed over ({', '.join(aside[:4])}); they are graded only when asked "
+             "(map_trace.py --evaluate-only --evaluate-all)"] if aside else [])
     if not todo:
-        return [head, "MAP_TRACE_EVALUATE: skipped - every output already has a scorecard (the Map quality section shows them)"]
-    auto = []
+        return [head, "MAP_TRACE_EVALUATE: skipped - every output handed over already has a scorecard (the Map quality section shows them)"] + note
+    mode = "auto"
     try:
         import map_evaluate as me
-        if me.evaluate_mode() == "auto":
-            auto = ["MAP_TRACE_EVALUATE_AUTO: yes (the owner set evaluate: auto; run it without asking, by fresh agents, observe only)"]
+        mode = me.evaluate_mode()
     except Exception:  # noqa: BLE001
         pass
-    return [head] + _plan_lines({**o, "outputs": todo}, stem, lst) + auto
+    if mode == "off":
+        return [head, "MAP_TRACE_EVALUATE: off (evaluate: off in the person's config); the outputs list is kept"] + note
+    auto = (["MAP_TRACE_EVALUATE_AUTO: yes (graded without asking since 4.2.0: one cold read and one graded read for each map handed over, by fresh "
+             "agents, observe only; evaluate: ask in the config asks first)"] if mode == "auto" else [])
+    return [head] + _plan_lines({**o, "outputs": todo}, stem, lst) + auto + note
 
 
 def _plan_lines(o: dict, stem: Path, lst: Path) -> list[str]:
@@ -1618,6 +1639,10 @@ def text_report(o: dict) -> str:
         L.append("Work done outside the plugin (each is a candidate plugin feature)")
         for g in o["outside_plugin"][:10]:
             L.append(f"  #{g['n']:<5} {g['what'][:40]:<40} {', '.join(g['libraries'])}" + (f"  ({', '.join(g['ops'][:6])})" if g.get("ops") else ""))
+    if o.get("road"):                                  # 4.2.0: the road rubric, how the maps were made (road.yaml)
+        import road_rubric
+        L += road_rubric.lines(o["road"])
+        L.append("")
     if (o.get("run_ledger") or {}).get("rows"):
         rl = o["run_ledger"]
         L.append(f"Ledger    {rl['rows']} plugin run(s) recorded, {rl['calls_matched']} call(s) matched (exit codes and outputs from the plugin itself)")
@@ -1700,6 +1725,7 @@ def main(argv=None) -> int:
     ap.add_argument("--no-evaluate", action="store_true", help="2.2.0: do not list the session's outputs or offer the map evaluator")
     ap.add_argument("--copy-to", metavar="DIR", help="4.1.0 (Day 24, T-04): also copy the report files into DIR (the map's work folder's "
                     ".geo-mapping/traces), so a later session can read them")
+    ap.add_argument("--evaluate-all", action="store_true", help="4.2.0: grade the tries that were built and set aside too, not only the maps handed over")
     ap.add_argument("--evaluate-only", action="store_true", help="2.2.0: offer the map evaluator on the outputs of the newest trace of this session, without tracing again")
     a = ap.parse_args(argv)
     if a.op == "find":
@@ -1709,6 +1735,12 @@ def main(argv=None) -> int:
     try:
         path, how = locate(a.transcript, a.session)
         o = build(path, how, since=a.since, until=a.until, idle_seconds=a.idle_seconds)
+        if (o.get("calls") or {}).get("map"):            # 4.2.0: the road rubric, from this summary and the finished maps' own records
+            try:
+                import road_rubric
+                o["road"] = road_rubric.measure(o)
+            except Exception:  # noqa: BLE001 - a report line, never a reason to lose the trace
+                pass
     except TraceError as ex:
         print(f"map_trace: {ex}. Nothing to trace.", file=sys.stderr)
         return gc.EXIT_USAGE
@@ -1719,7 +1751,7 @@ def main(argv=None) -> int:
         if not prev:
             print("map_trace: no earlier trace of this session to evaluate; run map-trace first.", file=sys.stderr)
             return gc.EXIT_USAGE
-        for ln in offer_evaluation(o, prev[-1].with_suffix("")):
+        for ln in offer_evaluation(o, prev[-1].with_suffix(""), a.evaluate_all):
             print(ln)
         return gc.EXIT_OK
     text = text_report(o)
@@ -1752,7 +1784,7 @@ def main(argv=None) -> int:
             print(f"MAP_TRACE_KEEP: {len(files)} file(s) live only in {d}; copy them into the work folder's .geo-mapping/traces on the person's "
                   "computer (or pass --copy-to), and offer, never assume, a copy in the Project")
         if not a.no_evaluate:
-            for ln in offer_evaluation(o, d / stem):
+            for ln in offer_evaluation(o, d / stem, a.evaluate_all):
                 print(ln)
     if a.strict and o["status"]["failed"]:
         return gc.EXIT_LINT

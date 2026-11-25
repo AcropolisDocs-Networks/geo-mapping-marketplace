@@ -329,6 +329,86 @@ def viewshed(dem_path, point_lonlat, h_m: float = 10.0, radius_m: float = 5000.0
             "gdf": gpd.GeoDataFrame({"h_m": [h_m], "radius_m": [radius_m]}, geometry=[geom_ll], crs=WGS84)}
 
 
+GRID_MAX_PX = 4800            # 4.2.0: the finest grid the cell-size viewshed makes a side (12 km at 5 m cells); about 300 MB at the limit
+GRID_RAY_CHUNK = 800
+
+
+def viewshed_grid(dem_path, point_lonlat, h_m: float = 10.0, radius_m: float = 5000.0, *, cell_m: float | None = None, max_px: int = 2048,
+                  target_h_m: float = 0.0, k_factor: float = K_DEFAULT) -> dict:
+    """4.2.0 (Day 25 #6): the ground visible from a point, cell by cell. The surface is read on an azimuthal equidistant grid of `cell_m` cells
+    (default: the DEM's own, coarser only when the grid would pass `max_px` a side), and enough rays are marched that neighbouring rays are
+    never more than a cell apart at the edge of the radius, so no strip is filled in between them. -> the same record as `viewshed`, plus
+    `mask` (1 visible, 0 not, 255 outside the radius), `transform` and `grid_crs` for a raster, and the visible cells as polygons. A surface
+    with buildings in it (lidar.py surface) gives a view over roofs; one polygon per ray run did not scale to that (Day 25: 15,080 rays)."""
+    import geopandas as gpd
+    import shapely
+    from pyproj import Transformer
+    from rasterio import features
+    from shapely.geometry import shape
+    lon, lat = _lonlat(point_lonlat, "point")
+    if radius_m <= 0:
+        raise TerrainError("radius must be positive")
+    if cell_m is not None and cell_m <= 0:
+        raise TerrainError("cell must be positive")
+    aeqd = f"+proj=aeqd +lat_0={lat} +lon_0={lon} +datum=WGS84 +units=m +no_defs"
+    res = dem_resolution_m(dem_path)
+    max_px = int(max(32, min(GRID_MAX_PX, max_px)))
+    want = float(cell_m) if cell_m else max(res, 1.0)
+    side = int(min(max_px, max(32, math.ceil(2 * radius_m / want))))
+    g = rio.read_window(dem_path, (-radius_m, -radius_m, radius_m, radius_m), aeqd, out_shape=(side, side), max_px=max(side, 32), resampling="bilinear")
+    z = np.ma.filled(np.ma.asarray(g.array, dtype=float), np.nan)
+    cell = 2 * radius_m / side
+    inv = ~g.transform
+    cx, cy = inv * (0.0, 0.0)
+    z0 = rio.bilinear(z, np.array([cx - 0.5]), np.array([cy - 0.5]))[0]
+    if not np.isfinite(z0):
+        raise TerrainError("the DEM has no elevation at the point")
+    eye = z0 + h_m
+    nstep = max(2, int(math.ceil(radius_m / cell)))
+    dist = np.linspace(cell, radius_m, nstep)
+    drop = dist * dist / (2.0 * k_factor * R_EARTH_M)
+    n_rays = int(math.ceil(2 * math.pi * nstep * 1.25))
+    az = np.arange(n_rays) * (2 * math.pi / n_rays)
+    mask = np.zeros((side, side), dtype=np.uint8)
+    for s in range(0, n_rays, GRID_RAY_CHUNK):
+        a_ = az[s:s + GRID_RAY_CHUNK][:, None]
+        xs, ys = np.sin(a_) * dist[None, :], np.cos(a_) * dist[None, :]
+        cols = inv.a * xs + inv.b * ys + inv.c
+        rows = inv.d * xs + inv.e * ys + inv.f
+        zs = rio.bilinear(z, cols.ravel() - 0.5, rows.ravel() - 0.5).reshape(cols.shape)
+        ok = np.isfinite(zs)
+        zs = np.where(ok, zs, -1e9)
+        ang = (zs + target_h_m - drop[None, :] - eye) / dist[None, :]
+        hmax = np.maximum.accumulate(np.concatenate([np.full((ang.shape[0], 1), -np.inf), ang[:, :-1]], axis=1), axis=1)
+        vis = (ang >= hmax) & ok
+        ci, ri = np.floor(cols).astype(int), np.floor(rows).astype(int)
+        inside = vis & (ci >= 0) & (ci < side) & (ri >= 0) & (ri < side)
+        mask[ri[inside], ci[inside]] = 1
+    ccx = (np.arange(side) + 0.5) * g.transform.a + g.transform.c
+    ccy = (np.arange(side) + 0.5) * g.transform.e + g.transform.f
+    outside = (ccx[None, :] ** 2 + ccy[:, None] ** 2) > radius_m ** 2
+    seen = int(mask[~outside].sum())
+    total = int((~outside).sum())
+    polys = [shape(geom) for geom, val in features.shapes(mask, mask=mask.astype(bool), transform=g.transform) if val == 1]
+    geom = shapely.union_all(polys) if polys else shapely.Polygon()
+    tr = Transformer.from_crs(aeqd, WGS84, always_xy=True)
+    geom_ll = shapely.transform(geom, lambda c: np.column_stack(tr.transform(c[:, 0], c[:, 1])))
+    mask_out = mask.copy()
+    mask_out[outside] = 255
+    return {"point": [lon, lat], "h_m": float(h_m), "target_h_m": float(target_h_m), "radius_m": float(radius_m), "k_factor": float(k_factor),
+            "elevation_m": float(z0), "eye_m": float(eye), "rays": n_rays, "samples_per_ray": nstep, "cell_m": float(cell), "dem": str(dem_path), "dem_resolution_m": res,
+            "visible_share_of_rays": float(seen / total) if total else 0.0, "visible_share": float(seen / total) if total else 0.0,
+            "visible_area_km2": float(seen * cell * cell / 1e6), "polygons": len(polys), "geometry": geom_ll, "crs": WGS84,
+            "method": f"ray marching on an azimuthal equidistant grid of {cell:.1f} m cells, {n_rays:,} rays, visible cells kept as a grid; k = {k_factor:.3g}",
+            "mask": mask_out, "transform": g.transform, "grid_crs": aeqd,
+            "gdf": gpd.GeoDataFrame({"h_m": [h_m], "radius_m": [radius_m]}, geometry=[geom_ll], crs=WGS84)}
+
+
+def write_viewshed_raster(r: dict, path) -> dict:
+    """The visible cells of `viewshed_grid` as a GeoTIFF (1 visible, 0 not, 255 no data outside the radius), in the grid's own projection."""
+    return rio.write_geotiff(path, r["mask"], r["transform"], r["grid_crs"], nodata=255, dtype="uint8")
+
+
 # --------------------------------------------------------------------------------------------------------------- CLI
 
 def _parse_bounds(s):
@@ -370,6 +450,9 @@ def main(argv=None) -> int:
     ap.add_argument("--samples", type=int)
     ap.add_argument("--radius", type=float, default=5000.0)
     ap.add_argument("--step", type=float, default=1.0)
+    ap.add_argument("--cell", type=float, help="4.2.0, viewshed: the grid's cell size in metres (the surface's own by default); the visible ground is then worked out cell by cell")
+    ap.add_argument("--max-px", type=int, help="4.2.0, viewshed: the grid's size limit a side (1024 by rays, 2048 by cells; 4800 at most)")
+    ap.add_argument("--raster", help="4.2.0, viewshed: also write the visible cells as a GeoTIFF (1 visible, 0 not)")
     ap.add_argument("--bounds")
     ap.add_argument("--res", type=float, default=30.0)
     ap.add_argument("--source", default="auto", choices=["auto", "3dep", "terrarium", "copernicus", "canada-mrdem", "gsi-japan", "ga-lidar-5m",
@@ -427,11 +510,22 @@ def main(argv=None) -> int:
             print(json.dumps({k: v for k, v in r.items() if k != "profile"}, indent=2))
             return gc.EXIT_OK
         if a.op == "viewshed":
-            if not (a.point and a.out):
-                raise TerrainError("viewshed needs --point lon,lat and --out file.geojson")
-            r = viewshed(a.dem, a.point, a.h, a.radius, a.step, target_h_m=a.target_h, k_factor=a.k)
+            if not (a.point and (a.out or a.raster)):
+                raise TerrainError("viewshed needs --point lon,lat and --out file.geojson (or --raster file.tif)")
+            if a.cell or a.raster:
+                r = viewshed_grid(a.dem, a.point, a.h, a.radius, cell_m=a.cell, max_px=a.max_px or 2048, target_h_m=a.target_h, k_factor=a.k)
+                if a.raster:
+                    Path(a.raster).parent.mkdir(parents=True, exist_ok=True)
+                    write_viewshed_raster(r, a.raster)
+                    r["raster"] = a.raster
+                for k_ in ("mask", "transform"):
+                    r.pop(k_, None)
+            else:
+                r = viewshed(a.dem, a.point, a.h, a.radius, a.step, target_h_m=a.target_h, k_factor=a.k, **({"max_px": a.max_px} if a.max_px else {}))
             import geo_io
-            geo_io.write(r.pop("gdf"), a.out)
+            gdf_ = r.pop("gdf")
+            if a.out:
+                geo_io.write(gdf_, a.out)
             r.pop("geometry")
             r["out"] = a.out
             print(json.dumps(r, indent=2, default=str))

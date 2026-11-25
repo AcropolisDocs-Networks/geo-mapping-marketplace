@@ -416,8 +416,35 @@ def lint_entries(entries: list[dict], lib: Path, plugin_root: Path | None = None
                 findings.append(f("MAP-LIB-011", "BLOCK", "-", f"{name} is missing; run tools/ref_release.py regen"))
             elif gp.read_text(encoding="utf-8") != render():
                 findings.append(f("MAP-LIB-011", "BLOCK", "-", f"{name} does not match the entries; run tools/ref_release.py regen"))
+    # 018 (4.2.0) every active data entry is in a theme (library/themes.yaml): a source no theme lists is one a request by need never finds
+    if check_index:
+        findings += theme_findings([e for e in entries if e.get("_scope") == "shipped" and "_parse_error" not in e], lib, release)
     findings.sort(key=lambda x: (SEV_ORDER[x["severity"]], x["id"], x["entry"]))
     return findings
+
+
+NOT_DATA = ("ref.map-type.", "ref.template.", "ref.palette.", "ref.symbol-set.", "ref.style.")
+
+
+def theme_findings(entries: list[dict], lib: Path, release: bool = False) -> list[dict]:
+    """MAP-LIB-018: an active data entry that no theme of library/themes.yaml lists (a pattern with * counts), and a theme that lists none."""
+    import fnmatch
+    tp = lib / "themes.yaml"
+    if not tp.is_file():
+        return [f("MAP-LIB-018", "BLOCK" if release else "WARN", "-", "library/themes.yaml is missing: sources cannot be found by what they are")]
+    doc = yaml.safe_load(tp.read_text(encoding="utf-8")) or {}
+    ids = sorted(str(e.get("id"))[4:] for e in entries if e.get("status") == "active" and str(e.get("id", "")).startswith("ref.")
+                 and not str(e.get("id")).startswith(NOT_DATA))
+    out, covered = [], set()
+    for name, th in (doc.get("themes") or {}).items():
+        hit = {i for pat in (th.get("entries") or []) for i in ids if i == pat or fnmatch.fnmatchcase(i, str(pat))}
+        covered |= hit
+        if not hit:
+            out.append(f("MAP-LIB-018", "WARN", "-", f"theme '{name}' lists no active entry"))
+    for i in ids:
+        if i not in covered:
+            out.append(f("MAP-LIB-018", "BLOCK" if release else "WARN", "ref." + i, "is in no theme of library/themes.yaml; add it to the theme that says what it is"))
+    return out
 
 
 def _as_list(v):

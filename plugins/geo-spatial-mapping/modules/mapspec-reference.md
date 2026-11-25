@@ -105,6 +105,25 @@ By default the title sits inside the map at the upper left with no panel behind 
 because it sits on data: the builder keeps every element in its corner and shrinks the map a little to keep that corner clear. When the person asks for
 a different arrangement, write the corner they named; `position: auto` lets the builder move that one element to a freer corner.
 
+**A changed default needs the person's words (4.2.0).** The defaults are in `data/policy.yaml` (`policy.py show`): light theme, title in the
+map, the corners above, logo, locator, names, context and ground on, the look and the hierarchy chosen by the builder. Every build lists what
+the MapSpec changed, in its digest and in `<stem>.result.json` (`deviations`): **asked** when `asks:` carries the person's words for it,
+**unexplained** when it does not. Write the ask when you write the change, in their words, never a reason of your own:
+
+```yaml
+theme: dark
+asks:
+  - {set: theme, words: "make it dark, like a circuit board"}
+  - {set: [names.on, context.preset], words: "no labels and no streets"}
+outcome: explain                   # what the map is for: explain | compare | locate | inventory | monitor | explore | sequence | evoke
+```
+
+`outcome` says what the map is for, from the request: explain (one point), compare (a pattern across places), locate (find things),
+inventory (what is where, exactly), monitor (status at a glance), explore (a web map to dig into), sequence (a story), evoke (the look is the
+point). `secondary_outcome` adds a second. `elements.frame: {on: false}` draws no line round the map; `elements.title.supplied: true` (or
+`[subtitle]`) marks text the person wrote, which is drawn as written and not marked by the text check; `focus.mask` takes `none`, `off` and
+`on` like the other switches. A title above the map (`elements.title.placement: outside`) moves the title only: the logo stays in the map.
+
 **Light is the default theme.** Use `theme: dark` only when the person asks for a dark map. Dark draws on a very dark grey (never black) with land,
 water, the locator and the frame kept apart by the contrast rules in MAP-A11Y-006.
 

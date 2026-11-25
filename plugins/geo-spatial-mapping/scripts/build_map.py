@@ -107,8 +107,13 @@ def text_findings(plan: mp.Plan, rendered: mr.Rendered) -> list[dict]:
         return []
     legends = [str((l.legend_block or {}).get("title") or "") for l in plan.layers if l.legend_block]
     dt_cfg = els.get("data_table") or {}
-    return text_lint.lint(text_lint.title_text(plan.spec), el.get("subtitle"), tagline=el.get("tagline"), legend_titles=[x for x in legends if x],
-                          table_title=dt_cfg.get("title") if dt_cfg.get("on") else None, source=" ".join(mr.source_lines(plan)))
+    fs = text_lint.lint(text_lint.title_text(plan.spec), el.get("subtitle"), tagline=el.get("tagline"), legend_titles=[x for x in legends if x],
+                        table_title=dt_cfg.get("title") if dt_cfg.get("on") else None, source=" ".join(mr.source_lines(plan)))
+    # 4.2.0 (Day 25 #6): text the person supplied is drawn as written and not marked. elements.title.supplied: true (the title and the
+    # subtitle) or a list of the supplied ones ([subtitle]) says which; a brief's asks set it (5.0.0).
+    sup = el.get("supplied")
+    supplied = {"title", "subtitle"} if sup is True else {str(x) for x in sup} if isinstance(sup, (list, tuple)) else set()
+    return [f for f in fs if (f.get("detail") or {}).get("element") not in supplied]
 
 
 def map_text_summary(plan: mp.Plan, findings: list[dict]) -> dict:
@@ -241,6 +246,11 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
                              for b in getattr(plan, "basemap", []) or [] if b.get("kind") == "hillshade"
                              and ((b.get("record") or {}).get("terrain") or {}).get("request")]
         result["summary"] = summary_line(result)
+        try:                                                 # 4.2.0: the MapSpec against the standing defaults (data/policy.yaml); a report, never a gate
+            import policy as _policy
+            result["deviations"] = _policy.deviations(plan.spec)
+        except Exception as ex:  # noqa: BLE001 - the table is a report; it never stops a build
+            result["deviations"] = {"line": f"deviations from the defaults: not checked ({type(ex).__name__})", "items": [], "counts": {}}
         gc.ledger_note(outputs=[f for f in result.get("files") or [] if Path(f).is_file()], findings=findings, degraded=result["degraded"])
         result["blocked"] = any(f["severity"] == "BLOCK" for f in findings)
         result["map_text"] = map_text_summary(plan, findings)
@@ -391,8 +401,49 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
     return result
 
 
+DIGEST_FINDINGS = 12          # 4.2.0: the digest lists this many findings (every BLOCK and WARN first); the result file holds them all
+_SEV_ORDER = {"BLOCK": 0, "WARN": 1, "INFO": 2}
+
+
+def write_result(res: dict, out_dir: str) -> Path | None:
+    """4.2.0 (trace T1): the whole build result as a file beside the map, `<stem>.result.json`, so nothing has to read it off the console
+    (three traces show a session's own parse of the printed result failing). -> the file, or None when it could not be written."""
+    try:
+        p = Path(out_dir) / f"{res.get('stem') or res.get('id') or 'map'}.result.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(res, indent=2, default=str), encoding="utf-8")
+        return p
+    except OSError:
+        return None
+
+
+def digest_lines(res: dict, result_file: Path | None = None) -> list[str]:
+    """The build in at most 25 lines, for a person and for the session that ran it: what was built, the deviations from the defaults, the
+    findings that matter, the map text and message callouts, and where the full result is."""
+    fs = sorted(res.get("findings") or [], key=lambda f: _SEV_ORDER.get(f.get("severity"), 3))
+    n = {s: sum(1 for f in fs if f.get("severity") == s) for s in ("BLOCK", "WARN", "INFO")}
+    L = [f"{'BLOCKED' if res.get('blocked') else 'built'}: {res.get('id')} on {res.get('template')} ({res.get('brand')}), {res.get('crs')}"]
+    L += [f"file: {f}" for f in (res.get("files") or [])[:6]]
+    if res.get("summary"):
+        L.append(str(res["summary"]))
+    dev = res.get("deviations") or {}
+    if dev.get("line"):
+        L.append(dev["line"])
+        L += [f"  {x}" for x in (dev.get("unexplained_lines") or [])[:4]]
+    L.append(f"findings: {n['BLOCK']} BLOCK, {n['WARN']} WARN, {n['INFO']} INFO")
+    shown = [f for f in fs if f.get("severity") in ("BLOCK", "WARN")][:DIGEST_FINDINGS]
+    L += [f"  {f.get('id')} {f.get('severity')}: {str(f.get('message') or '')[:200]}" for f in shown]
+    L += [str(x) for x in ((res.get("map_text") or {}).get("callout") or [])[:3]]
+    L += [str(x) for x in ((res.get("story") or {}).get("callout") or [])[:3]]
+    L = L[:24]
+    if result_file is not None:
+        L.append(f"result file: {result_file}")
+    return L
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--digest", action="store_true", help="4.2.0: print the build in at most 25 lines in place of the whole result (which is always written to <stem>.result.json)")
     ap.add_argument("--spec", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--formats")
@@ -411,7 +462,13 @@ def main(argv=None) -> int:
     except mp.PlanError as ex:
         print(f"build_map: {ex}", file=sys.stderr)
         return ex.code
+    rfile = write_result(res, a.out)
+    if a.digest:
+        print("\n".join(digest_lines(res, rfile)))
+        return gc.EXIT_LINT if res["blocked"] else gc.EXIT_OK
     print(json.dumps(res, indent=2, default=str))
+    if rfile is not None:
+        print(f"result file: {rfile}", file=sys.stderr)
     if res.get("summary"):
         print(res["summary"], file=sys.stderr)                       # 2.4.0 (T-06): "relief missing: <reason>" is never only a finding in a list
     for ln in ((res.get("map_text") or {}).get("callout") or []) + ((res.get("story") or {}).get("callout") or []):

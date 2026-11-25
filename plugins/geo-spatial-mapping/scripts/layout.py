@@ -210,8 +210,10 @@ def apply_layout(tpl: dict, spec: dict, classic: bool = False) -> dict:
     'in-map'; `classic` (the .pptx and QGIS paths, which place the title and logo themselves) or `elements.title.placement: outside` keeps the
     title band above the map and `layout` is 'classic'."""
     if not classic and tpl.get("map_full") and title_placement(spec) == "in-map":
-        return {**tpl, "map": dict(tpl["map_full"]), "layout": "in-map"}
-    return {**tpl, "layout": "classic"}
+        return {**tpl, "map": dict(tpl["map_full"]), "layout": "in-map", "overlays": "in-map"}
+    # 4.2.0 (Day 25 #1): a title above the map moves the title only. The logo and the other elements keep their in-map places; only the
+    # .pptx and QGIS paths (`classic`), which place the title and logo themselves, take the footer logo.
+    return {**tpl, "layout": "classic", "overlays": "classic" if classic or not tpl.get("map_full") else "in-map"}
 
 
 def rect_of(region: dict) -> Rect:

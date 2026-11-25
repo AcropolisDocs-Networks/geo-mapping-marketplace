@@ -90,3 +90,15 @@ anything. Build one map, then run `map-trace`: its `Hooks` line should show the 
 update case, keep a chat open, install the plugin again, and run one Bash command in that chat: it must run, not be refused.
 
 `tests/test_self_description.py` and `tests/test_hooks_1172.py` run the same cases in the test suite.
+
+## The map rules digest (4.2.0)
+
+`hooks/map_rules.py` is called by the `UserPromptSubmit` entry (`credentials_reminder.py`), so `hooks.json` did not change. When the
+person's message asks for a map (a making verb near "map", a map kind by name, a challenge name or one of this plugin's commands) it adds
+the ten lines of `data/policy.yaml`'s `digest` to the model's context, once a session: the defaults to keep, that a changed default needs
+the person's words in `asks:`, where data comes from, and to read the build's digest. It writes one line to the hook log
+(`{"e": "digest"}`, never the message) so it is given once. To check it by hand:
+
+```bash
+echo '{"session_id":"s9","prompt":"make a map of Tempe cell sites","cwd":"/tmp"}' | GEO_MAPPING_HOME=/tmp/gm python3 hooks/credentials_reminder.py
+```

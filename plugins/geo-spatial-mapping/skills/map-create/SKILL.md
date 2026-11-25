@@ -17,9 +17,12 @@ GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
 GP=${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 export GMAP_BUILD_TOKEN=$(python3 "$GMAP_ROOT/scripts/env_probe.py" --begin-build --spec map.yaml --value)
 python3 "$GMAP_ROOT/lints/mapspec_lint.py" map.yaml                       # spec check, before any data is read
-python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --draft      # two small pictures to look at first
-python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --formats svg,pdf,png [--strict]
+python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --draft --digest      # two small pictures to look at first
+python3 "$GMAP_ROOT/scripts/build_map.py" --spec map.yaml --out out --formats svg,pdf,png --digest [--strict]
 ```
+
+`--digest` (4.2.0) prints the build in at most 25 lines: the files, the deviations from the defaults, every BLOCK and WARN, the map text and
+message callouts. The whole result is always in `out/<stem>.result.json`: read that file for anything more, and never parse the console.
 
 ## Modules
 
@@ -79,7 +82,12 @@ In Cowork call `user_settings` (`op=bring`, `work_folder=<project>`) once per fo
 1. **Find the message.** A map says one thing. If the request does not, ask one short question ("What should the reader take from this map?") and
    nothing else. Write it as the MapSpec `message`: a full sentence, not "Map".
 2. **Inspect before mapping.** Run `geo-inspect` on any uploaded file (CRS, geometry, fields). Do not map data that reports "do not map as is".
-3. **Use the library first** (the region's adapters from `catalog_search --region` before it). Ask `ref_library.py select --geography ... --level ... --use-for ... --scale ... --audience ...` for the layer that fits
+3. **Use the library first, by what the thing is** (4.2.0): `python3 "$GMAP_ROOT/scripts/themes.py" show "cell towers" --geography us-az
+   --audience external` lists every source the library holds for a theme (cell sites, roads, buildings, elevation, population, water ...),
+   with its licence, the key it needs and where it can be fetched from. When a theme says to compare, count each candidate in the map's
+   window before choosing, and say which one was taken and why the others were not. A source in the cloud workspace's reach is not the
+   same as the best source: when the best one needs the person's computer, say so and ask, before swapping it for another.
+   Then the region's adapters from `catalog_search --region`. Ask `ref_library.py select --geography ... --level ... --use-for ... --scale ... --audience ...` for the layer that fits
    (the `ref-library` module has every option). A layer is used as `source: {type: ref, id: <entry id>}`. Say which entry was chosen and why in one phrase. Entries that are not
    `active` are never used. Exit 4 ("no reference entry fits") hands over to `geo-find-data`; ask for a file if the web has nothing usable. A table the person
    supplies is joined on the entry's join key: read the key column as text, keep leading zeros. A service entry (FEMA flood zones, HIFLD cellular towers,
@@ -100,7 +108,10 @@ In Cowork call `user_settings` (`op=bring`, `work_folder=<project>`) once per fo
    yourself by the `map-text` module (read it first): a subject-led title in Title Case (*Link Light Rail Walksheds, Seattle*), a subtitle that
    adds one thing (the key number, the scope or the measure); a finding-led title only when the person asks. Text the person supplies is drawn
    as written.
-6. **Fix, do not argue.** A BLOCK finding is a rule the map breaks. Change the spec and rebuild. Overrides exist only for MAP-CART-001 and
+6. **Keep the defaults; record an ask.** `mapspec-reference` lists them (`policy.py show`). Change one only when the person asked, and
+   write their words in `asks:` beside the change. The digest's deviations line counts the changes with no ask as unexplained: put the
+   default back, or ask the person. Write `outcome:` from the request (what the map is for).
+7. **Fix, do not argue.** A BLOCK finding is a rule the map breaks. Change the spec and rebuild. Overrides exist only for MAP-CART-001 and
    MAP-CART-010 and only with the person's own written reason (`override: {MAP-CART-001: "reason"}` on the layer).
 
 ## Rules the builder enforces (so do not work around them)
@@ -129,6 +140,6 @@ Lead with the result: the PNG and one sentence on what the map shows. Then at mo
 remain, a note when the legend or scale bar moved or was hidden and why). Then the map text: the title and subtitle drawn (`map_text` in the build
 result) and every line of `map_text.callout`, as written ("Map text: N findings (not blocking)" and one line per finding with its suggested fix);
 these never count against the three and never block. Then the message check the same way (every line of `story.callout`). Change supplied text only when the person says so. Offer one next step: `map-restyle` for a look change, `map-export` for another size.
-Say a summary line `relief missing: <reason>` first. From the cloud workspace, hand back only the map files (a DEM is in `refetch`).
+When the build's summary says relief was left out, say that line first, before the picture. From the cloud workspace, hand back only the map files (a DEM is in `refetch`).
 Files are `<brand prefix><id>_<template>_v<YYYYMMDD>.<ext>`, with a `.provenance.json` beside them (send it only if asked).
 A map to pan, zoom and click is `webmap-create` (one HTML file). To show how the map was made, turn on `methods_page` and send its one-page Data and Methods file. A map told in steps (a story, a carousel) is finished here, then `map-story`.

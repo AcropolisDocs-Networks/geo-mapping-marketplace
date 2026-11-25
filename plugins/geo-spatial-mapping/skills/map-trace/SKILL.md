@@ -50,21 +50,23 @@ GP=${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe; if [ -f "$GP" 
    `.geo-mapping/traces/` folder (the device bridge, or run with `--copy-to` when the folder is local) and say where they went. Offer, in one
    line, to save the Markdown report to the Project as well; save it only on a yes.
 
-5. **Offer the map evaluation (2.2.0).** When the run prints `MAP_TRACE_OUTPUTS:` with a number above 0, the session wrote finished maps,
-   and `MAP_TRACE_EVALUATE:` is the cost of grading them from their pictures (outputs, frames, and how many image reads fresh agents will
-   make). Show that cost line and ask whether to run it; it is observe only and never changes a map. On a clear yes, read the pipeline's
-   module and run the `MAP_TRACE_EVALUATE_RUN:` arguments through `pipelines.py`, then follow the module's steps 3 to 5, recording with
-   `--trace` so this report's page gains its Map quality section; send the updated page and the evaluation report. On no, or with
-   `MAP_TRACE_EVALUATE: skipped`, say nothing more about it. `--no-evaluate` leaves the offer out; `--evaluate-only` offers it again on
-   the newest trace of this session without tracing again (2.4.0: it finds the outputs from the transcript again, so an older page with an
-   empty outputs list can still gain its Map quality section).
-   When the run prints a reason line, `MAP_TRACE_OUTPUTS: 0 (N finished build(s), no output found: <reason>)` (2.4.0), say that N finished
-   builds were not matched to outputs, give the reason, and offer the evaluation it lists (`MAP_TRACE_EVALUATE:` and
-   `MAP_TRACE_EVALUATE_RUN:` follow it when those builds' `--out` folders still hold maps). Never report a session that built maps as having
-   no outputs without saying why.
-   3.4.0: outputs that already have a scorecard are read back into the Map quality section with no new reads, and only the others are
-   offered. When the run prints `MAP_TRACE_EVALUATE_AUTO: yes`, the owner set `evaluate: auto` (`~/.geo-mapping/config.yaml` or
-   `GMAP_EVALUATE=auto`): run the evaluation without asking, still by fresh agents and still observe only, and say it was run.
+5. **Grade the maps that were handed over (4.2.0).** `MAP_TRACE_OUTPUTS:` above 0 means the session wrote finished maps, and
+   `MAP_TRACE_EVALUATE:` is what grading them from their pictures takes (one cold read and one graded read each, by fresh agents). It is
+   observe only and never changes a map. `MAP_TRACE_EVALUATE_AUTO: yes` (the default): say the cost line and run it without asking.
+   Without that line (`evaluate: ask` in the config) ask first; `MAP_TRACE_EVALUATE: off` or `skipped`: say nothing more. Read the
+   pipeline's module, run the `MAP_TRACE_EVALUATE_RUN:` arguments through `pipelines.py`, then follow the module's steps 3 to 5, recording
+   with `--trace` so this report's page gains its Map quality section; send the updated page and the evaluation report.
+   - Only maps handed to the person are graded. `MAP_TRACE_EVALUATE_SET_ASIDE:` counts the tries that were built and set aside: say the
+     number, and grade them only when asked (`--evaluate-only --evaluate-all`).
+   - Outputs that already have a scorecard are read back with no new reads.
+   - `MAP_TRACE_OUTPUTS: 0 (N finished build(s), no output found: <reason>)`: say that N builds were not matched to outputs and why, and
+     run or offer the evaluation it lists. Never report a session that built maps as having no outputs without saying why.
+   - **Keep the scores.** After `record`, run `map_evaluate.py tracker --run <run folder>` and give each `MAP_EVAL_TRACKER:` line with the
+     report's `Road` lines: they are what a tracker entry carries beside the plugin's version. In a cloud workspace also run
+     `map_evaluate.py export --run <run folder>` and send the `MAP_EVAL_HANDBACK:` file (or copy it into the connected work folder's
+     `.geo-mapping/`): `map_evaluate.py import <file>` on the person's computer adds its lines to the history there, so a trend survives
+     the session. No picture is in it. Reports go to the Project only when asked.
+   - `--no-evaluate` leaves all of this out; `--evaluate-only` does it again on the newest trace of this session without tracing again.
 
    ```bash
    GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
@@ -96,6 +98,7 @@ GP=${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe; if [ -f "$GP" 
 | Rework | Retry: the same command again with nothing written between. Iteration loop: the same script on the same target again after a write, where the earlier run failed. Re-run after edit: the same shape after a success (normal for visual checks). Hotspot: 3 or more loops on one script. Writes made through the shell are inferred from the command and marked |
 | Time | Wall clock, tool time (map tool time on its own), idle gaps of 2 minutes or more, the residual, and the slowest map calls; a map call's time is measured when the timing hook logged it, else bounded |
 | Hooks | From the plugin's own hook log (`.geo-mapping/traces/hooks/<session>.ndjson`, joined by the call's id): how many map calls were measured, how many builds the pre-export check stopped (also read from the transcript when there is no log), how many times the credentials reminder fired. Never a command, an argument or a message |
+| Road (4.2.0) | How the maps were made (`evaluation/road.yaml`): the plugin's share of the map work, the layers that came through its door (a library entry, a service capture or an op) against layers read from a file with no record, the library entries drawn, the defaults changed with and without the person's ask (each map's `deviations` table), and build results a script read off the console. From the trace's own counts and the finished maps' `.result.json` and provenance files; no model reads anything |
 | Pipeline runs | This plugin's run records in the working folder: repeated or blocked pipeline jobs |
 | Run ledger (2.4.0) | `.geo-mapping/traces/runs/*.ndjson`: one line per plugin script run (script, option names, exit code, duration, outputs, finding ids), joined to the calls by time and script |
 | Outputs (2.2.0, 2.4.0) | From the run ledger first; then paths in the results of the plugin's map-writing scripts, absolute or relative to the call's folder; then the files in the build's `--out` folder whose provenance sidecar was written during the call. Finished maps that ran ok and still exist (previews, mute and draft pictures and sidecars left out); their paths go only into the outputs list beside the report. The map evaluator's own calls are counted on their own line, never as map work |
@@ -114,7 +117,7 @@ anything reads it (0.6.0), so a key someone pasted into the session never reache
 - `--format json`: the summary as JSON instead of the inline report.
 - `--no-pdf`: the HTML page without its PDF. `--no-html`: no page at all (the Markdown and the JSON only).
 - `--strict`: exit 3 when a map call failed (for checks in a pipeline).
-- `--no-evaluate`: no outputs list and no evaluation offer. `--evaluate-only`: the offer alone, on the newest trace of this session.
+- `--no-evaluate`: no outputs list and no evaluation. `--evaluate-only`: the evaluation alone, on the newest trace of this session; `--evaluate-all` with it grades the set-aside tries too.
 
 ## What it does not do
 

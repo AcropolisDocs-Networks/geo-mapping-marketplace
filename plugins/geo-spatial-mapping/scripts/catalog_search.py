@@ -30,7 +30,39 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "lints"))
 import gmap_common as gc  # noqa: E402
-import ogc_http as oh  # noqa: E402
+
+
+class _Door:
+    """4.2.0: the network door (ogc_http, which needs httpx and lxml) is loaded when it is first used, not when this file is. A search of the
+    plugin's own library reads files on this computer and has to work where the plugin's packages are not installed yet (the Cowork VM before
+    the doctor has run): until 4.1.0 `ref_library.py search` and `--sources library` stopped there with "No module named 'httpx'"."""
+
+    def __getattr__(self, name):
+        try:
+            import ogc_http
+        except ImportError:
+            if name == "untrusted":
+                return _untrusted
+            if name == "ServiceError":
+                return _NoDoor
+            raise
+        return getattr(ogc_http, name)
+
+
+class _NoDoor(Exception):
+    pass
+
+
+def _untrusted(text, limit: int = 400) -> str:
+    """ogc_http.untrusted, for the library-only path: shortened, control characters out."""
+    if text is None:
+        return ""
+    s = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", " ", str(text))
+    s = re.sub(r"\s+", " ", s).strip()
+    return s if len(s) <= limit else s[: limit - 1] + "…"
+
+
+oh = _Door()
 
 SOURCES = ("library", "datagov", "hub", "socrata", "stac")
 ENDPOINTS = {
@@ -172,12 +204,23 @@ def search_library(query: str, bbox=None, limit: int = 10, scope: str = "all") -
     import ref_library as rl
     q = words(query)
     out = []
-    for e in rl.all_entries(scope):
+    ents = rl.all_entries(scope)
+    themed: set[str] = set()
+    try:                                    # 4.2.0: "cell towers" names a theme (library/themes.yaml), and every source of it is a hit
+        import themes as _th
+        tdoc = _th.load()
+        for name, _score in _th.find(query, tdoc)[:2]:
+            themed |= {str(e_["id"]) for e_ in _th.members(tdoc["themes"][name], [x for x in ents if str(x.get("id", "")).startswith("ref.")])}
+    except Exception:  # noqa: BLE001 - no themes file: the word search alone
+        themed = set()
+    for e in ents:
         if e.get("status") in ("blocked", "retired"):
             continue
         tags = e.get("tags") or {}
         src = e.get("source") or {}
         s = _score_words(q, e.get("id"), e.get("title"), e.get("summary"), src.get("product"), src.get("publisher"), " ".join(" ".join(v) for v in tags.values() if isinstance(v, list)))
+        if str(e.get("id")) in themed:
+            s = max(s, 0.9)                 # 4.2.0: a source of the theme the words name is a hit whatever its own title says
         if q and s == 0:
             continue
         lic = e.get("license") or {}

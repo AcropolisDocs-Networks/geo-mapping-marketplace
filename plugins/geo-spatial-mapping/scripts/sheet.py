@@ -372,11 +372,17 @@ def compose(sheet: dict, panels: list[dict], tpl: dict, *, contact: bool = False
     ti = tpl["title"]
     st = sheet.get("title") or {}
     if st.get("text"):
+        sub_y = ti["y"] + fonts["title"] * 0.3528 * 0.95 + fonts["subtitle"] * 0.3528 * 1.5
+        tag_y = (sub_y if st.get("subtitle") else ti["y"] + fonts["title"] * 0.3528 * 0.95) + fonts["subtitle"] * 0.3528 * 1.35
         out.append(f'<g class="gm-title">{sd.text(ti["x"], ti["y"] + fonts["title"] * 0.3528 * 0.95, st["text"], fonts["title"], t["label"], weight=700)}'
-                   + (sd.text(ti["x"], ti["y"] + fonts["title"] * 0.3528 * 0.95 + fonts["subtitle"] * 0.3528 * 1.5, st["subtitle"], fonts["subtitle"], t["label"])
-                      if st.get("subtitle") else "") + "</g>")
+                   + (sd.text(ti["x"], sub_y, st["subtitle"], fonts["subtitle"], t["label"]) if st.get("subtitle") else "")
+                   # 4.2.0 (Day 25, sheet #3): the tagline a single map has, slanted the same way
+                   + (sd.text(ti["x"], tag_y, str(st["tagline"]), fonts["subtitle"], t["label"], weight=400, slant=mr.TAGLINE_SLANT_DEG, extra=' data-role="tagline"')
+                      if st.get("tagline") else "") + "</g>")
     drop = tuple(g for g in atlas.SHEET_DROP if not (g == "gm-legend" and sh.get("legend") == "each" and not contact)
-                 and not (g == "gm-scalebar" and "scale_bar" not in off))
+                 and not (g == "gm-scalebar" and "scale_bar" not in off)
+                 and not (g == "gm-inset" and sh.get("locator") == "each" and not contact)        # 4.2.0 (sheet #4): locator: each drew none
+                 and not (g == "gm-north" and sh.get("north_arrow") == "each" and not contact))
     rects_rep = []
     for k, (r, rr, cap) in enumerate(zip(rend, grid.panels, grid.captions, strict=True)):
         inner = _tile(r.svg, (0.0, 0.0, grid.pw, grid.ph), f"p{k + 1}-", drop)
@@ -514,9 +520,12 @@ def build(sheet_path: str, out_dir: str, formats: list[str] | None = None, *, br
     if len(first) != len(pspecs):
         return done()
     crs0 = first[0].crs
+    # 4.2.0 (Day 25, sheet #1): with shared.extent: each every panel has its own frame, so every panel keeps its own display CRS (Boston beside
+    # Gilbert was drawn in Gilbert's UTM zone and came out rotated). One shared CRS is only needed where the panels share one frame.
+    own_crs = (sheet.get("shared") or {}).get("extent") == "each"
     for ps, plan in zip(pspecs[1:], first[1:], strict=True):
         named = ((ps["data"].get("crs") or {}).get("display"))
-        if named and plan.crs != crs0:
+        if named and plan.crs != crs0 and not own_crs:
             fs.append(finding("MAP-PNL-003", "BLOCK", f"panel {ps['index'] + 1} names the display CRS {named}, but the sheet's panels take the first panel's, {crs0}"))
     if any(x["severity"] == "BLOCK" for x in fs):
         return done()
@@ -553,7 +562,8 @@ def build(sheet_path: str, out_dir: str, formats: list[str] | None = None, *, br
     plans = []
     for ps in pspecs:
         d = copy.deepcopy(ps["data"])
-        d.setdefault("crs", {})["display"] = crs0
+        if not own_crs:
+            d.setdefault("crs", {})["display"] = crs0
         if sh.get("extent") in ("union", "first"):
             d["extent"] = {**(d.get("extent") or {}), "mode": "bbox", "bbox": bbox}
             d["extent"].pop("place", None), d["extent"].pop("preset", None)
@@ -628,7 +638,8 @@ def build(sheet_path: str, out_dir: str, formats: list[str] | None = None, *, br
         sp.unlink()
         written.remove(sp)
     result.update({"files": [str(w) for w in written], "provenance": str(prov), "stem": stem, "report": comp["report"], "template": tpl["name"],
-                   "terms": {"files": [str(x) for x in tfiles], "summary": tdoc["summary"]}, "crs": crs0})
+                   "terms": {"files": [str(x) for x in tfiles], "summary": tdoc["summary"]}, "crs": crs0,
+                   **({"panel_crs": [p.crs for p in plans]} if own_crs and len({p.crs for p in plans}) > 1 else {})})
     import shutil
     shutil.rmtree(work, ignore_errors=True)
     return done()
