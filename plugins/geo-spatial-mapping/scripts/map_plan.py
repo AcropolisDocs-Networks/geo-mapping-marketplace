@@ -38,8 +38,11 @@ BASEMAP_REFS = {"countries": "ref.boundary.world.country.ne110", "states": "ref.
                 "lakes": "ref.context.world.lakes.ne110", "admin1": "ref.boundary.world.state.ne50",
                 "ocean": "ref.context.world.ocean.ne10", "lakes10": "ref.context.world.lakes.ne10",
                 "admin1_loc": "ref.boundary.world.state.ne10-locator",      # 1.5.0: the admin-1 locator anywhere (R3-LOC)
-                "countries_50": "ref.boundary.world.country.ne50", "countries_10": "ref.boundary.world.country.ne10"}   # 3.7.0 (C6)
+                "countries_50": "ref.boundary.world.country.ne50", "countries_10": "ref.boundary.world.country.ne10",   # 3.7.0 (C6)
+                "lakes50": "ref.context.world.lakes.ne50", "rivers50": "ref.context.world.rivers.ne50"}                # 5.2.0: the 1:50m ground tier
 NE10, NE110 = "Natural Earth 1:10m", "Natural Earth 1:110m"   # ground resolutions (MAP-CART-024: land and water always share one)
+NE50 = "Natural Earth 1:50m"
+MID_GROUND_MAX_DENOMINATOR = 50_000_000   # 5.2.0: from 1:10M to 1:50M the ground is the 50m countries and lakes; smaller scales keep the 110m
 FINE_GROUND_MAX_DENOMINATOR = 10_000_000  # finer than this the ground is the 10m ocean cut from the window, not the 110m countries (0.3.0)
 CONTEXT_REFS = {"urban": "ref.context.world.urban.ne10", "lakes": "ref.context.world.lakes.ne10", "rivers": "ref.context.world.rivers.ne10",
                 "roads": "ref.infrastructure.na.road.ne10"}                                  # the bundled context pack (M10, P0-2)
@@ -737,8 +740,9 @@ def load_source(layer: dict, base: Path, window=None):
             ent0 = None
         if ent0 is not None:
             import licence_ack as la                          # 3.7.0 (C7): a licensed library layer asks its licence before it is drawn
-            if la.required(ent0) and la.current(ent0["id"]) is None:
-                raise PlanError(f"MAP-LIC-018: layer '{layer['id']}': {la.refusal(ent0)}", gc.EXIT_REFUSED)
+            v0 = src.get("variant") if isinstance(src.get("variant"), str) else None
+            if la.required(ent0) and la.current(la.key_for(ent0, v0)) is None:
+                raise PlanError(f"MAP-LIC-018: layer '{layer['id']}': {la.refusal(ent0, variant=v0)}", gc.EXIT_REFUSED)
         gdf, e = load_ref_layer(sid or src["id"], src.get("variant"))
         notes = []
         if sid:
@@ -1971,7 +1975,13 @@ def add_context(plan: Plan) -> None:
     added: list[LayerPlan] = []
     what: list[str] = []
     gres = (plan.crs_info.get("ground_resolution") or {}).get("water")
-    if gres and NE10 not in gres and any(k in ("lakes", "rivers") for k in kinds):
+    refs = dict(CONTEXT_REFS)
+    if gres and NE50 in gres:
+        # 5.2.0: on the 1:50m ground the lakes are the ground's own and the rivers are the 1:50m ones, so every shore is one generalisation
+        if "lakes" in kinds:
+            kinds = [k for k in kinds if k != "lakes"]
+        refs["rivers"] = BASEMAP_REFS["rivers50"]
+    elif gres and NE10 not in gres and any(k in ("lakes", "rivers") for k in kinds):
         # Rule (0.12.0, MAP-CART-024): the context pack's water is Natural Earth 1:10m; on ground of another resolution it would draw a second
         # shoreline beside the ground's, so the ground's own water stands for it (TIGER holds the lakes and wide rivers; 1:110m maps are national)
         kinds = [k for k in kinds if k not in ("lakes", "rivers")]
@@ -1983,7 +1993,7 @@ def add_context(plan: Plan) -> None:
         try:
             gdf, e = _context_roads_tiger(plan, cfg) if kind == "roads" and cfg.get("roads") in TIGER_ROADS else (None, None)
             if gdf is None:
-                gdf, e = load_ref_layer(CONTEXT_REFS[kind])
+                gdf, e = load_ref_layer(refs[kind])
         except PlanError as ex:
             plan.notes.append(f"context pack: {kind} not drawn ({ex})")
             continue
@@ -3220,16 +3230,24 @@ def _load_basemap(plan: Plan, tiles_rec: dict | None = None, explained: bool = F
             return
         except PlanError as ex:
             plan.notes.append(f"ground: the 10m ocean is not available ({ex}); drawing the 110m countries instead")
-    layers.append(("country", BASEMAP_REFS["countries"]))
+    mid = scale_denominator(plan) < MID_GROUND_MAX_DENOMINATOR
+    if mid:                                              # 5.2.0: between 1:10M and 1:50M, land and lakes both at 1:50m (MAP-CART-024)
+        try:
+            load_ref_layer(BASEMAP_REFS["countries_50"])
+            load_ref_layer(BASEMAP_REFS["lakes50"])
+        except PlanError as ex:
+            mid = False
+            plan.notes.append(f"ground: the 1:50m ground is not available ({ex}); drawing the 110m countries instead")
+    layers.append(("country", BASEMAP_REFS["countries_50" if mid else "countries"]))
     if in_us:
         layers.append(("state", BASEMAP_REFS["states"]))
-    layers.append(("lake", BASEMAP_REFS["lakes"]))
+    layers.append(("lake", BASEMAP_REFS["lakes50" if mid else "lakes"]))
     for kind, ref in layers:
         gdf, e = load_ref_layer(ref)
         gdf = window_reproject(gdf, window, plan.crs)
         gdf = gdf[gdf.geometry.intersects(vis)].copy() if len(gdf) else gdf
         plan.basemap.append({"kind": kind, "gdf": gdf, "entry": e})
-    plan.crs_info["ground_resolution"] = {"land": NE110, "water": NE110}
+    plan.crs_info["ground_resolution"] = {"land": NE50, "water": NE50} if mid else {"land": NE110, "water": NE110}
 
 
 def detail_window(plan: Plan) -> tuple:

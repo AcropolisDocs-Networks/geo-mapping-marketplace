@@ -380,7 +380,11 @@ def check_024(plan, report=None) -> list[dict]:
     ctx_water = [l.id for l in getattr(plan, "layers", []) if l.role == "context" and str(l.id).startswith(("context-lakes", "context-rivers"))]
     if getattr(plan, "vector_ground", None):
         ctx_water = []                                                                # 1.10.0: the river lines come from the same tile file as the ground
-    if gr and ctx_water and "Natural Earth 1:10m" not in str(gr.get("water")):       # 1.5.0: OSM simplified land keeps the 10m lakes
+    if gr and ctx_water and "Natural Earth 1:50m" in str(gr.get("water")):            # 5.2.0: the 1:50m ground takes the 1:50m rivers and its own lakes
+        wrong = [l.id for l in plan.layers if l.id in ctx_water and ".ne50" not in str((getattr(l, "entry", None) or {}).get("id"))]
+        if wrong:
+            out.append(finding("MAP-CART-024", "BLOCK", f"context water ({', '.join(wrong)}) is not Natural Earth 1:50m on {gr.get('water')} ground", wrong))
+    elif gr and ctx_water and "Natural Earth 1:10m" not in str(gr.get("water")):     # 1.5.0: OSM simplified land keeps the 10m lakes
         out.append(finding("MAP-CART-024", "BLOCK", f"context water ({', '.join(ctx_water)}) is Natural Earth 1:10m on {gr.get('water')} ground", ctx_water))
     return out
 

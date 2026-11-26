@@ -1,0 +1,84 @@
+id: ref.public-service.uk.mapping.os-ngd-features
+type: public-service
+rev: 1
+status: draft
+title: 'OS NGD API - Features: the National Geographic Database of Great Britain by collection (Ordnance Survey)'
+summary: 'Ordnance Survey''s detailed national database as an OGC API Features service: 94 collections (buildings, land, water, transport, structures, addresses, names),
+  read for a box with the person''s own OS Data Hub key.'
+tags:
+  geography: [uk]
+  level: [place, line, water, site]
+  domain: [general, transport]
+  use_for: [context-basemap, site-map, label-reference]
+  avoid_for: [legal-boundary]
+  scale: [metro, local, site]
+  detail: [detailed]
+  audience: [internal]
+  confidentiality: [restricted-license]
+  freshness: [monthly]
+  tier: [T2]
+  license_class: [licensed]
+  quality: [authoritative]
+use_when:
+- 'A site or street map in Great Britain needs building outlines, kerbs or water at survey detail, and the person''s OS Data Hub plan covers the collection.'
+avoid_when:
+- 'Open data is enough: the OS OpenData products (Open Roads, Open Rivers, Open Greenspace, Boundary-Line, Open Zoomstack) need no key and carry the Open Government Licence.'
+- 'The map is published: most NGD collections are premium data under the person''s OS licence, not open data.'
+delivery:
+  mode: service
+  protocol: ogcapi
+  url: https://api.os.uk/features/ngd/ofa/v1
+  geometry: polygon
+  layer: bld-fts-building-4
+  max_record_count: 100
+  requires_credential:
+    name: os-maps
+    kind: apikey
+    class: secret
+    class_allowed:
+    - secret
+    host: api.os.uk
+    inject:
+      query: key
+    reject:
+      status:
+      - 401
+      - 403
+    signup_url: https://osdatahub.os.uk/
+    probe: https://api.os.uk/maps/raster/v1/zxy/Road_3857/7/63/42.png
+    free: true
+    limits: 600 transactions a minute per API in a live-mode project, 50 in a development-mode one (HTTP 429 above it). In EPSG:3857 zooms 7 to 16 are OS
+      OpenData (Open Zoomstack), free on every plan; zooms 17 to 20 are Premium (OS MasterMap Topography) and count against the plan.
+    note: The key belongs to one API project on the person's OS Data Hub account
+  note: 'The collections list (https://api.os.uk/features/ngd/ofa/v1/collections) answers with no key; items need the key, and the key works only if the NGD API - Features
+    is added to its project in the OS Data Hub. Draft until an items request has been made with a real key (see the changelog).'
+source:
+  publisher: Ordnance Survey
+  product: OS NGD API - Features
+  url: https://api.os.uk/features/ngd/ofa/v1/collections
+  page: https://docs.os.uk/osngd/accessing-os-ngd/access-the-os-ngd-api/os-ngd-api-features
+url_verified_on: '2026-11-25'
+vintage:
+  current: updated daily to monthly, by collection
+  cadence: monthly
+license:
+  class: licensed
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: false
+  external_ok: false
+  attribution_text: 'Contains OS data © Crown copyright and database rights 2026, under the holder''s OS licence.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-02-25'
+  check:
+    kind: http_get
+    url: https://api.os.uk/features/ngd/ofa/v1/collections
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'Draft (5.2.0, open data portals P2.6, exception E3). Verified on 2026-11-25: the collections list answered with no key (94 collections) and an items request
+      without a key answered 401. No request was made with a key: it is the person''s to make, and it works only when the NGD API is in their OS Data Hub
+      project. Not offered until one items request has succeeded.'

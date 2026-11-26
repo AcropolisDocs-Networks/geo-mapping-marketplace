@@ -1,0 +1,58 @@
+id: ref.terrain.uk.dem.os-terrain-50
+type: terrain
+rev: 1
+status: draft
+title: 'OS Terrain 50: a 50 m elevation model of Great Britain (Ordnance Survey)'
+summary: 'Heights of Great Britain on a 50 m grid, published as ASCII grid tiles (one a 10 km square) in a zip of zips, with contours as a separate vector product.'
+tags:
+  geography: [uk]
+  level: [grid]
+  domain: [general]
+  use_for: [context-basemap]
+  avoid_for: [engineering-grade, site-precision]
+  scale: [national, regional]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [authoritative]
+use_when:
+- 'Relief of Great Britain from the national source under the Open Government Licence.'
+avoid_when:
+- 'Not usable yet: the tiles are not read by the plugin''s relief (draft). Copernicus GLO-30 (ref.terrain.world.dem.copernicus-glo30) covers Great Britain at 30 m and is fetched.'
+crs: EPSG:27700
+delivery:
+  mode: user-supplied
+  format: ASCII grid tiles in a zip of zips
+  geometry: raster
+  size_mb: 161.7
+source:
+  publisher: Ordnance Survey
+  product: OS Terrain 50 (2026-07)
+  url: https://api.os.uk/downloads/v1/products/Terrain50/downloads
+  page: https://osdatahub.os.uk/downloads/open/Terrain50
+  api: https://api.os.uk/downloads/v1/products/Terrain50
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2026-07'
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Contains OS data © Crown copyright and database right 2026 (Open Government Licence v3.0).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
+  check:
+    kind: http_get
+    url: https://api.os.uk/downloads/v1/products/Terrain50
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.6). Draft: the Downloads API lists the ASCII grid (161.7 MB) on 2026-11-25; it was not read, so it is not offered.'

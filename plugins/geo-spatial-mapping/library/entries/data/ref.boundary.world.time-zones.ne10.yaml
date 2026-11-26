@@ -1,0 +1,57 @@
+id: ref.boundary.world.time-zones.ne10
+type: boundary
+rev: 1
+status: active
+title: 'World time zones (Natural Earth)'
+summary: 'The time zones of the world as polygons with their offset from UTC and the places that keep them, as Natural Earth drew them.'
+tags:
+  geography: [world]
+  level: [country]
+  domain: [general]
+  use_for: [context-basemap, label-reference, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A map shows time zones, or a schedule across zones (a network operations day, a follow-the-sun support map).']
+avoid_when: ['The offset on a given date is needed: zones and daylight saving rules change, and these polygons are a snapshot (use the IANA time zone database for dates).']
+join:
+  key: none
+  type: string
+  note: Drawn as it is; no table joins to it.
+distinct_from:
+- id: ref.boundary.world.country.ne10
+  why: countries, not disputed areas or time zones
+- id: ref.boundary.world.country.ne110
+  why: countries
+- id: ref.boundary.world.country.ne50
+  why: countries
+- id: ref.boundary.world.historical.basemaps
+  why: borders as of a past date
+- id: ref.boundary.world.disputed-areas.ne50
+  why: disputed territories
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: polygon
+  size_mb: 1.97
+  features: 120
+  columns: [objectid, scalerank, featurecla, name, map_color6, map_color8, note, zone, utc_format, time_zone, iso_8601, places, dst_places, tz_name1st]
+source: {publisher: Natural Earth, product: 'Time zones, 10m', url: 'https://naciscdn.org/naturalearth/10m/cultural/ne_10m_time_zones.zip',
+  file_sha256: 0b038d1198eeec0b35487dd4cc4a2ea859f9776825f2fb9340b9da455d697984}
+url_verified_on: '2026-11-25'
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check: {kind: feature_count_and_hash, features: 120, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched and read from the build workspace on 2026-11-25: 120 features, 1,972,370 bytes.'}

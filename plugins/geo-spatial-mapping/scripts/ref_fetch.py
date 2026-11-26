@@ -89,12 +89,34 @@ def fill_template(t: str, variant: str, entry_id: str = "") -> str:
     bad = [f for f in fields if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", f)]
     if bad:
         raise FetchError(f"{entry_id}: the url_template has fields that are not plain names ({', '.join(bad)})", gc.EXIT_LINT)
-    return t.format(**{f: variant for f in fields})
+    return t.format(**{f: (variant.upper() if f.isupper() else variant) for f in fields})      # 5.2.0: {ISO3} takes the code in capitals
+
+
+def split_variant(entry: dict, variant: str | None) -> tuple[str | None, str | None]:
+    """5.2.0: (code, level) of a variant. An entry kept as one file a country with a layer for each admin level (delivery.layer_template)
+    takes `ken-adm1`: the code names the file, the level the layer; with no level the entry's default_level is read."""
+    d = entry.get("delivery") or {}
+    if not variant or not d.get("layer_template"):
+        return variant, None
+    code, _, lvl = str(variant).partition("-")
+    return code, (lvl or str(d.get("default_level") or "adm1"))
+
+
+def layer_for(entry: dict, variant: str | None) -> str | None:
+    d = entry.get("delivery") or {}
+    code, lvl = split_variant(entry, variant)
+    if not lvl:
+        return d.get("layer")
+    n = re.sub(r"\D", "", lvl)
+    if n == "":
+        raise FetchError(f"{entry['id']}: '{lvl}' is not an admin level (adm0, adm1, adm2 ...)", gc.EXIT_USAGE)
+    return str(d["layer_template"]).format(n=int(n), code=code, CODE=str(code).upper())
 
 
 def source_url(entry: dict, variant: str | None) -> tuple[str, bool]:
     """(url, hash_applies). The `source.file_sha256` describes the entry's main URL only, never a per-variant URL."""
     d = entry.get("delivery") or {}
+    variant = split_variant(entry, variant)[0]
     if variant and isinstance(d.get("files"), dict):          # 3.7.0 (C7): named files of one entry (TeleGeography: cable, landing)
         if variant not in d["files"]:
             raise FetchError(f"{entry['id']} has the files {', '.join(d['files'])}; '{variant}' is not one", gc.EXIT_USAGE)
@@ -106,6 +128,11 @@ def source_url(entry: dict, variant: str | None) -> tuple[str, bool]:
         if not VARIANT.match(variant):
             raise FetchError(f"variant '{variant}' is not a plain code such as a state FIPS (04) or an MCC (310)", gc.EXIT_USAGE)
         return fill_template(t, variant, entry["id"]), False
+    if d.get("variant_required"):                              # 5.2.0: an entry published only as one file per state, county or country
+        what = {"statefp": "a state's 2-digit FIPS code (04)", "county": "a county's 5-digit FIPS code (04013)", "iso3": "a country's ISO alpha-3 code (ken)"}.get(
+            str(d.get("variant_key") or ""), "the code its url_template names")
+        raise FetchError(f"{entry['id']} is one file per {str(d.get('variant_key') or 'variant').replace('statefp', 'state').replace('iso3', 'country')}: "
+                         f"give --variant with {what} (in a MapSpec: source.variant)", gc.EXIT_USAGE)
     url = (entry.get("source") or {}).get("url")
     if not url:
         raise FetchError(f"{entry['id']} records no download URL", gc.EXIT_REFUSED)
@@ -304,7 +331,18 @@ def find_entry(entry_id: str) -> dict:
     return rl.pick(hits)                     # 3.7.0: local, then the person's own sources (user), then shipped
 
 
-TOOLS = ("census_query", "fcc_bdc", "hist_fetch", "cds_retrieve", "overture_io", "geoboundaries", "noaa_normals")
+TOOLS = ("census_query", "fcc_bdc", "hist_fetch", "cds_retrieve", "overture_io", "geoboundaries", "noaa_normals", "hdx_cod")
+LAYER_TOOLS = ("geoboundaries", "hdx_cod")            # 5.2.0: tools whose answer is one cached layer a variant (<country>-<level>)
+
+
+def fetch_for_layer(entry: dict, variant: str | None, refresh: bool = False, http=None, store=None) -> dict:
+    """5.2.0: fetch what a MapSpec layer names (source: {type: ref, id, variant}), whatever fetches it: the file itself, or the tool of an entry
+    that has one (geoBoundaries and COD-AB take <country>-<level>). The road's one fetch step calls this for every library layer."""
+    t = (entry.get("delivery") or {}).get("tool")
+    if t in LAYER_TOOLS:
+        code, _, lvl = str(variant or "").partition("-")
+        return fetch_by_tool(entry, {"state": code, "level": lvl or None}, refresh=refresh, http=http, store=store)
+    return fetch(entry, variant, refresh, http=http, store=store)
 
 
 def fetch_by_tool(entry: dict, params: dict, *, refresh: bool = False, http=None, store=None) -> dict:
@@ -324,6 +362,9 @@ def fetch_by_tool(entry: dict, params: dict, *, refresh: bool = False, http=None
         if t == "geoboundaries":                    # 1.5.0: gbOpen ADM1 or ADM2 for one country, CC BY 4.0 or more open only
             import geoboundaries as gb
             return gb.from_library(entry, p, refresh=refresh, http=http, store=store)
+        if t == "hdx_cod":                          # 5.2.0: OCHA's COD-AB boundaries for one country and level, from HDX
+            import hdx_cod as hc
+            return hc.from_library(entry, p, refresh=refresh, http=http, store=store)
         if t == "noaa_normals":                     # 3.1.0: the monthly normals of the stations in a region, as a point layer
             import noaa_normals as nn
             return nn.from_library(entry, p, refresh=refresh, http=http, store=store)
@@ -366,6 +407,8 @@ def fetch_entry(entry_id: str, variant: str | None = None, level: str | None = N
             return lr.run(entry_id, request=level or None, params={"variant": variant} if variant else None, refresh=refresh, http=http, store=store)
         except lr.RequestError as ex:
             raise FetchError(str(ex) + ("; library_request takes params= and bbox=" if ex.rule == "MAP-SVC-001" else ""), ex.code, ex.rule) from None
+    if level and d.get("layer_template") and variant:      # 5.2.0: one file a country, one layer a level (GADM)
+        return fetch(e, f"{variant}-{str(level).lower()}", refresh, http=http, store=store)
     if level:
         raise FetchError(f"{entry_id} takes no --level", gc.EXIT_USAGE)
     return fetch(e, variant, refresh, http=http, store=store)
@@ -659,7 +702,7 @@ def read_wof_sqlite(path: Path, placetype: str | None, bbox=None):
                  + (f"; {len(rows) - len(gdf)} without a readable geometry skipped" if len(rows) > len(gdf) else "")]
 
 
-def read_user_file(entry: dict, path: Path, bbox=None, placetype: str | None = None) -> tuple[object, list[str]]:
+def read_user_file(entry: dict, path: Path, bbox=None, placetype: str | None = None, layer: str | None = None) -> tuple[object, list[str]]:
     """A file the person supplied for a user-supplied entry, read by the entry's declared layout (or by geo_io when it declares none); a box
     keeps what intersects it (with `delivery.quadkey_column`, a Parquet is first cut to the quadkeys over the box, so the world is not parsed)."""
     import geo_io
@@ -696,8 +739,40 @@ def read_user_file(entry: dict, path: Path, bbox=None, placetype: str | None = N
         g, table_only, _fmt, more = read_declared(d, path)
         notes += more
     else:
-        r = geo_io.read(path, layer=d.get("layer"))
+        lay = layer or d.get("layer")
+        own = None
+        if bbox and suffix in (".gpkg", ".fgb", ".zip"):          # 5.2.0: a national GeoPackage is read for the box only, never whole
+            try:
+                import pyogrio
+                from pyproj import Transformer
+                if suffix == ".zip":                                 # the one GeoPackage inside a publisher's zip: unpacked once beside it, then read by its index
+                    import zipfile
+                    with zipfile.ZipFile(path) as z:
+                        inner = [i for i in z.infolist() if i.filename.lower().endswith(".gpkg") and ".." not in i.filename and not i.filename.startswith("/")]
+                        if len(inner) == 1:
+                            dest = path.with_name(path.stem + "__" + Path(inner[0].filename).name)
+                            if not dest.is_file() or dest.stat().st_size != inner[0].file_size:
+                                if inner[0].file_size > 12 * 1024 ** 3:
+                                    raise FetchError(f"{inner[0].filename} is {inner[0].file_size / 1e9:.1f} GB unpacked; unzip it yourself and give the .gpkg", gc.EXIT_REFUSED)
+                                part = dest.with_suffix(".part")
+                                with z.open(inner[0]) as zs, open(part, "wb") as out_f:
+                                    shutil.copyfileobj(zs, out_f, 1 << 22)
+                                part.replace(dest)
+                                notes.append(f"unpacked {inner[0].filename} ({inner[0].file_size / 1e6:,.0f} MB) beside the zip, once")
+                            path, suffix = dest, ".gpkg"
+                if suffix != ".zip":
+                    crs = pyogrio.read_info(str(path), layer=lay).get("crs")
+                    if crs:
+                        t = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+                        own = t.transform_bounds(*[float(v) for v in bbox], densify_pts=21)
+            except FetchError:
+                raise
+            except Exception:  # noqa: BLE001 - the whole layer is then read and cut below
+                own = None
+        r = geo_io.read(path, layer=lay, bbox=tuple(own) if own else None)
         g, table_only = r.gdf, False
+        if own:
+            notes.append(f"read layer {lay or '(the first)'} for the box only ({len(g)} feature(s))")
     if bbox and not table_only:
         import shapely
         box = shapely.box(*[float(v) for v in bbox])
@@ -755,8 +830,8 @@ def fetch(entry: dict, variant: str | None = None, refresh: bool = False, opener
     if (entry.get("delivery") or {}).get("mode") != "fetch":
         raise FetchError(f"{entry['id']} is delivered as {(entry.get('delivery') or {}).get('mode')}, not by fetch", gc.EXIT_USAGE)
     import licence_ack as la                               # 3.7.0 (C7): a third party's licence is asked before its data is fetched
-    if la.required(entry) and la.current(entry["id"]) is None:
-        raise FetchError(f"MAP-LIC-018: {la.refusal(entry)}", gc.EXIT_REFUSED, "MAP-LIC-018")
+    if la.required(entry) and la.current(la.key_for(entry, variant)) is None:
+        raise FetchError(f"MAP-LIC-018: {la.refusal(entry, variant=variant)}", gc.EXIT_REFUSED, "MAP-LIC-018")
     if not (entry.get("url_verified_on")):
         raise FetchError(f"{entry['id']} has no verified URL", gc.EXIT_REFUSED)
     url, hash_applies = source_url(entry, variant)
@@ -812,7 +887,7 @@ def fetch(entry: dict, variant: str | None = None, refresh: bool = False, opener
                 gdf, table_only, fmt_read, more = read_declared(d, src, tmp)
                 notes += more
             else:
-                res = geo_io.read(src, layer=d.get("layer"))
+                res = geo_io.read(src, layer=layer_for(entry, variant))
                 gdf = res.gdf
                 notes += [n.msg for n in res.notes if n.sev == "WARN" or n.id == "IO"]
                 fmt_read = res.format
@@ -858,7 +933,7 @@ def read_main(e: dict, a) -> int:
     if bbox is not None and len(bbox) != 4:
         print("--bbox is four numbers: W,S,E,N", file=sys.stderr)
         return gc.EXIT_USAGE
-    g, notes = read_user_file(e, src, bbox, placetype=a.placetype)
+    g, notes = read_user_file(e, src, bbox, placetype=a.placetype, layer=getattr(a, "layer", None))
     out = Path(a.out).expanduser() if a.out else src.with_name(re.sub(r"\.(gz|zip)$", "", src.name).split(".")[0] + "-read.parquet")
     if hasattr(g, "geometry") and getattr(g, "crs", None) is not None:
         geo_io.write(g, out, "geoparquet" if out.suffix.lower() == ".parquet" else None)
@@ -881,6 +956,7 @@ def main(argv=None) -> int:
     ap.add_argument("--refresh", action="store_true")
     ap.add_argument("--out", help="read: where to write the layer (GeoParquet, GeoPackage or GeoJSON by extension); default <file>-read.parquet beside it")
     ap.add_argument("--bbox", help="read: keep what intersects W,S,E,N (write --bbox=-112.4,33.2,-111.6,33.8)")
+    ap.add_argument("--layer", help="read (5.2.0): the layer of a GeoPackage to read, when the entry holds several (its delivery.layers lists them)")
     ap.add_argument("--placetype", help="read, a Who's On First database (1.17.0): the placetype to read (region, county, locality, ...)")
     a = ap.parse_args(argv)
     import credentials as cr

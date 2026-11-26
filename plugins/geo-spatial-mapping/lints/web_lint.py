@@ -252,7 +252,7 @@ def lint_page(text: str, report: dict, plan, providers: list[dict] | None = None
     # 012 brand
     page_for_brand = without_blobs(without_data(own))
     st = getattr(plan, "style", None)                       # 1.4.0: against the resolved style pack
-    out += [f for f in bl.check_palette(page_for_brand, plan.brand, st)]
+    out += [f for f in bl.check_palette(page_for_brand, plan.brand, st, bl.publisher_colors(plan))]
     out += bl.check_fonts(page_for_brand, (st.families() | {"Inter"}) if st is not None else None)
     out += bl.check_stamps(text, plan.brand, plan.manifest)
     out += bl.check_hidden_accreditation(text, plan.brand, plan.manifest)

@@ -22,6 +22,21 @@ Rules: every request goes through ogc_http.SafeHTTP (public hosts, GET, the plug
 WorldPop file for the United States, 494 MB, is not fetched whole: since 1.11.0 the map's window is read from it by HTTP byte range, through
 the same client, and kept as a small GeoTIFF; a server that sends no ranges gets the old refusal with the GHSL alternative named). Files are kept under `<workdir>/fetch/rasters/<entry>/` with a
 JSON record beside each; a second call for the same tile or country reads nothing from the network. GMAP_OFFLINE=1 refuses a fetch that is not cached.
+
+5.2.0 (open data portals P4.2): any library raster entry whose `delivery.cog` block names a Cloud-Optimized GeoTIFF is read the same way, with no
+code of its own. The block is data:
+
+    delivery:
+      cog:
+        url: https://host/file.tif                 one file, or
+        url_template: https://host/..._{tile}_Map.tif
+        tiles: {size_deg: 3, corner: lower-left, name: "{NS}{lat:02d}{EW}{lon:03d}"}     the tile grid and how a tile is named by its corner
+        max_tiles: 4                                a window over more tiles is refused
+        max_px: 3000                                a window wider than this is read from the file's overviews (decimated), never at full size
+        resampling: nearest                         nearest for classes, average for a measure
+
+The window is read by HTTP byte range through SafeHTTP (the same client and ceilings as above), from as many tiles as it touches, and kept as one
+GeoTIFF with a record naming every tile and the bytes each cost. A tile the publisher does not hold (open sea) is passed over and said.
 """
 from __future__ import annotations
 
@@ -30,6 +45,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -76,8 +92,80 @@ def library_entry(entry_id: str) -> dict:
     raise RasterFetchError(f"the reference library has no entry '{entry_id}'")
 
 
+def cog_block(entry) -> dict | None:
+    """The entry's `delivery.cog` block (5.2.0), or None. `entry` is an id or the entry itself."""
+    if isinstance(entry, str):
+        try:
+            entry = library_entry(entry)
+        except RasterFetchError:
+            return None
+    c = ((entry or {}).get("delivery") or {}).get("cog")
+    return c if isinstance(c, dict) and (c.get("url") or c.get("url_template")) else None
+
+
+def file_block(entry) -> dict | None:
+    """The entry's `delivery.raster` block (5.2.0): one GeoTIFF fetched whole, plain or inside a zip (`url`, `zipped`), small enough to keep
+    (200 MB at most). `files: {name: url}` names several, chosen by source.variant; the first is the default."""
+    if isinstance(entry, str):
+        try:
+            entry = library_entry(entry)
+        except RasterFetchError:
+            return None
+    r = ((entry or {}).get("delivery") or {}).get("raster")
+    return r if isinstance(r, dict) and (r.get("url") or r.get("files")) else None
+
+
 def known(entry_id: str) -> bool:
-    return entry_id in ENTRIES
+    return entry_id in ENTRIES or cog_block(entry_id) is not None or file_block(entry_id) is not None
+
+
+# --------------------------------------------------------------------------------------------------------------- COG tiles (5.2.0)
+COG_MAX_TILES = 4
+COG_MAX_PX = 3000
+
+
+def cog_tile_name(pattern: str, lon: float, lat: float) -> str:
+    """A tile's name from its corner: {NS} {EW} {ns} {ew} are the hemisphere letters, {lat} and {lon} the whole degrees without sign
+    (with a format: {lat:02d}), {slat} and {slon} the signed degrees."""
+    la, lo = int(round(lat)), int(round(lon))
+    return pattern.format(NS="N" if la >= 0 else "S", EW="E" if lo >= 0 else "W", ns="n" if la >= 0 else "s", ew="e" if lo >= 0 else "w",
+                          lat=abs(la), lon=abs(lo), slat=la, slon=lo)
+
+
+def cog_variant(block: dict, variant: str | None) -> str | None:
+    """The product of the entry to read (delivery.cog.variants lists them; the first is the default), or None when the entry has one."""
+    vs = [str(v) for v in (block.get("variants") or [])]
+    if not vs:
+        return None
+    v = str(variant or block.get("default_variant") or vs[0])
+    if v not in vs:
+        raise RasterFetchError(f"this library raster has the products {', '.join(vs)}; '{v}' is not one (source.variant)")
+    return v
+
+
+def cog_tiles(block: dict, bounds_wgs84, variant: str | None = None) -> list[tuple[str, str]]:
+    """[(tile name, url)] of the files a lon/lat window touches: the one file, or every tile of the grid under the window."""
+    import math
+    v = cog_variant(block, variant)
+    if block.get("url"):
+        u = str(block["url"]).replace("{variant}", v or "")
+        return [(Path(u).stem, u)]
+    g = block.get("tiles") or {}
+    size = float(g.get("size_deg") or 0)
+    pattern = str(g.get("name") or "")
+    tpl = str(block.get("url_template") or "").replace("{variant}", v or "")
+    if size <= 0 or not pattern or "{tile}" not in tpl:
+        raise RasterFetchError("this library raster's delivery.cog names a url_template but no tile grid (tiles: {size_deg, name}) or no {tile} in the address")
+    upper = str(g.get("corner") or "lower-left").lower().startswith("upper")
+    x0, y0, x1, y1 = (float(v) for v in bounds_wgs84)
+    eps = 1e-9
+    out = []
+    for i in range(math.floor(x0 / size), math.floor((x1 - eps) / size) + 1):
+        for j in range(math.floor(y0 / size), math.floor((y1 - eps) / size) + 1):
+            lon, lat = i * size, (j + 1) * size if upper else j * size
+            name = cog_tile_name(pattern, lon, lat)
+            out.append((name, tpl.replace("{tile}", name)))
+    return out
 
 
 # --------------------------------------------------------------------------------------------------------------- GHSL tiles
@@ -328,47 +416,83 @@ def _window_cached(root: Path, stem: str, bounds) -> tuple[Path, dict] | None:
     return None
 
 
-def window_download(url: str, size: int, bounds_wgs84, root: Path, http) -> tuple[Path, dict]:
-    """The window of a remote GeoTIFF as a local GeoTIFF: full resolution, the file's own CRS, nodata and compression kept. -> (path, record)."""
+def window_download(url: str, size: int, bounds_wgs84, root: Path, http, *, max_px: int | None = None, full_bounds=None, resampling: str = "nearest",
+                    pad: float | None = None) -> tuple[Path, dict]:
+    """The window of a remote GeoTIFF as a local GeoTIFF: the file's own CRS, nodata and compression kept. -> (path, record).
+    Full resolution, unless `max_px` is given (5.2.0): then a window wider than max_px pixels (measured over `full_bounds`, the whole window when
+    this file is one tile of several) is read decimated, which GDAL serves from the file's overviews, so a country costs what a city does."""
     rasterio = rio._rasterio()
     from rasterio.windows import from_bounds as window_from_bounds
     if offline():
         raise RasterFetchError(f"offline (GMAP_OFFLINE=1): this window of {Path(url).name} is not in the cache and nothing is fetched")
-    b = (float(bounds_wgs84[0]) - WINDOW_PAD_DEG, float(bounds_wgs84[1]) - WINDOW_PAD_DEG, float(bounds_wgs84[2]) + WINDOW_PAD_DEG, float(bounds_wgs84[3]) + WINDOW_PAD_DEG)
+    pad = WINDOW_PAD_DEG if pad is None else float(pad)
+    b = (float(bounds_wgs84[0]) - pad, float(bounds_wgs84[1]) - pad, float(bounds_wgs84[2]) + pad, float(bounds_wgs84[3]) + pad)
     rf_ = RangedFile(url, size, http)
+    factor = 1
     stem = Path(url).stem
     try:
         with rasterio.open(Path(url).name, opener=rf_.opener(Path(url).name)) as src:
-            if src.crs is None or src.crs.to_epsg() != 4326:
+            if src.crs is None:
+                raise RasterFetchError(f"{Path(url).name} has no CRS; it cannot be read by window here")
+            degrees = src.crs.to_epsg() == 4326
+            if not degrees and max_px is None:
                 raise RasterFetchError(f"{Path(url).name} is not in EPSG:4326; it cannot be read by window here")
-            sb = src.bounds
-            bb = (max(b[0], sb.left), max(b[1], sb.bottom), min(b[2], sb.right), min(b[3], sb.top))
-            if bb[0] >= bb[2] or bb[1] >= bb[3]:
-                raise RasterFetchError(f"the window is outside {Path(url).name}")
             import math
             from rasterio.windows import Window
+            from rasterio.warp import transform_bounds
+            to_src = (lambda q: q) if degrees else (lambda q: transform_bounds("EPSG:4326", src.crs, *q, densify_pts=21))
+            sb = src.bounds
+            q = to_src(b)
+            bb = (max(q[0], sb.left), max(q[1], sb.bottom), min(q[2], sb.right), min(q[3], sb.top))
+            if bb[0] >= bb[2] or bb[1] >= bb[3]:
+                raise RasterFetchError(f"the window is outside {Path(url).name}")
             w0 = window_from_bounds(*bb, transform=src.transform)
             c0, r0 = max(0, math.floor(w0.col_off)), max(0, math.floor(w0.row_off))
             c1, r1 = min(src.width, math.ceil(w0.col_off + w0.width)), min(src.height, math.ceil(w0.row_off + w0.height))
             win = Window(c0, r0, c1 - c0, r1 - r0)
-            data = src.read(window=win)
+            if max_px:
+                fq = to_src(tuple(float(v) for v in full_bounds)) if full_bounds else bb
+                span = max((fq[2] - fq[0]) / abs(src.res[0]), (fq[3] - fq[1]) / abs(src.res[1]))
+                factor = max(1, math.ceil(span / float(max_px)))
+            if factor > 1:
+                from rasterio.enums import Resampling
+                oh_, ow_ = max(1, math.ceil(win.height / factor)), max(1, math.ceil(win.width / factor))
+                data = src.read(window=win, out_shape=(src.count, oh_, ow_), resampling=getattr(Resampling, resampling, Resampling.nearest))
+                base, sc = src.window_transform(win), rasterio.Affine.scale(win.width / ow_, win.height / oh_)
+                tr = base.__matmul__(sc) if hasattr(base, "__matmul__") else base * sc
+            else:
+                data = src.read(window=win)
+                tr = src.window_transform(win)
             prof = src.profile.copy()
-            prof.update(driver="GTiff", height=data.shape[1], width=data.shape[2], transform=src.window_transform(win), compress="deflate", tiled=True,
+            prof.update(driver="GTiff", height=data.shape[1], width=data.shape[2], transform=tr, compress="deflate", tiled=True,
                         blockxsize=256, blockysize=256)
             prof.pop("photometric", None)
             wb = rasterio.windows.bounds(win, src.transform)
+            if not degrees:                                           # the record's window is what was asked for (the read covers it), never a larger guess
+                fb = transform_bounds(src.crs, "EPSG:4326", *sb, densify_pts=21)
+                wb = (max(b[0], fb[0]), max(b[1], fb[1]), min(b[2], fb[2]), min(b[3], fb[3]))
+            cmap = None
+            try:
+                cmap = src.colormap(1)
+            except ValueError:
+                pass
             layout = "tiled" if src.profile.get("tiled") else "strips"
+            overviews = list(src.overviews(1))
     except RasterFetchError:
         raise
     except Exception as ex:  # noqa: BLE001 - GDAL's message through the opener; the reason is passed on
         raise RasterFetchError(f"this window of {Path(url).name} could not be read by byte range ({type(ex).__name__}: {str(ex)[:160]})") from None
-    key = hashlib.sha256(json.dumps([round(v, 5) for v in wb]).encode()).hexdigest()[:12]
+    key = hashlib.sha256(json.dumps([round(v, 5) for v in wb] + ([factor] if factor > 1 else [])).encode()).hexdigest()[:12]
     dest = root / f"{stem}_window_{key}.tif"
     dest.parent.mkdir(parents=True, exist_ok=True)
     with rasterio.open(dest, "w", **prof) as dst:
         dst.write(data)
+        if cmap and prof.get("dtype") == "uint8" and prof.get("count") == 1:
+            dst.write_colormap(1, cmap)
     rec = {"url": oh.redact_url(rf_.final_url), "bytes": rf_.fetched, "file_bytes": int(size), "requests": rf_.requests, "ranged": True, "layout": layout,
            "window_wgs84": [float(v) for v in wb], "pixels": [int(data.shape[2]), int(data.shape[1])], "sha256": _sha(dest), "retrieved_at": today()}
+    if max_px:
+        rec.update({"factor": int(factor), "overviews": overviews, "max_px": int(max_px)})
     dest.with_suffix(".json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
     return dest, rec
 
@@ -376,8 +500,10 @@ def window_download(url: str, size: int, bounds_wgs84, root: Path, http) -> tupl
 # --------------------------------------------------------------------------------------------------------------- the one call
 def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, variant: str | None = None) -> dict:
     """A local GeoTIFF of the library raster covering the window. -> {path, record, findings, entry}."""
-    if entry_id not in ENTRIES:
-        raise RasterFetchError(f"'{entry_id}' is not a raster this fetcher knows ({', '.join(ENTRIES)}); give a file path instead")
+    block = None if entry_id in ENTRIES else cog_block(entry_id)
+    whole = None if (entry_id in ENTRIES or block is not None) else file_block(entry_id)
+    if entry_id not in ENTRIES and block is None and whole is None:
+        raise RasterFetchError(f"'{entry_id}' is not a raster this fetcher knows ({', '.join(ENTRIES)}, or a library raster with a delivery.cog block); give a file path instead")
     e = library_entry(entry_id)
     if e.get("status") in ("blocked", "retired", "draft"):
         raise RasterFetchError(f"library entry '{entry_id}' is {e.get('status')}")
@@ -386,7 +512,24 @@ def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, varian
     lic = e.get("license") or {}
     findings: list[dict] = []
     fetched_from_cache = []
-    if entry_id == HRSL:
+    if whole is not None:                                  # 5.2.0: one small GeoTIFF kept whole (a world raster at a coarse grain)
+        files = {str(k): str(v) for k, v in (whole.get("files") or {}).items()}
+        name = str(variant or whole.get("default") or (next(iter(files)) if files else ""))
+        if files and name not in files:
+            raise RasterFetchError(f"'{entry_id}' has the files {', '.join(files)}; '{name}' is not one (source.variant)")
+        url = files[name] if files else str(whole["url"])
+        zipped = bool(whole.get("zipped", url.lower().split("?")[0].endswith(".zip")))
+        stem = re.sub(r"[^A-Za-z0-9_.-]", "_", name or Path(url.split("?")[0]).stem)
+        path = root / f"{stem}.tif"
+        r, cached = _one(url, path, h, zipped=zipped)
+        fetched_from_cache.append(cached)
+        rec = {"entry": entry_id, "files": [{**r, "cached": cached}]}
+        if name:
+            rec["variant"] = name
+    elif block is not None:
+        path, rec, findings, cached = cog_window(entry_id, block, bounds_wgs84, root, h, variant)
+        fetched_from_cache.append(cached)
+    elif entry_id == HRSL:
         path, r, cached = hrsl_window(bounds_wgs84, root)
         fetched_from_cache.append(cached)
         rec = {"entry": entry_id, "files": [{**r, "cached": cached}]}
@@ -449,6 +592,82 @@ def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, varian
     return {"path": str(path), "record": rec, "findings": findings, "entry": e}
 
 
+def cog_window(entry_id: str, block: dict, bounds_wgs84, root: Path, http, variant: str | None = None) -> tuple[Path, dict, list, bool]:
+    """5.2.0: the window of a library raster kept as Cloud-Optimized GeoTIFFs (one file, or a grid of tiles), read by byte range and kept as one
+    GeoTIFF. -> (path, record, findings, cached)."""
+    bounds = tuple(float(v) for v in bounds_wgs84)
+    max_px = int(block.get("max_px") or COG_MAX_PX)
+    max_tiles = int(block.get("max_tiles") or COG_MAX_TILES)
+    resampling = str(block.get("resampling") or "nearest")
+    findings: list[dict] = []
+    span = max(bounds[2] - bounds[0], bounds[3] - bounds[1])
+    variant = cog_variant(block, variant)
+    if variant:
+        root = root / variant
+    for rp in sorted(root.glob("cog_*.json")):                         # an earlier read that holds this window at no coarser a grain
+        try:
+            old = json.loads(rp.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        w = old.get("window_wgs84") or []
+        tif = rp.with_suffix(".tif")
+        if (len(w) == 4 and tif.is_file() and w[0] <= bounds[0] and w[1] <= bounds[1] and w[2] >= bounds[2] and w[3] >= bounds[3]
+                and old.get("max_px") == max_px and (old.get("factor", 1) == 1 or max(w[2] - w[0], w[3] - w[1]) <= 1.5 * span) and old.get("sha256") == _sha(tif)):
+            return tif, {**old, "files": [{**f, "cached": True} for f in old.get("files", [])]}, findings, True
+    if offline():
+        raise RasterFetchError(f"offline (GMAP_OFFLINE=1): this window of {entry_id} is not in the cache and nothing is fetched")
+    tiles = cog_tiles(block, bounds, variant)
+    if len(tiles) > max_tiles:
+        g = block.get("tiles") or {}
+        raise RasterFetchError(f"the window touches {len(tiles)} tiles of {entry_id} ({g.get('size_deg')} degrees each); at most {max_tiles} are read for one map. "
+                               "Use a smaller window")
+    pad = min(WINDOW_PAD_DEG, 0.05 * span)
+    parts, recs = [], []
+    for name, url in tiles:
+        size = remote_size(url, http)
+        if size is None:
+            if len(tiles) > 1:                                          # a tile of open sea is not published; its neighbours carry the land
+                findings.append({"id": "MAP-TER-005", "severity": "INFO", "detail": name,
+                                 "message": f"tile {name} of {entry_id} is not published or does not serve byte ranges (open sea, most often); the window is read from the other tile(s)"})
+                continue
+            raise RasterFetchError(f"{Path(url).name} did not answer a byte-range request; this library raster cannot be read by window from here")
+        try:
+            p, r = window_download(url, size, bounds, root / "parts", http, max_px=max_px, full_bounds=bounds, resampling=resampling, pad=pad)
+        except RasterFetchError as ex:
+            if len(tiles) > 1 and "outside" in str(ex):
+                continue
+            raise
+        parts.append(p)
+        recs.append({"tile": name, **r, "cached": False})
+    if not parts:
+        raise RasterFetchError(f"no tile of {entry_id} covers this window")
+    key = hashlib.sha256(json.dumps([[round(v, 5) for v in bounds], max_px, [x["tile"] for x in recs]]).encode()).hexdigest()[:12]
+    out = root / f"cog_{key}.tif"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if len(parts) == 1:
+        out.write_bytes(parts[0].read_bytes())
+    else:
+        _mosaic(parts, out)
+    ws = [x["window_wgs84"] for x in recs]
+    window = [min(w[0] for w in ws), min(w[1] for w in ws), max(w[2] for w in ws), max(w[3] for w in ws)]
+    if len(recs) < len(tiles):
+        window = [max(window[0], bounds[0]), max(window[1], bounds[1]), min(window[2], bounds[2]), min(window[3], bounds[3])]
+    factor = max(int(x.get("factor") or 1) for x in recs)
+    rec = {"entry": entry_id, "tiles": [x["tile"] for x in recs], "files": recs, "window_wgs84": window, "max_px": max_px, "factor": factor,
+           "sha256": _sha(out), "retrieved_at": today()}
+    if variant:
+        rec["variant"] = variant
+    out.with_suffix(".json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
+    for p in parts:
+        for q in (p, p.with_suffix(".json")):
+            q.unlink(missing_ok=True)
+    if factor > 1:
+        findings.append({"id": "MAP-TER-005", "severity": "INFO", "detail": {"factor": factor, "max_px": max_px},
+                         "message": f"the window is wider than {max_px} cells of {entry_id}, so one cell in every {factor} was read (from the file's overviews); "
+                                    "a smaller window reads it at full grain"})
+    return out, rec, findings, False
+
+
 def hrsl_window(bounds_wgs84, root: Path, opener=None) -> tuple[Path, dict, bool]:
     """3.1.0: the window of Meta's HRSL (people a 1-arc-second cell) read from its public VRT of COGs, kept as a GeoTIFF. -> (path, record, cached)."""
     import math
@@ -505,12 +724,13 @@ def _mosaic(paths: list[Path], out: Path) -> None:
 
 def main(argv=None) -> int:
     import argparse
-    ap = argparse.ArgumentParser(description="Fetch a population raster (GHSL tile or WorldPop country) for a lon/lat window")
-    ap.add_argument("entry", choices=list(ENTRIES))
+    ap = argparse.ArgumentParser(description="Fetch a library raster (a population grid, or any entry kept as Cloud-Optimized GeoTIFFs) for a lon/lat window")
+    ap.add_argument("entry", help="a library raster id: " + ", ".join(ENTRIES) + ", or any entry with a delivery.cog block")
     ap.add_argument("--bounds", required=True, help="lon0,lat0,lon1,lat1")
+    ap.add_argument("--variant", help="the product of an entry that has several (delivery.cog.variants), or WorldPop's unadj")
     a = ap.parse_args(argv)
     try:
-        r = raster_for(a.entry, tuple(float(v) for v in a.bounds.split(",")))
+        r = raster_for(a.entry, tuple(float(v) for v in a.bounds.split(",")), variant=a.variant)
     except rio.RasterError as e:
         print(str(e), file=sys.stderr)
         return gc.EXIT_RUNTIME

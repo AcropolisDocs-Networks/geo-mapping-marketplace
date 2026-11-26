@@ -47,3 +47,9 @@
 - {host: data.gov.au,                     url: "https://data.gov.au/data/api/3/action/status_show", class: data}
 - {host: ckan.publishing.service.gov.uk,  url: "https://ckan.publishing.service.gov.uk/api/action/status_show", class: data}
 - {host: data.europa.eu,                  url: "https://data.europa.eu/api/hub/search/",         class: data}
+# 5.2.0 (open data portals P2): the hosts behind the new library sources; each answered from the build workspace on 2026-11-25.
+- {host: esa-worldcover.s3.eu-central-1.amazonaws.com, url: "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_N06E003_Map.tif", class: data}
+- {host: storage.googleapis.com,          url: "https://storage.googleapis.com/earthenginepartners-hansen/GFC-2024-v1.12/download.html", class: data}
+- {host: geodata.ucdavis.edu,             url: "https://geodata.ucdavis.edu/gadm/gadm4.1/gpkg/gadm41_KEN.gpkg", class: data}
+- {host: api.os.uk,                       url: "https://api.os.uk/downloads/v1/products",       class: data}
+- {host: data-gis.unep-wcmc.org,          url: "https://data-gis.unep-wcmc.org/server/rest/services?f=json", class: service}

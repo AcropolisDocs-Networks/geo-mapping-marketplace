@@ -1,0 +1,62 @@
+id: ref.gazetteer.us.address-range.tiger
+type: gazetteer
+rev: 1
+status: active
+title: US address ranges along streets, by county (TIGER/Line address features)
+summary: 'Street segments of one county with the house-number range on each side and the ZIP code: what the Census geocoder interpolates along.'
+tags:
+  geography: [us]
+  level: [line]
+  domain: [general, geocoding]
+  use_for: [label-reference, context-basemap]
+  avoid_for: [parcel-level, engineering-grade, legal-boundary]
+  scale: [local, site]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [annual]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'Site or venue addresses of one county are placed offline, by interpolating along a street segment.'
+- 'Address ranges are drawn as block numbers on a local map.'
+avoid_when:
+- 'A handful of addresses: the Census geocoder (ref.public-service.us.geocoder.census) answers faster and reads this same data.'
+- 'A point must be at the building: an interpolated range is a place along the street, not the door.'
+pairs_with: [ref.public-service.us.geocoder.census]
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: line
+  url_template: https://www2.census.gov/geo/tiger/TIGER2025/ADDRFEAT/tl_2025_{county}_addrfeat.zip
+  variant_key: county
+  variant_required: true
+  note: 'The variant is the 5-digit county FIPS code. LFROMHN, LTOHN, RFROMHN and RTOHN are the range ends on the left and right; ZIPL and ZIPR the ZIP codes.'
+source:
+  publisher: US Census Bureau
+  product: 2025 TIGER/Line Shapefile, Address Range-Feature, by county
+  url: https://www2.census.gov/geo/tiger/TIGER2025/ADDRFEAT/
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, TIGER/Line Shapefiles.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_head
+    url: https://www2.census.gov/geo/tiger/TIGER2025/ADDRFEAT/tl_2025_04013_addrfeat.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.3). Fetched and read from the build workspace on 2026-11-25: Maricopa County (04013), 216,396 segments with address ranges, EPSG:4269.'

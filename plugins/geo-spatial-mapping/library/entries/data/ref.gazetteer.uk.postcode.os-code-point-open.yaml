@@ -1,0 +1,69 @@
+id: ref.gazetteer.uk.postcode.os-code-point-open
+type: gazetteer
+rev: 1
+status: active
+title: 'Code-Point Open: postcode unit points of Great Britain'
+summary: 'One point for each of the 1.7 million postcode units of Great Britain (the mean position of its addresses), with the codes of the areas it falls in.'
+tags:
+  geography: [uk]
+  level: [place]
+  domain: [general, geocoding]
+  use_for: [join-key, label-reference, dot-density]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level, site-precision]
+  scale: [national, regional, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [authoritative]
+use_when:
+- 'A table of British sites, shops or venues carries postcodes and needs points, offline and with no key.'
+- 'Values reported by postcode are placed or rolled up to districts.'
+avoid_when:
+- 'A point at the door is needed; a postcode unit is about fifteen addresses.'
+- 'The postcodes belong to private individuals: their addresses are not mapped (the plugin geocodes sites and venues only).'
+- 'Northern Ireland (BT postcodes) is wanted; it is not in this product.'
+join:
+  key: postcode
+  type: string
+  note: 'The postcode unit, written as in the file (seven characters, the inward code right-aligned): compare after removing spaces.'
+crs: EPSG:27700
+delivery:
+  mode: fetch
+  format: Zip of the national file (EPSG:27700)
+  geometry: point
+  size_mb: 55.4
+  rolling: true
+  layer: codepoint
+  features: 1749385
+  columns: [postcode, positional_quality_indicator, country_code, nhs_regional_ha_code, nhs_ha_code, admin_county_code, admin_district_code, admin_ward_code]
+source:
+  publisher: Ordnance Survey
+  product: Code-Point Open (2026-11)
+  url: https://api.os.uk/downloads/v1/products/CodePointOpen/downloads?area=GB&format=GeoPackage&redirect
+  page: https://osdatahub.os.uk/downloads/open/CodePointOpen
+  api: https://api.os.uk/downloads/v1/products/CodePointOpen
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2026-11'
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Contains OS data © Crown copyright and database right 2026; contains Royal Mail data © Royal Mail copyright and database right 2026; contains National Statistics data © Crown copyright and database right 2026 (Open Government Licence v3.0).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
+  check:
+    kind: http_get
+    url: https://api.os.uk/downloads/v1/products/CodePointOpen
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.6). '

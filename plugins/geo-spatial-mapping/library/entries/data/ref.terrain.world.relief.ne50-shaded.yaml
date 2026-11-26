@@ -1,0 +1,47 @@
+id: ref.terrain.world.relief.ne50-shaded
+type: terrain
+rev: 1
+status: active
+title: 'World shaded relief, 50m (Natural Earth, a picture of relief)'
+summary: 'A grey shaded-relief picture of the whole world, 10,800 by 5,400 cells (about 3.7 km at the equator), drawn by Natural Earth from elevation data: relief as a ready-made
+  backdrop for world and continental maps, with no heights in it.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [general]
+  use_for: [context-basemap, atlas]
+  avoid_for: [engineering-grade, site-precision, legal-boundary]
+  scale: [world, national]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when:
+- 'A world or continental map wants relief under its data and no elevation model is fetched: draw it as a raster layer under the others, light (opacity 0.3 to 0.5).'
+avoid_when:
+- 'The map is regional or finer: the cells are kilometres across; the plugin''s own relief (terrain: {on: true}) is drawn from an elevation model for the window.'
+- Heights are read from it; the values are shades of grey (0 to 255), not metres.
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: GeoTIFF in a zip, uint8, EPSG:4326, cells of 1/30 degree
+  size_mb: 11.38
+  raster: {url: 'https://naciscdn.org/naturalearth/50m/raster/SR_50M.zip', zipped: true}
+style:
+  title: Shaded relief
+  raster: {ramp: sequential, vmin: 0, vmax: 255, from_land: false}
+source: {publisher: Natural Earth, product: 'Shaded Relief Basic, 50m (SR_50M)', url: 'https://naciscdn.org/naturalearth/50m/raster/SR_50M.zip',
+  file_sha256: ff810f5f2747463fd8ffa612b23e5f5e5d593a345218976872b6749610976ab7}
+url_verified_on: '2026-11-25'
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check: {kind: http_head, url: 'https://naciscdn.org/naturalearth/50m/raster/SR_50M.zip', expect: 200}
+  changelog:
+  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched from the build workspace on 2026-11-25 (11,380,369 bytes; SR_50M.tif, 10,800 x 5,400, one band) and read as a raster layer. The coloured hypsometric tint (HYP_50M_SR_W, three bands) waits for the three-band drawing that comes with imagery.'}

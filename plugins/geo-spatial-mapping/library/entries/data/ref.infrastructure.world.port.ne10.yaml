@@ -1,0 +1,42 @@
+id: ref.infrastructure.world.port.ne10
+type: infrastructure
+rev: 1
+status: active
+title: 'World sea ports (Natural Earth)'
+summary: 'About 1,080 sea ports of the world as points with their name.'
+tags:
+  geography: [world]
+  level: [site]
+  domain: [general]
+  use_for: [context-basemap, label-reference, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A subsea cable, shipping or coastal map shows the main ports as context.']
+avoid_when: ['Port areas or terminals are wanted; these are single points.']
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: point
+  size_mb: 0.05
+  features: 1081
+  columns: [scalerank, featurecla, name, website, natlscale]
+source: {publisher: Natural Earth, product: 'Ports, 10m', url: 'https://naciscdn.org/naturalearth/10m/cultural/ne_10m_ports.zip',
+  file_sha256: 1824cccd897a6c2ad546abbaf1f3545d51cff4bddfbda40244a1ad1ab1e4371d}
+url_verified_on: '2026-11-25'
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
+  check: {kind: feature_count_and_hash, features: 1081, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched and read from the build workspace on 2026-11-25: 1,081 features, 51,824 bytes.'}

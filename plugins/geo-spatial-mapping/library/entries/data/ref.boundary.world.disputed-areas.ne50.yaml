@@ -1,0 +1,57 @@
+id: ref.boundary.world.disputed-areas.ne50
+type: boundary
+rev: 1
+status: active
+title: 'Disputed and breakaway areas, 50m (Natural Earth)'
+summary: 'Disputed and breakaway territories as polygons (Kashmir, Crimea, Northern Cyprus, Somaliland, Western Sahara), with the claimants named.'
+tags:
+  geography: [world]
+  level: [country]
+  domain: [general]
+  use_for: [context-basemap, label-reference, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A choropleth by country marks the areas whose status is disputed (hatched), so they are not silently given to one side.']
+avoid_when: ['The area is read as a legal position: Natural Earth shows de facto control.']
+join:
+  key: none
+  type: string
+  note: Drawn as it is; no table joins to it.
+distinct_from:
+- id: ref.boundary.world.country.ne10
+  why: countries, not disputed areas or time zones
+- id: ref.boundary.world.country.ne110
+  why: countries
+- id: ref.boundary.world.country.ne50
+  why: countries
+- id: ref.boundary.world.historical.basemaps
+  why: borders as of a past date
+- id: ref.boundary.world.time-zones.ne10
+  why: time zones
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: polygon
+  size_mb: 0.05
+  features: 28
+  columns: [featurecla, scalerank, LABELRANK, SOVEREIGNT, SOV_A3, ADM0_DIF, LEVEL, TYPE, TLC, ADMIN, ADM0_A3, GEOU_DIF, GEOUNIT, GU_A3]
+source: {publisher: Natural Earth, product: 'Admin 0 breakaway and disputed areas, 50m', url: 'https://naciscdn.org/naturalearth/50m/cultural/ne_50m_admin_0_breakaway_disputed_areas.zip',
+  file_sha256: 916aa95a9ce65bb1d551cf5fe1f689d96032a3498b053487bbd4a805650f8f4d}
+url_verified_on: '2026-11-25'
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check: {kind: feature_count_and_hash, features: 28, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched and read from the build workspace on 2026-11-25: 28 features, 49,928 bytes.'}

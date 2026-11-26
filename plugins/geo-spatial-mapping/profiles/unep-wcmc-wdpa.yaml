@@ -1,0 +1,31 @@
+# Shipped service profile (read-only; see service_registry.py). Verified 2026-11-25 from the build environment.
+profile: unep-wcmc-wdpa
+type: arcgis-rest
+base_url: https://data-gis.unep-wcmc.org/server/rest/services
+auth:
+  method: none
+network:
+  route: mcp
+  public: true
+limits:
+  max_features_per_request: 2000
+  server_max_features: 2000
+  max_concurrency: 1
+  timeout_s: 120
+  max_bytes: 100000000
+  max_total_features: 50000
+cors:
+  browser_ok: unknown
+  mixed_content_ok: false
+  checked_on: null
+license:
+  default: restricted
+  confidential: false
+  attribution: 'UNEP-WCMC and IUCN (2026), Protected Planet: The World Database on Protected and Conserved Areas (WDPCA), www.protectedplanet.net.'
+host_visibility: shown
+host_confirmed_on: '2026-11-25'
+verified_on: '2026-11-25'
+notes: 'UNEP-WCMC''s ArcGIS server. ProtectedSites/The_World_Database_of_Protected_Areas/FeatureServer/1 is WDPA_poly_latest (the polygons, updated
+  monthly; layer 0 holds the sites known only as points); maxRecordCount 2000 with paging; query by a bbox or by iso3. The data is under Protected
+  Planet''s terms (non-commercial without permission, no redistribution): the library entry asks the person before it is drawn. Shipped with the
+  plugin (5.2.0), read-only.'

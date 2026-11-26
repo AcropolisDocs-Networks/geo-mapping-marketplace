@@ -196,6 +196,13 @@ entries:
   rev: 2
   tags_digest: 30c858531488
   entry_digest: 1b6241179a2a
+- id: ref.boundary.uk.admin.os-boundary-line
+  file: entries/data/ref.boundary.uk.admin.os-boundary-line.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: b962850fc5e7
+  entry_digest: cdc77c9ae5ca
 - id: ref.boundary.uk.lad.ons
   file: entries/data/ref.boundary.uk.lad.ons.yaml
   type: boundary
@@ -224,6 +231,13 @@ entries:
   rev: 1
   tags_digest: e669996133a8
   entry_digest: 931e7ffc74bb
+- id: ref.boundary.us.congressional.cb500k
+  file: entries/data/ref.boundary.us.congressional.cb500k.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: b3e5edc8e588
+  entry_digest: 3e174ced0aba
 - id: ref.boundary.us.county.cb
   file: entries/data/ref.boundary.us.county.cb.yaml
   type: boundary
@@ -287,6 +301,48 @@ entries:
   rev: 1
   tags_digest: 694e88852ac4
   entry_digest: bdb489f13ad9
+- id: ref.boundary.us.puma.tiger2025
+  file: entries/data/ref.boundary.us.puma.tiger2025.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 4da445c1a025
+  entry_digest: c39ba3ca4563
+- id: ref.boundary.us.school-elementary.cb500k
+  file: entries/data/ref.boundary.us.school-elementary.cb500k.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: ff6d9c075a0f
+  entry_digest: 87792307e10b
+- id: ref.boundary.us.school-secondary.cb500k
+  file: entries/data/ref.boundary.us.school-secondary.cb500k.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: ff6d9c075a0f
+  entry_digest: c3f07478f522
+- id: ref.boundary.us.school-unified.cb500k
+  file: entries/data/ref.boundary.us.school-unified.cb500k.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: ff6d9c075a0f
+  entry_digest: 19ea42ce33d2
+- id: ref.boundary.us.state-legislative-lower.cb500k
+  file: entries/data/ref.boundary.us.state-legislative-lower.cb500k.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: f146cfc7aaf2
+  entry_digest: b71694eddc31
+- id: ref.boundary.us.state-legislative-upper.cb500k
+  file: entries/data/ref.boundary.us.state-legislative-upper.cb500k.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: f146cfc7aaf2
+  entry_digest: 8cb7960b450e
 - id: ref.boundary.us.state.cb20m
   file: entries/data/ref.boundary.us.state.cb20m.yaml
   type: boundary
@@ -322,6 +378,13 @@ entries:
   rev: 1
   tags_digest: e95e5dbad120
   entry_digest: afc6cea12927
+- id: ref.boundary.us.voting-district.cb2020-500k
+  file: entries/data/ref.boundary.us.voting-district.cb2020-500k.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 5a20d3f4ca18
+  entry_digest: 3dd6e2d78954
 - id: ref.boundary.us.zcta.cb2020-500k
   file: entries/data/ref.boundary.us.zcta.cb2020-500k.yaml
   type: boundary
@@ -329,13 +392,20 @@ entries:
   rev: 1
   tags_digest: e9e7127c5581
   entry_digest: c04c835ef670
+- id: ref.boundary.world.admin.cod-ab
+  file: entries/data/ref.boundary.world.admin.cod-ab.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 749297db6ccf
+  entry_digest: 817ea00bb4e9
 - id: ref.boundary.world.admin.gadm41
   file: entries/data/ref.boundary.world.admin.gadm41.yaml
   type: boundary
   status: active
-  rev: 1
+  rev: 2
   tags_digest: 8ba124bb4842
-  entry_digest: 4e575620b27d
+  entry_digest: 42261e71ad86
 - id: ref.boundary.world.country.geoboundaries
   file: entries/data/ref.boundary.world.country.geoboundaries.yaml
   type: boundary
@@ -364,6 +434,20 @@ entries:
   rev: 1
   tags_digest: 646ee9fca63f
   entry_digest: e30a68af9e89
+- id: ref.boundary.world.disputed-areas.ne50
+  file: entries/data/ref.boundary.world.disputed-areas.ne50.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 5ddde5f3378b
+  entry_digest: 353e5a563e3e
+- id: ref.boundary.world.disputed-lines.ne50
+  file: entries/data/ref.boundary.world.disputed-lines.ne50.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: b0c49a1696f1
+  entry_digest: 75adf63a7270
 - id: ref.boundary.world.division.overture
   file: entries/data/ref.boundary.world.division.overture.yaml
   type: boundary
@@ -392,6 +476,13 @@ entries:
   rev: 1
   tags_digest: f9b041984a7a
   entry_digest: 1d15b77fd89f
+- id: ref.boundary.world.protected.wdpa
+  file: entries/data/ref.boundary.world.protected.wdpa.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 1ee2dbaeb1f7
+  entry_digest: 6530b8d844d5
 - id: ref.boundary.world.state.ne10
   file: entries/data/ref.boundary.world.state.ne10.yaml
   type: boundary
@@ -413,6 +504,41 @@ entries:
   rev: 1
   tags_digest: 47bd4b8cdc7e
   entry_digest: cebe1a1a34d6
+- id: ref.boundary.world.time-zones.ne10
+  file: entries/data/ref.boundary.world.time-zones.ne10.yaml
+  type: boundary
+  status: active
+  rev: 1
+  tags_digest: 5ddde5f3378b
+  entry_digest: 73897dd246e3
+- id: ref.context.uk.basemap.os-open-zoomstack
+  file: entries/data/ref.context.uk.basemap.os-open-zoomstack.yaml
+  type: context
+  status: draft
+  rev: 1
+  tags_digest: ecd466ca5446
+  entry_digest: d54254fc1f28
+- id: ref.context.uk.built-up.os-open-built-up-areas
+  file: entries/data/ref.context.uk.built-up.os-open-built-up-areas.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 37245b07dd3e
+  entry_digest: 90a874554a67
+- id: ref.context.uk.greenspace.os-open-greenspace
+  file: entries/data/ref.context.uk.greenspace.os-open-greenspace.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 61b56e48a862
+  entry_digest: 49b9b5e4a6eb
+- id: ref.context.uk.rivers.os-open-rivers
+  file: entries/data/ref.context.uk.rivers.os-open-rivers.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 70c0ec5b6f1a
+  entry_digest: 7929053207eb
 - id: ref.context.us.hazard.fema-nfhl
   file: entries/data/ref.context.us.hazard.fema-nfhl.yaml
   type: context
@@ -476,6 +602,34 @@ entries:
   rev: 1
   tags_digest: 9ce2e92f50c6
   entry_digest: b55f65c9a062
+- id: ref.context.world.coastline.ne50
+  file: entries/data/ref.context.world.coastline.ne50.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 593da7e878eb
+  entry_digest: 8528a22f6646
+- id: ref.context.world.forest.global-forest-change
+  file: entries/data/ref.context.world.forest.global-forest-change.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: be65b210a644
+  entry_digest: 1ce46f8341f9
+- id: ref.context.world.geographic-lines.ne50
+  file: entries/data/ref.context.world.geographic-lines.ne50.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: b0c49a1696f1
+  entry_digest: 5ecda448c22c
+- id: ref.context.world.glaciers.ne50
+  file: entries/data/ref.context.world.glaciers.ne50.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 9c7f7b75b570
+  entry_digest: d48e80e31dfc
 - id: ref.context.world.ground.overture
   file: entries/data/ref.context.world.ground.overture.yaml
   type: context
@@ -483,6 +637,13 @@ entries:
   rev: 1
   tags_digest: fdfe07632dcd
   entry_digest: 3c262d0fd597
+- id: ref.context.world.hazard.ndh-hotspots
+  file: entries/data/ref.context.world.hazard.ndh-hotspots.yaml
+  type: context
+  status: draft
+  rev: 1
+  tags_digest: d4f0a17f5c83
+  entry_digest: 4cce59b3390c
 - id: ref.context.world.lakes.ne10
   file: entries/data/ref.context.world.lakes.ne10.yaml
   type: context
@@ -497,6 +658,20 @@ entries:
   rev: 1
   tags_digest: 84955c38b5af
   entry_digest: d3b7272e1342
+- id: ref.context.world.lakes.ne50
+  file: entries/data/ref.context.world.lakes.ne50.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 7b30e045a14e
+  entry_digest: 7d73daa6a539
+- id: ref.context.world.land.ne50
+  file: entries/data/ref.context.world.land.ne50.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: b78887785163
+  entry_digest: b80e2f4c8e57
 - id: ref.context.world.land.osm-simplified
   file: entries/data/ref.context.world.land.osm-simplified.yaml
   type: context
@@ -504,6 +679,20 @@ entries:
   rev: 1
   tags_digest: a87ee9bc92a1
   entry_digest: 1f25887da5b5
+- id: ref.context.world.landcover.esa-worldcover
+  file: entries/data/ref.context.world.landcover.esa-worldcover.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 3544237d48ae
+  entry_digest: efe48c32283a
+- id: ref.context.world.marine-areas.ne50
+  file: entries/data/ref.context.world.marine-areas.ne50.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: dde37e99636c
+  entry_digest: 7d2ec6e58932
 - id: ref.context.world.ocean.ne10
   file: entries/data/ref.context.world.ocean.ne10.yaml
   type: context
@@ -511,6 +700,27 @@ entries:
   rev: 1
   tags_digest: e93d9e372278
   entry_digest: 7635e165b7c9
+- id: ref.context.world.ocean.ne50
+  file: entries/data/ref.context.world.ocean.ne50.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 9885270d3635
+  entry_digest: 916420e1a0d6
+- id: ref.context.world.playas.ne50
+  file: entries/data/ref.context.world.playas.ne50.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: dde37e99636c
+  entry_digest: e4262573cef8
+- id: ref.context.world.reefs.ne10
+  file: entries/data/ref.context.world.reefs.ne10.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: b0c49a1696f1
+  entry_digest: 83f0e038102d
 - id: ref.context.world.rivers.ne10
   file: entries/data/ref.context.world.rivers.ne10.yaml
   type: context
@@ -518,6 +728,20 @@ entries:
   rev: 1
   tags_digest: f5358af672c0
   entry_digest: 743ab9cb3ca5
+- id: ref.context.world.rivers.ne50
+  file: entries/data/ref.context.world.rivers.ne50.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: ca257df2bcf3
+  entry_digest: f71c51fd02f9
+- id: ref.context.world.urban.grump-extents
+  file: entries/data/ref.context.world.urban.grump-extents.yaml
+  type: context
+  status: draft
+  rev: 1
+  tags_digest: be54c66767fd
+  entry_digest: afc5586c4e2f
 - id: ref.context.world.urban.ne10
   file: entries/data/ref.context.world.urban.ne10.yaml
   type: context
@@ -532,6 +756,27 @@ entries:
   rev: 1
   tags_digest: 06ab6a5a8230
   entry_digest: f981c04ab5da
+- id: ref.gazetteer.uk.place.os-open-names
+  file: entries/data/ref.gazetteer.uk.place.os-open-names.yaml
+  type: gazetteer
+  status: active
+  rev: 1
+  tags_digest: 8393c4f0c210
+  entry_digest: f22965edb63b
+- id: ref.gazetteer.uk.postcode.os-code-point-open
+  file: entries/data/ref.gazetteer.uk.postcode.os-code-point-open.yaml
+  type: gazetteer
+  status: active
+  rev: 1
+  tags_digest: 9242b692c69e
+  entry_digest: 4606a647ca6e
+- id: ref.gazetteer.us.address-range.tiger
+  file: entries/data/ref.gazetteer.us.address-range.tiger.yaml
+  type: gazetteer
+  status: active
+  rev: 1
+  tags_digest: 813cf6000eca
+  entry_digest: ff821e65f796
 - id: ref.gazetteer.us.landform.gnis
   file: entries/data/ref.gazetteer.us.landform.gnis.yaml
   type: gazetteer
@@ -574,6 +819,13 @@ entries:
   rev: 1
   tags_digest: f86a1f0ecd96
   entry_digest: 259076d80293
+- id: ref.gazetteer.world.place.ne50
+  file: entries/data/ref.gazetteer.world.place.ne50.yaml
+  type: gazetteer
+  status: active
+  rev: 1
+  tags_digest: 9c7f7b75b570
+  entry_digest: c0f885eb1a5e
 - id: ref.gazetteer.world.place.overture
   file: entries/data/ref.gazetteer.world.place.overture.yaml
   type: gazetteer
@@ -602,6 +854,13 @@ entries:
   rev: 1
   tags_digest: b0c9ac12d292
   entry_digest: 04d0d40ba09c
+- id: ref.infrastructure.uk.road.os-open-roads
+  file: entries/data/ref.infrastructure.uk.road.os-open-roads.yaml
+  type: infrastructure
+  status: active
+  rev: 1
+  tags_digest: 63363daba4fe
+  entry_digest: ce950b0dba63
 - id: ref.infrastructure.us.energy.substations
   file: entries/data/ref.infrastructure.us.energy.substations.yaml
   type: infrastructure
@@ -637,6 +896,13 @@ entries:
   rev: 1
   tags_digest: 2f76e34504fd
   entry_digest: 89e9e9528fcf
+- id: ref.infrastructure.us.road.tiger-all
+  file: entries/data/ref.infrastructure.us.road.tiger-all.yaml
+  type: infrastructure
+  status: active
+  rev: 1
+  tags_digest: 47a3abff0b3c
+  entry_digest: f0e3b304401f
 - id: ref.infrastructure.us.road.tiger-primary
   file: entries/data/ref.infrastructure.us.road.tiger-primary.yaml
   type: infrastructure
@@ -672,6 +938,13 @@ entries:
   rev: 2
   tags_digest: e2b707830cc4
   entry_digest: 382268ba48b7
+- id: ref.infrastructure.world.airport.ne10
+  file: entries/data/ref.infrastructure.world.airport.ne10.yaml
+  type: infrastructure
+  status: active
+  rev: 1
+  tags_digest: 2c69c3eba76c
+  entry_digest: 3c81d2dbe22b
 - id: ref.infrastructure.world.cell.opencellid
   file: entries/data/ref.infrastructure.world.cell.opencellid.yaml
   type: infrastructure
@@ -686,6 +959,20 @@ entries:
   rev: 2
   tags_digest: 54c0f98c86e4
   entry_digest: 7f0dcbb30ce5
+- id: ref.infrastructure.world.port.ne10
+  file: entries/data/ref.infrastructure.world.port.ne10.yaml
+  type: infrastructure
+  status: active
+  rev: 1
+  tags_digest: 2c69c3eba76c
+  entry_digest: 7f0313f59bb7
+- id: ref.infrastructure.world.rail.ne10
+  file: entries/data/ref.infrastructure.world.rail.ne10.yaml
+  type: infrastructure
+  status: active
+  rev: 1
+  tags_digest: b0c49a1696f1
+  entry_digest: 6763fc4e21b9
 - id: ref.infrastructure.world.road.ne10
   file: entries/data/ref.infrastructure.world.road.ne10.yaml
   type: infrastructure
@@ -945,6 +1232,13 @@ entries:
   rev: 2
   tags_digest: c5b800dce73c
   entry_digest: 319d8b87b968
+- id: ref.public-service.uk.mapping.os-ngd-features
+  file: entries/data/ref.public-service.uk.mapping.os-ngd-features.yaml
+  type: public-service
+  status: draft
+  rev: 1
+  tags_digest: 9774012f33ce
+  entry_digest: 31e77af68101
 - id: ref.public-service.uk.transit.tfl
   file: entries/data/ref.public-service.uk.transit.tfl.yaml
   type: public-service
@@ -1344,6 +1638,20 @@ entries:
   rev: 1
   tags_digest: '906769109899'
   entry_digest: 8e333864379d
+- id: ref.statistic.world.population.gpw-v4-count
+  file: entries/data/ref.statistic.world.population.gpw-v4-count.yaml
+  type: statistic
+  status: draft
+  rev: 1
+  tags_digest: ff0c04e9764f
+  entry_digest: e862210c9663
+- id: ref.statistic.world.population.gpw-v4-density
+  file: entries/data/ref.statistic.world.population.gpw-v4-density.yaml
+  type: statistic
+  status: draft
+  rev: 1
+  tags_digest: 05030d0309af
+  entry_digest: 46d01be15b42
 - id: ref.statistic.world.population.hrsl
   file: entries/data/ref.statistic.world.population.hrsl.yaml
   type: statistic
@@ -1484,6 +1792,13 @@ entries:
   rev: 1
   tags_digest: e8b8582d6251
   entry_digest: 7ee7fb2bfbca
+- id: ref.terrain.uk.dem.os-terrain-50
+  file: entries/data/ref.terrain.uk.dem.os-terrain-50.yaml
+  type: terrain
+  status: draft
+  rev: 1
+  tags_digest: 6749aef713ee
+  entry_digest: 41792a746e65
 - id: ref.terrain.us.dem.3dep
   file: entries/data/ref.terrain.us.dem.3dep.yaml
   type: terrain
@@ -1526,3 +1841,10 @@ entries:
   rev: 2
   tags_digest: a0291820f14f
   entry_digest: d3cf7302cac8
+- id: ref.terrain.world.relief.ne50-shaded
+  file: entries/data/ref.terrain.world.relief.ne50-shaded.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 320ee89e9278
+  entry_digest: e10bea4e5033

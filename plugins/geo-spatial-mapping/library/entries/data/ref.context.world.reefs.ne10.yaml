@@ -1,0 +1,42 @@
+id: ref.context.world.reefs.ne10
+type: context
+rev: 1
+status: active
+title: 'World coral reefs, 10m (Natural Earth)'
+summary: 'The major coral reefs of the world as lines (the Great Barrier Reef, the Red Sea, the Caribbean).'
+tags:
+  geography: [world]
+  level: [line]
+  domain: [general]
+  use_for: [context-basemap, label-reference, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A marine or coastal map names or draws the reefs as context.']
+avoid_when: ['Reef extent is measured; these are cartographic lines, not habitat areas.']
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: line
+  size_mb: 0.18
+  features: 1043
+  columns: [scalerank, featurecla, min_zoom]
+source: {publisher: Natural Earth, product: 'Reefs, 10m', url: 'https://naciscdn.org/naturalearth/10m/physical/ne_10m_reefs.zip',
+  file_sha256: b29cce160628a9aa243ab9c88d2234d79af97aded495137248059230e36f508c}
+url_verified_on: '2026-11-25'
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check: {kind: feature_count_and_hash, features: 1043, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched and read from the build workspace on 2026-11-25: 1,043 features, 178,301 bytes.'}

@@ -1,0 +1,42 @@
+id: ref.context.world.geographic-lines.ne50
+type: context
+rev: 1
+status: active
+title: 'Equator, tropics, polar circles and the date line (Natural Earth)'
+summary: 'The equator, the tropics of Cancer and Capricorn, the Arctic and Antarctic circles and the International Date Line as lines.'
+tags:
+  geography: [world]
+  level: [line]
+  domain: [general]
+  use_for: [context-basemap, label-reference, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A world or continental map draws the tropics or the date line as reference.']
+avoid_when: ['A regional map away from these lines.']
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: line
+  size_mb: 0.03
+  features: 6
+  columns: [scalerank, name, abbrev, note, featurecla, min_zoom, wdid_score]
+source: {publisher: Natural Earth, product: 'Geographic lines, 50m', url: 'https://naciscdn.org/naturalearth/50m/physical/ne_50m_geographic_lines.zip',
+  file_sha256: 58e5580d7d76eb4bff2d2d6ef4bca3b76f8e331b2556580c631b46b44f7dd3b9}
+url_verified_on: '2026-11-25'
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check: {kind: feature_count_and_hash, features: 6, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched and read from the build workspace on 2026-11-25: 6 features, 31,271 bytes.'}

@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 216 entries (214 active); basemap-provider 18, boundary 39, boundary-derived 2, context 16, crosswalk 1, gazetteer 8, infrastructure 16, map-type 13, palette 2, public-service 55, statistic 24, symbol-set 1, template 6, terrain 15.
+Library: 262 entries (253 active); basemap-provider 18, boundary 53, boundary-derived 2, context 34, crosswalk 1, gazetteer 12, infrastructure 21, map-type 13, palette 2, public-service 56, statistic 26, symbol-set 1, template 6, terrain 17.
 
 ### Usable now
 
@@ -26,10 +26,12 @@ Library: 216 entries (214 active); basemap-provider 18, boundary 39, boundary-de
 | `ref.boundary.fr.region.ign-adminexpress` | IGN ADMIN EXPRESS COG, small scale: French regions | Institut national de l'information géographique et forestière (IGN), COG 2026 | downloaded on first use | open | code_insee (string) |
 | `ref.boundary.mx.municipio.inegi2023` | Mexican municipalities (INEGI Marco Geoestadístico 2023) | Instituto Nacional de Estadística y Geografía (INEGI), December 2023 | downloaded on first use | attribution | CVEGEO (string, 5 chars) |
 | `ref.boundary.mx.state.inegi2023` | Mexican states (INEGI Marco Geoestadístico 2023) | Instituto Nacional de Estadística y Geografía (INEGI), December 2023 | downloaded on first use | attribution | CVE_ENT (string, 2 chars) |
+| `ref.boundary.uk.admin.os-boundary-line` | Boundary-Line: administrative and electoral boundaries of Great Britain (Ordnance Survey) | Ordnance Survey, 2026-10 | you supply the file | attribution | Census_Code (string) |
 | `ref.boundary.uk.lad.ons` | ONS local authority districts, December 2024 (UK, ultra generalised) | Office for National Statistics, December 2024 | web service | open | LAD24CD (string, 9 chars) |
 | `ref.boundary.us.aiannh.cb500k` | US American Indian, Alaska Native and Native Hawaiian areas, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 4 chars) |
 | `ref.boundary.us.block-group.cb500k` | US block groups, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 12 chars) |
 | `ref.boundary.us.cbsa.cb500k` | US metropolitan and micropolitan areas, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 5 chars) |
+| `ref.boundary.us.congressional.cb500k` | US congressional districts, 119th Congress, 1:500,000 (Census cartographic boundary) | US Census Bureau, 119th Congress (2025) | downloaded on first use | public-domain | GEOID (string) |
 | `ref.boundary.us.county.cb` | US counties, generalized (Census cartographic boundary) | US Census Bureau, 2025 | bundled (0.49 MB) | public-domain | GEOID (string, 5 chars) |
 | `ref.boundary.us.county.cb500k` | US counties, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 5 chars) |
 | `ref.boundary.us.county.tiger` | US counties, full detail (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 5 chars) |
@@ -39,24 +41,39 @@ Library: 216 entries (214 active); basemap-provider 18, boundary 39, boundary-de
 | `ref.boundary.us.place.cb500k` | US incorporated places and CDPs, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 7 chars) |
 | `ref.boundary.us.protected.pad-us` | Protected Areas Database of the United States (PAD-US 4.1) | US Geological Survey, Gap Analysis Project, 4.1 (2024) | web service | public-domain | Unit_Nm (string) |
 | `ref.boundary.us.protected.usfs-forests` | USFS administrative forest boundaries (National Forests) | USDA Forest Service, EDW (live) | downloaded on first use | public-domain | forestname (string) |
+| `ref.boundary.us.puma.tiger2025` | US Public Use Microdata Areas (2020 PUMAs), by state (TIGER/Line) | US Census Bureau, 2020 PUMAs (2025 TIGER) | downloaded on first use | public-domain | GEOID20 (string) |
+| `ref.boundary.us.school-elementary.cb500k` | US school districts, elementary, 1:500,000, by state (Census cartographic boundary) | US Census Bureau, 2025 (school year 2024-2025) | downloaded on first use | public-domain | GEOID (string) |
+| `ref.boundary.us.school-secondary.cb500k` | US school districts, secondary, 1:500,000, by state (Census cartographic boundary) | US Census Bureau, 2025 (school year 2024-2025) | downloaded on first use | public-domain | GEOID (string) |
+| `ref.boundary.us.school-unified.cb500k` | US school districts, unified, 1:500,000, by state (Census cartographic boundary) | US Census Bureau, 2025 (school year 2024-2025) | downloaded on first use | public-domain | GEOID (string) |
+| `ref.boundary.us.state-legislative-lower.cb500k` | US state legislative districts, lower chamber, 1:500,000, by state (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string) |
+| `ref.boundary.us.state-legislative-upper.cb500k` | US state legislative districts, upper chamber, 1:500,000, by state (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string) |
 | `ref.boundary.us.state.cb20m` | US states, generalized (Census cartographic boundary) | US Census Bureau, 2025 | bundled (0.15 MB) | public-domain | GEOID (string, 2 chars) |
 | `ref.boundary.us.state.cb5m` | US states, moderately generalized (Census cartographic boundary, 1:5,000,000) | US Census Bureau, 2025 | bundled (0.69 MB) | public-domain | GEOID (string, 2 chars) |
 | `ref.boundary.us.surface-management.blm` | BLM National Surface Management Agency (federal and state land ownership) | Bureau of Land Management, current BLM service | web service | public-domain | ADMIN_AGENCY_CODE (string) |
 | `ref.boundary.us.tract.cb500k` | US census tracts, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2025 | downloaded on first use | public-domain | GEOID (string, 11 chars) |
 | `ref.boundary.us.urban-area.cb2020-500k` | US urban areas (2020 Census), 1:500,000 (cartographic boundary) | US Census Bureau, 2020 (decennial definition) | downloaded on first use | public-domain | GEOID20 (string, 5 chars) |
+| `ref.boundary.us.voting-district.cb2020-500k` | US voting districts (precincts) as of the 2020 Census, 1:500,000, by state | US Census Bureau, 2020 (Census redistricting) | downloaded on first use | public-domain | GEOID20 (string) |
 | `ref.boundary.us.zcta.cb2020-500k` | US ZIP Code Tabulation Areas, 2020 vintage, 1:500,000 (Census cartographic boundary) | US Census Bureau, 2020 (decennial) | downloaded on first use | public-domain | GEOID20 (string, 5 chars) |
-| `ref.boundary.world.admin.gadm41` | GADM 4.1 (administrative areas worldwide, restricted licence) | GADM (University of California, Davis), 4.1 (July 2022) | you supply the file | restricted | GID_1 (string) |
+| `ref.boundary.world.admin.cod-ab` | COD-AB administrative boundaries (OCHA, on the Humanitarian Data Exchange), by country | United Nations Office for the Coordination of Humanitarian Affairs (OCHA), with each country's contributing agency, as each country's dataset states (read at fetch) | downloaded on first use | attribution | ADM1_PCODE (string) |
+| `ref.boundary.world.admin.gadm41` | GADM 4.1 (administrative areas worldwide, restricted licence) | GADM (University of California, Davis), 4.1 (July 2022) | downloaded on first use | restricted | GID_1 (string) |
 | `ref.boundary.world.country.geoboundaries` | geoBoundaries (administrative boundaries worldwide) | geoBoundaries (William & Mary geoLab), current gbOpen release (CAN ADM1 represents 2023) | downloaded on first use | attribution | shapeISO (string) |
 | `ref.boundary.world.country.ne10` | World countries, 10m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain | ISO_A3_EH (string, 3 chars) |
 | `ref.boundary.world.country.ne110` | World countries, 110m (Natural Earth) | Natural Earth 5.1.1 | bundled (0.15 MB) | public-domain | ISO_A3_EH (string, 3 chars) |
 | `ref.boundary.world.country.ne50` | World countries, 50m (Natural Earth) | Natural Earth 5.1.1 | bundled (0.57 MB) | public-domain | ISO_A3_EH (string, 3 chars) |
+| `ref.boundary.world.disputed-areas.ne50` | Disputed and breakaway areas, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain | none (string) |
+| `ref.boundary.world.disputed-lines.ne50` | Disputed international boundary lines, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain | none (string) |
 | `ref.boundary.world.division.overture` | Overture Maps divisions (administrative areas) | Overture Maps Foundation, 2026-10-21.0 | you supply the file | share-alike | id (string) |
 | `ref.boundary.world.historical.awmc` | Ancient World Mapping Center geodata (Roman Empire extents, provinces, roads) | Ancient World Mapping Center (University of North Carolina at Chapel Hill), repository master (static layers) | downloaded on first use | share-alike | None (none) |
 | `ref.boundary.world.historical.basemaps` | historical-basemaps - world political boundaries by century (A. Ourednik) | André Ourednik and contributors, repository master | downloaded on first use | share-alike | NAME (string) |
 | `ref.boundary.world.historical.ohm` | OpenHistoricalMap administrative boundaries as of a date | OpenHistoricalMap, live, edited daily | web service | public-domain | ohm_id (integer) |
+| `ref.boundary.world.protected.wdpa` | World Database on Protected Areas (WDPA, Protected Planet), by map window | UNEP-WCMC and IUCN, November 2026 (the service is replaced each month) | web service | restricted | site_id (string) |
 | `ref.boundary.world.state.ne10` | States and provinces worldwide, 1:10,000,000 (Natural Earth admin-1) | Natural Earth, 5.1.x (naciscdn.org current file, downloaded 2026-11-04) | downloaded on first use | public-domain | iso_3166_2 (string) |
 | `ref.boundary.world.state.ne10-locator` | World first-level divisions for locators and country lookup, 10m simplified (Natural Earth) | Natural Earth 5.1.1 | bundled (2.79 MB) | public-domain | iso_3166_2 (string) |
 | `ref.boundary.world.state.ne50` | World first-level divisions, 50m (Natural Earth) | Natural Earth 5.1.1 | bundled (0.72 MB) | public-domain | adm1_code (string, 8 chars) |
+| `ref.boundary.world.time-zones.ne10` | World time zones (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain | none (string) |
+| `ref.context.uk.built-up.os-open-built-up-areas` | OS Open Built Up Areas: towns and cities of Great Britain as areas | Ordnance Survey, 2026-04 | downloaded on first use | attribution | gsscode (string) |
+| `ref.context.uk.greenspace.os-open-greenspace` | OS Open Greenspace: parks, playing fields and other green spaces of Great Britain | Ordnance Survey, 2026-10 | downloaded on first use | attribution |  |
+| `ref.context.uk.rivers.os-open-rivers` | OS Open Rivers: watercourses of Great Britain (Ordnance Survey) | Ordnance Survey, 2026-10 | downloaded on first use | attribution |  |
 | `ref.context.us.hazard.fema-nfhl` | FEMA National Flood Hazard Layer (flood hazard zones) | FEMA, effective NFHL (continuously updated as studies take effect) | web service | public-domain |  |
 | `ref.context.us.hydrography.nhdplus-hr` | National Hydrography Dataset Plus High Resolution (USGS map service) | US Geological Survey, The National Map, NHDPlus HR, data refreshed October 2022 | web service | public-domain |  |
 | `ref.context.us.landcover.nlcd` | NLCD land cover (MRLC web map service) | Multi-Resolution Land Characteristics (MRLC) Consortium, USGS, NLCD 2021 (service); Annual NLCD 2024 (download) | web service | public-domain |  |
@@ -66,36 +83,57 @@ Library: 216 entries (214 active); basemap-provider 18, boundary 39, boundary-de
 | `ref.context.world.building.microsoft` | Microsoft Global ML Building Footprints | Microsoft, 2026-02-03 | you supply the file | share-alike |  |
 | `ref.context.world.building.overture` | Overture Maps buildings (footprints) | Overture Maps Foundation, 2026-10-21.0 | you supply the file | share-alike |  |
 | `ref.context.world.coastline.ne110` | World coastline, 110m (Natural Earth) | Natural Earth 4.1.0 | bundled (0.09 MB) | public-domain |  |
+| `ref.context.world.coastline.ne50` | World coastline, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
+| `ref.context.world.forest.global-forest-change` | Global Forest Change 2000 to 2024 (Hansen, UMD and GLAD), 30 m | Hansen, Potapov, Moore, Hancher et al., University of Maryland (GLAD), Google, USGS and NASA, 2000 to 2024 (v1.12) | downloaded on first use | attribution |  |
+| `ref.context.world.geographic-lines.ne50` | Equator, tropics, polar circles and the date line (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
+| `ref.context.world.glaciers.ne50` | World glaciers and ice caps, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.context.world.ground.overture` | Overture Maps land and water (base theme), for detailed ground anywhere | Overture Maps Foundation, 2026-10-21.0 | downloaded on first use | share-alike |  |
 | `ref.context.world.lakes.ne10` | World lakes and reservoirs, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (1.26 MB) | public-domain |  |
 | `ref.context.world.lakes.ne110` | World lakes, 110m (Natural Earth) | Natural Earth 5.0.0 | bundled (0.02 MB) | public-domain |  |
+| `ref.context.world.lakes.ne50` | World lakes, 50m (Natural Earth) | Natural Earth 5.1.1 | bundled (0.13 MB) | public-domain |  |
+| `ref.context.world.land.ne50` | World land, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.context.world.land.osm-simplified` | OpenStreetMap simplified land polygons (osmdata.openstreetmap.de) | OpenStreetMap Data (osmdata.openstreetmap.de, FOSSGIS), daily build | downloaded on first use | share-alike |  |
+| `ref.context.world.landcover.esa-worldcover` | ESA WorldCover 2021 land cover, 10 m, the whole world | European Space Agency (ESA) WorldCover consortium, led by VITO, 2021 (v200) | downloaded on first use | attribution |  |
+| `ref.context.world.marine-areas.ne50` | World seas, gulfs and bays as named areas, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.context.world.ocean.ne10` | World ocean, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (2.49 MB) | public-domain |  |
+| `ref.context.world.ocean.ne50` | World ocean, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
+| `ref.context.world.playas.ne50` | World playas and salt flats, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
+| `ref.context.world.reefs.ne10` | World coral reefs, 10m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.context.world.rivers.ne10` | World rivers and lake centerlines, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (1.22 MB) | public-domain |  |
+| `ref.context.world.rivers.ne50` | World rivers, 50m (Natural Earth) | Natural Earth 5.1.1 | bundled (0.38 MB) | public-domain |  |
 | `ref.context.world.urban.ne10` | World urban areas, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (2.54 MB) | public-domain |  |
 | `ref.crosswalk.us.county-cbsa.omb2023` | US county to metro/micro area crosswalk (OMB July 2023 delineations) | US Census Bureau, Population Division, from OMB Bulletin 23-01, OMB July 2023 | bundled (0.2 MB) | public-domain | county_geoid (string, 5 chars) |
+| `ref.gazetteer.uk.place.os-open-names` | OS Open Names: place names, road names and postcodes of Great Britain | Ordnance Survey, 2026-10 | you supply the file | attribution |  |
+| `ref.gazetteer.uk.postcode.os-code-point-open` | Code-Point Open: postcode unit points of Great Britain | Ordnance Survey, 2026-11 | downloaded on first use | attribution | postcode (string) |
+| `ref.gazetteer.us.address-range.tiger` | US address ranges along streets, by county (TIGER/Line address features) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
 | `ref.gazetteer.us.landform.gnis` | USGS GNIS named landforms (summits, buttes, canyons, ridges, valleys) | U.S. Geological Survey, refreshed October 2026 (the service's copyright text) | web service | public-domain | gaz_id (integer) |
 | `ref.gazetteer.world.address.openaddresses` | OpenAddresses (open address points, by source) | OpenAddresses (Batch), rolling | you supply the file | attribution |  |
 | `ref.gazetteer.world.place.geonames` | GeoNames populated places (cities15000) | GeoNames, daily dump (downloaded 2026-11-05) | downloaded on first use | attribution |  |
 | `ref.gazetteer.world.place.geonames-cities1000` | GeoNames populated places (cities1000) | GeoNames, daily dump (downloaded 2026-11-20) | downloaded on first use | attribution |  |
 | `ref.gazetteer.world.place.ne10` | World populated places, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (0.33 MB) | public-domain |  |
 | `ref.gazetteer.world.place.ne110` | World populated places, 110m (Natural Earth) | Natural Earth 5.1.2 | bundled (0.03 MB) | public-domain |  |
+| `ref.gazetteer.world.place.ne50` | World cities and towns, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.gazetteer.world.place.overture` | Overture Maps places (points of interest) | Overture Maps Foundation, 2026-10-21.0 | you supply the file | attribution | id (string) |
 | `ref.gazetteer.world.place.wof` | Who's On First gazetteer | Who's On First (Geocode Earth), not verified | you supply the file | attribution | wof:id (integer) |
 | `ref.infrastructure.ca.license.ised-spectrum` | ISED spectrum licence and site data (Canada) | Innovation, Science and Economic Development Canada, monthly extracts (2026-11-03 files) | you supply the file | attribution |  |
 | `ref.infrastructure.na.road.ne10` | North America roads, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (1.02 MB) | public-domain |  |
+| `ref.infrastructure.uk.road.os-open-roads` | OS Open Roads: the road network of Great Britain (Ordnance Survey) | Ordnance Survey, 2026-10 | you supply the file | attribution |  |
 | `ref.infrastructure.us.energy.substations` | US electric substations (OpenStreetMap; the HIFLD layer is withdrawn) | OpenStreetMap contributors (via Overpass), not verified | you supply the file | share-alike |  |
 | `ref.infrastructure.us.energy.transmission-lines` | US electric power transmission lines (HIFLD layer re-hosted on GeoPlatform) | DHS HIFLD, re-hosted by the GeoPlatform Federal User Community, 2025-08-26 (data last edited) | web service | public-domain |  |
 | `ref.infrastructure.us.hifld.cell-tower` | Cellular towers (FCC ULS cellular licences, HIFLD layer re-hosted on GeoPlatform) | DHS HIFLD (from FCC ULS), re-hosted by the GeoPlatform Federal User Community, 2025-08-25 (data last edited) | web service | public-domain |  |
 | `ref.infrastructure.us.license.fcc-uls` | FCC Universal Licensing System (licensed locations) | FCC, weekly complete files | you supply the file | public-domain |  |
 | `ref.infrastructure.us.rail.tiger` | US railroads (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
+| `ref.infrastructure.us.road.tiger-all` | US all roads, by county (TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
 | `ref.infrastructure.us.road.tiger-primary` | US primary roads (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
 | `ref.infrastructure.us.road.tiger-prisec` | US primary and secondary roads by state (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
 | `ref.infrastructure.us.tower.fcc-asr` | FCC Antenna Structure Registration (towers) | FCC, weekly complete file | you supply the file | public-domain |  |
 | `ref.infrastructure.us.tower.land-mobile` | Land mobile commercial transmission towers (FCC ULS) | FCC Universal Licensing System, weekly ULS complete file | you supply the file | public-domain |  |
 | `ref.infrastructure.us.tower.microwave` | Microwave service towers (FCC ULS microwave licences) | FCC Universal Licensing System, weekly ULS complete file | you supply the file | public-domain |  |
+| `ref.infrastructure.world.airport.ne10` | World airports (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.infrastructure.world.cell.opencellid` | OpenCelliD cell tower database (crowd-sourced) | Unwired Labs (OpenCelliD project), daily export (per-MCC files refreshed daily) | downloaded on first use | share-alike | mcc,mnc,lac,cell (string) |
 | `ref.infrastructure.world.osm.geofabrik` | OpenStreetMap extracts by state or country (Geofabrik) | Geofabrik GmbH (OpenStreetMap data), daily extracts | you supply the file | share-alike |  |
+| `ref.infrastructure.world.port.ne10` | World sea ports (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
+| `ref.infrastructure.world.rail.ne10` | World railways (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.infrastructure.world.road.ne10` | Roads worldwide, 1:10,000,000 (Natural Earth) | Natural Earth, 5.1.x (naciscdn.org current file, downloaded 2026-11-04) | downloaded on first use | public-domain |  |
 | `ref.infrastructure.world.submarine-cable.telegeography` | Submarine cable systems and landing points (TeleGeography Submarine Cable Map) | TeleGeography | downloaded on first use | licensed |  |
 | `ref.public-service.ca-bc.transit.translink` | TransLink (Metro Vancouver) GTFS and GTFS-realtime | TransLink, current GTFS | web service, your own key needed (/geo-spatial-mapping:map-credentials) | restricted |  |
@@ -192,6 +230,7 @@ Library: 216 entries (214 active); basemap-provider 18, boundary 39, boundary-de
 | `ref.terrain.world.dem.nasadem` | NASADEM (reprocessed SRTM, 1 arc second), 60 N to 56 S, with an Earthdata token | NASA JPL, distributed by the NASA Land Processes DAAC (LP DAAC), NASADEM 001 (2020), SRTM data of February 2000 | downloaded on first use | public-domain |  |
 | `ref.terrain.world.dem.opentopography` | OpenTopography global DEMs (SRTM, Copernicus, ALOS, NASADEM) | OpenTopography (San Diego Supercomputer Center, UC San Diego), per dataset | downloaded on first use | attribution |  |
 | `ref.terrain.world.dem.terrarium` | Terrain Tiles on AWS (Mapzen Terrarium), world elevation | Mapzen (Linux Foundation), hosted on the Registry of Open Data on AWS, joerd build of the tileset (sources listed in the attribution document; 3DEP and SRTM v3 for the US and the world between 60 N and 56 S) | downloaded on first use | attribution |  |
+| `ref.terrain.world.relief.ne50-shaded` | World shaded relief, 50m (Natural Earth, a picture of relief) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 
 ### Not usable yet
 
@@ -199,6 +238,13 @@ These are in the library so that a request can be answered honestly, but a map c
 
 | Entry | What it is | Status | Why |
 |---|---|---|---|
+| `ref.context.uk.basemap.os-open-zoomstack` | OS Open Zoomstack: a layered base map of Great Britain (Ordnance Survey) | draft | New (5.2.0, open data portals P2.6). Draft: the Downloads API lists the GeoPackage (4,301.5 MB) and the vector tiles (2,852.7 MB) on 2026-11-25; neither was downloaded or read, so it is not offered. |
+| `ref.context.world.hazard.ndh-hotspots` | Natural Disaster Hotspots: hazard frequency and distribution grids (CHRR and CIESIN, 2005; SEDAC, frozen) | draft | Fetched with the Earthdata tools and the person's one token: earthdata_search (short_name=CIESIN_CHRR_NDH_MULTIHZ_HFD, kind=granules) lists the files, earthdata_fetch (urls=<one file>) shows the plan and downloads after the person agrees, into data/earthdata/CIESIN_CHRR_NDH_MULTIHZ_HFD/. The GeoTIFF inside the zip is then a file layer (role: raster) with this entry named in its provenance. Draft until one download has been made with a real token (see the changelog). |
+| `ref.context.world.urban.grump-extents` | GRUMP v1 urban extents grid, 1995 (SEDAC, frozen) | draft | Fetched with the Earthdata tools and the person's one token: earthdata_search (short_name=CIESIN_SEDAC_GRUMPv1_EXT, kind=granules) lists the files, earthdata_fetch (urls=<one file>) shows the plan and downloads after the person agrees, into data/earthdata/CIESIN_SEDAC_GRUMPv1_EXT/. The GeoTIFF inside the zip is then a file layer (role: raster) with this entry named in its provenance. Draft until one download has been made with a real token (see the changelog). |
+| `ref.public-service.uk.mapping.os-ngd-features` | OS NGD API - Features: the National Geographic Database of Great Britain by collection (Ordnance Survey) | draft | The collections list (https://api.os.uk/features/ngd/ofa/v1/collections) answers with no key; items need the key, and the key works only if the NGD API - Features is added to its project in the OS Data Hub. Draft until an items request has been made with a real key (see the changelog). |
+| `ref.statistic.world.population.gpw-v4-count` | Gridded Population of the World v4.11: population count, 2000 to 2020 (SEDAC, frozen) | draft | Fetched with the Earthdata tools and the person's one token: earthdata_search (short_name=CIESIN_SEDAC_GPWv4_POPCOUNT_R11, kind=granules) lists the files, earthdata_fetch (urls=<one file>) shows the plan and downloads after the person agrees, into data/earthdata/CIESIN_SEDAC_GPWv4_POPCOUNT_R11/. The GeoTIFF inside the zip is then a file layer (role: raster) with this entry named in its provenance. Draft until one download has been made with a real token (see the changelog). |
+| `ref.statistic.world.population.gpw-v4-density` | Gridded Population of the World v4.11: population density, 2000 to 2020 (SEDAC, frozen) | draft | Fetched with the Earthdata tools and the person's one token: earthdata_search (short_name=CIESIN_SEDAC_GPWv4_POPDENS_R11, kind=granules) lists the files, earthdata_fetch (urls=<one file>) shows the plan and downloads after the person agrees, into data/earthdata/CIESIN_SEDAC_GPWv4_POPDENS_R11/. The GeoTIFF inside the zip is then a file layer (role: raster) with this entry named in its provenance. Draft until one download has been made with a real token (see the changelog). |
+| `ref.terrain.uk.dem.os-terrain-50` | OS Terrain 50: a 50 m elevation model of Great Britain (Ordnance Survey) | draft | New (5.2.0, open data portals P2.6). Draft: the Downloads API lists the ASCII grid (161.7 MB) on 2026-11-25; it was not read, so it is not offered. |
 
 ## Sources by country (3.0.0)
 

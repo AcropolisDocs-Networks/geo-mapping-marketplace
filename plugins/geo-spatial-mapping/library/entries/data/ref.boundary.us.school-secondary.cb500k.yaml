@@ -1,0 +1,70 @@
+id: ref.boundary.us.school-secondary.cb500k
+type: boundary
+rev: 1
+status: active
+title: US school districts, secondary, 1:500,000, by state (Census cartographic boundary)
+summary: 'The secondary school districts of one state for the 2024 to 2025 school year: one file per state.'
+tags:
+  geography: [us]
+  level: [school-district]
+  domain: [general, demographics]
+  use_for: [choropleth, join-key, context-basemap]
+  avoid_for: [parcel-level, engineering-grade, legal-boundary, site-precision]
+  scale: [state, metro, local]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [annual]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'A map by school district (E-Rate, student connectivity, a programme by district) in a state whose districts are secondary.'
+- 'District lines as context where a town is known by its schools.'
+avoid_when:
+- 'A state has no districts of this kind: many states have unified districts only, and the file is then missing (the fetch says so). Arizona has all three.'
+- 'All of a state is wanted in one layer: elementary and secondary districts overlap unified ones; take each kind the state uses.'
+join:
+  key: GEOID
+  type: string
+  note: 'State FIPS + local education agency code, 7 characters. Keep leading zeros.'
+distinct_from:
+- id: ref.boundary.us.school-unified.cb500k
+  why: districts for every grade
+- id: ref.boundary.us.school-elementary.cb500k
+  why: districts for the lower grades only
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: polygon
+  url_template: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_{statefp}_scsd_500k.zip
+  variant_key: statefp
+  variant_required: true
+  service_route: 'the same areas as a service: the shipped tigerweb profile, layer School/MapServer'
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, Secondary School Districts, 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2025 (school year 2024-2025)'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_head
+    url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_04_scsd_500k.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.3). Fetched and read from the build workspace on 2026-11-25: Arizona (04), 15 districts, EPSG:4269.'

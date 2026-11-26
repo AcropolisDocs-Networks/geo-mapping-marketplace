@@ -638,6 +638,37 @@ def _entry(eid: str) -> dict | None:
     return next((x for x in rl.all_entries("all") if x.get("id") == eid), None)
 
 
+def variant_for(e: dict, brief: dict) -> str | None:
+    """5.2.0: the state, county or country code a per-area library source needs (delivery.variant_key), read from the brief's place:
+    statefp from the state the map is in, county from the county under the window's centre, iso3 from the country under it."""
+    key = str((e.get("delivery") or {}).get("variant_key") or "")
+    if not key:
+        return None
+    try:
+        bb = brief.get("bbox")
+        if not bb:
+            import region as region_mod
+            r = region_mod.resolve(brief.get("region") if isinstance(brief.get("region"), dict) else {"place": str(brief.get("region") or "")})
+            bb = list(r.geometry.bounds)
+        cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
+        if key == "iso3":
+            import raster_fetch as rf
+            lvl = (e.get("delivery") or {}).get("default_level")
+            return rf.worldpop_iso3(bb)[0].lower() + (f"-{lvl}" if lvl else "")
+        import geopandas as gpd
+        from shapely.geometry import Point
+        name = "us_states_cb.parquet" if key == "statefp" else "us_counties_cb.parquet"
+        g = gpd.read_parquet(gc.plugin_root() / "assets" / "basemaps" / name)
+        pt = gpd.GeoSeries([Point(cx, cy)], crs="EPSG:4326").to_crs(g.crs).iloc[0] if g.crs is not None else Point(cx, cy)
+        hit = g[g.geometry.contains(pt)]
+        if not len(hit):
+            return None
+        row = hit.iloc[0]
+        return str(row["STATEFP"]) if key == "statefp" else str(row.get("GEOID") or (str(row["STATEFP"]) + str(row["COUNTYFP"])))
+    except Exception:  # noqa: BLE001 - no code found: the layer is written without one and the fetch says which is needed
+        return None
+
+
 def _license_text(e: dict) -> str:
     lic = e.get("license") or {}
     return str(lic.get("name") or lic.get("class") or "see the source")
@@ -646,9 +677,13 @@ def _license_text(e: dict) -> str:
 def _kind_of_entry(e: dict) -> str | None:
     dl = e.get("delivery") or {}
     k = str(dl.get("layer_kind") or dl.get("geometry") or "").lower()
+    if not k and (".boundary." in str(e.get("id")) or str(e.get("type")) == "boundary"):
+        k = "polygon"
     for word, kind in (("point", "point"), ("line", "line"), ("polygon", "polygon"), ("raster", "raster"), ("grid", "raster")):
         if word in k:
             return kind
+    if dl.get("cog") or dl.get("raster") or "geotiff" in str(dl.get("format") or "").lower() or ".population.ghsl" in str(e.get("id")) or ".population.hrsl" in str(e.get("id")):
+        return "raster"                                   # 5.2.0: a library raster is drawn as a raster layer
     lv = " ".join(str(x) for x in ((e.get("tags") or {}).get("level") or []))
     if "site" in lv:
         return "point"
@@ -864,6 +899,10 @@ def compose_spec(job: dict, spec_dir: Path) -> dict:
         kind = (d or {}).get("kind") or _kind_of_entry(e)
         lid = slug(n["theme"], 24).replace("-", "_")
         ly = {"id": lid, "source": _source_of(d, spec_dir) if d else {"type": "ref", "id": n["chosen"]}, "role": roles.get(kind) or ROLE_OF.get(kind) or "points"}
+        if not d:
+            v = variant_for(e, b)
+            if v:
+                ly["source"]["variant"] = v                  # 5.2.0: a source published one file a state, county or country names the map's own
         if d:
             ly["provenance"] = d["provenance"]
             used.add(d["name"])

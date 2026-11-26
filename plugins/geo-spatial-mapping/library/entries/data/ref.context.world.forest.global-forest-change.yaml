@@ -1,0 +1,84 @@
+id: ref.context.world.forest.global-forest-change
+type: context
+rev: 1
+status: active
+title: Global Forest Change 2000 to 2024 (Hansen, UMD and GLAD), 30 m
+summary: 'Tree cover in 2000, the year each cell lost its forest (2001 to 2024) and forest gain to 2012, on a 1 arc-second (about 30 m) grid from Landsat, in
+  10 degree tiles on a public Google Cloud bucket. The map''s window is read by byte range, from up to four tiles, and a wide window is read thinned.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [general, imagery]
+  use_for: [context-basemap, density-surface, atlas]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level, site-precision]
+  scale: [national, regional, state, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [annual]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [derived]
+use_when:
+- 'The story is forest loss over two decades in one region (the year of loss, drawn as a sequence): source.variant lossyear, the default.'
+- 'Tree cover as it stood in 2000 is the ground of a map (source.variant treecover2000, percent of each cell).'
+- A window of a few degrees is enough; four tiles (20 degrees on a side at most) is the limit for one map.
+avoid_when:
+- 'Loss is read as deforestation: it counts every stand-replacing loss (fire, harvest in plantations, storm), and the methods changed in 2011 and 2015, so
+  the years do not compare evenly.'
+- Net change is wanted; gain covers 2000 to 2012 only and cannot be subtracted from loss.
+- 'The window is wide and the session is in the cloud workspace: the files are stored in rows with no overviews, so a thinned read still downloads most of
+  each tile (lossyear is about 100 MB a tile, treecover2000 about 480 MB and over the size one file may cost).'
+pairs_with: [ref.context.world.landcover.esa-worldcover]
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: GeoTIFF, uint8, EPSG:4326, cells of 0.00025 degree (about 30 m), LZW in single rows, no overviews
+  url_template: https://storage.googleapis.com/earthenginepartners-hansen/GFC-2024-v1.12/Hansen_GFC-2024-v1.12_lossyear_{tile}.tif
+  cog:
+    url_template: https://storage.googleapis.com/earthenginepartners-hansen/GFC-2024-v1.12/Hansen_GFC-2024-v1.12_{variant}_{tile}.tif
+    variants: [lossyear, treecover2000, gain, datamask]
+    tiles: {size_deg: 10, corner: upper-left, name: '{lat:02d}{NS}_{lon:03d}{EW}'}
+    max_tiles: 4
+    max_px: 3000
+    resampling: nearest
+  note: 'A tile is named by its upper-left corner in whole degrees on a 10 degree grid (10S_070W holds 20 to 10 south, 70 to 60 west; 00N_070W holds 10
+    south to the equator). lossyear holds 0 (no loss) or 1 to 24 (2001 to 2024); treecover2000 holds 0 to 100 percent; gain is 0 or 1; datamask is 0 (no
+    data), 1 (land) or 2 (water).'
+style:
+  titles: {lossyear: Year the forest was lost, treecover2000: Tree cover in 2000, gain: Forest gain 2000 to 2012, datamask: Land and water}
+  raster:
+    variants:
+      lossyear: {nodata: 0, ramp: sequential, vmin: 1, vmax: 24, unit: 'years after 2000', from_land: false}
+      treecover2000: {ramp: sequential, vmin: 0, vmax: 100, unit: percent}
+      gain: {nodata: 0, ramp: categorical, labels: {1: Forest gain}}
+      datamask: {nodata: 0, ramp: categorical, labels: {1: Land, 2: Water}}
+source:
+  publisher: Hansen, Potapov, Moore, Hancher et al., University of Maryland (GLAD), Google, USGS and NASA
+  product: Global Forest Change 2000-2024, version 1.12
+  url: https://storage.googleapis.com/earthenginepartners-hansen/GFC-2024-v1.12/download.html
+  citation: 'Hansen, M. C. et al. 2013. High-Resolution Global Maps of 21st-Century Forest Cover Change. Science 342: 850-853.'
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2000 to 2024 (v1.12)'
+  cadence: annual
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Forest change: Hansen/UMD/Google/USGS/NASA, Global Forest Change 2000-2024 v1.12, CC BY 4.0.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_head
+    url: https://storage.googleapis.com/earthenginepartners-hansen/GFC-2024-v1.12/Hansen_GFC-2024-v1.12_lossyear_10S_070W.tif
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.9). Verified from the build workspace on 2026-11-25: byte-range requests answered 206 for the lossyear
+      (97,673,117 bytes), treecover2000 (479,586,770), gain and datamask files of tile 10S_070W; a window across the 10 south line in Rondonia was read
+      from two tiles through the generic reader.'

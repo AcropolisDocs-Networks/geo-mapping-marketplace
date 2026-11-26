@@ -1,0 +1,64 @@
+id: ref.context.world.hazard.ndh-hotspots
+type: context
+rev: 1
+status: draft
+title: 'Natural Disaster Hotspots: hazard frequency and distribution grids (CHRR and CIESIN, 2005; SEDAC, frozen)'
+summary: 'World grids at 2.5 arc-minutes of how often each cell was hit by floods, cyclones, earthquakes, droughts, landslides and volcanoes over about two decades to 2000, in deciles, with a multi-hazard grid.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [hazard]
+  use_for: [context-basemap, density-surface]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T2]
+  license_class: [attribution]
+  quality: [derived]
+use_when:
+- 'A world or continental resilience story shows which regions face which natural hazards, at a glance and with the study named.'
+avoid_when:
+- 'A siting decision: the grids are coarse deciles from data that ends about 2000 (use FEMA flood zones, USGS earthquakes or a national hazard model).'
+- 'A newer version is expected: NASA ended SEDAC''s contract on 30 April 2025. The data were restored in Earthdata Cloud on 17 June 2025 and are complete but frozen: no new versions.'
+delivery:
+  mode: fetch
+  tool: earthdata
+  short_name: CIESIN_CHRR_NDH_MULTIHZ_HFD
+  concept_id: C3550186069-ESDIS
+  format: GeoTIFF in a zip, EPSG:4326
+  files: 'one zip a hazard: flood (CIESIN_CHRR_NDH_FLOOD_HFD), cyclone (..._CYCLONE_HFD), earthquake (..._EQUAKE_HFD), drought, landslide, volcano, and the multi-hazard grid'
+  note: 'Fetched with the Earthdata tools and the person''s one token: earthdata_search (short_name=CIESIN_CHRR_NDH_MULTIHZ_HFD, kind=granules) lists the files, earthdata_fetch (urls=<one file>)
+    shows the plan and downloads after the person agrees, into data/earthdata/CIESIN_CHRR_NDH_MULTIHZ_HFD/. The GeoTIFF inside the zip is then a file layer (role: raster) with
+    this entry named in its provenance. Draft until one download has been made with a real token (see the changelog).'
+source:
+  publisher: 'NASA Socioeconomic Data and Applications Center (SEDAC), CIESIN, Columbia University'
+  product: CIESIN_CHRR_NDH_MULTIHZ_HFD
+  url: https://cmr.earthdata.nasa.gov/search/concepts/C3550186069-ESDIS.html
+url_verified_on: '2026-11-25'
+vintage:
+  current: frozen (no new versions since SEDAC closed in 2025)
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: CIESIN, Columbia University, Natural Disaster Hotspots: hazard frequency and distribution grids, NASA SEDAC (CC BY 4.0).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://cmr.earthdata.nasa.gov/search/collections.json?concept_id=C3550186069-ESDIS
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'Draft (5.2.0, open data portals P2.4). Verified on 2026-11-25: the collection and its files are listed by the Common Metadata Repository with no key, and
+      from the person''s computer the fetch plan for one file named data.earthdata.nasa.gov as the only host the token goes to. No file was downloaded: a
+      download needs the person''s agreement to the plan, and an Earthdata forum thread reports access-denied answers for GPW files, so the entry is not
+      offered until one download has succeeded. The copy on Harvard Dataverse asks for a guestbook form before each download, so it is not a route.'

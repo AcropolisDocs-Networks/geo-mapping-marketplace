@@ -1,0 +1,92 @@
+id: ref.context.world.landcover.esa-worldcover
+type: context
+rev: 1
+status: active
+title: ESA WorldCover 2021 land cover, 10 m, the whole world
+summary: 'Eleven land cover classes (tree cover, shrubland, grassland, cropland, built-up, bare, snow and ice, water, wetland, mangroves, moss and lichen) for
+  2021 on a 10 m grid from Sentinel-1 and Sentinel-2, as Cloud-Optimized GeoTIFFs in 3 degree tiles on a public AWS bucket. Only the map''s window is
+  read, by byte range, and a wide window is read from the tiles'' overviews.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [general, imagery]
+  use_for: [context-basemap, atlas]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level, site-precision]
+  scale: [national, regional, state, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [derived]
+use_when:
+- A map outside the United States needs what the ground is (built-up against cropland, forest against open land) under a coverage or site story.
+- Built-up extent is wanted as a class anywhere in the world, at one grain and one year.
+- 'A window up to about 6 degrees across: it is read from at most four tiles; wider than 3,000 cells it is read from the overviews and says so.'
+avoid_when:
+- The map is in the conterminous United States and the national product is wanted; ref.context.us.landcover.nlcd is the MRLC's own.
+- A change over time is the point; this is one year (2021, with a 2020 edition made by a different algorithm, so the two do not compare).
+- 'Anything is measured to the cell: the stated overall accuracy is about 77 percent, and classes are confused at their edges.'
+pairs_with: [ref.statistic.world.population.ghsl]
+distinct_from: [ref.context.us.landcover.nlcd]
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Cloud-Optimized GeoTIFF, uint8, EPSG:4326, cells of 1/12000 degree (about 10 m), nodata 0, overviews to 1/128, class palette embedded
+  url_template: https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_{tile}_Map.tif
+  cog:
+    url_template: https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_{tile}_Map.tif
+    tiles: {size_deg: 3, corner: lower-left, name: '{NS}{lat:02d}{EW}{lon:03d}'}
+    max_tiles: 4
+    max_px: 3000
+    resampling: nearest
+  second_route: 'Planetary Computer STAC collection esa-worldcover (https://planetarycomputer.microsoft.com/api/stac/v1/collections/esa-worldcover): the same
+    tiles on Azure behind a keyless signed address; used when the AWS bucket does not answer.'
+  note: 'A tile is named by its lower-left corner in whole degrees on a 3 degree grid (N06E003 holds 6 to 9 north, 3 to 6 east). A tile of open sea is not
+    published. Not bundled: the window is kept under .geo-mapping/fetch/rasters/ with a record of the tiles, the bytes and the sha256.'
+style:
+  title: Land cover
+  note: The publisher's legend (WorldCover Product User Manual v2.0, table 2). A map draws these unless its layer says raster.colors brand.
+  classes:
+    10: {label: Tree cover, color: '#006400'}
+    20: {label: Shrubland, color: '#ffbb22'}
+    30: {label: Grassland, color: '#ffff4c'}
+    40: {label: Cropland, color: '#f096ff'}
+    50: {label: Built-up, color: '#fa0000'}
+    60: {label: Bare or sparse vegetation, color: '#b4b4b4'}
+    70: {label: Snow and ice, color: '#f0f0f0'}
+    80: {label: Permanent water, color: '#0064c8'}
+    90: {label: Herbaceous wetland, color: '#0096a0'}
+    95: {label: Mangroves, color: '#00cf75'}
+    100: {label: Moss and lichen, color: '#fae6a0'}
+source:
+  publisher: European Space Agency (ESA) WorldCover consortium, led by VITO
+  product: ESA WorldCover 10 m 2021 v200
+  url: https://esa-worldcover.org/en/data-access
+  registry: https://registry.opendata.aws/esa-worldcover-vito/
+  doi: 10.5281/zenodo.7254221
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2021 (v200)'
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Land cover: © ESA WorldCover project 2021, contains modified Copernicus Sentinel data (2021) processed by the ESA WorldCover consortium, CC BY 4.0.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_head
+    url: https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_N06E003_Map.tif
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.1). Verified from the build workspace on 2026-11-25: HEAD of tile N06E003 answered 200 (123,693,004 bytes,
+      Accept-Ranges bytes) and a window over Lagos was read by byte range through the generic COG reader (see the release note for the bytes and the
+      classes found).'

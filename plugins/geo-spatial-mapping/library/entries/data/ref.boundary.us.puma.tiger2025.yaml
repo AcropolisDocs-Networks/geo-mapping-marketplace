@@ -1,0 +1,66 @@
+id: ref.boundary.us.puma.tiger2025
+type: boundary
+rev: 1
+status: active
+title: US Public Use Microdata Areas (2020 PUMAs), by state (TIGER/Line)
+summary: 'The 2020 Public Use Microdata Areas of one state: areas of at least 100,000 people that ACS microdata and the ACS 1-year tables are published for.'
+tags:
+  geography: [us]
+  level: [puma]
+  domain: [general, demographics]
+  use_for: [choropleth, join-key]
+  avoid_for: [parcel-level, engineering-grade, legal-boundary, site-precision]
+  scale: [state, metro]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'A rate comes from ACS microdata (PUMS) or a 1-year table published by PUMA.'
+- 'A metro is split into areas of like population, which tracts and ZIP areas are not.'
+avoid_when:
+- 'The value is published by tract or county; PUMAs then only blur it.'
+- 'A printed national map; the lines are full TIGER detail and there is no national file.'
+join:
+  key: GEOID20
+  type: string
+  note: 'State FIPS + PUMA code, 7 characters. Keep leading zeros.'
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: polygon
+  url_template: https://www2.census.gov/geo/tiger/TIGER2025/PUMA20/tl_2025_{statefp}_puma20.zip
+  variant_key: statefp
+  variant_required: true
+  service_route: 'the same areas as a service: the shipped tigerweb profile, layer PUMA_TAD_TAZ_UGA_ZCTA/MapServer'
+  note: 'No cartographic boundary (simplified) file is published for 2020 PUMAs in 2025 (GENZ2025 answered 404 on 2026-11-25); this is the full-detail TIGER file.'
+source:
+  publisher: US Census Bureau
+  product: 2025 TIGER/Line Shapefile, 2020 Public Use Microdata Areas
+  url: https://www2.census.gov/geo/tiger/TIGER2025/PUMA20/
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2020 PUMAs (2025 TIGER)'
+  cadence: static
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, TIGER/Line Shapefiles.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_head
+    url: https://www2.census.gov/geo/tiger/TIGER2025/PUMA20/tl_2025_04_puma20.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.3). Fetched and read from the build workspace on 2026-11-25: Arizona (04), 57 areas, EPSG:4269.'

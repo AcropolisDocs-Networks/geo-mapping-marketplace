@@ -1,0 +1,63 @@
+id: ref.infrastructure.uk.road.os-open-roads
+type: infrastructure
+rev: 1
+status: active
+title: 'OS Open Roads: the road network of Great Britain (Ordnance Survey)'
+summary: 'Every road of Great Britain as connected links with class (motorway, A road, B road, minor), number, name and form, with junction nodes: a generalised network for mapping and routing studies.'
+tags:
+  geography: [uk]
+  level: [line]
+  domain: [general, transport]
+  use_for: [context-basemap, label-reference, flow-line]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level]
+  scale: [national, regional, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [authoritative]
+use_when:
+- 'A British map needs its roads by class from the national source under the Open Government Licence.'
+- 'Road length is measured by class in an area.'
+avoid_when:
+- 'A site map needs kerb lines or lanes; the links are generalised centre lines.'
+- 'Northern Ireland: Great Britain only.'
+crs: EPSG:27700
+delivery:
+  mode: user-supplied
+  format: Zip of the national file (EPSG:27700)
+  geometry: line
+  size_mb: 1010.6
+  layer: road_link
+  layers: [road_link, road_node, motorway_junction]
+  note: 'Too large for one fetch (the library takes 400 MB a file). Download the GeoPackage zip once from the address under source.url (the OS Downloads API, no key), keep the zip as it is, and read the map''s box from it: ref_fetch.py read ref.infrastructure.uk.road.os-open-roads <the zip> --bbox W,S,E,N [--layer NAME]. Only the box is read.'
+source:
+  publisher: Ordnance Survey
+  product: OS Open Roads (2026-10)
+  url: https://api.os.uk/downloads/v1/products/OpenRoads/downloads?area=GB&format=GeoPackage&redirect
+  page: https://osdatahub.os.uk/downloads/open/OpenRoads
+  api: https://api.os.uk/downloads/v1/products/OpenRoads
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2026-10'
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Contains OS data © Crown copyright and database right 2026 (Open Government Licence v3.0).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
+  check:
+    kind: http_get
+    url: https://api.os.uk/downloads/v1/products/OpenRoads
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.6). '

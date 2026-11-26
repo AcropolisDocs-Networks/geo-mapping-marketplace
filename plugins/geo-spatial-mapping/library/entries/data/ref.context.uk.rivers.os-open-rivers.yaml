@@ -1,0 +1,65 @@
+id: ref.context.uk.rivers.os-open-rivers
+type: context
+rev: 1
+status: active
+title: 'OS Open Rivers: watercourses of Great Britain (Ordnance Survey)'
+summary: 'Every named and unnamed watercourse of Great Britain as connected centre lines with flow direction, from Ordnance Survey: rivers, streams, canals and tidal reaches.'
+tags:
+  geography: [uk]
+  level: [line, water]
+  domain: [general]
+  use_for: [context-basemap, label-reference]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level]
+  scale: [national, regional, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [authoritative]
+use_when:
+- 'A British map needs its rivers and canals at more detail than Natural Earth, with their names.'
+- 'A river network is followed or measured (links carry flow direction and start and end nodes).'
+avoid_when:
+- 'Northern Ireland is wanted: this is Great Britain only.'
+- 'River width or banks are the point; these are centre lines (OpenStreetMap or OS Zoomstack hold the water areas).'
+crs: EPSG:27700
+delivery:
+  mode: fetch
+  format: Zip of the national file (EPSG:27700)
+  geometry: line
+  size_mb: 52.5
+  rolling: true
+  layer: watercourse_link
+  layers: [watercourse_link, hydro_node]
+  features: 193722
+  columns: [id, flow_direction, length, fictitious, form, watercourse_name, watercourse_name_alternative, start_node, end_node]
+source:
+  publisher: Ordnance Survey
+  product: OS Open Rivers (2026-10)
+  url: https://api.os.uk/downloads/v1/products/OpenRivers/downloads?area=GB&format=GeoPackage&redirect
+  page: https://osdatahub.os.uk/downloads/open/OpenRivers
+  api: https://api.os.uk/downloads/v1/products/OpenRivers
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2026-10'
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Contains OS data © Crown copyright and database right 2026 (Open Government Licence v3.0).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
+  check:
+    kind: http_get
+    url: https://api.os.uk/downloads/v1/products/OpenRivers
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.6). '

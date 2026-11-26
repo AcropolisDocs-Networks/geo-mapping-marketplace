@@ -1,0 +1,63 @@
+id: ref.infrastructure.us.road.tiger-all
+type: infrastructure
+rev: 1
+status: active
+title: US all roads, by county (TIGER/Line)
+summary: 'Every road the Census Bureau holds in one county, local streets included, with its name and class (MTFCC): one file per county.'
+tags:
+  geography: [us]
+  level: [line]
+  domain: [general, transport]
+  use_for: [context-basemap, label-reference]
+  avoid_for: [parcel-level, engineering-grade, legal-boundary, site-precision]
+  scale: [metro, local, site]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [annual]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'A local or site map needs the street grid of one county with street names, from a public-domain source.'
+- 'Streets are counted or measured (road length a tract) and the licence must be public domain.'
+avoid_when:
+- 'A state or national map: use ref.infrastructure.us.road.tiger-prisec (primary and secondary roads, one file a state).'
+- 'Routing or travel time: the file has no turn rules or speeds (use the routing sources).'
+pairs_with: [ref.infrastructure.us.road.tiger-prisec]
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: line
+  url_template: https://www2.census.gov/geo/tiger/TIGER2025/ROADS/tl_2025_{county}_roads.zip
+  variant_key: county
+  variant_required: true
+  service_route: 'the same areas as a service: the shipped tigerweb profile, layer Transportation/MapServer'
+  note: 'The variant is the 5-digit county FIPS code (04013 is Maricopa County, Arizona; 18.7 MB). MTFCC S1100 is a primary road, S1200 secondary, S1400 a local street.'
+source:
+  publisher: US Census Bureau
+  product: 2025 TIGER/Line Shapefile, All Roads, by county
+  url: https://www2.census.gov/geo/tiger/TIGER2025/ROADS/
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, TIGER/Line Shapefiles.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
+  check:
+    kind: http_head
+    url: https://www2.census.gov/geo/tiger/TIGER2025/ROADS/tl_2025_04013_roads.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.3). Fetched and read from the build workspace on 2026-11-25: Maricopa County (04013), 123,711 road segments, EPSG:4269.'

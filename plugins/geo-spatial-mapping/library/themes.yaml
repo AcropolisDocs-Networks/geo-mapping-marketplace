@@ -42,14 +42,14 @@ themes:
     says: "Roads and streets"
     words: [road, roads, street, streets, highway, highways, arterial, arterials, freeway, freeways, road network, street grid]
     compare: true
-    entries: [infrastructure.us.road.tiger-prisec, infrastructure.us.road.tiger-primary, public-service.world.osm.overpass, infrastructure.world.osm.geofabrik,
-              infrastructure.na.road.ne10, infrastructure.world.road.ne10, "public-service.us-*.gis.*"]
+    entries: [infrastructure.us.road.tiger-prisec, infrastructure.us.road.tiger-primary, infrastructure.us.road.tiger-all, public-service.world.osm.overpass,
+              infrastructure.world.osm.geofabrik, infrastructure.uk.road.os-open-roads, infrastructure.na.road.ne10, infrastructure.world.road.ne10, "public-service.us-*.gis.*"]
     note: "TIGER names primary and secondary roads and puts every other street in one class; OpenStreetMap's highway tag separates arterials from local streets; the Natural Earth roads are for small scales only."
     gap: "State DOT functional classes (arterial, collector) are not in the library: Day 25 used Arizona DOT's layer by hand."
   rail-transit:
     says: "Rail lines and public transit"
     words: [rail, railway, railroad, transit, bus, subway, metro, light rail, train, gtfs, stops, stations, ferry]
-    entries: [infrastructure.us.rail.tiger, public-service.world.transit.transitland, public-service.world.transit.navitia, "public-service.*.transit.*", public-service.world.osm.overpass]
+    entries: [infrastructure.us.rail.tiger, public-service.world.transit.transitland, public-service.world.transit.navitia, "public-service.*.transit.*", public-service.world.osm.overpass, infrastructure.world.rail.ne10]
   buildings:
     says: "Building footprints and heights"
     words: [building, buildings, footprint, footprints, rooftops, roofs, built form, massing]
@@ -60,7 +60,7 @@ themes:
     says: "Elevation models (bare earth)"
     words: [elevation, dem, terrain, relief, hillshade, contours, slope, viewshed, line of sight, topography]
     entries: [terrain.us.dem.3dep, terrain.ca.dem.mrdem, terrain.fr.dem.rge-alti, terrain.jp.dem.gsi, terrain.se.dem.lantmateriet-mhm, terrain.be-vlg.dem.dhmv, terrain.au.dem.ga-lidar-5m,
-              terrain.world.dem.copernicus-glo30, terrain.world.dem.nasadem, terrain.world.dem.opentopography, terrain.world.dem.terrarium, terrain.arctic.dem.arcticdem, terrain.antarctica.dem.rema]
+              terrain.world.dem.copernicus-glo30, terrain.world.dem.nasadem, terrain.world.dem.opentopography, terrain.world.dem.terrarium, terrain.arctic.dem.arcticdem, terrain.antarctica.dem.rema, terrain.world.relief.ne50-shaded]
     note: "Bare earth: buildings and trees are not in these, so a line of sight over them sees more than is there."
   lidar:
     says: "Lidar point clouds and surface models"
@@ -75,16 +75,25 @@ themes:
     says: "Countries, states, counties, towns"
     words: [boundary, boundaries, border, borders, country, countries, state, states, county, counties, province, municipality, city limits, admin]
     entries: ["boundary.us.state.*", "boundary.us.county.*", boundary.us.place.cb500k, boundary.us.cousub.tiger, "boundary.ca.*", "boundary.mx.*", "boundary.fr.*", boundary.uk.lad.ons,
-              boundary.europe.nuts.gisco2024, "boundary.world.country.*", "boundary.world.state.*", boundary.world.admin.gadm41, boundary.world.division.overture]
+              boundary.uk.admin.os-boundary-line, boundary.europe.nuts.gisco2024, "boundary.world.country.*", "boundary.world.state.*", boundary.world.admin.cod-ab, boundary.world.admin.gadm41,
+              boundary.world.division.overture, boundary.world.disputed-lines.ne50, boundary.world.disputed-areas.ne50]
   boundaries-statistical:
     says: "Census and market areas"
-    words: [tract, tracts, block group, zip, zcta, cbsa, metro area, urban area, market, dma, crosswalk]
+    words: [tract, tracts, block group, zip, zcta, cbsa, metro area, urban area, market, dma, crosswalk, puma, microdata]
     entries: [boundary.us.tract.cb500k, boundary.us.block-group.cb500k, boundary.us.zcta.cb2020-500k, boundary.us.cbsa.cb500k, boundary.us.urban-area.cb2020-500k,
-              crosswalk.us.county-cbsa.omb2023, boundary.us.dma.nielsen]
+              boundary.us.puma.tiger2025, crosswalk.us.county-cbsa.omb2023, boundary.us.dma.nielsen]
+  boundaries-political:
+    says: "Election, legislative and school districts"
+    words: [congressional district, congressional districts, district, districts, legislative district, state senate, state house, assembly district, school district,
+            school districts, precinct, precincts, voting district, ward, election]
+    entries: [boundary.us.congressional.cb500k, boundary.us.state-legislative-upper.cb500k, boundary.us.state-legislative-lower.cb500k, boundary.us.school-unified.cb500k,
+              boundary.us.school-elementary.cb500k, boundary.us.school-secondary.cb500k, boundary.us.voting-district.cb2020-500k]
+    note: "State legislative, school and voting districts come one file a state; the layer names its state (source.variant, the 2-digit FIPS code). Voting districts are the 2020 snapshot."
   boundaries-land:
     says: "Public, tribal, military and protected land"
-    words: [tribal, reservation, public land, blm, forest, national forest, park, protected, military, federal land]
-    entries: [boundary.us.aiannh.cb500k, boundary.us.surface-management.blm, boundary.us.protected.pad-us, boundary.us.protected.usfs-forests, boundary.us.military.tiger]
+    words: [tribal, reservation, public land, blm, national forest, park, parks, national park, protected, protected area, protected areas, reserve, military, federal land, wdpa]
+    entries: [boundary.us.aiannh.cb500k, boundary.us.surface-management.blm, boundary.us.protected.pad-us, boundary.us.protected.usfs-forests, boundary.us.military.tiger,
+              boundary.world.protected.wdpa]
   boundaries-historical:
     says: "Borders as of a past date"
     words: [historical, history, ancient, old borders, as of]
@@ -102,12 +111,21 @@ themes:
   water:
     says: "Rivers, lakes, coasts and canals"
     words: [water, river, rivers, lake, lakes, stream, streams, canal, canals, coast, coastline, ocean, hydrography, watershed, basin]
-    entries: [context.us.hydrography.nhdplus-hr, context.us.water-area.tiger, context.us.water-linear.tiger, context.world.rivers.ne10, "context.world.lakes.*",
-              context.world.ocean.ne10, context.world.coastline.ne110, public-service.world.osm.overpass]
+    entries: [context.us.hydrography.nhdplus-hr, context.us.water-area.tiger, context.us.water-linear.tiger, "context.world.rivers.*", "context.world.lakes.*",
+              "context.world.ocean.*", "context.world.coastline.*", context.uk.rivers.os-open-rivers, public-service.world.osm.overpass, context.world.reefs.ne10, context.world.marine-areas.ne50]
   land-ground:
     says: "Land, land cover and built-up areas"
-    words: [land, land cover, landcover, ground, urban area, built-up, vegetation, nlcd]
-    entries: [context.world.ground.overture, context.world.land.osm-simplified, context.us.landcover.nlcd, context.world.urban.ne10]
+    words: [land, land cover, landcover, ground, urban area, built-up, vegetation, nlcd, worldcover, forest, cropland, land use]
+    entries: [context.world.ground.overture, context.world.land.osm-simplified, context.world.land.ne50, context.world.landcover.esa-worldcover, context.us.landcover.nlcd, context.world.urban.ne10,
+              context.world.forest.global-forest-change, context.uk.greenspace.os-open-greenspace, context.uk.built-up.os-open-built-up-areas, context.world.glaciers.ne50, context.world.playas.ne50]
+  reference-lines:
+    says: "Time zones, tropics, the equator and the date line"
+    words: [time zone, time zones, timezone, equator, tropic, tropics, arctic circle, date line, graticule]
+    entries: [boundary.world.time-zones.ne10, context.world.geographic-lines.ne50]
+  airports-ports:
+    says: "Airports and sea ports"
+    words: [airport, airports, port, ports, harbour, harbor, seaport]
+    entries: [infrastructure.world.airport.ne10, infrastructure.world.port.ne10, public-service.world.osm.overpass]
   hazards:
     says: "Floods, fires, earthquakes and storms"
     words: [hazard, hazards, flood, floodplain, fire, wildfire, earthquake, storm, storms, risk, resilience]
@@ -134,11 +152,12 @@ themes:
     says: "Place names and landforms"
     words: [place names, names, gazetteer, cities, towns, landforms, peaks, labels]
     entries: [gazetteer.world.place.ne10, gazetteer.world.place.ne110, gazetteer.world.place.geonames-cities1000, gazetteer.world.place.geonames, gazetteer.world.place.overture,
-              gazetteer.world.place.wof, gazetteer.us.landform.gnis, public-service.world.wikidata]
+              gazetteer.world.place.wof, gazetteer.us.landform.gnis, gazetteer.uk.place.os-open-names, public-service.world.wikidata, gazetteer.world.place.ne50]
   geocoding:
     says: "Addresses to points"
     words: [geocode, geocoding, address, addresses]
-    entries: [public-service.us.geocoder.census, public-service.world.geocoder.nominatim, public-service.world.geocoder.geoapify, gazetteer.world.address.openaddresses]
+    entries: [public-service.us.geocoder.census, public-service.world.geocoder.nominatim, public-service.world.geocoder.geoapify, gazetteer.world.address.openaddresses,
+              gazetteer.us.address-range.tiger, gazetteer.uk.postcode.os-code-point-open]
   routing:
     says: "Travel times and routes"
     words: [route, routing, travel time, isochrone, drive time, walk time, walkshed]

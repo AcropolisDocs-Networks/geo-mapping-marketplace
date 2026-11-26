@@ -1,0 +1,44 @@
+id: ref.context.world.lakes.ne50
+type: context
+rev: 1
+status: active
+title: World lakes, 50m (Natural Earth)
+summary: 'The lakes and reservoirs that read at continental scale (412), drawn as the water of a 1:10,000,000 to 1:50,000,000 map so that it matches a 50m coast.'
+tags:
+  geography: [world]
+  level: [water]
+  domain: [general]
+  use_for: [context-basemap, locator-inset, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T0, T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A continental or large-country map (the Mediterranean, the conterminous United States, India) shows its lakes at the same generalisation as its coast.']
+avoid_when: ['The map is regional or larger in scale than 1:10,000,000; the 10m lakes follow the shore more closely.']
+pairs_with: [ref.boundary.world.country.ne50]
+crs: EPSG:4326
+delivery:
+  mode: bundled
+  path: assets/basemaps/ne_50m_lakes.parquet
+  sha256: 2887f323a1a2b3bc19f6acc01416e8f59fecb8d65d24c9f9bfa6607ad3d661c8
+  size_mb: 0.13
+  format: GeoParquet (zstd)
+  features: 412
+  columns: [name, scalerank, featurecla, min_zoom, min_label, label]
+source: {publisher: Natural Earth, product: 'Lakes + Reservoirs, 50m', url: 'https://naciscdn.org/naturalearth/50m/physical/ne_50m_lakes.zip',
+  file_sha256: f28d42c286d96b57a17aac2cbeb432f8c65532c20063495711fbc64e24666df3}
+url_verified_on: 2026-11-25
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-25
+  verify_by: 2027-11-25
+  check: {kind: feature_count_and_hash, features: 412, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-25, note: 'Bundled payload built from the Natural Earth archive downloaded on 2026-11-25 (5.2.0, open data portals P2.2: the 1:50m ground tier).'}

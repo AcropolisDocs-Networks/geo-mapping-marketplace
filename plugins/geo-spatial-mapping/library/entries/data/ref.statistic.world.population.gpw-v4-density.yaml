@@ -1,0 +1,68 @@
+id: ref.statistic.world.population.gpw-v4-density
+type: statistic
+rev: 1
+status: draft
+title: 'Gridded Population of the World v4.11: population density, 2000 to 2020 (SEDAC, frozen)'
+summary: 'People a square kilometre for 2000, 2005, 2010, 2015 and 2020, the GPWv4 count divided by land area: GeoTIFF grids from 30 arc-seconds to 1 degree.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [demographics]
+  use_for: [density-surface]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T2]
+  license_class: [attribution]
+  quality: [derived]
+use_when:
+- 'A world or continental density surface is drawn straight from the grid (the 2.5 arc-minute file is 22 MB).'
+avoid_when:
+- 'A local map, for the reason given for the count: density is even across each census unit.'
+- 'A newer version is expected: NASA ended SEDAC''s contract on 30 April 2025. The data were restored in Earthdata Cloud on 17 June 2025 and are complete but frozen: no new versions.'
+join:
+  key: none
+  type: raster
+  note: 'No join: the value is read under polygons with a zonal sum (count) or mean (density).'
+delivery:
+  mode: fetch
+  tool: earthdata
+  short_name: CIESIN_SEDAC_GPWv4_POPDENS_R11
+  concept_id: C3540910651-ESDIS
+  format: GeoTIFF in a zip, EPSG:4326
+  files: 'gpw-v4-population-density-rev11_{year}_{grain}_tif.zip (grain: 30_sec 347 MB, 2pt5_min 22 MB, 15_min, 30_min, 1_deg)'
+  note: 'Fetched with the Earthdata tools and the person''s one token: earthdata_search (short_name=CIESIN_SEDAC_GPWv4_POPDENS_R11, kind=granules) lists the files, earthdata_fetch (urls=<one file>)
+    shows the plan and downloads after the person agrees, into data/earthdata/CIESIN_SEDAC_GPWv4_POPDENS_R11/. The GeoTIFF inside the zip is then a file layer (role: raster) with
+    this entry named in its provenance. Draft until one download has been made with a real token (see the changelog).'
+source:
+  publisher: 'NASA Socioeconomic Data and Applications Center (SEDAC), CIESIN, Columbia University'
+  product: CIESIN_SEDAC_GPWv4_POPDENS_R11
+  url: https://cmr.earthdata.nasa.gov/search/concepts/C3540910651-ESDIS.html
+url_verified_on: '2026-11-25'
+vintage:
+  current: frozen (no new versions since SEDAC closed in 2025)
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: CIESIN, Columbia University, Gridded Population of the World v4.11: population density, 2000 to 2020, NASA SEDAC (CC BY 4.0).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://cmr.earthdata.nasa.gov/search/collections.json?concept_id=C3540910651-ESDIS
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'Draft (5.2.0, open data portals P2.4). Verified on 2026-11-25: the collection and its files are listed by the Common Metadata Repository with no key, and
+      from the person''s computer the fetch plan for one file named data.earthdata.nasa.gov as the only host the token goes to. No file was downloaded: a
+      download needs the person''s agreement to the plan, and an Earthdata forum thread reports access-denied answers for GPW files, so the entry is not
+      offered until one download has succeeded. The copy on Harvard Dataverse asks for a guestbook form before each download, so it is not a route.'

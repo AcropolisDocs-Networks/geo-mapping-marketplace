@@ -1,0 +1,62 @@
+id: ref.gazetteer.uk.place.os-open-names
+type: gazetteer
+rev: 1
+status: active
+title: 'OS Open Names: place names, road names and postcodes of Great Britain'
+summary: 'About three million named things of Great Britain as points: settlements, roads by name and number, postcodes, landforms, water and woodland, each with its type and the areas it is in.'
+tags:
+  geography: [uk]
+  level: [place]
+  domain: [general, geocoding]
+  use_for: [label-reference, join-key]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level, site-precision]
+  scale: [national, regional, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [authoritative]
+use_when:
+- 'Place and street names of Great Britain are looked up or labelled from the national source, with no key.'
+- 'A list of British place names is turned into points.'
+avoid_when:
+- 'Only towns and cities are needed on a small-scale map: GeoNames or Natural Earth places are far smaller.'
+- 'Northern Ireland: Great Britain only.'
+crs: EPSG:27700
+delivery:
+  mode: user-supplied
+  format: Zip of the national file (EPSG:27700)
+  geometry: point
+  size_mb: 209.5
+  layer: named_place
+  note: 'Too large for one fetch (the zip opens to 2.1 GB, over the 2 GB a fetch may unpack). Download the GeoPackage zip once from the address under source.url (the OS Downloads API, no key), keep the zip as it is, and read the map''s box from it: ref_fetch.py read ref.gazetteer.uk.place.os-open-names <the zip> --bbox W,S,E,N [--layer NAME]. Only the box is read.'
+source:
+  publisher: Ordnance Survey
+  product: OS Open Names (2026-10)
+  url: https://api.os.uk/downloads/v1/products/OpenNames/downloads?area=GB&format=GeoPackage&redirect
+  page: https://osdatahub.os.uk/downloads/open/OpenNames
+  api: https://api.os.uk/downloads/v1/products/OpenNames
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2026-10'
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Contains OS data © Crown copyright and database right 2026 (Open Government Licence v3.0).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
+  check:
+    kind: http_get
+    url: https://api.os.uk/downloads/v1/products/OpenNames
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.6). '

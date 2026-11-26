@@ -681,7 +681,7 @@ def _source_path(plan, l, win, shape=(512, 512)) -> tuple[str, dict | None, list
     if src == "pop":
         import raster_fetch as rf
         try:
-            r = rf.raster_for(info["entry_id"], window_wgs84(plan, win))
+            r = rf.raster_for(info["entry_id"], window_wgs84(plan, win), variant=(l.spec.get("source") or {}).get("variant"))
         except Exception as ex:  # noqa: BLE001 - RasterFetchError, or a service failure under it
             raise RasterLayerError(f"layer '{l.id}': {ex}", gc.EXIT_RUNTIME)
         return r["path"], r["record"], r["findings"]
@@ -705,7 +705,19 @@ def raster_layer(plan, l, win, shape) -> None:
     import legend as lg
     rio = _rio()
     t = plan.tokens
-    cfg = raster_cfg(l.spec)
+    est = ((getattr(l, "entry", None) or {}).get("style") or {})
+    variant = str((l.spec.get("source") or {}).get("variant") or "")
+    cogb = ((getattr(l, "entry", None) or {}).get("delivery") or {}).get("cog") or {}
+    if not variant and cogb.get("variants"):
+        variant = str(cogb.get("default_variant") or cogb["variants"][0])
+    edef = est.get("raster") or {}                                       # 5.2.0: the entry's own drawing defaults (nodata, unit, ends), under the layer's
+    edef = {**{k: v for k, v in edef.items() if k != "variants"}, **((edef.get("variants") or {}).get(variant) or {})}
+    cfg = raster_cfg({**l.spec, "raster": {**edef, **(l.spec.get("raster") or {})}})
+    own = entry_classes(getattr(l, "entry", None)) if not variant or variant in (est.get("classes_for") or [variant]) else {}
+    given = l.spec.get("raster") or {}
+    if own and not given.get("ramp") and not given.get("classes"):       # 5.2.0: a classed library raster is drawn as its classes unless told otherwise
+        cfg["ramp"] = "categorical"
+        cfg["resampling"] = str(given.get("resampling") or "nearest")
     path, fetch_rec, fs = _source_path(plan, l, win, shape)
     plan.findings += [{**f, "layer": l.id} for f in fs]
     info = rio.open_info(path)
@@ -720,19 +732,25 @@ def raster_layer(plan, l, win, shape) -> None:
     if a.count() == 0:
         raise RasterLayerError(f"layer '{l.id}': the raster holds no value inside the map window (it lies elsewhere, or it is all nodata)")
     alpha = 255
-    title = lg._layer_title(l.spec)
+    etitle = ((est.get("titles") or {}).get(variant) if variant else None) or est.get("title")
+    title = lg._layer_title(l.spec if (l.spec.get("title") or (l.spec.get("legend") or {}).get("title") or not etitle) else {**l.spec, "title": str(etitle)})
     unit = cfg["unit"]
     legend_title = title + (f" ({unit})" if unit and unit not in title else "")
     lspec = l.spec | {"title": legend_title, "legend": {**(l.spec.get("legend") or {}), "title": legend_title}}
     if cfg["ramp"] == "categorical":
         vals = np.unique(a.compressed())
-        if len(vals) > len(t["categorical"]):
-            raise RasterLayerError(f"layer '{l.id}': {len(vals)} distinct values is more than the brand's {len(t['categorical'])} categorical colours; "
-                                   "classify it (raster.classes) on the sequential ramp instead")
         import map_look
-        colors = map_look.categorical_pick(t, len(vals))
+        publisher = bool(own) and str(given.get("colors") or "publisher").lower() != "brand" and all(own.get(float(v), {}).get("color") for v in vals)
+        if publisher:                                     # 5.2.0: the publisher's class colours (the entry's style.classes), as a service picture keeps its own
+            colors = [own[float(v)]["color"] for v in vals]
+        else:
+            if len(vals) > len(t["categorical"]):
+                raise RasterLayerError(f"layer '{l.id}': {len(vals)} distinct values is more than the brand's {len(t['categorical'])} categorical colours; "
+                                       "classify it (raster.classes) on the sequential ramp instead")
+            colors = map_look.categorical_pick(t, len(vals))
         breaks = [float(x + y) / 2 for x, y in zip(vals, vals[1:])]
-        labels_map = {str(k): str(v) for k, v in (cfg["labels"] or {}).items()} if isinstance(cfg["labels"], dict) else {}
+        labels_map = {str(_num(k)): v["label"] for k, v in own.items()}
+        labels_map.update({str(k): str(v) for k, v in (cfg["labels"] or {}).items()} if isinstance(cfg["labels"], dict) else {})
         labels = [labels_map.get(str(_num(v)), str(_num(v))) for v in vals]
         if len(vals) == 1:
             png, entries = rio.to_png(a, [colors[0], colors[0]], vmin=float(vals[0]), vmax=float(vals[0]) + 1, alpha=alpha)
@@ -741,7 +759,8 @@ def raster_layer(plan, l, win, shape) -> None:
         items = [{"label": lab, "fill": col, "stroke": t["legend_frame"], "opacity": cfg["opacity"]} for lab, col in zip(labels, colors)]
         l.legend_block = {"layer": l.id, "title": legend_title, "kind": "categories", "items": items, "note": (l.spec.get("legend") or {}).get("note")}
         l.colors, l.palette_kind = colors, "categorical"
-        how = f"{len(vals)} categories in the brand's categorical colours"
+        how = (f"{len(vals)} classes in the publisher's own colours (the library entry's legend)" if publisher
+               else f"{len(vals)} categories in the brand's categorical colours")
     elif cfg["classes"]:
         breaks, ends = class_edges(cfg["classes"], a)
         pk = "diverging" if cfg["ramp"] == "diverging" else "sequential"
@@ -826,8 +845,23 @@ def raster_layer(plan, l, win, shape) -> None:
     _finish(plan, l, rec)
 
 
+def entry_classes(entry) -> dict:
+    """{value: {label, color}} from a library entry's `style.classes` (5.2.0): the publisher's own legend for a classed raster (land cover).
+    The MapSpec still names no colour: the entry carries the publisher's, the way a service picture carries its own."""
+    out = {}
+    for k, v in ((((entry or {}).get("style") or {}).get("classes")) or {}).items():
+        if isinstance(v, dict) and v.get("label"):
+            try:
+                out[float(k)] = {"label": str(v["label"]), "color": str(v.get("color") or "")}
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
 def _fetch_step(rec: dict) -> str:
-    if rec.get("tiles"):
+    if rec.get("tiles") and "ghsl" not in str(rec.get("entry")):
+        what = f"tile(s) {', '.join(rec['tiles'])} of {rec.get('entry')}" + (f", every {rec['factor']}th cell" if int(rec.get("factor") or 1) > 1 else "")
+    elif rec.get("tiles"):
         what = f"GHSL tile(s) {', '.join(rec['tiles'])}"
     elif rec.get("country"):
         what = f"the WorldPop file for {rec['country']}"

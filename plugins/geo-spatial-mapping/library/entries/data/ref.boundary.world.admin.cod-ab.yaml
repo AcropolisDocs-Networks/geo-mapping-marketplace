@@ -1,0 +1,95 @@
+id: ref.boundary.world.admin.cod-ab
+type: boundary
+rev: 1
+status: active
+title: COD-AB administrative boundaries (OCHA, on the Humanitarian Data Exchange), by country
+summary: 'The administrative boundaries humanitarian agencies agree to use for a country, admin 0 down to 2, 3 or 4, each area with its P-code, from the
+  country''s own mapping or statistics agency through OCHA. One country and one level are fetched at a time, with the licence HDX states for that country.'
+tags:
+  geography: [africa, asia, latin-america-and-the-caribbean, oceania, eastern-europe]
+  level: [admin0, admin1, admin2, admin3, admin4, country, state, county]
+  domain: [general, demographics, hazard]
+  use_for: [choropleth, join-key, context-basemap, market-rollup]
+  avoid_for: [engineering-grade, site-precision, legal-boundary]
+  scale: [national, regional, state, metro]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [authoritative]
+use_when:
+- 'A map of a country where humanitarian or development data is published by P-code (HDX population, needs, displacement tables): the P-codes join them.'
+- Sub-national boundaries are wanted from the country's own agency, deeper than admin 1, for a country OCHA covers (about 150 countries and territories).
+avoid_when:
+- 'The country is not one OCHA works in (most of Europe, North America, Australia): there is no COD-AB; use the national files or geoBoundaries.'
+- 'A country''s dataset is kept in its own layout (Colombia was, on 2026-11-25): the fetch says so and lists the files; download the level and give the file.'
+- The line is read as a legal boundary; a COD-AB is an operational agreement, and disputed lines are drawn as the contributor chose.
+pairs_with: [ref.statistic.world.population.worldpop]
+distinct_from:
+- id: ref.boundary.world.country.geoboundaries
+  why: open licences only, one API, simplified files; no P-codes
+- id: ref.boundary.world.admin.gadm41
+  why: one consistent source for every country, non-commercial terms
+join:
+  key: ADM1_PCODE
+  type: string
+  note: 'The P-code of the level (ADM1_PCODE, ADM2_PCODE ...): the country''s ISO alpha-2 code and digits (KE030). The fetch record names the P-code and the
+    name column found.'
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  tool: hdx_cod
+  geometry: polygon
+  format: GeoJSON in a zip (one file an admin level), named <iso3>_admin_boundaries.geojson.zip on HDX; cached as GeoParquet with a record
+  variant_key: iso3
+  variant_required: true
+  default_level: adm1
+  api: https://data.humdata.org/api/3/action/package_show?id=cod-ab-{iso3}
+  note: 'ref_fetch.py fetch ref.boundary.world.admin.cod-ab --variant ken --level adm1 (in a MapSpec: source.variant ken-adm1). The dataset''s licence, its
+    contributor and its caveats are read from HDX at each fetch and written into the record and the credit; the person answers the licence pop-up once for
+    each country (licence_acknowledge entry_id=ref.boundary.world.admin.cod-ab@ken).'
+source:
+  publisher: United Nations Office for the Coordination of Humanitarian Affairs (OCHA), with each country's contributing agency
+  product: Common Operational Datasets, Administrative Boundaries (COD-AB)
+  url: https://data.humdata.org/dashboards/cod
+url_verified_on: '2026-11-25'
+vintage:
+  current: as each country's dataset states (read at fetch)
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Boundaries: OCHA COD-AB on the Humanitarian Data Exchange (data.humdata.org); the country''s contributor and licence are in the map''s record.'
+  acknowledgment:
+    provider: OCHA and the country's contributor
+    product: COD-AB boundaries for {VARIANT}
+    per_variant: true
+    terms_url: https://data.humdata.org/dataset/cod-ab-{variant}
+    question: 'COD-AB boundaries are shared by each country''s own agency through OCHA, and the licence differs by country (most are CC BY-IGO; some set
+      other terms or caveats). The licence for {VARIANT} is on its HDX page. The map plugin does not decide for you: have you read that page, and which of
+      these uses do its terms allow you? Your answer is kept in your own folder, for this country only, and you can withdraw it.'
+    uses:
+    - internal
+    - publication
+    - commercial
+    - redistribution
+  note: 'The flags describe the common case (CC BY-IGO: use, share and adapt with credit, commercial use included). A country under other terms is used
+    only as the person acknowledged for that country; the licence HDX states is printed in the record either way.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://data.humdata.org/api/3/action/package_show?id=cod-ab-ken
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.5). Verified from the build workspace on 2026-11-25: package_show answered for Kenya, Nigeria, Haiti and
+      Ukraine (all CC BY-IGO, the standard <iso3>_admin_boundaries.geojson.zip) and Colombia (its own layout: refused with its files listed); the Kenya
+      file (6,957,132 bytes) was fetched and admin 1 read (47 counties).'

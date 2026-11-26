@@ -172,7 +172,10 @@ def license_gate(e: dict, req: dict) -> tuple[list[str], list[str]]:
     # 1.15.0: data under a third party's licence is not hidden: the person says, in a pop-up, whether they hold that licence and for which
     # uses (licence_ack). Until they answer, the reason names the pop-up; after, their licence decides external, commercial and redistribution.
     import licence_ack as la
-    if la.required(e):
+    if la.required(e) and la.required(e).get("per_variant"):
+        # 5.2.0: terms that differ by country (COD-AB) are asked for the map's own country when its layer is fetched, not here
+        cautions.append(f"{la.required(e)['provider']}: the terms differ by country; the licence pop-up is answered once for each country used.")
+    elif la.required(e):
         ack = la.current(e.get("id", ""))
         prov = la.required(e)["provider"]
         if ack is None:

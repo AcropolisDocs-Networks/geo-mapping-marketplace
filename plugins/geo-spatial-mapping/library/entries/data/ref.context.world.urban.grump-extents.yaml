@@ -1,0 +1,64 @@
+id: ref.context.world.urban.grump-extents
+type: context
+rev: 1
+status: draft
+title: 'GRUMP v1 urban extents grid, 1995 (SEDAC, frozen)'
+summary: 'Urban against rural for the whole world at 30 arc-seconds as of about 1995, from night lights and settlement points: a historical baseline of where cities were.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [general]
+  use_for: [context-basemap]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T2]
+  license_class: [attribution]
+  quality: [derived]
+use_when:
+- 'A then-and-now story needs the urban footprint of the mid 1990s against a current built-up layer.'
+avoid_when:
+- 'Anything current: the extents are thirty years old (ESA WorldCover built-up is 2021 at 10 m).'
+- 'A newer version is expected: NASA ended SEDAC''s contract on 30 April 2025. The data were restored in Earthdata Cloud on 17 June 2025 and are complete but frozen: no new versions.'
+delivery:
+  mode: fetch
+  tool: earthdata
+  short_name: CIESIN_SEDAC_GRUMPv1_EXT
+  concept_id: C3540930317-ESDIS
+  format: GeoTIFF in a zip, EPSG:4326
+  files: 'one zip a country or continent in the collection (<iso3>_grumpv1_urextent_ascii_30.zip and others)'
+  note: 'Fetched with the Earthdata tools and the person''s one token: earthdata_search (short_name=CIESIN_SEDAC_GRUMPv1_EXT, kind=granules) lists the files, earthdata_fetch (urls=<one file>)
+    shows the plan and downloads after the person agrees, into data/earthdata/CIESIN_SEDAC_GRUMPv1_EXT/. The GeoTIFF inside the zip is then a file layer (role: raster) with
+    this entry named in its provenance. Draft until one download has been made with a real token (see the changelog).'
+source:
+  publisher: 'NASA Socioeconomic Data and Applications Center (SEDAC), CIESIN, Columbia University'
+  product: CIESIN_SEDAC_GRUMPv1_EXT
+  url: https://cmr.earthdata.nasa.gov/search/concepts/C3540930317-ESDIS.html
+url_verified_on: '2026-11-25'
+vintage:
+  current: frozen (no new versions since SEDAC closed in 2025)
+  cadence: static
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: CIESIN, Columbia University, GRUMP v1 urban extents grid, 1995, NASA SEDAC (CC BY 4.0).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://cmr.earthdata.nasa.gov/search/collections.json?concept_id=C3540930317-ESDIS
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'Draft (5.2.0, open data portals P2.4). Verified on 2026-11-25: the collection and its files are listed by the Common Metadata Repository with no key, and
+      from the person''s computer the fetch plan for one file named data.earthdata.nasa.gov as the only host the token goes to. No file was downloaded: a
+      download needs the person''s agreement to the plan, and an Earthdata forum thread reports access-denied answers for GPW files, so the entry is not
+      offered until one download has succeeded. The copy on Harvard Dataverse asks for a guestbook form before each download, so it is not a route.'

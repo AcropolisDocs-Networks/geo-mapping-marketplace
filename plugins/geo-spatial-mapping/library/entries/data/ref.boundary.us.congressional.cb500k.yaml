@@ -1,0 +1,65 @@
+id: ref.boundary.us.congressional.cb500k
+type: boundary
+rev: 1
+status: active
+title: US congressional districts, 119th Congress, 1:500,000 (Census cartographic boundary)
+summary: 'The 441 areas of the 119th Congress (the 435 districts, the delegate districts and the areas with none) (2025 to 2027) as one national file, for maps by district.'
+tags:
+  geography: [us]
+  level: [congressional-district]
+  domain: [general, demographics]
+  use_for: [choropleth, join-key, context-basemap, atlas]
+  avoid_for: [parcel-level, engineering-grade, legal-boundary, site-precision]
+  scale: [national, regional, state, metro]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [annual]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'A map by congressional district: a rate from the ACS, a programme''s reach, sites counted by district.'
+- 'District lines as context over a market or a state.'
+avoid_when:
+- 'The map is of an earlier Congress: districts are redrawn; this file is the 119th only.'
+- 'The exact line through a block matters; these are simplified to 1:500,000 (use TIGERweb).'
+join:
+  key: GEOID
+  type: string
+  note: 'State FIPS + district, 4 characters (0401); 98 marks a delegate district and ZZ areas with no district.'
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: polygon
+  size_mb: 6.74
+  features: 441
+  service_route: 'the same areas as a service: the shipped tigerweb profile, layer Legislative/MapServer (119th Congressional Districts)'
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, 119th Congressional Districts, 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_cd119_500k.zip
+  file_sha256: 8e804518d333d67e24e25c61767c6a7c78fd0a0852179e8cc19c36fd66011010
+url_verified_on: '2026-11-25'
+vintage:
+  current: '119th Congress (2025)'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_head
+    url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_us_cd119_500k.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.3). Fetched and read from the build workspace on 2026-11-25: the national file, 441 features, EPSG:4269, SHA-256 8e804518d333....'

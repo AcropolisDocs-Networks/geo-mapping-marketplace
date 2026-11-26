@@ -73,6 +73,9 @@ python3 "$GMAP_ROOT/scripts/modules.py" read geo-catalog-search        # any mod
 3. **Check the gates.** An entry is never offered if it is draft or blocked, if its license does not allow the audience, or if the task
    is in its `avoid_for`. Say so when a near-miss was held back, and name the reason in one phrase. A reason that names `licence_acknowledge`
    is not a refusal: the data is under a third party's licence, so show the person the licence pop-up (that tool) and offer it again (1.15.0).
+   Since 5.2.0 the pop-up also covers terms the person must accept (GADM, protected areas) and, for COD-AB boundaries, one answer a country
+   (`entry_id=<entry>@ken`). A source published one file a state, county or country needs its code (`--variant 04`, `04013`, `ken-adm1`);
+   a national file too large to fetch is read for the box from the person's own download (`ref_fetch.py read <entry> <zip> --bbox ...`).
 4. **No fit: ask the catalogs.** `catalog_search.py "<words>" --region "<place>"` (or the `catalog_search` tool; `--sources auto` is the
    default since 5.1.0) asks every catalog whose coverage holds the place: the person's own portals first, the US state's portal, then
    data.gov and Socrata (US), Open Canada, data.gov.au, data.gov.uk, data.europa.eu (INSPIRE's datasets since July 2026), HDX, ArcGIS Online,

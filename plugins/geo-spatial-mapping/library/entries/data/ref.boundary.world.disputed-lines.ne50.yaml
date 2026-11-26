@@ -1,0 +1,46 @@
+id: ref.boundary.world.disputed-lines.ne50
+type: boundary
+rev: 1
+status: active
+title: 'Disputed international boundary lines, 50m (Natural Earth)'
+summary: 'The boundary lines of disputed and breakaway areas (Kashmir, Western Sahara, Abkhazia, the Korean demilitarised zone) as lines, with how several countries view each.'
+tags:
+  geography: [world]
+  level: [line]
+  domain: [general]
+  use_for: [context-basemap, label-reference, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A map that shows borders draws the disputed ones differently (dashed), so it takes no side by accident.']
+avoid_when: ['The line is read as a legal position: Natural Earth shows de facto control.']
+join:
+  key: none
+  type: string
+  note: Drawn as it is; no table joins to it.
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: line
+  size_mb: 0.02
+  features: 34
+  columns: [SCALERANK, FEATURECLA, NAME, MIN_ZOOM, BRK_NAME, NOTE, BRK_A3]
+source: {publisher: Natural Earth, product: 'Admin 0 boundary lines, disputed areas, 50m', url: 'https://naciscdn.org/naturalearth/50m/cultural/ne_50m_admin_0_boundary_lines_disputed_areas.zip',
+  file_sha256: 0765ade48688db1f3141f8ea0cefffedf1dab4337ceabc8b148bb95b8bfb63b3}
+url_verified_on: '2026-11-25'
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check: {kind: feature_count_and_hash, features: 34, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched and read from the build workspace on 2026-11-25: 34 features, 22,000 bytes.'}

@@ -124,9 +124,24 @@ def style_allowed_colors(slug: str, style) -> set[str]:
     return _STYLE_ALLOWED[key]
 
 
-def check_palette(text: str, slug: str, style=None) -> list[dict]:
-    """MAP-BRAND-001: declared and derived tokens only (1.4.0: the resolved style pack's, which under `default` are the brand's)."""
-    bad = sorted(colors_in(text) - style_allowed_colors(slug, style))
+def publisher_colors(plan) -> set[str]:
+    """5.2.0: the class colours a classed library raster of this map carries as its publisher's legend (the entry's style.classes), read from the
+    library entry and never from the map, so a colour the renderer made up still fails. Only a raster layer drawn in the publisher's colours counts."""
+    out: set[str] = set()
+    for l in getattr(plan, "layers", None) or []:
+        e = getattr(l, "entry", None) or {}
+        if getattr(l, "role", None) != "raster" or str(((getattr(l, "spec", None) or {}).get("raster") or {}).get("colors") or "").lower() == "brand":
+            continue
+        for v in ((e.get("style") or {}).get("classes") or {}).values():
+            if isinstance(v, dict) and str(v.get("color") or "").startswith("#"):
+                out.add(_norm(str(v["color"])))
+    return out
+
+
+def check_palette(text: str, slug: str, style=None, extra: set[str] | None = None) -> list[dict]:
+    """MAP-BRAND-001: declared and derived tokens only (1.4.0: the resolved style pack's, which under `default` are the brand's).
+    `extra` (5.2.0): the publisher's class colours of a classed library raster on this map (publisher_colors)."""
+    bad = sorted(colors_in(text) - style_allowed_colors(slug, style) - (extra or set()))
     named = sorted(named_colors_in(text))
     out = []
     if bad:

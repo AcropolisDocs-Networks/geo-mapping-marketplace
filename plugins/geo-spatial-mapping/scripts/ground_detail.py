@@ -397,7 +397,7 @@ def fetch_spec_layers(spec_path: str, refresh: bool = False) -> list[dict]:
     out = []
     for m in todo:
         try:
-            rf.fetch(mp.library_entry(m["entry"]), m["variant"], refresh=refresh)
+            rf.fetch_for_layer(mp.library_entry(m["entry"]), m["variant"], refresh=refresh)
             out.append({**m, "status": "fetched"})
         except Exception as ex:  # noqa: BLE001 - one file that cannot be fetched is said; the others still are
             out.append({**m, "status": "failed", "error": str(ex).splitlines()[0][:200]})

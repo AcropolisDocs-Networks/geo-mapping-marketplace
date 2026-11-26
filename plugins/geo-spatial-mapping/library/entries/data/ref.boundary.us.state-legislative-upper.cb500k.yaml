@@ -1,0 +1,67 @@
+id: ref.boundary.us.state-legislative-upper.cb500k
+type: boundary
+rev: 1
+status: active
+title: US state legislative districts, upper chamber, 1:500,000, by state (Census cartographic boundary)
+summary: 'The state senate districts of one state, as the Census Bureau holds them for 2025: one file per state.'
+tags:
+  geography: [us]
+  level: [state-legislative-district]
+  domain: [general, demographics]
+  use_for: [choropleth, join-key, context-basemap]
+  avoid_for: [parcel-level, engineering-grade, legal-boundary, site-precision]
+  scale: [state, metro, local]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [annual]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'A state map by state senate district, or district lines as context for a siting or programme story told to legislators.'
+avoid_when:
+- 'A national map: there is no national file, and the districts are too small to read at that scale.'
+- 'The exact line matters; these are simplified to 1:500,000 (use TIGERweb).'
+join:
+  key: GEOID
+  type: string
+  note: 'State FIPS + district code, 5 characters. Keep leading zeros.'
+distinct_from:
+- id: ref.boundary.us.state-legislative-lower.cb500k
+  why: the lower chamber
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: polygon
+  url_template: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_{statefp}_sldu_500k.zip
+  variant_key: statefp
+  variant_required: true
+  service_route: 'the same areas as a service: the shipped tigerweb profile, layer Legislative/MapServer (State Legislative Districts, upper)'
+source:
+  publisher: US Census Bureau
+  product: 2025 Cartographic Boundary File, State Legislative Districts (upper chamber), 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2025/shp/
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2025'
+  cadence: annual
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_head
+    url: https://www2.census.gov/geo/tiger/GENZ2025/shp/cb_2025_04_sldu_500k.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.3). Fetched and read from the build workspace on 2026-11-25: Arizona (04), 30 districts, EPSG:4269.'

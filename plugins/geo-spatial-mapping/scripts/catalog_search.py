@@ -197,13 +197,23 @@ def _score_words(q: list[str], *fields) -> float:
     return round(hits / len(q), 3)
 
 
+def plain(text) -> str | None:
+    """5.2.0: a catalog's text with its markup taken out (data.gov and Hub descriptions arrive as HTML): tags dropped, entities read, spaces joined."""
+    if text is None:
+        return None
+    import html
+    t = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", str(text))
+    t = re.sub(r"(?s)<[^>]{0,400}>", " ", t)
+    return re.sub(r"\s+", " ", html.unescape(t)).strip()
+
+
 def result(**kw) -> dict:
     r = {"source": None, "id": None, "title": None, "publisher": None, "formats": [], "access_url": None, "service_url": None, "license": None,
          "updated": None, "bbox": None, "score": 0.0, "description": None}
     r.update(kw)
-    r["title"] = oh.untrusted(r["title"], 200) or None
-    r["publisher"] = oh.untrusted(r["publisher"], 120) or None
-    r["description"] = oh.untrusted(r["description"], 300) or None
+    r["title"] = oh.untrusted(plain(r["title"]), 200) or None
+    r["publisher"] = oh.untrusted(plain(r["publisher"]), 120) or None
+    r["description"] = oh.untrusted(plain(r["description"]), 300) or None
     r["license"] = oh.untrusted(r["license"], 200) or None
     return r
 

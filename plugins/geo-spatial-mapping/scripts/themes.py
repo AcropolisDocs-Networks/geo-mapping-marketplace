@@ -108,8 +108,17 @@ def candidate(e: dict, audience: str | None = None) -> dict:
         where = "the person's computer (the cloud workspace cannot reach it)"
     ok = True
     why = None
+    asks = False
+    try:                                                   # 5.2.0: a use the person acknowledged for their own licence opens the source for them
+        import licence_ack as la
+        if la.required(e) and not la.required(e).get("per_variant"):
+            asks = True
+            lic = la.effective(lic, la.current(eid))
+    except Exception:  # noqa: BLE001
+        pass
     if audience == "external" and lic.get("external_ok") is False:
-        ok, why = False, "its licence keeps it to internal maps"
+        ok, why = False, ("its terms keep it to internal maps unless the person says theirs cover publication (the licence pop-up, licence_acknowledge)" if asks
+                          else "its licence keeps it to internal maps")
     return {"id": eid, "title": e.get("title"), "delivery": mode, "license": lic.get("class"), "key": (cred.get("name") if isinstance(cred, dict) else None),
             "fetch_from": where, "needs_computer": where.startswith("the person's computer"), "brings_file": mode == "user-supplied", "audience_ok": ok, "audience_note": why, "status": e.get("status"),
             "geography": (e.get("tags") or {}).get("geography") or [], "scale": (e.get("tags") or {}).get("scale") or []}

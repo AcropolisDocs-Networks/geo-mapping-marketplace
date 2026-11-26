@@ -1,0 +1,43 @@
+id: ref.context.world.coastline.ne50
+type: context
+rev: 1
+status: active
+title: World coastline, 50m (Natural Earth)
+summary: 'The coast of the world as lines at 1:50m (1,428), for a continental map that draws its shore as a line.'
+tags:
+  geography: [world]
+  level: [line]
+  domain: [general]
+  use_for: [context-basemap, locator-inset, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A coast line is drawn over a surface (a raster, a hex grid) on a map between 1:10,000,000 and 1:50,000,000.']
+avoid_when: ['A regional map, or a world map (use the 10m ocean, or the 110m coastline).']
+pairs_with: [ref.boundary.world.country.ne50]
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: line
+  size_mb: 0.46
+  features: 1428
+  columns: [scalerank, featurecla, min_zoom]
+source: {publisher: Natural Earth, product: 'Coastline, 50m', url: 'https://naciscdn.org/naturalearth/50m/physical/ne_50m_coastline.zip',
+  file_sha256: 640f805509b822f57f4840a2e18d9ff2412cf1cf6976124701c2789436166fde}
+url_verified_on: 2026-11-25
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: 2026-11-25
+  verify_by: 2027-11-25
+  check: {kind: feature_count_and_hash, features: 1428, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: 2026-11-25, note: 'New (5.2.0, open data portals P2.2). Fetched and read from the build workspace on 2026-11-25; the lakes and rivers of this tier are bundled, this layer is fetched when a map names it.'}

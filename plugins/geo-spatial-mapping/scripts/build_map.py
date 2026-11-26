@@ -47,7 +47,7 @@ STATIC_ONLY = {"MAP-CART-009", "MAP-CRS-003", "MAP-CART-020", "MAP-STORY-001", "
 
 def guard_findings(svg: str, plan: mp.Plan) -> list[dict]:
     st = getattr(plan, "style", None)                  # 1.4.0: the brand lints check against the resolved style pack
-    return (brand_lint.check_palette(svg, plan.brand, st) + brand_lint.check_fonts(svg, st.families() if st is not None else None)
+    return (brand_lint.check_palette(svg, plan.brand, st, brand_lint.publisher_colors(plan)) + brand_lint.check_fonts(svg, st.families() if st is not None else None)
             + brand_lint.check_stamps(svg, plan.brand, plan.manifest)
             + brand_lint.check_hidden_accreditation(svg, plan.brand, plan.manifest))
 

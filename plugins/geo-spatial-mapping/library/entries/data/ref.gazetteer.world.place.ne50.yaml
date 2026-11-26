@@ -1,0 +1,42 @@
+id: ref.gazetteer.world.place.ne50
+type: gazetteer
+rev: 1
+status: active
+title: 'World cities and towns, 50m (Natural Earth)'
+summary: 'About 1,250 cities and towns of the world as points with population and rank: capitals, the large cities and regional centres.'
+tags:
+  geography: [world]
+  level: [place]
+  domain: [general]
+  use_for: [context-basemap, label-reference, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A continental map between 1:10,000,000 and 1:50,000,000 labels its cities at a density that fits.']
+avoid_when: ['A regional map (the 10m places hold 7,000), or a world map (the 110m hold 240).']
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: point
+  size_mb: 0.55
+  features: 1251
+  columns: [SCALERANK, NATSCALE, LABELRANK, FEATURECLA, NAME, NAMEPAR, NAMEALT, NAMEASCII, ADM0CAP, CAPIN, WORLDCITY, MEGACITY, SOV0NAME, SOV_A3]
+source: {publisher: Natural Earth, product: 'Populated places, 50m', url: 'https://naciscdn.org/naturalearth/50m/cultural/ne_50m_populated_places.zip',
+  file_sha256: 9022c3be867be79c44bd6fc6ff4dcc210e85ffee13b033bf4d1d87d83c9ee6b4}
+url_verified_on: '2026-11-25'
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check: {kind: feature_count_and_hash, features: 1251, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched and read from the build workspace on 2026-11-25: 1,251 features, 553,649 bytes.'}

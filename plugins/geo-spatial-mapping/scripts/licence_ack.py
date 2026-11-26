@@ -53,7 +53,7 @@ USES = {
 # what each use opens in the entry's licence block
 FLAGS = {"publication": "external_ok", "commercial": "commercial_ok", "redistribution": "redistribute_ok"}
 HOWS = ("pop-up", "asked")
-_ID = re.compile(r"^[a-z0-9][a-z0-9.\-]{2,160}$")
+_ID = re.compile(r"^[a-z0-9][a-z0-9.\-]{2,160}(?:@[a-z0-9]{2,8})?$")     # 5.2.0: <entry>@<code> is the entry's licence for one country
 
 
 class AckError(ValueError):
@@ -66,6 +66,15 @@ def required(entry: dict | None) -> dict | None:
         return None
     a = (entry.get("license") or {}).get("acknowledgment")
     return a if isinstance(a, dict) and a.get("provider") else None
+
+
+def key_for(entry: dict | None, variant: str | None = None) -> str:
+    """The id an acknowledgment is kept under: the entry's, or <entry>@<code> when its licence differs by country (acknowledgment.per_variant:
+    HDX's COD-AB boundaries, each under its contributor's terms). `variant` is the layer's (ken, or ken-adm1: the code is what counts)."""
+    eid = str((entry or {}).get("id") or "").split("@")[0]
+    a = required(entry) or {}
+    code = re.sub(r"[^a-z0-9]", "", str(variant or (entry or {}).get("_variant") or "").split("-")[0].lower())
+    return f"{eid}@{code}" if a.get("per_variant") and code else eid
 
 
 def _dirs() -> list[Path]:
@@ -147,14 +156,18 @@ def question(entry: dict) -> dict:
     if not a:
         raise AckError(f"library entry '{entry.get('id')}' needs no licence acknowledgment")
     offered = [u for u in (a.get("uses") or list(USES)) if u in USES]
-    prod = a.get("product") or entry.get("title") or entry.get("id")
-    msg = (a.get("question") or
+    v = str(entry.get("_variant") or "")
+    fill = lambda t: str(t).replace("{variant}", v).replace("{VARIANT}", v.upper()) if t else t      # noqa: E731
+    prod = fill(a.get("product") or entry.get("title") or entry.get("id"))
+    own = bool(a.get("question"))                             # 5.2.0: open-but-conditional terms (GADM, WDPA, COD-AB) ask in their own words
+    msg = (fill(a.get("question")) or
            f"{prod} is licensed by {a['provider']}. The map plugin cannot read your licence, so it asks you: do you hold a licence from "
            f"{a['provider']} for this data, and which uses does it cover? Your answer is kept in your own folder and you can withdraw it.")
-    return {"entry": entry.get("id"), "provider": a["provider"], "product": prod, "terms_url": a.get("terms_url") or (entry.get("source") or {}).get("url"),
+    return {"entry": entry.get("id"), "provider": a["provider"], "product": prod, "terms_url": fill(a.get("terms_url") or (entry.get("source") or {}).get("url")),
             "message": msg, "uses": {u: USES[u] for u in offered},
             "ask_user_question": {
-                "question": f"Do you hold a {a['provider']} licence for {prod}? Pick every use it covers.",
+                "question": (f"{prod}: have you read {a['provider']}'s terms, and which of these uses do they allow you? Pick each one." if own
+                             else f"Do you hold a {a['provider']} licence for {prod}? Pick every use it covers."),
                 "header": "Licence", "multiSelect": True,
                 "options": [{"label": u.capitalize(), "description": USES[u]} for u in offered][:4]}}
 
@@ -186,8 +199,9 @@ def acknowledge(entry: dict, uses: list[str], *, how: str = "pop-up", licence_re
     folder = where or (gc.user_folder(create=True) / FOLDER)    # 3.7.0 (Part D): your own folder, read from every project
     folder.mkdir(parents=True, exist_ok=True)
     p = folder / _name(entry["id"])
-    rec = {"acknowledged": True, "entry": entry["id"], "provider": a["provider"], "product": a.get("product") or entry.get("title"),
-           "terms_url": a.get("terms_url") or (entry.get("source") or {}).get("url"), "uses": uses, "acknowledged_on": _today().isoformat(),
+    q = question(entry)
+    rec = {"acknowledged": True, "entry": entry["id"], "provider": a["provider"], "product": q["product"],
+           "terms_url": q["terms_url"], "uses": uses, "acknowledged_on": _today().isoformat(),
            "how": how}
     if ref:
         rec["licence_ref"] = ref
@@ -230,18 +244,27 @@ def status(entry_id: str | None = None) -> list[dict]:
     return out
 
 
-def refusal(entry: dict, audience: str = "internal") -> str:
+def refusal(entry: dict, audience: str = "internal", variant: str | None = None) -> str:
     a = required(entry) or {}
-    return (f"{entry.get('title') or entry.get('id')} is licensed by {a.get('provider', 'its publisher')}: before it is drawn, the person answers the "
-            f"licence pop-up once (the plugin server's licence_acknowledge tool, entry_id={entry.get('id')}; or licence_ack.py ask). "
+    key = key_for(entry, variant)
+    how = "under terms the person accepts" if a.get("question") else f"licensed by {a.get('provider', 'its publisher')}"
+    return (f"{entry.get('title') or entry.get('id')} is {how}: before it is drawn, the person answers the "
+            f"licence pop-up once{' for this country' if '@' in key else ''} (the plugin server's licence_acknowledge tool, entry_id={key}; or licence_ack.py ask). "
             f"This map needs: {', '.join(uses_needed(audience))}.")
 
 
 def _entry(entry_id: str) -> dict:
     import ref_library as rl
-    e = next((x for x in rl.all_entries("all") if x.get("id") == entry_id), None)
+    base, _, v = str(entry_id or "").partition("@")
+    e = next((x for x in rl.all_entries("all") if x.get("id") == base), None)
     if e is None:
-        raise AckError(f"'{entry_id}' is not in the reference library")
+        raise AckError(f"'{base}' is not in the reference library")
+    if v:
+        if not (required(e) or {}).get("per_variant"):
+            raise AckError(f"'{base}' has one licence for all of its data: acknowledge it as {base}")
+        return {**e, "id": f"{base}@{v.lower()}", "_variant": v.lower()}
+    if (required(e) or {}).get("per_variant"):
+        raise AckError(f"'{base}' is acknowledged one country at a time: {base}@<code> (for Kenya, {base}@ken)")
     return e
 
 

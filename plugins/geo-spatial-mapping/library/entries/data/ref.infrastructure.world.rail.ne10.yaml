@@ -1,0 +1,42 @@
+id: ref.infrastructure.world.rail.ne10
+type: infrastructure
+rev: 1
+status: active
+title: 'World railways (Natural Earth)'
+summary: 'The main railways of the world as lines (about 25,000 segments), fullest in North America and Europe.'
+tags:
+  geography: [world]
+  level: [line]
+  domain: [general]
+  use_for: [context-basemap, label-reference, atlas]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [world, national, regional]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when: ['A continental or national map draws the main rail lines as context.']
+avoid_when: ['A metro or local map, or a complete network: use OpenStreetMap, or TIGER rail in the United States.']
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: line
+  size_mb: 15.12
+  features: 25413
+  columns: [rwdb_rr_id, mult_track, electric, other_code, category, disp_scale, add, featurecla, scalerank, natlscale, part, continent]
+source: {publisher: Natural Earth, product: 'Railroads, 10m', url: 'https://naciscdn.org/naturalearth/10m/cultural/ne_10m_railroads.zip',
+  file_sha256: 0bce64d1bb7ce1178810f0a341322b0459acb0689a61016259ef38f75abed0a4}
+url_verified_on: '2026-11-25'
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
+  check: {kind: feature_count_and_hash, features: 25413, against: the source archive's SHA-256 above}
+  changelog:
+  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched and read from the build workspace on 2026-11-25: 25,413 features, 15,116,579 bytes.'}

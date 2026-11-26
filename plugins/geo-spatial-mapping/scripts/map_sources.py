@@ -388,6 +388,9 @@ def load_service_layer(layer: dict, base: Path, window_fn=None):
         raise mp.PlanError(f"layer '{lid}': {refusal(e)}", gc.EXIT_REFUSED)
     if window_fn is None:
         raise mp.PlanError(f"layer '{lid}': a library service layer is fetched for the map window, which only a map build knows", gc.EXIT_USAGE)
+    import licence_ack as la                               # 5.2.0: a service layer under a third party's terms (WDPA) asks them first, as a file does
+    if la.required(e) and la.current(la.key_for(e, src.get("variant") if isinstance(src.get("variant"), str) else None)) is None:
+        raise mp.PlanError(f"MAP-LIC-018: layer '{lid}': {la.refusal(e)}", gc.EXIT_REFUSED)
     bbox, why = window_fn()
     try:
         rp, cached = fetch(e, src, bbox, refresh=bool(src.get("refresh")))

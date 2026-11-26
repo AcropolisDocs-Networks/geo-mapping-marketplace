@@ -1,0 +1,97 @@
+id: ref.boundary.world.protected.wdpa
+type: boundary
+rev: 1
+status: active
+title: World Database on Protected Areas (WDPA, Protected Planet), by map window
+summary: 'National parks, reserves, marine protected areas and other protected and conserved areas of every country, as polygons with their designation, IUCN
+  category and year, from UNEP-WCMC and IUCN. The map''s window is read from UNEP-WCMC''s own service once the person has accepted Protected Planet''s terms.'
+tags:
+  geography: [world]
+  level: [protected-area]
+  domain: [general]
+  use_for: [context-basemap, choropleth, label-reference]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level, site-precision]
+  scale: [national, regional, state, metro]
+  detail: [detailed]
+  audience: [internal]
+  confidentiality: [restricted-license]
+  freshness: [monthly]
+  tier: [T2]
+  license_class: [restricted]
+  quality: [authoritative]
+use_when:
+- 'Protected land or sea is the ground of a map outside the United States (a siting or route story that must show what is protected), for internal or
+  non-commercial use.'
+- A country's protected areas are listed or measured by designation or IUCN category.
+avoid_when:
+- 'The map is commercial work or for a client: Protected Planet''s terms need UNEP-WCMC''s permission first (or a licence through IBAT).'
+- 'The United States: ref.boundary.us.protected.pad-us is the national inventory and public domain.'
+- 'The window is a continent: a build reads at most 50,000 polygons; filter by country (source.where: iso3 = ''KEN'') or draw a smaller window.'
+distinct_from:
+- id: ref.boundary.us.protected.pad-us
+  why: the United States only, public domain
+join:
+  key: site_id
+  type: string
+  note: 'The WDPA site id (formerly WDPAID); site_pid separates the parts of a site. name_eng holds the name, desig_eng the designation, iucn_cat the IUCN
+    category, status_yr the year, iso3 the country.'
+crs: EPSG:4326
+delivery:
+  mode: service
+  profile: unep-wcmc-wdpa
+  protocol: arcgis
+  layer: ProtectedSites/The_World_Database_of_Protected_Areas/FeatureServer/1
+  max_record_count: 2000
+  geometry: polygon
+  columns: [site_id, site_pid, site_type, name_eng, name, desig, desig_eng, desig_type, iucn_cat, realm, rep_area, gis_area, status, status_yr, gov_type, own_type,
+    mang_auth, iso3]
+  request: service_query.py fetch --profile unep-wcmc-wdpa --protocol arcgis --layer ProtectedSites/The_World_Database_of_Protected_Areas/FeatureServer/1 --bbox=W,S,E,N
+    [--generalize-m 100]
+  note: 'WDPA_poly_latest on UNEP-WCMC''s server, updated monthly. Sites known only as a point are in layer 0 of the same service. The world file is a 4 GB
+    download from protectedplanet.net and is not fetched.'
+source:
+  publisher: UNEP-WCMC and IUCN
+  product: 'Protected Planet: The World Database on Protected and Conserved Areas (WDPA and WD-OECM)'
+  url: https://data-gis.unep-wcmc.org/server/rest/services/ProtectedSites/The_World_Database_of_Protected_Areas/FeatureServer
+  page: https://www.protectedplanet.net/en/thematic-areas/wdpa
+url_verified_on: '2026-11-25'
+vintage:
+  current: November 2026 (the service is replaced each month)
+  cadence: monthly
+license:
+  class: restricted
+  redistribute_ok: false
+  commercial_ok: false
+  bulk_ok: false
+  external_ok: false
+  attribution_text: 'UNEP-WCMC and IUCN (2026), Protected Planet: The World Database on Protected and Conserved Areas (WDPCA), November 2026, Cambridge, UK:
+    UNEP-WCMC and IUCN. www.protectedplanet.net.'
+  acknowledgment:
+    provider: UNEP-WCMC and IUCN (Protected Planet)
+    product: the World Database on Protected Areas
+    terms_url: https://www.protectedplanet.net/en/legal
+    question: 'The World Database on Protected Areas may be used for non-commercial purposes with its citation; the data itself may not be passed on, and
+      commercial use needs UNEP-WCMC''s written permission (or a licence through IBAT). The map plugin cannot judge your use, so it asks you: have you read
+      Protected Planet''s terms, and which of these uses do they allow you? Choose commercial or redistribution only if you hold that permission. Your
+      answer is kept in your own folder and you can withdraw it.'
+    uses:
+    - internal
+    - publication
+    - commercial
+    - redistribution
+  note: 'protectedplanet.net/en/legal: no commercial use without prior written permission; no sub-licensing or redistribution of the data; the citation is
+    printed. The flags here stay false and are opened for one person by the uses they acknowledge.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-02-25'
+  check:
+    kind: http_get
+    url: https://data-gis.unep-wcmc.org/server/rest/services/ProtectedSites/The_World_Database_of_Protected_Areas/FeatureServer?f=json
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.9). Verified from the build workspace on 2026-11-25: the service answered with layers WDPA_point_latest and
+      WDPA_poly_latest (maxRecordCount 2000, paging), a count over Kenya''s box answered 525 polygons, and a window in southern Kenya was fetched through
+      the shipped profile and drawn.'

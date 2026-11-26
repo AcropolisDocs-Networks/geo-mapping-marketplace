@@ -1,0 +1,64 @@
+id: ref.boundary.us.voting-district.cb2020-500k
+type: boundary
+rev: 1
+status: active
+title: US voting districts (precincts) as of the 2020 Census, 1:500,000, by state
+summary: 'Voting districts (precincts, wards, election districts) as the states reported them for 2020 redistricting: one file per state, never updated since.'
+tags:
+  geography: [us]
+  level: [voting-district]
+  domain: [general, demographics]
+  use_for: [choropleth, join-key]
+  avoid_for: [parcel-level, engineering-grade, legal-boundary, site-precision]
+  scale: [state, metro, local]
+  detail: [simplified]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'A 2020 redistricting (P.L. 94-171) value is mapped by precinct.'
+- 'Precinct lines of 2020 are the wanted geography and the date is said on the map.'
+avoid_when:
+- 'Current precincts are wanted: states and counties redraw them every year; this is the 2020 snapshot. Ask the county or state election office.'
+- 'A state did not take part in the programme (the file is then missing or holds placeholders).'
+join:
+  key: GEOID20
+  type: string
+  note: 'State + county FIPS + voting district code.'
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: Shapefile (zip)
+  geometry: polygon
+  url_template: https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_{statefp}_vtd_500k.zip
+  variant_key: statefp
+  variant_required: true
+source:
+  publisher: US Census Bureau
+  product: 2020 Cartographic Boundary File, Voting Districts, 1:500,000
+  url: https://www2.census.gov/geo/tiger/GENZ2020/shp/
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2020 (Census redistricting)'
+  cadence: static
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Source: U.S. Census Bureau, Cartographic Boundary Files.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_head
+    url: https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_04_vtd_500k.zip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.3). Fetched and read from the build workspace on 2026-11-25: Arizona (04), 1,538 voting districts, EPSG:4269.'

@@ -33,7 +33,7 @@ providers:
   - id: bundled-ne
     title: Natural Earth (bundled)
     coverage: world
-    resolution: Natural Earth 1:10m or 1:110m
-    entries: [ref.context.world.ocean.ne10, ref.context.world.lakes.ne10, ref.boundary.world.country.ne110]
+    resolution: Natural Earth 1:10m (finer than 1:10,000,000), 1:50m (to 1:50,000,000) or 1:110m
+    entries: [ref.context.world.ocean.ne10, ref.context.world.lakes.ne10, ref.boundary.world.country.ne50, ref.context.world.lakes.ne50, ref.boundary.world.country.ne110]
     licence: public-domain
     cache: bundled

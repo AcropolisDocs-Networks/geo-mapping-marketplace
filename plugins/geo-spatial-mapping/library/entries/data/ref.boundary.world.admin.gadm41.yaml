@@ -1,10 +1,10 @@
 id: ref.boundary.world.admin.gadm41
 type: boundary
-rev: 1
+rev: 2
 status: active
 title: GADM 4.1 (administrative areas worldwide, restricted licence)
-summary: Detailed administrative boundaries for every country at all available levels (one 1.4 GB GeoPackage, or per-country downloads) from GADM; free
-  for academic and non-commercial use, redistribution and commercial use need permission.
+summary: Detailed administrative boundaries for every country at all available levels from GADM, fetched one country and one level at a time once the
+  person has accepted GADM's terms; free for academic and non-commercial use, redistribution and commercial use need GADM's permission.
 tags:
   geography:
   - world
@@ -67,15 +67,23 @@ join:
   note: GADM ids GID_0 (ISO3), GID_1, GID_2 and so on; NAME_1, NAME_2; HASC_1 carries the HASC code (e.g. CA.ON).
 crs: EPSG:4326
 delivery:
-  mode: user-supplied
-  format: GeoPackage (world, 1.4 GB) or per-country GeoPackage/Shapefile from gadm.org
-  note: Download https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip (HEAD 200, 1,466,771,821 bytes, verified 2026-11-04) or the per-country file
-    from gadm.org/download_country.html, and supply the layer for the country.
+  mode: fetch
+  format: GeoPackage, one file a country, one layer an admin level (ADM_ADM_0, ADM_ADM_1 ...)
+  geometry: polygon
+  url_template: https://geodata.ucdavis.edu/gadm/gadm4.1/gpkg/gadm41_{ISO3}.gpkg
+  layer_template: ADM_ADM_{n}
+  default_level: adm1
+  variant_key: iso3
+  variant_required: true
+  note: 'ref_fetch.py fetch ref.boundary.world.admin.gadm41 --variant ken --level adm2 (in a MapSpec: source.variant ken-adm2). The country file is fetched
+    whole (Kenya 47.5 MB; a file over 400 MB is refused) and the one level is kept. Names are in NAME_1, NAME_2 ...; GID_1, GID_2 are GADM''s own codes,
+    HASC_1 the HASC code. The world file (1.47 GB) is not fetched. geoBoundaries (ref.boundary.world.country.geoboundaries) is offered first for
+    anything published.'
 source:
   publisher: GADM (University of California, Davis)
   product: GADM version 4.1
-  url: https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip
-url_verified_on: '2026-11-04'
+  url: https://gadm.org/download_country.html
+url_verified_on: '2026-11-25'
 vintage:
   current: 4.1 (July 2022)
   cadence: irregular
@@ -86,17 +94,35 @@ license:
   bulk_ok: true
   external_ok: false
   attribution_text: Boundaries from GADM (gadm.org), version 4.1.
+  acknowledgment:
+    provider: GADM
+    product: GADM 4.1 administrative areas
+    terms_url: https://gadm.org/license.html
+    question: 'GADM''s boundaries are free for academic and other non-commercial use, and for maps in academic publications. Redistribution and commercial
+      use are not allowed without GADM''s permission. The map plugin cannot judge your use, so it asks you: have you read GADM''s terms, and which of
+      these uses do they allow you? Choose commercial or redistribution only if you hold GADM''s permission. Your answer is kept in your own folder and you
+      can withdraw it. For anything published, geoBoundaries is open and is offered first.'
+    uses:
+    - internal
+    - publication
+    - commercial
+    - redistribution
   note: 'gadm.org/license.html (read 2026-11-04): free for academic and other non-commercial use; redistribution and commercial use are not allowed without
     prior permission.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
-  verify_by: '2027-11-04'
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
   check:
     kind: http_head
-    url: https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip
+    url: https://geodata.ucdavis.edu/gadm/gadm4.1/gpkg/gadm41_KEN.gpkg
     expect: 200
   changelog:
   - rev: 1
     date: '2026-11-04'
     note: Verified the world GeoPackage (HEAD 200, 1.47 GB; too large to download and hash here) and read the licence page on 2026-11-04. Internal, restricted-license.
+  - rev: 2
+    date: '2026-11-25'
+    note: 'Fetched per country behind the licence pop-up (5.2.0, open data portals P2.7, decision D2): the Kenya GeoPackage answered 200 (47,509,504 bytes)
+      on 2026-11-25 with layers ADM_ADM_0 to ADM_ADM_3, and its ADM_ADM_1 layer was read (47 counties). The entry stays restricted-license: the flags are
+      opened for one person by the uses they acknowledge.'

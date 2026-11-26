@@ -1,0 +1,69 @@
+id: ref.context.uk.built-up.os-open-built-up-areas
+type: context
+rev: 1
+status: active
+title: 'OS Open Built Up Areas: towns and cities of Great Britain as areas'
+summary: 'The built-up areas of Great Britain (8,716 towns, cities and villages) as polygons with their names and GSS codes, made by Ordnance Survey with the ONS.'
+tags:
+  geography: [uk]
+  level: [place]
+  domain: [general, demographics]
+  use_for: [context-basemap, choropleth, join-key, label-reference]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level]
+  scale: [national, regional, metro]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [authoritative]
+use_when:
+- 'A British map shows where the towns are as areas, or reports a value by town (gsscode joins ONS built-up area statistics).'
+- 'Urban against rural coverage is told for Great Britain.'
+avoid_when:
+- 'The administrative district is meant (use the ONS local authority districts or Boundary-Line).'
+- 'Northern Ireland: Great Britain only.'
+join:
+  key: gsscode
+  type: string
+  note: 'The ONS GSS code of the built-up area (E63..., W45..., S45...).'
+crs: EPSG:27700
+delivery:
+  mode: fetch
+  format: Zip of the national file (EPSG:27700)
+  geometry: polygon
+  size_mb: 43.6
+  rolling: true
+  layer: os_open_built_up_areas
+  layers: [os_open_built_up_areas, os_open_built_up_extents, os_open_non_built_up_extents]
+  features: 8716
+  columns: [gsscode, name1_text, name1_language, name2_text, name2_language, areahectares, geometry_area_m]
+source:
+  publisher: Ordnance Survey
+  product: OS Open Built Up Areas (2026-04)
+  url: https://api.os.uk/downloads/v1/products/BuiltUpAreas/downloads?area=GB&format=GeoPackage&redirect
+  page: https://osdatahub.os.uk/downloads/open/BuiltUpAreas
+  api: https://api.os.uk/downloads/v1/products/BuiltUpAreas
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2026-04'
+  cadence: irregular
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Contains OS data © Crown copyright and database right 2026 (Open Government Licence v3.0).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
+  check:
+    kind: http_get
+    url: https://api.os.uk/downloads/v1/products/BuiltUpAreas
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.2.0, open data portals P2.6). '
