@@ -13,16 +13,20 @@ steps:
       - "Pick the intent from the request (gmap.py intents). art is the only way to take the references away in one step."
       - "Write an ask only for what the person said, in their words. A look you would like is not an ask."
       - "Text the person supplied (--title, --subtitle, --tagline) is drawn as written."
+      - "With the person's computer linked, call the credentials_status tool once and pass the keys that are ready (--keys earthdata,opencellid): the source sheet then says which keyed sources can be used now."
       - "Say where the session runs and what it cannot reach before promising data. When a source needs the person's computer, ask to link it; do not swap the source."
     read: [regions, map-text]
   sources:
     says: "Every source that could serve each need, in view, before one is taken."
-    command: "gmap.py sources   then   gmap.py choose <need> <entry id> --why \"<one phrase>\""
+    command: "gmap.py sources [--count] [--search]   then   gmap.py choose <need> <entry id> --why \"<one phrase>\"   (or gmap.py take <need> c<N> --confirm-host <host>)"
     rules:
       - "The sheet lists every library source for the need here, with licence, key and where it can be fetched from. Take one from the sheet, or say why none fits (then geo-find-data)."
       - "When the sheet says to compare, count the candidates in the map's window (gmap.py sources --count) before choosing: the fullest source is rarely the first."
       - "A source whose licence does not allow the map's audience is not a choice."
       - "Each 'also available here' line is accepted (gmap.py need add <theme>) or declined (gmap.py need decline <theme> --why ...). Declining is fine; silence is not."
+      - "When the sheet has no fit, or the need is not a theme of the library: gmap.py sources --search asks the open data catalogs that cover the place (the person's own portals first). Each candidate is a find to assess: read its terms and how it would come in."
+      - "A town's, county's or agency's own portal is added once with the source_add tool (portal=<address>, the host typed back by the person); it is then asked first for every map of its place."
+      - "A catalog find comes in with gmap.py take <need> c<N> --confirm-host <host>; one whose terms are not open, or not stated, only on the person's word (--asked)."
       - "The person's own file is a source too: gmap.py data file <name> --path <file> --source ... --license ... (ask them for both; never invent them)."
     read: [ref-library, geodata-sources, tile-licensing]
   data:

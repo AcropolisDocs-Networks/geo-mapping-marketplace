@@ -22,8 +22,9 @@ python3 "$GMAP_ROOT/scripts/ref_library.py" select --geography us-az --level cou
 python3 "$GMAP_ROOT/scripts/ref_library.py" select --bbox=3.1,6.3,3.7,6.7 --level admin2 --use-for choropleth      # Lagos: the country under the window
 python3 "$GMAP_ROOT/scripts/ref_library.py" get ref.boundary.us.county.cb500k
 python3 "$GMAP_ROOT/scripts/themes.py" show "cell towers" --geography us-az --audience external                    # 4.2.0: every library source for what the thing is, first
-python3 "$GMAP_ROOT/scripts/catalog_search.py" "cell towers Arizona" --sources library,datagov,hub,socrata --limit 5     # the catalogs, library first
+python3 "$GMAP_ROOT/scripts/catalog_search.py" "cell towers" --region "Gilbert, Arizona" --sources auto --limit 5         # 5.1.0: the library, then every catalog that covers the place
 python3 "$GMAP_ROOT/scripts/catalog_search.py" "cell towers Arizona" --sources hub --find-record 1 > find.json           # result 1 as a draft record
+python3 "$GMAP_ROOT/scripts/catalogs.py" roots --geography us-az                                                          # which catalogs a place is asked of
 python3 "$GMAP_ROOT/scripts/find_record.py" template > find.json     # or fill one in by hand, then:
 python3 "$GMAP_ROOT/scripts/find_record.py" check find.json
 ```
@@ -72,8 +73,15 @@ python3 "$GMAP_ROOT/scripts/modules.py" read geo-catalog-search        # any mod
 3. **Check the gates.** An entry is never offered if it is draft or blocked, if its license does not allow the audience, or if the task
    is in its `avoid_for`. Say so when a near-miss was held back, and name the reason in one phrase. A reason that names `licence_acknowledge`
    is not a refusal: the data is under a third party's licence, so show the person the licence pop-up (that tool) and offer it again (1.15.0).
-4. **No fit: ask the catalogs.** `catalog_search.py "<words>" --bbox=...` (or the `catalog_search` tool) searches data.gov, ArcGIS Online and Hub,
-   Socrata and STAC at once. Read the top results with their license as the catalog states it and their route (a download, or an ArcGIS
+4. **No fit: ask the catalogs.** `catalog_search.py "<words>" --region "<place>"` (or the `catalog_search` tool; `--sources auto` is the
+   default since 5.1.0) asks every catalog whose coverage holds the place: the person's own portals first, the US state's portal, then
+   data.gov and Socrata (US), Open Canada, data.gov.au, data.gov.uk, data.europa.eu (INSPIRE's datasets since July 2026), HDX, ArcGIS Online,
+   ArcGIS Hub, Living Atlas, the AWS open data registry and STAC. A subscriber or premium Living Atlas item and a requester-pays bucket are
+   shown marked and never fetched. **A town's, county's or agency's own portal is added once**: the `source_add` tool with `portal=<its
+   address>` (the person types the host back as `confirm_host`) finds its platform (ArcGIS Hub, CKAN, Socrata, OpenDataSoft, ArcGIS Server),
+   asks it once and saves it among the person's own sources; for a Hub site it also lists the organisation's public layers that are not on
+   the site. On the road, `gmap.py sources --search` lists the catalogs' candidates beside the library's sheet and `gmap.py take <need> c<N>
+   --confirm-host <host>` brings one in with a record. Read the top results with their license as the catalog states it and their route (a download, or an ArcGIS
    FeatureServer or WFS address). `--find-record N` drafts the record for one result (`confidence: medium`, a caveat that the publisher's page has not
    been read); open that page to fill in the resolution and the data's own vintage before presenting it. A service address in a result is never
    queried from here: `geo-service-explore` with `url=` does that after the person confirms the host.

@@ -14,6 +14,12 @@ steps:
   public-fetch:
     run_on: [cloud, cowork-vm, host]
     how: where the file is used (3DEP, Copernicus, Terrarium, Natural Earth, geoBoundaries are keyless); never handed back, the provenance keeps the request (I-22)
+  catalog-search:
+    run_on: [cloud, cowork-vm, host]
+    how: catalog_search.py (or the map server's catalog_search tool) with --sources auto; every shipped catalog root is keyless and answers from all three places. A portal of the person's own is asked from the place it was added from (its row keeps where it answered)
+  portal-add:
+    run_on: [host, cloud, cowork-vm]
+    how: source_add portal=URL on the map server (the row is saved in the person's own sources, which every project reads), or catalogs.py portal URL where the session runs (the row is saved in that place only)
   build:
     run_on: [cloud, cowork-vm]
     how: build_map.py in the cloud workspace; in the Cowork VM only when doctor --fix --place cowork-vm made the venv in the work folder (O3)

@@ -730,12 +730,13 @@ def plan(profile: str = "", layer: str = "", protocol: str = "wfs", cql_filter: 
 
 # ---------------------------------------------------------------------------------------------------------------- M13: catalogs and geocoding
 @guarded
-def catalog_search(query: str, sources: str = "library,datagov,hub,socrata,stac", bbox: str = "", limit: int = 10, stac_root: str = "", datetime: str = "", http=None,
-                   region: str = "") -> dict:
+def catalog_search(query: str, sources: str = "auto", bbox: str = "", limit: int = 10, stac_root: str = "", datetime: str = "", http=None,
+                   region: str = "", geography: str = "") -> dict:
     """Open geodata in the public catalogs, the plugin's library first. Results are catalog text (data); a URL in a result is reported, never queried."""
     import catalog_search as cs
     root = cs.STAC_ROOTS.get(stac_root or "", stac_root or None)
-    res = cs.search(query, sources, bbox or None, limit, http=http or cs.make_http(), stac_root=root, datetime=datetime or None, region=region or None)
+    res = cs.search(query, sources or "auto", bbox or None, limit, http=http or cs.make_http(), stac_root=root, datetime=datetime or None, region=region or None,
+                    geography=geography or None)
     if res.get("ok"):
         res["draft_find_records"] = "catalog_search.to_find_record(result) drafts a find record for one result; verify it on the publisher's page before use"
     return res
@@ -1509,8 +1510,12 @@ def _src(res: dict) -> dict:
     return res
 
 
-def source_add_tool(entry=None, from_url: str = "", type_: str = "", answers=None, replace: bool = False, confirm_host: str = "", store=None) -> dict:
+def source_add_tool(entry=None, from_url: str = "", type_: str = "", answers=None, replace: bool = False, confirm_host: str = "", store=None, portal: str = "",
+                    name: str = "", http=None) -> dict:
     import user_sources as us
+    if str(portal or "").strip():                       # 5.1.0: a whole portal (a Hub site, a CKAN, Socrata or OpenDataSoft catalog, an ArcGIS Server) as a catalog of the person's own
+        import catalogs
+        return catalogs.add_portal(str(portal).strip(), confirm_host, name or None, http=http)
     if isinstance(entry, str) and entry.strip():
         try:
             import yaml

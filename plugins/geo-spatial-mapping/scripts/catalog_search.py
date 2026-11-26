@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """catalog_search: find open geodata in the public catalogs, the plugin's own library first (gap analysis P1-7; M13).
 
-    catalog_search.py "cell towers Arizona" [--sources library,datagov,hub,socrata,stac] [--limit 5] [--bbox=-115,31,-108,37]
+    catalog_search.py "cell towers Arizona" [--sources auto] [--region "Gilbert, Arizona" | --geography us-az] [--limit 5] [--bbox=-115,31,-108,37]
                       [--stac-root URL] [--datetime 2024-01-01/2024-12-31] [--json] [--find-record N]
 
 Sources (each is one read-only request through `ogc_http.SafeHTTP`: public hosts only, capped bytes and time, backoff):
-  library   the plugin's reference library (shipped entries plus the local overlay); always first in the result list
-  datagov   data.gov catalog search, https://catalog.data.gov/search (JSON; DCAT-US records; the CKAN package_search API was retired)
-  hub       ArcGIS Online / ArcGIS Hub item search, https://www.arcgis.com/sharing/rest/search (type "Feature Service")
-  socrata   Socrata Discovery, https://api.us.socrata.com/api/catalog/v1 (datasets with a geometry column)
-  stac      a STAC API's collections (default https://earth-search.aws.element84.com/v1; Planetary Computer is the other root), by words, box and time
+  auto         (5.1.0, the default) the library, then every catalog whose coverage holds the place: your own portals, the state's, the country's, the world's
+  library      the plugin's reference library (shipped entries plus the local overlay); always first in the result list
+  datagov      data.gov catalog search, https://catalog.data.gov/search (JSON; DCAT-US records; the CKAN package_search API was retired)
+  hub          ArcGIS Online item search (public feature, map, image and tile services, OGC services and file items)
+  socrata      Socrata Discovery, https://api.us.socrata.com/api/catalog/v1 (datasets with a geometry column)
+  stac         a STAC API's collections (default https://earth-search.aws.element84.com/v1; Planetary Computer is the other root), by words, box and time
+  hubsearch    (5.1.0) the ArcGIS Hub Search API, every public Hub site
+  livingatlas  (5.1.0) ArcGIS Living Atlas; subscriber and premium items are shown marked and never fetched
+  hdx, open-canada, data-gov-au, data-gov-uk   (5.1.0) CKAN catalogs; europa: data.europa.eu (INSPIRE's datasets since July 2026); aws: the AWS open data registry
+  state-xx     (5.1.0) a US state's own portal (data/state-portals.yaml); a name of your own: a portal you added (catalogs.py portal URL)
 
 Results are normalised to one shape: {source, id, title, publisher, formats, access_url, service_url, license, updated, bbox, score, description}.
 `to_find_record(result)` turns one into a draft find record (`find_record.py` shape) for `geo-find-data`; it is a draft until the publisher's own page is read.
@@ -64,7 +69,10 @@ def _untrusted(text, limit: int = 400) -> str:
 
 oh = _Door()
 
-SOURCES = ("library", "datagov", "hub", "socrata", "stac")
+SOURCES = ("library", "datagov", "hub", "socrata", "stac")      # the five built in; 5.1.0 adds every root in data/catalog-roots.yaml, each state's portal and the person's own (catalogs.py)
+AUTO = "auto"                                                   # 5.1.0: the library, then the catalogs whose coverage holds the place (catalogs.roots_for)
+PLACE_IN_WORDS = ("ckan", "europa", "opendatasoft", "socrata-domain")      # platforms with no box filter: the place's name goes into the words
+PER_SOURCE_AUTO = 5                                             # with auto, each catalog adds at most this many results
 ENDPOINTS = {
     "datagov": "https://catalog.data.gov/search",
     "hub": "https://www.arcgis.com/sharing/rest/search",
@@ -173,7 +181,8 @@ def license_class_of(text: str | None) -> tuple[str, str]:
         return "share-alike", f"catalog license: {oh.untrusted(text, 120)}"
     if "creativecommons.org/licenses/by" in t or "cc-by" in t or "cc by" in t or "odc-by" in t or "attribution" in t:
         return "attribution", f"catalog license: {oh.untrusted(text, 120)}"
-    if "opendefinition" in t or "open data commons" in t or "open government licence" in t or "open government license" in t:
+    if ("opendefinition" in t or "open data commons" in t or "open government licence" in t or "open government license" in t
+            or "no access and use limitations" in t or "no access or use limitations" in t or "no use limitations" in t or "no restrictions" in t):      # 5.1.0: ArcGIS items' usual wording
         return "open", f"catalog license: {oh.untrusted(text, 120)}"
     if "proprietary" in t or "copyright" in t or "all rights" in t:
         return "licensed", f"catalog license: {oh.untrusted(text, 120)}"
@@ -278,11 +287,10 @@ def normalise_datagov(doc: dict, query: str = "", limit: int = 10) -> list[dict]
 
 # ---------------------------------------------------------------------------------------------------------------- ArcGIS Online / Hub
 def search_hub(http, query: str, bbox=None, limit: int = 10) -> list[dict]:
-    params = {"q": f'{query} type:"Feature Service"', "f": "json", "num": str(min(max(int(limit), 1), 100)), "sortField": "relevance", "sortOrder": "desc"}
-    if bbox:
-        params["bbox"] = ",".join(f"{v:g}" for v in bbox)
-    r = http.get(ENDPOINTS["hub"], params, expect="json")
-    return normalise_hub(json.loads(r.content), query, limit)
+    """5.1.0: public items of every service and file type a map can use (feature, map, image and vector tile services, WMS, WFS, OGC API
+    Features, GeoJSON, Shapefile, GeoPackage, KML, CSV), not feature services only. Subscriber and premium items come back marked."""
+    import catalogs
+    return catalogs.search_agol(http, {"url": ENDPOINTS["hub"], "name": "hub"}, query, bbox, limit)
 
 
 def normalise_hub(doc: dict, query: str = "", limit: int = 10) -> list[dict]:
@@ -296,7 +304,7 @@ def normalise_hub(doc: dict, query: str = "", limit: int = 10) -> list[dict]:
         mod = it.get("modified")
         upd = dt.datetime.fromtimestamp(mod / 1000, dt.timezone.utc).strftime("%Y-%m-%d") if isinstance(mod, (int, float)) and mod > 0 else None
         t = it.get("type") or ""
-        fmts = ["ArcGIS Feature Service"] if "Feature" in t else ([t] if t else [])
+        fmts = ["ArcGIS Feature Service"] if t == "Feature Service" else ([("ArcGIS " + t) if t.endswith("Service") else (_fmt(t) or t)] if t else [])
         lic = it.get("licenseInfo") or it.get("accessInformation") or None
         owner = str(it.get("owner") or "")
         # the owner is an account name, often a person's; the publisher is what the item says about itself, else the organisation part of the account
@@ -333,7 +341,8 @@ def normalise_socrata(doc: dict, query: str = "", limit: int = 10) -> list[dict]
         out.append(result(source="socrata", id=f"{dom}/{fid}" if dom and fid else fid, title=res.get("name"), publisher=res.get("attribution") or dom, formats=fmts,
                           access_url=access, service_url=None, license=((row.get("metadata") or {}).get("license")), updated=res.get("data_updated_at") or res.get("updatedAt"),
                           bbox=None, score=_score_words(q, res.get("name"), res.get("description"), " ".join((row.get("classification") or {}).get("tags") or [])),
-                          description=res.get("description"), domain=dom, export_url=f"https://{dom}/resource/{fid}.geojson" if dom and fid else None))
+                          description=res.get("description"), domain=dom, export_url=f"https://{dom}/resource/{fid}.geojson" if dom and fid else None,
+                          downloads=[{"format": "GeoJSON", "url": f"https://{dom}/resource/{fid}.geojson?$limit=50000", "name": "the dataset as GeoJSON"}] if dom and fid else []))
     out.sort(key=lambda r: -r["score"])
     return out[:limit]
 
@@ -401,12 +410,26 @@ def adapters_for(region_text: str | None) -> list[dict]:
 
 
 def search(query: str, sources=None, bbox=None, limit: int = 10, http=None, stac_root: str | None = None, datetime: str | None = None,
-           region: str | None = None) -> dict:
-    """Every source in order, the library first whatever the order given; one source's failure never hides another's results."""
+           region: str | None = None, geography: str | None = None, place: str | None = None) -> dict:
+    """Every source in order, the library first whatever the order given; one source's failure never hides another's results.
+    5.1.0: `sources` may name any catalog root (hdx, europa, livingatlas, aws, a state's, one of the person's own) or be `auto`: the library,
+    then the catalogs whose coverage holds the place (from `geography`, else `region`, else the box), the person's own portals first."""
+    import catalogs
     srcs = [s.strip().lower() for s in (sources.split(",") if isinstance(sources, str) else (sources or SOURCES)) if s.strip()]
-    bad = [s for s in srcs if s not in SOURCES]
+    known = catalogs.roots()
+    auto = AUTO in srcs
+    geo = None
+    if auto or any(s in known and s not in SOURCES for s in srcs):
+        try:
+            geo = (geography or catalogs.geography_of(region, parse_bbox(bbox))) if (geography or region or bbox) else None
+        except ValueError:
+            geo = geography
+    if auto:
+        srcs = ["library"] + [s for s in srcs if s not in (AUTO, "library")] + [n for n in catalogs.roots_for(geo) if n not in srcs]
+    bad = [s for s in srcs if s not in SOURCES and s not in known]
     if bad:
-        return {"ok": False, "error_kind": "usage", "findings": [finding("MAP-SVC-001", "BLOCK", f"unknown catalog source(s) {', '.join(bad)}; sources are {', '.join(SOURCES)}")]}
+        return {"ok": False, "error_kind": "usage", "findings": [finding("MAP-SVC-001", "BLOCK", f"unknown catalog source(s) {', '.join(bad)}; sources are auto, {', '.join(SOURCES)} "
+                                                                  f"and the catalog roots ({', '.join(n for n in known if n not in SOURCES and not n.startswith('state-'))}; catalogs.py roots)")]}
     if not str(query or "").strip():
         return {"ok": False, "error_kind": "usage", "findings": [finding("MAP-SVC-001", "BLOCK", "a catalog search needs words to search for")]}
     try:
@@ -414,6 +437,15 @@ def search(query: str, sources=None, bbox=None, limit: int = 10, http=None, stac
     except ValueError as e:
         return {"ok": False, "error_kind": "usage", "findings": [finding("MAP-SVC-004", "BLOCK", str(e))]}
     limit = max(1, min(int(limit or 10), MAX_LIMIT))
+    if auto and bb is None and region:                    # 5.1.0: the place's own box narrows the catalogs that take one (ArcGIS Online, Hub, STAC)
+        try:
+            import recipe
+            import region as region_mod
+            x0, y0, x1, y1 = region_mod.resolve(recipe.region_block(region)).bounds
+            pad = max(0.25, (x1 - x0) * 0.5, (y1 - y0) * 0.5)
+            bb = [round(x0 - pad, 4), round(y0 - pad, 4), round(x1 + pad, 4), round(y1 + pad, 4)]
+        except Exception:  # noqa: BLE001 - a place that does not resolve here is searched by its words
+            bb = None
     srcs = (["library"] if "library" in srcs else []) + [s for s in srcs if s != "library"]
     results: list[dict] = []
     try:
@@ -424,18 +456,36 @@ def search(query: str, sources=None, bbox=None, limit: int = 10, http=None, stac
     h = http
     for s in srcs:
         try:
+            n_s = limit if not auto or s == "library" else min(limit, PER_SOURCE_AUTO)
+            q_used = query
             if s == "library":
                 rows = search_library(query, bb, limit)
-            else:
+            elif s in SEARCHERS:
                 h = h or make_http()
-                rows = search_stac(h, query, bb, limit, root=stac_root, datetime=datetime) if s == "stac" else SEARCHERS[s](h, query, bb, limit)
+                town = place and s in ("datagov", "socrata")      # 5.1.0: a catalog with no box filter is asked for the place by name
+                q_used = f"{query} {place}" if town else query
+                rows = search_stac(h, query, bb, n_s, root=stac_root, datetime=datetime) if s == "stac" else SEARCHERS[s](h, q_used, bb, n_s)
+            else:                                         # 5.1.0: a catalog root, by its platform
+                h = h or make_http()
+                root_s = known[s]
+                town = place and root_s.get("platform") in PLACE_IN_WORDS and not root_s.get("country_filter") and root_s.get("scope") != "user"
+                rows = catalogs.search_root(h, s, f"{query} {place}" if town else query, bb, n_s, country=catalogs.country_of(geo))
+                q_used = f"{query} {place}" if town else query
+            if auto:                                      # with auto, a result has to hold most of the question's words (one of one, two of two or three)
+                floor = 0.6 if len(words(q_used)) > 1 else 0.5
+                rows = [r for r in rows if r.get("score", 0) >= floor]
             per[s] = {"count": len(rows)}
+            if s in known:
+                per[s]["catalog"] = known[s].get("title")
+                per[s]["scope"] = known[s].get("scope")
             if s == "socrata" and bb:
                 per[s]["note"] = "Socrata Discovery has no box filter; results are not limited to the box"
             results += rows
-        except (oh.ServiceError, ValueError, KeyError, TypeError) as e:
+        except (oh.ServiceError, catalogs.CatalogError, ValueError, KeyError, TypeError) as e:
             per[s] = {"count": 0, "error": oh.untrusted(str(e), 200), "rule": getattr(e, "rule", None)}
     out = {"ok": True, "query": query, "bbox": bb, "sources": srcs, "results": results, "per_source": per, "notice": NOTICE}
+    if geo:
+        out["geography"] = geo
     if region:
         out["adapters"] = ranked_adapters
     return out
@@ -448,7 +498,8 @@ def to_find_record(r: dict) -> dict:
     lic, why = license_class_of(r.get("license"))
     if r.get("source") == "library" and r.get("license"):
         lic, why = r["license"], "the library entry's license class"
-    url = r.get("service_url") or r.get("access_url") or ""
+    dl = next((d.get("url") for d in r.get("downloads") or [] if d.get("url")), None)      # 5.1.0: a CKAN or data.europa.eu resource
+    url = r.get("service_url") or dl or r.get("access_url") or ""
     rec.update({"dataset": r.get("title") or r.get("id") or "", "publisher": r.get("publisher") or "", "vintage": _year(r.get("updated")) or "",
                 "license_class": lic, "format": (r.get("formats") or ["not stated"])[0], "resolution": "not stated by the catalog",
                 "route": "service" if r.get("service_url") else "download", "url": url, "confidence": "high" if r.get("source") == "library" else "medium",
@@ -462,8 +513,11 @@ def render_text(res: dict) -> str:
         return "\n".join(f"{f['severity']:5} {f['id']} {f['message']}" for f in res.get("findings", []))
     lines = [f"{len(res['results'])} result(s) for '{res['query']}'" + (f" in box {res['bbox']}" if res.get("bbox") else "")]
     for i, r in enumerate(res["results"], 1):
-        lines.append(f"{i:2}. [{r['source']}] {r['title']}  ({r['publisher'] or 'publisher not stated'}; {', '.join(r['formats']) or 'format not stated'}; license: {r['license'] or 'not stated'}; updated {r['updated'] or '?'})")
+        mark = f"  [{r['note']}]" if r.get("note") else ""
+        lines.append(f"{i:2}. [{r['source']}] {r['title']}  ({r['publisher'] or 'publisher not stated'}; {', '.join(r['formats']) or 'format not stated'}; license: {r['license'] or 'terms not stated'}; updated {r['updated'] or '?'}){mark}")
         lines.append(f"    {r.get('service_url') or r.get('access_url') or ''}")
+        if r.get("reader"):
+            lines.append(f"    opened with: {r['reader']}")
     for s, p in res["per_source"].items():
         if p.get("error"):
             lines.append(f"{s}: not searched: {p['error']}")
@@ -476,7 +530,9 @@ def render_text(res: dict) -> str:
 def main(argv=None, http=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("query")
-    ap.add_argument("--sources", default=",".join(SOURCES))
+    ap.add_argument("--sources", default=AUTO, help="auto (the library, then the catalogs that cover the place), or names: library, datagov, hub, socrata, stac, hubsearch, "
+                                                    "livingatlas, hdx, open-canada, data-gov-au, data-gov-uk, europa, aws, state-az, or a portal of your own")
+    ap.add_argument("--geography", help="5.1.0: the library geography term that picks the catalogs (us-az, fr, uk); default: from --region or --bbox")
     ap.add_argument("--limit", type=int, default=10)
     ap.add_argument("--bbox", help="minx,miny,maxx,maxy (write --bbox=-115,31,-108,37 for the west)")
     ap.add_argument("--stac-root", help="a STAC API root (default earth-search; or planetary-computer)")
@@ -486,7 +542,7 @@ def main(argv=None, http=None) -> int:
     ap.add_argument("--find-record", type=int, metavar="N", help="print result N as a draft find record")
     a = ap.parse_args(argv)
     root = STAC_ROOTS.get(a.stac_root or "", a.stac_root)
-    res = search(a.query, a.sources, a.bbox, a.limit, http=http, stac_root=root, datetime=a.datetime, region=a.region)
+    res = search(a.query, a.sources, a.bbox, a.limit, http=http, stac_root=root, datetime=a.datetime, region=a.region, geography=a.geography)
     if a.find_record and res.get("ok"):
         if not 1 <= a.find_record <= len(res["results"]):
             print(f"there is no result {a.find_record}", file=sys.stderr)

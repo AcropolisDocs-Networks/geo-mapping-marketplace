@@ -6,7 +6,9 @@
                     [--outcome explain] [--audience external] [--template square-social] [--title T --subtitle S --tagline G]
                     [--computer linked|none] [--id ID]
     gmap.py sources [--count]                      every source that could serve each need, and what else is available here
+    gmap.py sources --search                       5.1.0: also what the open data catalogs hold for each need (candidates c1, c2 ...)
     gmap.py choose  NEED ENTRY_ID --why "..."      take one source for a need (the others are recorded as seen and not taken)
+    gmap.py take    NEED cN --confirm-host HOST    5.1.0: a catalog find through the plugin's door, with a record [--layer N] [--asked "their words"]
     gmap.py need    add|decline THEME [--why "..."]
     gmap.py data    plan | add NEED --file F | file NAME --path F --source S --license L | derive NAME --op OP --in F --out F [--param k=v]
                     | step NAME --script S [--in F ...] --out F [...] [-- ARGS]
@@ -37,6 +39,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -302,7 +305,9 @@ def cmd_brief(a) -> int:
     for n in list(a.need or []) + [t for t in idoc.get("needs") or [] if not a.no_usual]:
         name = n if n in (tdoc.get("themes") or {}) else (themes.find(n, tdoc)[:1] or [(None, 0)])[0][0]
         if not name:
-            unknown.append(n)
+            unknown.append(n)                             # 5.1.0: no library theme: the need stands in the person's words, and the catalogs are asked for it
+            if slug(n, 32) not in [x["theme"] for x in needs]:
+                needs.append({"theme": slug(n, 32), "asked_as": n, "status": "open", "free": True})
         elif name not in [x["theme"] for x in needs]:
             needs.append({"theme": name, "asked_as": n, "status": "open"})
     jid = slug(a.id or brief.get("title") or brief["message"])
@@ -312,6 +317,8 @@ def cmd_brief(a) -> int:
     job = {"id": jid, "created": now(), "plugin_version": _version(), "step": "brief", "where": w, "brief": brief, "asks": asks, "needs": needs,
            "unknown_needs": unknown, "files": [{"path": f} for f in a.file or []], "data": [], "drafts": [], "builds": [], "enrich": [], "log": []}
     job["geography"] = geography_of(brief)
+    if a.keys is not None:
+        job["keys_ready"] = sorted({k.strip().lower() for k in a.keys.split(",") if k.strip()})
     log(job, "brief", "the brief was written")
     save(job)
     L = [f"Job {jid}: {idoc.get('says')}", f"  message: {brief['message']}", f"  for: {brief['outcome']} ({brief['audience']} audience) on {brief['template']}"]
@@ -322,8 +329,12 @@ def cmd_brief(a) -> int:
     L += [f"  asked: {x['set']}={policy._show(x['value'])}  (\"{x['words']}\")" for x in asks] or ["  asked: nothing that departs from a default"]
     L.append("  needs: " + (", ".join(x["theme"] for x in needs) or "none named (the person's own data, or name one with --need)"))
     if unknown:
-        L.append("  no theme for: " + ", ".join(unknown) + " (gmap.py sources lists the themes; geo-find-data looks further)")
+        L.append("  not a theme of the library: " + ", ".join(unknown) + " (gmap.py sources asks the open data catalogs for them)")
     L += where_lines(w)
+    if job.get("keys_ready") is not None:
+        L.append("  keys ready: " + (", ".join(job["keys_ready"]) or "none"))
+    elif w["computer"] == "linked":
+        L.append("  keys: not said. Call the credentials_status tool once and pass the ready ones (--keys a,b), so the sheet says which keyed sources can be used now")
     out(L + next_lines("sources"))
     return gc.EXIT_OK
 
@@ -366,6 +377,11 @@ def cmd_sources(a) -> int:
     bbox = window_of(job) if a.count else None
     L = [f"Sources for job {job['id']}" + (f" (library geography {geo})" if geo else " (no geography found for the place: every source of each theme is listed)")]
     for n in job["needs"]:
+        if n.get("free"):                                 # 5.1.0: a need the library has no theme for: the catalogs are its sheet
+            n["candidates"], n["compare"] = [], False
+            L += ["", f"Need: {n['asked_as']}  (not a theme of the library)" + (f"  taken: {n['chosen']}" if n.get("chosen") else "")]
+            L += catalog_lines(job, n, {})
+            continue
         s = themes.show(n["theme"], geo, aud, tdoc)
         if a.count and s.get("compare"):
             for c in s["candidates"]:
@@ -382,12 +398,18 @@ def cmd_sources(a) -> int:
             flag = ("" if c["audience_ok"] else f"  NOT FOR THIS AUDIENCE: {c['audience_note']}") + \
                    ("  NEEDS THE COMPUTER" if needs_pc and job["where"]["cloud"] and job["where"]["computer"] != "linked" else "")
             cnt = f"  count here: {c['count_in_window']:,}" if c.get("count_in_window") is not None else ""
-            L.append(f"  {i}. {c['id']}  [{c['license']}, {c['delivery']}" + (f", key {c['key']}" if c["key"] else "") + f"]  from: {c['fetch_from']}{cnt}{flag}")
+            keyed = ""
+            if c["key"]:
+                ready = job.get("keys_ready")
+                keyed = f", key {c['key']}" + ("" if ready is None else " (ready)" if str(c["key"]).lower() in ready else " (not registered: map-credentials add " + str(c["key"]) + ")")
+            L.append(f"  {i}. {c['id']}  [{c['license']}, {c['delivery']}{keyed}]  from: {c['fetch_from']}{cnt}{flag}")
             L.append(f"     {c['title']}")
         if not s["candidates"]:
             L.append("  the library has no source for this here: geo-find-data looks in the catalogues; or ask the person for a file")
         if s.get("gap"):
             L.append(f"  not in the library yet: {s['gap']}")
+        if a.search:
+            L += catalog_lines(job, n, s)
     idoc = policy.intent_doc(job["brief"]["intent"])
     have = {n["theme"] for n in job["needs"]} | {e["theme"] for e in job.get("enrich") or [] if e.get("answer")}
     more = [t for t in idoc.get("enrich") or [] if t not in have][:5]
@@ -403,6 +425,136 @@ def cmd_sources(a) -> int:
     log(job, "sources", "the source sheet was made", counted=bool(a.count))
     save(job)
     out(L + ["", 'Take one for each need: gmap.py choose <need> <entry id> --why "<one phrase>"'] + next_lines("data"))
+    return gc.EXIT_OK
+
+
+OPEN_CLASSES = ("public-domain", "open", "attribution", "share-alike")
+TAKE_FORMATS = ("GeoJSON", "GeoPackage", "Shapefile", "Shapefile (zip)", "KML", "FlatGeobuf")
+TAKE_MAX_BYTES = 150_000_000
+
+
+def _use_of(r: dict) -> str:
+    """How a catalog find could come into the map, in a phrase (the assessment a person reads before saying yes)."""
+    if r.get("marking") in ("subscriber", "premium") or r.get("requester_pays"):
+        return "not fetched: " + (r.get("note") or "marked by its catalog")
+    svc = str(r.get("service_url") or "")
+    if re.search(r"/(FeatureServer|MapServer)(/\d+)?/?$", svc):
+        return "a service layer, read for the map's window"
+    if any(d.get("format") in TAKE_FORMATS for d in r.get("downloads") or []):
+        return "a file, downloaded once"
+    if r.get("reader"):
+        return "a cloud bucket: " + r["reader"]
+    if svc:
+        return "a service: explore it first (geo-service-query)"
+    return "its page has to be read first (no map format named by the catalog)"
+
+
+def catalog_lines(job: dict, n: dict, sheet: dict) -> list[str]:
+    """5.1.0: what the open data catalogs hold for this need, beside the library's sheet: the person's own portals, the state's, the
+    country's and the world's (catalog_search auto). Candidates to assess, never tested sources: each line says who publishes it, its
+    terms as the catalog states them and how it would come in. Nothing is fetched here."""
+    import catalog_search as cs
+    words = str(n.get("asked_as") or n["theme"]).replace("-", " ")
+    b = job["brief"]
+    try:
+        place_text = str((b.get("region") or {}).get("place") or "") if isinstance(b.get("region"), dict) else str(b.get("place_name") or "")
+        res = cs.search(words, "auto", window_of(job), 5, geography=job.get("geography"), region=place_text or None,
+                        place=place_text.split(",")[0].strip() or None)
+    except Exception as ex:  # noqa: BLE001 - the library's sheet stands on its own
+        return [f"  the catalogs were not searched ({type(ex).__name__}: {str(ex)[:120]})"]
+    rows = [r for r in res.get("results") or [] if r.get("source") != "library"]
+    asked = [k for k in res.get("sources") or [] if k != "library"]
+    failed = [f"{k} ({v.get('error', '')[:60]})" for k, v in (res.get("per_source") or {}).items() if v.get("error")]
+    found = []
+    L = [f"  in the open data catalogs for \"{words}\" ({len(asked)} asked: {', '.join(asked)}): {len(rows)} candidate(s); each is a find to assess, not a tested source"]
+    for i, r in enumerate(rows[:12], 1):
+        lic_class, _why = cs.license_class_of(r.get("license"))
+        host = urllib.parse.urlsplit(str(r.get("service_url") or next((d.get("url") for d in r.get("downloads") or []), "") or r.get("access_url") or "")).hostname
+        rec = {"n": f"c{i}", "source": r.get("source"), "catalog": r.get("catalog") or r.get("source"), "id": r.get("id"), "title": r.get("title"), "publisher": r.get("publisher"),
+               "license": r.get("license"), "license_class": lic_class if r.get("license") else None, "formats": r.get("formats"), "service_url": r.get("service_url"),
+               "downloads": r.get("downloads") or [], "access_url": r.get("access_url"), "updated": r.get("updated"), "marking": r.get("marking"), "host": host, "use": _use_of(r),
+               "scope": r.get("scope")}
+        found.append(rec)
+        terms = (f"{rec['license_class']}: " + str(r["license"])[:70]) if r.get("license") else "terms not stated"
+        L.append(f"    {rec['n']}. [{rec['source']}] {r.get('title')}  ({r.get('publisher') or 'publisher not stated'}; {', '.join((r.get('formats') or [])[:3]) or 'format not stated'}; "
+                 f"updated {r.get('updated') or '?'})")
+        L.append(f"        terms: {terms}   use: {rec['use']}" + (f"   host: {host}" if host else ""))
+    if failed:
+        L.append("    not searched: " + "; ".join(failed))
+    if rows:
+        L.append(f"    take one: gmap.py take {n['theme']} c<N> --confirm-host <its host, typed back by the person> [--layer N] [--asked \"<their words>\" when its terms are not open]")
+    n["found"] = found
+    return L
+
+
+def cmd_take(a) -> int:
+    """5.1.0: a catalog find through the plugin's door: a service layer read for the map's window, or a file downloaded once, with a record
+    (who publishes it, its terms as stated, where it came from, the bytes' hash). The host is typed back by the person; a find whose terms are
+    not open, or not stated, comes in only on the person's word."""
+    job = load(a.job)
+    n = _need(job, a.need)
+    r = next((x for x in n.get("found") or [] if x["n"] == a.pick), None)
+    if r is None:
+        raise JobError(f"no candidate {a.pick} for {n['theme']}: gmap.py sources --search lists them (c1, c2 ...)")
+    if r.get("marking") in ("subscriber", "premium"):
+        raise JobError(f"{a.pick} is {r['marking']} content of its catalog: shown, never fetched", EXIT_PERSON)
+    aud = job["brief"].get("audience")
+    open_terms = r.get("license_class") in OPEN_CLASSES
+    if not open_terms and not a.asked:
+        raise JobError(f"the terms of {a.pick} are " + (f"'{str(r['license'])[:100]}' ({r['license_class']})" if r.get("license") else "not stated by its catalog")
+                       + f", and this map is for an {aud} audience. Show the person the dataset's page ({r.get('access_url')}) and take it only on their word: "
+                       f"--asked \"<their words>\"", EXIT_PERSON)
+    svc = str(r.get("service_url") or "")
+    m = re.search(r"^(.*?/(?:FeatureServer|MapServer))(?:/(\d+))?/?$", svc)
+    dl = next((d for d in r.get("downloads") or [] if d.get("format") in TAKE_FORMATS and d.get("url")), None)
+    target = svc if m else (dl or {}).get("url")
+    if not target:
+        raise JobError(f"{a.pick} names no layer or file a map can read ({r['use']}). Open its page, or add its address as a source of your own (source_add).", EXIT_PERSON)
+    host = (urllib.parse.urlsplit(target).hostname or "").lower()
+    if (a.confirm_host or "").strip().lower() != host:
+        raise JobError(f"ask the person to type the host back before it is asked anything: --confirm-host {host}", EXIT_PERSON)
+    bbox = window_of(job)
+    name = slug(n["theme"], 32)
+    dest = job_dir(job["id"]) / "data"
+    dest.mkdir(parents=True, exist_ok=True)
+    if m:
+        import service_tools as st
+        with gc.outputs_in(dest):
+            lyr = str(a.layer if a.layer is not None else (m.group(2) or "0"))
+            res = st.fetch_features(url=f"{m.group(1)}/{lyr}", bbox=",".join(f"{v:g}" for v in bbox) if bbox else "", confirm_host=host)      # the address names the layer
+        path = Path(str(res.get("result") or ""))
+        if not res.get("ok") or not path.is_file():
+            msg = "; ".join(f.get("message", "") for f in res.get("findings") or [])[:300] or str(res.get("error") or res.get("ask") or "no file was written")[:300]
+            raise JobError(f"the layer was not read: {msg}", gc.EXIT_SERVICE)
+        door, count = "service capture", res.get("features")
+    else:
+        import catalog_search as cs
+        ext = {"GeoJSON": ".geojson", "GeoPackage": ".gpkg", "KML": ".kml", "FlatGeobuf": ".fgb"}.get(dl["format"], ".zip")
+        path = dest / f"{name}{ext}"
+        try:
+            resp = cs.oh.SafeHTTP(limits={"timeout_s": 120, "max_bytes": TAKE_MAX_BYTES}).get(target, None, expect="any", max_bytes=TAKE_MAX_BYTES)
+        except cs.oh.ServiceError as ex:
+            raise JobError(f"the file was not downloaded: {str(ex)[:300]}", gc.EXIT_SERVICE) from None
+        path.write_bytes(resp.content)
+        door, count = "catalog download", None
+    kind = _kind_of_file(path)
+    if kind is None:
+        raise JobError(f"{path.name} was fetched and is not a layer the plugin reads (run geo-inspect on it): {path}", gc.EXIT_SERVICE)
+    terms = str(r["license"])[:200] if r.get("license") else "Terms not stated by the publisher"
+    item = {"name": name, "need": n["theme"], "door": door, "path": str(path.resolve()), "sha256": sha256(path), "bytes": path.stat().st_size, "kind": kind,
+            "catalog": {"source": r["source"], "id": r.get("id"), "page": r.get("access_url"), "address": target, "host": host, "updated": r.get("updated")},
+            "provenance": {"source": f"{r.get('publisher') or r.get('catalog')}: {r.get('title')}"[:200], "license": terms, "retrieved_at": dt.date.today().isoformat()}, "at": now()}
+    if a.asked:
+        item["asked"] = a.asked.strip()
+        job["asks"] = [x for x in job.get("asks") or [] if x.get("set") != f"source.{name}"] + [{"set": f"source.{name}", "value": r.get("id"), "words": a.asked.strip()}]
+    job["data"] = [d for d in job["data"] if d["name"] != name] + [item]
+    n.update(chosen=f"catalog:{r['source']}/{r.get('id')}", why=(a.why or f"found in {r['catalog']}").strip(), status="chosen",
+             not_taken=[c["id"] for c in n.get("candidates") or []] + [x["n"] for x in n.get("found") or [] if x["n"] != a.pick], needs_computer=False)
+    log(job, "data", f"{door}: {name} from {r['source']}", host=host)
+    save(job)
+    out([f"in hand: {name} ({door} from {r['catalog']}), {kind}" + (f", {count} feature(s)" if count else "") + f", {item['bytes']:,} bytes",
+         f"  source line: {item['provenance']['source']}", f"  terms: {terms}" + ("" if open_terms else f"  (taken on the person's word: \"{a.asked.strip()}\")"),
+         "  Inspect it before it is mapped (geo-inspect), and say what it covers: a catalog find is tested once, not vouched for."] + next_lines("compose"))
     return gc.EXIT_OK
 
 
@@ -445,6 +597,13 @@ def cmd_need(a) -> int:
     job = load(a.job)
     tdoc = themes.load()
     name = a.theme if a.theme in (tdoc.get("themes") or {}) else (themes.find(a.theme, tdoc)[:1] or [(None, 0)])[0][0]
+    if not name and a.op == "add":                       # 5.1.0: a need in the person's words; the catalogs are asked for it
+        if slug(a.theme, 32) not in [n["theme"] for n in job["needs"]]:
+            job["needs"].append({"theme": slug(a.theme, 32), "asked_as": a.theme, "status": "open", "free": True})
+        log(job, "sources", f"need added: {a.theme}")
+        save(job)
+        out([f"need added: {a.theme} (not a theme of the library). gmap.py sources asks the open data catalogs for it."])
+        return gc.EXIT_OK
     if not name:
         raise JobError(f"no theme '{a.theme}' (python3 scripts/themes.py list)")
     e = next((x for x in job["enrich"] if x["theme"] == name), None)
@@ -1202,9 +1361,19 @@ def parser() -> argparse.ArgumentParser:
     b.add_argument("--tagline")
     b.add_argument("--style-pack")
     b.add_argument("--computer", choices=["linked", "none"])
+    b.add_argument("--keys", help="5.1.0: the person's keys that are ready, comma-separated, as the credentials_status tool lists them (earthdata,opencellid); "
+                                  "the source sheet then says which keyed sources can be used now")
     b.add_argument("--replace", action="store_true")
     s = job_arg(sub.add_parser("sources"))
     s.add_argument("--count", action="store_true")
+    s.add_argument("--search", action="store_true", help="5.1.0: also ask the open data catalogs for each need (your own portals, the state's, the country's, the world's)")
+    tk = job_arg(sub.add_parser("take"))
+    tk.add_argument("need")
+    tk.add_argument("pick", help="a candidate from gmap.py sources --search: c1, c2 ...")
+    tk.add_argument("--confirm-host", default="")
+    tk.add_argument("--layer", type=int)
+    tk.add_argument("--asked")
+    tk.add_argument("--why")
     c = job_arg(sub.add_parser("choose"))
     c.add_argument("need")
     c.add_argument("entry")
@@ -1289,7 +1458,7 @@ def main(argv=None) -> int:
                 raise JobError("data add NEED --file FILE")
             if a.op == "file" and not a.path:
                 raise JobError("data file NAME --path FILE --source ... --license ...")
-        return {"brief": cmd_brief, "sources": cmd_sources, "choose": cmd_choose, "need": cmd_need, "data": cmd_data, "compose": cmd_compose, "set": cmd_set, "draft": cmd_draft,
+        return {"brief": cmd_brief, "sources": cmd_sources, "choose": cmd_choose, "take": cmd_take, "need": cmd_need, "data": cmd_data, "compose": cmd_compose, "set": cmd_set, "draft": cmd_draft,
                 "cold": cmd_cold, "build": cmd_build, "review": cmd_review, "status": cmd_status, "usage": cmd_usage}[a.cmd](a)
     except JobError as ex:
         print(f"gmap: {ex}", file=sys.stderr)

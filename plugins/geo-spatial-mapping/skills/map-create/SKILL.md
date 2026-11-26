@@ -18,7 +18,7 @@ GMAP_ROOT="${CLAUDE_PLUGIN_ROOT}"
 GP=${USERPROFILE:-}/.geo-mapping/runtime/venv/Scripts/python.exe; if [ -f "$GP" ]; then python3(){ "$GP" "$@";}; fi
 python3 "$GMAP_ROOT/scripts/gmap.py" brief --region "Tempe, Arizona" --message "<one sentence: what the reader should take away>" \
         --intent site-map [--need "cell towers" ...] [--ask "theme=dark | <the person's own words>" ...] [--title "..."] [--computer linked|none]
-python3 "$GMAP_ROOT/scripts/gmap.py" sources [--count]     # every library source for each need; then: gmap.py choose <need> <entry id> --why "<one phrase>"
+python3 "$GMAP_ROOT/scripts/gmap.py" sources [--count] [--search]     # every library source for each need (--search: the open data catalogs too); then choose, or take
 python3 "$GMAP_ROOT/scripts/gmap.py" data plan             # how each source comes in; data add | file | derive | step record every layer
 python3 "$GMAP_ROOT/scripts/gmap.py" compose               # writes map.yaml from the defaults, the intent, the brief, the asks and the data
 python3 "$GMAP_ROOT/scripts/gmap.py" set <key>=<value> [--layer <id>] [--asked "<their words>"]     # a standing default moves only on the person's word
@@ -38,7 +38,8 @@ python3 "$GMAP_ROOT/scripts/gmap.py" review                # how the map was mad
   take the references away in one step.
 - **Take sources from the sheet.** It lists every source the library holds for what the thing is, with licence, key and where it can be
   fetched from. When it says to compare, count first. When the best source needs the person's computer and none is linked, the job stops:
-  ask them; never swap the source yourself. Answer each "also available here" line (add or decline).
+  ask them; never swap the source yourself. Answer each "also available here" line (add or decline). `--search` (5.1.0) adds what the open
+  data catalogs hold for the place, the person's own portals first; `gmap.py take <need> c<N> --confirm-host <host>` brings a find in.
 - **Bring data through the door.** A library layer is fetched by the build or by the data tool the plan names. Shape data with an op
   (`data derive`); when no op does it, write the script and run it with `data step`, so its inputs, outputs and provenance are recorded.
   Never fetch with curl or draw with a script of your own. Run `geo-inspect` on a file the person brought.

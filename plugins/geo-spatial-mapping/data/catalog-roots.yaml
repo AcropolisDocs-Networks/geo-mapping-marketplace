@@ -1,0 +1,32 @@
+# Open data catalogs the plugin searches (5.1.0, the open data portals spec, P1). Platforms, not portals: a portal on a known platform is a
+# row here (or a row in the person's own catalogs.yaml, written by the portal adder), never new code. `catalog_search.py --sources auto`
+# picks the rows whose coverage holds the map's place; a row can also be named (--sources hdx,europa).
+#
+#   platform   ckan | europa | hub-search | arcgis-online | aws-registry | datagov | socrata | stac | opendatasoft | arcgis-server
+#   url        the API root the platform's searcher calls
+#   site       where a person opens a dataset's page (when it is not the root's own host)
+#   coverage   library geography terms the catalog serves (world, europe, us, ca, au, uk, us-az ...)
+#   licence    what the catalog says of its datasets' terms, in a phrase; each result still carries its own
+#   tested     the day a real request answered from the build workspace (the release check asks each again)
+#
+# Every root here answered with no key on the day shown. A root that stops answering is marked by the check, never removed silently.
+roots_version: 1
+roots:
+  datagov:      {platform: datagov, title: "data.gov (US federal catalog)", url: "https://catalog.data.gov/search", coverage: [us], licence: "mostly public domain; stated per dataset", tested: 2026-11-25}
+  hub:          {platform: arcgis-online, title: "ArcGIS Online (public items)", url: "https://www.arcgis.com/sharing/rest/search", coverage: [world], licence: "stated per item, often not at all", tested: 2026-11-25}
+  socrata:      {platform: socrata, title: "Socrata Discovery (city, county and state portals)", url: "https://api.us.socrata.com/api/catalog/v1", coverage: [us, ca], licence: "stated per dataset", tested: 2026-11-25}
+  stac:         {platform: stac, title: "Earth Search (STAC collections on AWS)", url: "https://earth-search.aws.element84.com/v1", coverage: [world], licence: "stated per collection", tested: 2026-11-25}
+  hubsearch:    {platform: hub-search, title: "ArcGIS Hub (every public Hub site)", url: "https://hub.arcgis.com/api/search/v1", coverage: [world], licence: "stated per item, often not at all", tested: 2026-11-25}
+  livingatlas:  {platform: arcgis-online, title: "ArcGIS Living Atlas of the World", url: "https://www.arcgis.com/sharing/rest/search", group: "47dd57c9a59d458c86d3d6b978560088",
+                 coverage: [world], licence: "Esri's terms; subscriber and premium items are marked and never fetched", tested: 2026-11-25}
+  hdx:          {platform: ckan, title: "Humanitarian Data Exchange (OCHA)", url: "https://data.humdata.org/api/3/action", site: "https://data.humdata.org", coverage: [world], country_filter: "groups:{iso3}",
+                 licence: "varies by dataset (CC BY, CC BY-IGO, ODbL, other): acknowledged per dataset", tested: 2026-11-25}
+  open-canada:  {platform: ckan, title: "Open Government Canada", url: "https://open.canada.ca/data/en/api/3/action", site: "https://open.canada.ca/data/en", coverage: [ca],
+                 licence: "Open Government Licence - Canada, unless a dataset says otherwise", tested: 2026-11-25}
+  data-gov-au:  {platform: ckan, title: "data.gov.au", url: "https://data.gov.au/data/api/3/action", site: "https://data.gov.au/data", coverage: [au], licence: "stated per dataset (mostly CC BY)", tested: 2026-11-25}
+  data-gov-uk:  {platform: ckan, title: "data.gov.uk (Find open data)", url: "https://ckan.publishing.service.gov.uk/api/action", site: "https://www.data.gov.uk", coverage: [uk],
+                 licence: "UK Open Government Licence, unless a dataset says otherwise", tested: 2026-11-25}
+  europa:       {platform: europa, title: "data.europa.eu (the European data portal; INSPIRE datasets since July 2026)", url: "https://data.europa.eu/api/hub/search/search", site: "https://data.europa.eu/data/datasets",
+                 coverage: [europe], licence: "stated per distribution", tested: 2026-11-25}
+  aws:          {platform: aws-registry, title: "Registry of Open Data on AWS (geospatial)", url: "https://s3.amazonaws.com/registry.opendata.aws/roda/ndjson/index.ndjson", site: "https://registry.opendata.aws",
+                 coverage: [world], licence: "stated per dataset; a requester-pays bucket is refused and said", tested: 2026-11-25}

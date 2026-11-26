@@ -37,3 +37,13 @@
 - {host: cds.climate.copernicus.eu,       url: "https://cds.climate.copernicus.eu/",             class: service}
 # 1.17.0: Statistics Canada's ArcGIS service (statcan-geo); the USGS GAP organisation (usgs-gap-padus) is on services.arcgis.com, listed above.
 - {host: geo.statcan.gc.ca,               url: "https://geo.statcan.gc.ca/geo_wa/rest/services?f=json", class: service}
+# 5.1.0 (open data portals P1, rule 6): the open data catalogs catalog_search asks (data/catalog-roots.yaml); all answered from the build
+# workspace and from the PC on 2026-11-25.
+- {host: catalog.data.gov,                url: "https://catalog.data.gov/",                      class: data}
+- {host: hub.arcgis.com,                  url: "https://hub.arcgis.com/api/search/v1",           class: service}
+- {host: www.arcgis.com,                  url: "https://www.arcgis.com/sharing/rest/info?f=json", class: service}
+- {host: data.humdata.org,                url: "https://data.humdata.org/api/3/action/status_show", class: data}
+- {host: open.canada.ca,                  url: "https://open.canada.ca/data/en/api/3/action/status_show", class: data}
+- {host: data.gov.au,                     url: "https://data.gov.au/data/api/3/action/status_show", class: data}
+- {host: ckan.publishing.service.gov.uk,  url: "https://ckan.publishing.service.gov.uk/api/action/status_show", class: data}
+- {host: data.europa.eu,                  url: "https://data.europa.eu/api/hub/search/",         class: data}
