@@ -452,9 +452,9 @@ entries:
   file: entries/data/ref.boundary.world.division.overture.yaml
   type: boundary
   status: active
-  rev: 2
+  rev: 3
   tags_digest: 87bf1428023f
-  entry_digest: 410e83c965ab
+  entry_digest: f6c4977f6c2b
 - id: ref.boundary.world.historical.awmc
   file: entries/data/ref.boundary.world.historical.awmc.yaml
   type: boundary
@@ -546,6 +546,13 @@ entries:
   rev: 2
   tags_digest: 2fdff583cdc9
   entry_digest: 51a7d373ee40
+- id: ref.context.us.hydrography.nhd
+  file: entries/data/ref.context.us.hydrography.nhd.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 2dada50b075f
+  entry_digest: 5486cb4ad638
 - id: ref.context.us.hydrography.nhdplus-hr
   file: entries/data/ref.context.us.hydrography.nhdplus-hr.yaml
   type: context
@@ -581,6 +588,13 @@ entries:
   rev: 1
   tags_digest: 951b8581d771
   entry_digest: bb31c05c4a7f
+- id: ref.context.us.watershed.wbd
+  file: entries/data/ref.context.us.watershed.wbd.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 50733778d17e
+  entry_digest: 0f85d742b368
 - id: ref.context.world.building.google
   file: entries/data/ref.context.world.building.google.yaml
   type: context
@@ -812,6 +826,13 @@ entries:
   rev: 1
   tags_digest: 51056b8d99d2
   entry_digest: fd4deb6fc8b1
+- id: ref.gazetteer.world.place.foursquare-os
+  file: entries/data/ref.gazetteer.world.place.foursquare-os.yaml
+  type: gazetteer
+  status: active
+  rev: 1
+  tags_digest: 70a4a597164f
+  entry_digest: 027a68dd0922
 - id: ref.gazetteer.world.place.geonames
   file: entries/data/ref.gazetteer.world.place.geonames.yaml
   type: gazetteer
@@ -851,9 +872,9 @@ entries:
   file: entries/data/ref.gazetteer.world.place.overture.yaml
   type: gazetteer
   status: active
-  rev: 2
-  tags_digest: 5761264db34e
-  entry_digest: 68fbe5c3691f
+  rev: 3
+  tags_digest: 3b0039cea4f0
+  entry_digest: 1d8568194667
 - id: ref.gazetteer.world.place.wof
   file: entries/data/ref.gazetteer.world.place.wof.yaml
   type: gazetteer
@@ -938,6 +959,13 @@ entries:
   rev: 1
   tags_digest: 3d59856d0559
   entry_digest: fc9f0acc3334
+- id: ref.infrastructure.us.structure.nsd
+  file: entries/data/ref.infrastructure.us.structure.nsd.yaml
+  type: infrastructure
+  status: active
+  rev: 1
+  tags_digest: ba8ba169e1f9
+  entry_digest: 760c62bf9517
 - id: ref.infrastructure.us.tower.fcc-asr
   file: entries/data/ref.infrastructure.us.tower.fcc-asr.yaml
   type: infrastructure
@@ -977,9 +1005,9 @@ entries:
   file: entries/data/ref.infrastructure.world.osm.geofabrik.yaml
   type: infrastructure
   status: active
-  rev: 2
+  rev: 3
   tags_digest: 54c0f98c86e4
-  entry_digest: 7f0dcbb30ce5
+  entry_digest: 17393c37a968
 - id: ref.infrastructure.world.port.ne10
   file: entries/data/ref.infrastructure.world.port.ne10.yaml
   type: infrastructure
@@ -1827,6 +1855,13 @@ entries:
   rev: 1
   tags_digest: e5c1c8f771f4
   entry_digest: a12b98c9af63
+- id: ref.terrain.us.dem.3dep-1m
+  file: entries/data/ref.terrain.us.dem.3dep-1m.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 17cd134092e1
+  entry_digest: 803349e60c92
 - id: ref.terrain.world.bathymetry.gebco
   file: entries/data/ref.terrain.world.bathymetry.gebco.yaml
   type: terrain

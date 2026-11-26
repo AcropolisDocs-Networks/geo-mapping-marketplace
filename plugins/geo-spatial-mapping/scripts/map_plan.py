@@ -589,6 +589,8 @@ def uncached_ref_layers(spec: dict) -> list[dict]:
             continue                                  # the load says what is wrong with the id itself
         if (e.get("delivery") or {}).get("mode") != "fetch" or e.get("status") != "active":
             continue
+        if (e.get("delivery") or {}).get("window"):
+            continue                                  # 5.4.0: read for the map's window by the build itself (window_read), never cached ahead by variant
         import map_raster
         if (map_raster.is_dem_entry(e["id"]) or ly.get("role") in ("hillshade", "contours", "raster", "terrain")
                 or str(e.get("type") or "") in ("terrain", "raster", "dem")):
@@ -743,8 +745,28 @@ def load_source(layer: dict, base: Path, window=None):
             v0 = src.get("variant") if isinstance(src.get("variant"), str) else None
             if la.required(ent0) and la.current(la.key_for(ent0, v0)) is None:
                 raise PlanError(f"MAP-LIC-018: layer '{layer['id']}': {la.refusal(ent0, variant=v0)}", gc.EXIT_REFUSED)
-        gdf, e = load_ref_layer(sid or src["id"], src.get("variant"))
-        notes = []
+        import window_read
+        wnote = None
+        if ent0 is not None and window_read.block(ent0) is not None:
+            # 5.4.0 (open data portals P4.1, P4.3): a source kept as large GeoParquet files in a public bucket is read for the map's window only
+            if window is None:
+                raise PlanError(f"layer '{layer['id']}': library entry '{src['id']}' is read for the map window, which only a map build knows", gc.EXIT_USAGE)
+            wb, why = window()
+            try:
+                gdf, wrec = window_read.read(ent0, wb, src)
+            except window_read.WindowError as ex:
+                raise PlanError(f"{(ex.rule + ': ') if ex.rule and ex.rule not in str(ex) else ''}layer '{layer['id']}': {ex}", ex.code) from None
+            e = ent0
+            how = ("read from the window kept by an earlier build; no request was sent" if wrec.get("cached") else
+                   f"read from {wrec.get('files', 0)} staged file(s) ({wrec.get('bytes', 0) / 1e6:,.1f} MB downloaded and kept, {wrec.get('seconds', 0):g} s)"
+                   if wrec.get("products") is not None else
+                   f"fetched for this map ({wrec.get('files', 0)} file(s), {wrec.get('row_groups', 0)} row group(s), {wrec.get('bytes', 0) / 1e6:,.1f} MB in "
+                   f"{wrec.get('requests', 0)} request(s), {wrec.get('seconds', 0):g} s)")
+            wnote = (f"library entry {e['id']} rev {e.get('rev')}: {wrec.get('what')}, inside the box {', '.join(f'{v:g}' for v in wb)} (lon/lat; {why}); {how}; "
+                     f"{len(gdf):,} feature(s)")
+        else:
+            gdf, e = load_ref_layer(sid or src["id"], src.get("variant"))
+        notes = [{"id": "IO", "sev": "INFO", "message": wnote, "step": wnote}] if wnote else []
         if sid:
             notes.append({"message": f"countries at {src['detail']} (Natural Earth, source.detail)", "step": f"read {sid} for detail {src['detail']}"})
         elif str(src["id"]) == BASEMAP_REFS["countries"] and src.get("fill_small", True) is not False:
@@ -763,7 +785,7 @@ def load_source(layer: dict, base: Path, window=None):
             except Exception as ex:  # noqa: BLE001 - a filter GDAL cannot read is the person's to fix, said in full
                 raise PlanError(f"MAP-SPEC-005: layer '{layer['id']}': source.where could not be read on library entry '{src['id']}' "
                                 f"({str(ex).splitlines()[0][:160]}); write it in SQL as ogr2ogr reads it, or use the layer's filter: block", gc.EXIT_USAGE) from None
-            notes = [{"message": f"{n.msg}"} for n in notes_io] + [{"message": f"source.where kept {len(gdf):,} feature(s) of library entry '{src['id']}'",
+            notes = notes + [{"message": f"{n.msg}"} for n in notes_io] + [{"message": f"source.where kept {len(gdf):,} feature(s) of library entry '{src['id']}'",
                                                                     "step": f"kept the features of {src['id']} where {src['where']}"}]
             if not len(gdf):
                 raise PlanError(f"MAP-SPEC-005: layer '{layer['id']}': source.where ({src['where']}) keeps no feature of library entry '{src['id']}'", gc.EXIT_USAGE)
@@ -796,11 +818,14 @@ def load_source(layer: dict, base: Path, window=None):
     if t == "osm":                           # 3.4.0 (Day 21 #14): OpenStreetMap by tag through Overpass, cached in data/osm/
         import osm
         reg = _BUILD.get("region")
+        box = src.get("bbox") or (list(reg.bounds) if reg is not None else None)
+        if box is None and window is not None:              # 5.4.0: a map with no region block reads the box of its own frame (the build's window was
+            box = list(window()[0]) if callable(window) else window   # passed on as the function it is, and the layer failed with a TypeError)
         try:
-            gdf, prov = osm.source_layer(src, base, src.get("bbox") or (list(reg.bounds) if reg is not None else window))
+            gdf, prov = osm.source_layer(src, base, box)
         except osm.OsmError as ex:
             raise PlanError(f"{ex.rule}: layer '{layer['id']}': {ex}", ex.code) from None
-        return gdf, library_entry(osm.ENTRY), False, [{"step": f"OpenStreetMap features ({', '.join(src.get('tags') or ['own query'])}) from "
+        return gdf, library_entry(prov.get("library_ref") or osm.ENTRY), False, [{"step": f"OpenStreetMap features ({', '.join(src.get('tags') or ['own query'])}) from "
                                                                f"{prov.get('source', 'Overpass')}, {prov.get('vintage', 'live')}: {len(gdf):,} feature(s)"}], None
     raise PlanError(f"layer '{layer['id']}': source type '{t}' is not a source this plugin knows (file, ref, service, user-run, h3, adapter, osm)", gc.EXIT_USAGE)
 

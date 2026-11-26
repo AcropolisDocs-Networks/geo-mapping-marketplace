@@ -1,0 +1,79 @@
+id: ref.context.us.hydrography.nhd
+type: context
+rev: 1
+status: active
+title: 'National Hydrography Dataset, best resolution (staged products of The National Map)'
+summary: 'Streams, canals, ditches, pipelines and water bodies of the United States at 1:24,000 or better, as USGS stages them by hydrologic unit. The units
+  over the map''s window are found through the TNM Access products API, downloaded once and kept, and each layer is read for the window from the kept file.'
+tags:
+  geography: [us]
+  level: [line, water]
+  domain: [general, hazard]
+  use_for: [context-basemap, site-map]
+  avoid_for: [engineering-grade, legal-boundary, site-precision]
+  scale: [metro, local, site]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'Every stream, canal and ditch of a city or a county with its name and its kind (fcode_description: Stream/River, Canal/Ditch, Artificial Path), kept on disk
+  so the next map of the place asks nothing.'
+- 'Water bodies or wide rivers as areas (source.layer: NHDWaterbody or NHDArea), or dams and gates as points (NHDPoint).'
+- The map service (ref.context.us.hydrography.nhdplus-hr) is slow or caps the answer at 2,000 features.
+avoid_when:
+- 'The map is a state or larger: the network is dense; Natural Earth rivers or TIGER water read better.'
+- 'Flow, order or drainage area are needed: those are NHDPlus HR''s value-added attributes (a file geodatabase, listed by tnm.py and not read).'
+- 'Currency matters: NHD was retired in 2023 and is no longer updated; 3DHP replaces it and is staged as one 23 GB file, which is not read.'
+pairs_with: [ref.context.us.hydrography.nhdplus-hr, ref.context.us.watershed.wbd]
+distinct_from:
+- id: ref.context.us.hydrography.nhdplus-hr
+  why: the USGS map service, asked for the window each time and capped at 2,000 features a request
+- id: ref.context.us.water-linear.tiger
+  why: the Census Bureau's linear water by county, coarser and without hydrologic attributes
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: GeoPackage in a zip, one a hydrologic unit (HU-8 subbasin, HU-4 subregion) or state; read for the map's window from the kept file
+  geometry: line
+  window:
+    reader: tnm
+    key: nhd
+    layer: NHDFlowline
+    layers: [NHDFlowline, NHDWaterbody, NHDArea, NHDLine, NHDPoint]
+    cap_mb: 700
+    max_span_deg: 3
+  columns: [permanent_identifier, gnis_name, lengthkm, reachcode, ftype, fcode, fcode_description]
+  note: 'In a MapSpec: source: {type: ref, id: ref.context.us.hydrography.nhd, layer: NHDWaterbody, where: "ftype = 390"}. Every unit of the smallest kind
+    whose box touches the window is read (a unit is a watershed, so its box is not its coverage) and a feature in two units is kept once. By hand:
+    tnm.py plan nhd --bbox=W,S,E,N names the files and their size before anything is downloaded.'
+source:
+  publisher: US Geological Survey, National Geospatial Program
+  product: National Hydrography Dataset (NHD) Best Resolution, staged products
+  url: https://www.usgs.gov/national-hydrography/national-hydrography-dataset
+  api: https://tnmaccess.nationalmap.gov/api/v1/docs
+url_verified_on: '2026-11-25'
+vintage:
+  current: 'final NHD, staged 2023 (each file names its publication date)'
+  cadence: static
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Hydrography: USGS National Hydrography Dataset, public domain.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://tnmaccess.nationalmap.gov/api/v1/datasets
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.4.0, open data portals P4.5). Verified from the build workspace on 2026-11-25: the products API listed 9 products over Gilbert (-111.9,33.2,-111.6,33.42); the four HU-8 subbasins whose boxes touch it were downloaded (73 MB, 9 s) and NHDFlowline read 495 features (440 from Middle Gila 15050100, 62 from Lower Salt 15060106, so one unit alone would have left part of the window empty); NHDWaterbody then read 125 from the kept files with no download.'

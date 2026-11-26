@@ -1,6 +1,6 @@
 id: ref.boundary.world.division.overture
 type: boundary
-rev: 2
+rev: 3
 status: active
 title: Overture Maps divisions (administrative areas)
 summary: Countries, regions (states, provinces), counties and localities with names and hierarchy from the Overture divisions theme (division and division_area
@@ -67,35 +67,28 @@ join:
     the polygons, division the points and hierarchy.
 crs: EPSG:4326
 delivery:
-  mode: user-supplied
-  format: GeoParquet (S3, read with pyarrow or DuckDB; filter on subtype and country)
-  note: 'Overture publishes each release as GeoParquet on S3: s3://overturemaps-us-west-2/release/<release>/theme=<theme>/type=<type>/*.parquet (listing
-    verified 2026-11-04: releases 2026-09-23.0, 2026-09-23.1, 2026-10-21.0; themes addresses, base, buildings, divisions, places, transportation). Files
-    are 700 to 800 MB each, so read them with a bbox filter rather than downloading: pyarrow.dataset(''s3://overturemaps-us-west-2/release/2026-10-21.0/theme=divisions/type=division_area/'',
-    filesystem=S3FileSystem(anonymous=True, region=''us-west-2'')).to_table(filter=(bbox.xmin > W) & (bbox.xmax < E) & ...), or DuckDB: SELECT ... FROM
-    read_parquet(''s3://.../theme=divisions/type=division_area/*'', hive_partitioning=1) WHERE bbox.xmin > W AND ...; save the result as GeoParquet and
-    supply it.'
-  columns:
-  - id
-  - geometry
-  - bbox
-  - version
-  - sources
-  - subtype
-  - class
-  - names
-  - country
-  - region
-  - division_id
-  - is_land
-  - is_territorial
+  mode: fetch
+  format: GeoParquet (S3), read for the map's window by HTTPS range request
+  geometry: polygon
+  window:
+    reader: overture
+    theme: divisions
+    type: division_area
+    release: 2026-11-18.0
+    cap_mb: 400
+    max_span_deg: 25
+  columns: [id, name, subtype, class, country, region, admin_level, division_id, is_land, is_territorial]
+  note: 'In a MapSpec: source: {type: ref, id: ref.boundary.world.division.overture, where: "subtype = ''region'' AND country = ''KE''"}; the build reads the
+    window (window_read.py). Add class = ''land'': a coastal area is listed a second time as class maritime. subtype is country, dependency, region, county, localadmin, locality, macrohood, neighborhood or microhood; name one, or every
+    level is drawn on top of the others. The points with population and the boundary lines (with is_disputed) are read by hand: overture_io.py read --release
+    2026-11-18.0 --theme divisions --type division | division_boundary --bbox=W,S,E,N --out F.parquet.'
 source:
   publisher: Overture Maps Foundation
-  product: Overture divisions theme, release 2026-10-21.0
-  url: https://overturemaps-us-west-2.s3.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/&delimiter=/
-url_verified_on: '2026-11-04'
+  product: Overture divisions theme, release 2026-11-18.0
+  url: https://overturemaps-us-west-2.s3.amazonaws.com/?list-type=2&prefix=release/2026-11-18.0/&delimiter=/
+url_verified_on: '2026-11-25'
 vintage:
-  current: 2026-10-21.0
+  current: 2026-11-18.0
   cadence: monthly
 license:
   class: share-alike
@@ -106,11 +99,11 @@ license:
   note: The divisions theme is ODbL 1.0 (docs.overturemaps.org, read 2026-11-04).
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-04'
-  verify_by: '2027-11-04'
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
   check:
     kind: http_get
-    url: https://overturemaps-us-west-2.s3.amazonaws.com/?list-type=2&prefix=release/2026-10-21.0/&delimiter=/
+    url: https://overturemaps-us-west-2.s3.amazonaws.com/?list-type=2&prefix=release/2026-11-18.0/&delimiter=/
     expect: 200
   changelog:
   - rev: 1
@@ -119,6 +112,9 @@ maintenance:
   - rev: 2
     date: '2026-11-09'
     note: 'attribution block for the web map frame (release 1.1.0): the short corner credit, its links, the full text, whether the map must show it, when it may collapse and the export wording; terms as recorded above (OSMF Attribution Guidelines and Mapbox attribution help re-read 2026-11-09).'
+  - rev: 3
+    date: '2026-11-25'
+    note: 'Fetched for the map''s window (5.4.0, open data portals P4.1 and P2.8): release 2026-11-18.0. Verified from the build workspace on 2026-11-25: Kenya''s box (33.9,-4.7,41.9,5.1) read 2,405 areas of every level (161 MB in 37 requests, 25 s); subtype = ''region'' AND country = ''KE'' kept 50: 48 land areas (the 47 counties and the Elemi Triangle) and 2 maritime ones (Kwale and Lamu; add class = ''land'' to leave those out).'
 attribution:
   corner: © Overture Maps Foundation
   links:

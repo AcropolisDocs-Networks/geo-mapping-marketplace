@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 266 entries (257 active); basemap-provider 18, boundary 53, boundary-derived 2, context 37, crosswalk 1, gazetteer 12, infrastructure 21, map-type 13, palette 2, public-service 56, statistic 26, symbol-set 1, template 6, terrain 18.
+Library: 271 entries (262 active); basemap-provider 18, boundary 53, boundary-derived 2, context 39, crosswalk 1, gazetteer 13, infrastructure 22, map-type 13, palette 2, public-service 56, statistic 26, symbol-set 1, template 6, terrain 19.
 
 ### Usable now
 
@@ -62,7 +62,7 @@ Library: 266 entries (257 active); basemap-provider 18, boundary 53, boundary-de
 | `ref.boundary.world.country.ne50` | World countries, 50m (Natural Earth) | Natural Earth 5.1.1 | bundled (0.57 MB) | public-domain | ISO_A3_EH (string, 3 chars) |
 | `ref.boundary.world.disputed-areas.ne50` | Disputed and breakaway areas, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain | none (string) |
 | `ref.boundary.world.disputed-lines.ne50` | Disputed international boundary lines, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain | none (string) |
-| `ref.boundary.world.division.overture` | Overture Maps divisions (administrative areas) | Overture Maps Foundation, 2026-10-21.0 | you supply the file | share-alike | id (string) |
+| `ref.boundary.world.division.overture` | Overture Maps divisions (administrative areas) | Overture Maps Foundation, 2026-11-18.0 | downloaded on first use | share-alike | id (string) |
 | `ref.boundary.world.historical.awmc` | Ancient World Mapping Center geodata (Roman Empire extents, provinces, roads) | Ancient World Mapping Center (University of North Carolina at Chapel Hill), repository master (static layers) | downloaded on first use | share-alike | None (none) |
 | `ref.boundary.world.historical.basemaps` | historical-basemaps - world political boundaries by century (A. Ourednik) | André Ourednik and contributors, repository master | downloaded on first use | share-alike | NAME (string) |
 | `ref.boundary.world.historical.ohm` | OpenHistoricalMap administrative boundaries as of a date | OpenHistoricalMap, live, edited daily | web service | public-domain | ohm_id (integer) |
@@ -75,11 +75,13 @@ Library: 266 entries (257 active); basemap-provider 18, boundary 53, boundary-de
 | `ref.context.uk.greenspace.os-open-greenspace` | OS Open Greenspace: parks, playing fields and other green spaces of Great Britain | Ordnance Survey, 2026-10 | downloaded on first use | attribution |  |
 | `ref.context.uk.rivers.os-open-rivers` | OS Open Rivers: watercourses of Great Britain (Ordnance Survey) | Ordnance Survey, 2026-10 | downloaded on first use | attribution |  |
 | `ref.context.us.hazard.fema-nfhl` | FEMA National Flood Hazard Layer (flood hazard zones) | FEMA, effective NFHL (continuously updated as studies take effect) | web service | public-domain |  |
+| `ref.context.us.hydrography.nhd` | National Hydrography Dataset, best resolution (staged products of The National Map) | US Geological Survey, National Geospatial Program, final NHD, staged 2023 (each file names its publication date) | downloaded on first use | public-domain |  |
 | `ref.context.us.hydrography.nhdplus-hr` | National Hydrography Dataset Plus High Resolution (USGS map service) | US Geological Survey, The National Map, NHDPlus HR, data refreshed October 2022 | web service | public-domain |  |
 | `ref.context.us.imagery.naip` | NAIP aerial photography, 0.3 to 1 m, the conterminous United States (USDA) | USDA Farm Production and Conservation Business Center, National Agriculture Imagery Program, through Microsoft Planetary Computer, 2010 to 2025, by state | downloaded on first use | public-domain |  |
 | `ref.context.us.landcover.nlcd` | NLCD land cover (MRLC web map service) | Multi-Resolution Land Characteristics (MRLC) Consortium, USGS, NLCD 2021 (service); Annual NLCD 2024 (download) | web service | public-domain |  |
 | `ref.context.us.water-area.tiger` | US area water by county (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
 | `ref.context.us.water-linear.tiger` | US linear water by county (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
+| `ref.context.us.watershed.wbd` | Watershed Boundary Dataset, HUC2 to HUC12 (staged products of The National Map) | US Geological Survey and USDA Natural Resources Conservation Service, each file names its publication date (region 15: 2025-01-08) | downloaded on first use | public-domain |  |
 | `ref.context.world.building.google` | Google Open Buildings (Africa, South and Southeast Asia, Latin America and the Caribbean) | Google Research, v3 (2023) | you supply the file | attribution |  |
 | `ref.context.world.building.microsoft` | Microsoft Global ML Building Footprints | Microsoft, 2026-02-03 | you supply the file | share-alike |  |
 | `ref.context.world.building.overture` | Overture Maps buildings (footprints) | Overture Maps Foundation, 2026-10-21.0 | you supply the file | share-alike |  |
@@ -111,12 +113,13 @@ Library: 266 entries (257 active); basemap-provider 18, boundary 53, boundary-de
 | `ref.gazetteer.us.address-range.tiger` | US address ranges along streets, by county (TIGER/Line address features) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
 | `ref.gazetteer.us.landform.gnis` | USGS GNIS named landforms (summits, buttes, canyons, ridges, valleys) | U.S. Geological Survey, refreshed October 2026 (the service's copyright text) | web service | public-domain | gaz_id (integer) |
 | `ref.gazetteer.world.address.openaddresses` | OpenAddresses (open address points, by source) | OpenAddresses (Batch), rolling | you supply the file | attribution |  |
+| `ref.gazetteer.world.place.foursquare-os` | Foursquare Open Source Places (points of interest, worldwide; on Source Cooperative) | Foursquare Labs, Inc., repartitioned by Fused on Source Cooperative, 2025-02-06 | downloaded on first use | open |  |
 | `ref.gazetteer.world.place.geonames` | GeoNames populated places (cities15000) | GeoNames, daily dump (downloaded 2026-11-05) | downloaded on first use | attribution |  |
 | `ref.gazetteer.world.place.geonames-cities1000` | GeoNames populated places (cities1000) | GeoNames, daily dump (downloaded 2026-11-20) | downloaded on first use | attribution |  |
 | `ref.gazetteer.world.place.ne10` | World populated places, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (0.33 MB) | public-domain |  |
 | `ref.gazetteer.world.place.ne110` | World populated places, 110m (Natural Earth) | Natural Earth 5.1.2 | bundled (0.03 MB) | public-domain |  |
 | `ref.gazetteer.world.place.ne50` | World cities and towns, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
-| `ref.gazetteer.world.place.overture` | Overture Maps places (points of interest) | Overture Maps Foundation, 2026-10-21.0 | you supply the file | attribution | id (string) |
+| `ref.gazetteer.world.place.overture` | Overture Maps places (points of interest) | Overture Maps Foundation, 2026-11-18.0 | downloaded on first use | attribution | id (string) |
 | `ref.gazetteer.world.place.wof` | Who's On First gazetteer | Who's On First (Geocode Earth), not verified | you supply the file | attribution | wof:id (integer) |
 | `ref.infrastructure.ca.license.ised-spectrum` | ISED spectrum licence and site data (Canada) | Innovation, Science and Economic Development Canada, monthly extracts (2026-11-03 files) | you supply the file | attribution |  |
 | `ref.infrastructure.na.road.ne10` | North America roads, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (1.02 MB) | public-domain |  |
@@ -129,12 +132,13 @@ Library: 266 entries (257 active); basemap-provider 18, boundary 53, boundary-de
 | `ref.infrastructure.us.road.tiger-all` | US all roads, by county (TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
 | `ref.infrastructure.us.road.tiger-primary` | US primary roads (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
 | `ref.infrastructure.us.road.tiger-prisec` | US primary and secondary roads by state (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
+| `ref.infrastructure.us.structure.nsd` | USGS National Structures Dataset: schools, hospitals, fire and police stations (staged by state) | US Geological Survey, National Geospatial Program, state files published February 2026 (each file names its date) | downloaded on first use | public-domain |  |
 | `ref.infrastructure.us.tower.fcc-asr` | FCC Antenna Structure Registration (towers) | FCC, weekly complete file | you supply the file | public-domain |  |
 | `ref.infrastructure.us.tower.land-mobile` | Land mobile commercial transmission towers (FCC ULS) | FCC Universal Licensing System, weekly ULS complete file | you supply the file | public-domain |  |
 | `ref.infrastructure.us.tower.microwave` | Microwave service towers (FCC ULS microwave licences) | FCC Universal Licensing System, weekly ULS complete file | you supply the file | public-domain |  |
 | `ref.infrastructure.world.airport.ne10` | World airports (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.infrastructure.world.cell.opencellid` | OpenCelliD cell tower database (crowd-sourced) | Unwired Labs (OpenCelliD project), daily export (per-MCC files refreshed daily) | downloaded on first use | share-alike | mcc,mnc,lac,cell (string) |
-| `ref.infrastructure.world.osm.geofabrik` | OpenStreetMap extracts by state or country (Geofabrik) | Geofabrik GmbH (OpenStreetMap data), daily extracts | you supply the file | share-alike |  |
+| `ref.infrastructure.world.osm.geofabrik` | OpenStreetMap extracts by state or country (Geofabrik) | Geofabrik GmbH (OpenStreetMap data), daily extracts | downloaded on first use | share-alike |  |
 | `ref.infrastructure.world.port.ne10` | World sea ports (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.infrastructure.world.rail.ne10` | World railways (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.infrastructure.world.road.ne10` | Roads worldwide, 1:10,000,000 (Natural Earth) | Natural Earth, 5.1.x (naciscdn.org current file, downloaded 2026-11-04) | downloaded on first use | public-domain |  |
@@ -228,6 +232,7 @@ Library: 266 entries (257 active); basemap-provider 18, boundary 53, boundary-de
 | `ref.terrain.jp.dem.gsi` | GSI Japan elevation tiles (dem_png, about 10 m) | Geospatial Information Authority of Japan, dem_png (DEM10B) | downloaded on first use | attribution |  |
 | `ref.terrain.se.dem.lantmateriet-mhm` | Lantmäteriet Markhöjdmodell, 1 m (Sweden, bare earth) | Lantmäteriet, Markhöjdmodell (updated continuously) | downloaded on first use | attribution |  |
 | `ref.terrain.us.dem.3dep` | USGS 3DEP bare-earth elevation (ImageServer) | US Geological Survey, National Geospatial Program, all 3DEP DEM data published as of October 26, 2026 (the service description states its date) | web service | public-domain |  |
+| `ref.terrain.us.dem.3dep-1m` | USGS 3DEP 1 m elevation tiles (staged products of The National Map) | US Geological Survey, National Geospatial Program, by lidar project; each tile names its project and publication date | downloaded on first use | public-domain |  |
 | `ref.terrain.world.bathymetry.gebco` | GEBCO 2026 grid (sea floor and land, 15 arc seconds) | GEBCO Compilation Group (IHO and IOC of UNESCO), GEBCO_2026 | downloaded on first use | public-domain |  |
 | `ref.terrain.world.dem.copernicus-glo30` | Copernicus DEM GLO-30 Public (with GLO-90), world elevation, keyless from AWS Open Data | European Space Agency and the Copernicus Programme, hosted by Sinergise on the Registry of Open Data on AWS, Copernicus DEM 2021 release | downloaded on first use | attribution |  |
 | `ref.terrain.world.dem.nasadem` | NASADEM (reprocessed SRTM, 1 arc second), 60 N to 56 S, with an Earthdata token | NASA JPL, distributed by the NASA Land Processes DAAC (LP DAAC), NASADEM 001 (2020), SRTM data of February 2000 | downloaded on first use | public-domain |  |
@@ -281,6 +286,8 @@ Every national source is reached through a data adapter (`scripts/adapters/`) th
 ### Worldwide
 
 - **Big open datasets are read by area, not downloaded.** Overture (GeoParquet on S3), Ookla tiles, Microsoft footprints and the national BEAD layer hold millions of rows: filter by bbox, state or quadkey first.
+- **A bulk source is read for the map's window (5.4.0).** Overture places and divisions, Foursquare places, and the USGS staged products (NHD, watershed boundaries, structures) are library entries with a `delivery.window` block: a layer names the entry and the build reads only the window, keeps it, and says what it cost. `source: {type: ref, id: ref.gazetteer.world.place.overture, where: "category = 'hospital'"}`; a source with several layers takes `layer:`. Before a large read: `python3 "$GMAP_ROOT/scripts/window_read.py" plan <entry id> --bbox=W,S,E,N`. A window wider than the entry allows, or a download above its cap, is refused with the reason: draw a smaller window, never page through it by hand.
+- **OpenStreetMap for a state or a country comes from the day's extract (5.4.0).** Overpass is for a city. `source: {type: osm, tags: [...], extract: auto}` (or the `osm_fetch` tool with `extract=auto`) downloads the region's Geofabrik file once, keeps it 30 days and reads the tags from it; a file above 800 MB is refused with the smaller regions named. download.geofabrik.de answers from the person's computer, not from the cloud workspace. A query copied from Overpass Turbo is accepted as it is.
 - **Licences that block external use.** Ookla open data is CC BY-NC, GADM forbids redistribution, OpenCelliD is share-alike: the library marks them `restricted-license` and selection drops them for an external audience.
 - **OpenStreetMap data is ODbL.** Attribution is required, and a derived database shares alike. The tile servers have their own usage policy: see `tile-licensing`.
 - **Natural Earth is public domain** and needs no credit, but its political boundaries are a cartographic choice; for a client with a position on a disputed boundary, say which file you used.

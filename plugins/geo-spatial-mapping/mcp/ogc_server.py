@@ -553,13 +553,17 @@ def ofcom_postcodes(postcodes: str = "", work_folder: str = "") -> dict:
 
 @mcp.tool()
 @st.masked
-def osm_fetch(tags: str = "", bbox: str = "", query: str = "", out: str = "", confirm: bool = False, work_folder: str = "") -> dict:
+def osm_fetch(tags: str = "", bbox: str = "", query: str = "", out: str = "", confirm: bool = False, work_folder: str = "", extract: str = "") -> dict:
     """OpenStreetMap features by tag through the public Overpass API (3.4.0, no key, ODbL). tags: filter sets separated by ';' (k=v, k=*,
     k!=v, k~regex; a comma joins filters that must all hold), e.g. "amenity=drinking_water;highway=*,foot!=no"; bbox W,S,E,N (a city, not a
-    region), or query: an Overpass QL query of your own. Without confirm: the query and the hosts it goes to. With confirm=true: one POST at
-    a time, busy answers (429, 502, 503, 504) tried again after 2, 6, 18 s, then the next mirror; written as a GeoPackage (layers points,
-    lines, polygons) in WORK_FOLDER/data/osm/ with the OSM base time in its record. The map's `source: {type: osm, tags: [...]}` reads it."""
-    return st.in_work_folder(work_folder, st.osm_fetch_tool, tags, bbox, query, out, confirm)
+    region), or query: an Overpass QL query of your own, or one written for Overpass Turbo (its bbox, center, date and geocodeArea
+    shortcuts are filled in; a share link that carries the query is read; 5.4.0). Without confirm: the query and the hosts it goes to. With
+    confirm=true: one POST at a time, busy answers (429, 502, 503, 504) tried again after 2, 6, 18 s, then the next mirror; written as a
+    GeoPackage (layers points, lines, polygons) in WORK_FOLDER/data/osm/ with the OSM base time in its record. The map's
+    `source: {type: osm, tags: [...]}` reads it. For a region wider than Overpass takes (a state, a country): extract=auto, or a Geofabrik
+    region (us/arizona, kenya), reads the same tags from the day's regional extract (5.4.0): without confirm, the file(s) and their size;
+    with confirm=true the extract is downloaded once (800 MB at most), kept 30 days and read for the box."""
+    return st.in_work_folder(work_folder, st.osm_fetch_tool, tags, bbox, query, out, confirm, extract=extract)
 
 @mcp.tool()
 @st.masked

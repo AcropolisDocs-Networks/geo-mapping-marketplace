@@ -100,7 +100,7 @@ def cog_block(entry) -> dict | None:
         except RasterFetchError:
             return None
     c = ((entry or {}).get("delivery") or {}).get("cog")
-    return c if isinstance(c, dict) and (c.get("url") or c.get("url_template")) else None
+    return c if isinstance(c, dict) and (c.get("url") or c.get("url_template") or isinstance(c.get("products"), dict)) else None
 
 
 def file_block(entry) -> dict | None:
@@ -158,6 +158,12 @@ def cog_tiles(block: dict, bounds_wgs84, variant: str | None = None) -> list[tup
     """[(tile name, url)] of the files a lon/lat window touches: the one file, or every tile of the grid under the window."""
     import math
     v = cog_variant(block, variant)
+    if isinstance(block.get("products"), dict):                       # 5.4.0 (P4.5): the tiles are whatever USGS has staged over the window
+        import tnm
+        try:
+            return tnm.tiles_for(block["products"], bounds_wgs84)
+        except tnm.TNMError as ex:
+            raise RasterFetchError(str(ex)) from None
     if block.get("url"):
         u = str(block["url"]).replace("{variant}", v or "")
         return [(Path(u).stem, u)]

@@ -59,7 +59,7 @@ themes:
   elevation:
     says: "Elevation models (bare earth)"
     words: [elevation, dem, terrain, relief, hillshade, contours, slope, viewshed, line of sight, topography]
-    entries: [terrain.us.dem.3dep, terrain.ca.dem.mrdem, terrain.fr.dem.rge-alti, terrain.jp.dem.gsi, terrain.se.dem.lantmateriet-mhm, terrain.be-vlg.dem.dhmv, terrain.au.dem.ga-lidar-5m,
+    entries: [terrain.us.dem.3dep, terrain.us.dem.3dep-1m, terrain.ca.dem.mrdem, terrain.fr.dem.rge-alti, terrain.jp.dem.gsi, terrain.se.dem.lantmateriet-mhm, terrain.be-vlg.dem.dhmv, terrain.au.dem.ga-lidar-5m,
               terrain.world.dem.copernicus-glo30, terrain.world.dem.nasadem, terrain.world.dem.opentopography, terrain.world.dem.terrarium, terrain.arctic.dem.arcticdem, terrain.antarctica.dem.rema, terrain.world.relief.ne50-shaded, terrain.world.relief.ne50-hypsometric]
     note: "Bare earth: buildings and trees are not in these, so a line of sight over them sees more than is there."
   lidar:
@@ -111,7 +111,7 @@ themes:
   water:
     says: "Rivers, lakes, coasts and canals"
     words: [water, river, rivers, lake, lakes, stream, streams, canal, canals, coast, coastline, ocean, hydrography, watershed, basin]
-    entries: [context.us.hydrography.nhdplus-hr, context.us.water-area.tiger, context.us.water-linear.tiger, "context.world.rivers.*", "context.world.lakes.*",
+    entries: [context.us.hydrography.nhdplus-hr, context.us.hydrography.nhd, context.us.watershed.wbd, context.us.water-area.tiger, context.us.water-linear.tiger, "context.world.rivers.*", "context.world.lakes.*",
               "context.world.ocean.*", "context.world.coastline.*", context.uk.rivers.os-open-rivers, public-service.world.osm.overpass, context.world.reefs.ne10, context.world.marine-areas.ne50]
   land-ground:
     says: "Land, land cover and built-up areas"
@@ -126,6 +126,14 @@ themes:
     says: "Airports and sea ports"
     words: [airport, airports, port, ports, harbour, harbor, seaport]
     entries: [infrastructure.world.airport.ne10, infrastructure.world.port.ne10, public-service.world.osm.overpass]
+  public-facilities:
+    says: "Schools, hospitals, fire and police stations"
+    words: [schools, school, hospitals, hospital, clinics, fire stations, fire station, police stations, police, public facilities, anchor institutions, structures,
+            emergency services, colleges, universities]
+    entries: [infrastructure.us.structure.nsd, gazetteer.world.place.overture, public-service.world.osm.overpass, gazetteer.world.place.foursquare-os,
+              infrastructure.world.osm.geofabrik]
+    compare: true
+    note: "In the United States the USGS structures file is the one federal list with addresses; a state education or health agency's own list is fuller. Elsewhere Overture and OpenStreetMap carry what has been mapped: count each in the window before choosing."
   hazards:
     says: "Floods, fires, earthquakes and storms"
     words: [hazard, hazards, flood, floodplain, fire, wildfire, earthquake, storm, storms, risk, resilience]
@@ -157,7 +165,7 @@ themes:
   places-names:
     says: "Place names and landforms"
     words: [place names, names, gazetteer, cities, towns, landforms, peaks, labels]
-    entries: [gazetteer.world.place.ne10, gazetteer.world.place.ne110, gazetteer.world.place.geonames-cities1000, gazetteer.world.place.geonames, gazetteer.world.place.overture,
+    entries: [gazetteer.world.place.ne10, gazetteer.world.place.ne110, gazetteer.world.place.geonames-cities1000, gazetteer.world.place.geonames, gazetteer.world.place.overture, gazetteer.world.place.foursquare-os,
               gazetteer.world.place.wof, gazetteer.us.landform.gnis, gazetteer.uk.place.os-open-names, public-service.world.wikidata, gazetteer.world.place.ne50]
   geocoding:
     says: "Addresses to points"

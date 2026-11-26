@@ -407,6 +407,7 @@
               "query": {"type": "string", "description": "3.4.0, type osm: an Overpass QL query of your own instead of tags"},
               "geometry": {"enum": ["points", "lines", "polygons"], "description": "3.4.0, type osm: which geometry of the answer the layer draws"},
               "cache": {"type": "string", "description": "3.4.0, type osm: the folder the answer is cached in (default data/osm)"},
+              "extract": {"type": "string", "description": "5.4.0, type osm: read the tags from the day's Geofabrik extract instead of Overpass, for a region: auto (the region over the box) or a region id (us/arizona, kenya)"},
               "as_of": {"type": "string"},
               "providers": {"anyOf": [{"const": "all"}, {"type": "array", "items": {"type": "string"}}]},
               "mode": {

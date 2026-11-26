@@ -28,7 +28,7 @@ sys.path.insert(0, str(HERE.parent / "lints"))
 
 THEMES_FILE = HERE.parent / "library" / "themes.yaml"
 HOST_MODES = {"service": "cloud or computer", "fetch": "cloud or computer", "bundled": "here (shipped with the plugin)", "user-supplied": "a file you bring"}
-CLOUD_BLOCKED = ("overpass", "ohsome", "nominatim")       # hosts the cloud workspace's egress does not reach (execution-routes.yaml)
+CLOUD_BLOCKED = ("overpass", "ohsome", "nominatim", "geofabrik")       # hosts the cloud workspace's egress does not reach (execution-routes.yaml)
 
 
 def load(path: Path | None = None) -> dict:

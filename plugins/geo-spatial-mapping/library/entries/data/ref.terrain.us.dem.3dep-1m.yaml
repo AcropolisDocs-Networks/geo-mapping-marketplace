@@ -1,0 +1,74 @@
+id: ref.terrain.us.dem.3dep-1m
+type: terrain
+rev: 1
+status: active
+title: 'USGS 3DEP 1 m elevation tiles (staged products of The National Map)'
+summary: 'The 1 m bare-earth elevation model USGS makes from lidar, as 10 km Cloud-Optimized GeoTIFF tiles by lidar project. The tiles over the map''s window are found
+  through the TNM Access products API and only the window is read from them, by byte range. Where lidar has been flown: most of the lower 48, not all.'
+tags:
+  geography: [us]
+  level: [grid]
+  domain: [general]
+  use_for: [context-basemap, site-map]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level]
+  scale: [local, site]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'A neighbourhood or site map is to show the ground at 1 m: a levee, a wash, a cut, a berm, drawn as a raster with a ramp.'
+- The lidar project and its publication date must be named for the cells drawn (the record carries each tile's name).
+avoid_when:
+- 'The window is wider than a city: the 3DEP service (ref.terrain.us.dem.3dep) gives one seamless surface for hillshade, contours and line of sight.'
+- 'Lidar has not been flown there: the products API answers with no tile and the read is refused, saying so.'
+- 'Buildings or trees matter: this is bare earth.'
+pairs_with: [ref.terrain.us.dem.3dep]
+distinct_from:
+- id: ref.terrain.us.dem.3dep
+  why: the seamless service, one request for any window; this is the 1 m tiles themselves, by lidar project
+crs: EPSG:26912
+delivery:
+  mode: fetch
+  format: Cloud-Optimized GeoTIFF, float32 metres (NAVD88), UTM by zone (NAD83), cells of 1 m, nodata -999999, overviews to 1/32
+  geometry: raster
+  cog:
+    products: {key: dem-1m}
+    max_tiles: 6
+    max_px: 3000
+    resampling: bilinear
+  note: 'The tiles are found at each read: GET https://tnmaccess.nationalmap.gov/api/v1/products with datasets=Digital Elevation Model (DEM) 1 meter and the
+    window. Where two lidar projects cover one tile the later publication is read. A window across two UTM zones is refused by the mosaic; draw it inside one.
+    The crs above is one zone''s (12N); each tile carries its own. By hand: tnm.py plan dem-1m --bbox=W,S,E,N.'
+style:
+  title: Elevation (m)
+source:
+  publisher: US Geological Survey, National Geospatial Program
+  product: 3D Elevation Program (3DEP) 1 meter Digital Elevation Model, staged products
+  url: https://apps.nationalmap.gov/downloader/
+  api: https://tnmaccess.nationalmap.gov/api/v1/docs
+url_verified_on: '2026-11-25'
+vintage:
+  current: 'by lidar project; each tile names its project and publication date'
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Elevation: USGS 3D Elevation Program (3DEP) 1 m DEM, public domain. Data courtesy of the U.S. Geological Survey.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://tnmaccess.nationalmap.gov/api/v1/datasets
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.4.0, open data portals P4.5). Verified from the build workspace on 2026-11-25: the products API answered 200 in under a second with two tiles of project AZ_MaricopaPinal_2020_B20 over Gilbert (-111.80,33.30,-111.72,33.34); the window was read from both by byte range (45 MB in 37 requests, 28 s; one cell in three, from the overviews) as float32 in EPSG:26912, 372 to 399 m, and drawn through the road under the canals.'

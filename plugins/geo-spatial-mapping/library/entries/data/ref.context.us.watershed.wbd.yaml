@@ -1,0 +1,73 @@
+id: ref.context.us.watershed.wbd
+type: context
+rev: 1
+status: active
+title: 'Watershed Boundary Dataset, HUC2 to HUC12 (staged products of The National Map)'
+summary: 'The nested watershed boundaries of the United States, from the 22 regions (HUC2) down to about 100,000 subwatersheds (HUC12), each with its code, name
+  and area. The region over the map''s window is found through the TNM Access products API, downloaded once and kept, and a level is read for the window.'
+tags:
+  geography: [us]
+  level: [water]
+  domain: [general, hazard]
+  use_for: [context-basemap, choropleth]
+  avoid_for: [engineering-grade, legal-boundary]
+  scale: [state, regional, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'Watershed outlines under a flood, drainage or water-supply map: HUC12 for a city, HUC8 for a metro or a state (source.layer: WBDHU8).'
+- 'A table keyed by hydrologic unit code is to be joined and drawn (the huc12, huc10 or huc8 column).'
+avoid_when:
+- 'A drainage area to a point is wanted: these are fixed units, not the area above an outlet.'
+- The map is outside the United States and its territories.
+pairs_with: [ref.context.us.hydrography.nhd, ref.context.us.hydrography.nhdplus-hr]
+distinct_from:
+- id: ref.context.us.hydrography.nhdplus-hr
+  why: the map service's HUC12 layer, asked for the window each time; this is the staged file with every level
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: GeoPackage in a zip, one a 2-digit hydrologic region (or the nation); read for the map's window from the kept file
+  geometry: polygon
+  window:
+    reader: tnm
+    key: wbd
+    layer: WBDHU12
+    layers: [WBDHU2, WBDHU4, WBDHU6, WBDHU8, WBDHU10, WBDHU12]
+    cap_mb: 700
+    max_span_deg: 12
+  columns: [tnmid, huc12, name, areasqkm, states, hutype]
+  note: 'In a MapSpec: source: {type: ref, id: ref.context.us.watershed.wbd, layer: WBDHU8}. The code column is named for the level (huc8 in WBDHU8). By hand:
+    tnm.py plan wbd --bbox=W,S,E,N.'
+source:
+  publisher: US Geological Survey and USDA Natural Resources Conservation Service
+  product: Watershed Boundary Dataset (WBD), staged products
+  url: https://www.usgs.gov/national-hydrography/watershed-boundary-dataset
+  api: https://tnmaccess.nationalmap.gov/api/v1/docs
+url_verified_on: '2026-11-25'
+vintage:
+  current: 'each file names its publication date (region 15: 2025-01-08)'
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Watersheds: USGS and USDA NRCS Watershed Boundary Dataset, public domain.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://tnmaccess.nationalmap.gov/api/v1/datasets
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.4.0, open data portals P4.5). Verified from the build workspace on 2026-11-25: the products API named region 15 (182 MB, published 2025-01-08) for the Gilbert window; downloaded once (12 s), WBDHU12 read 13 subwatersheds and WBDHU8 then read 2 (Middle Gila 15050100, Lower Salt 15060106) from the kept file.'

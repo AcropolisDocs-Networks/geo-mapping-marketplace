@@ -1173,10 +1173,40 @@ def hist_fetch_tool(op: str, as_of: str, bbox: str, admin_level: str = "4", tags
         return _tool_fail(ex)
 
 
-def osm_fetch_tool(tags: str = "", bbox: str = "", query: str = "", out: str = "", confirm: bool = False, http=None) -> dict:
-    """3.4.0: OpenStreetMap features by tag through Overpass (osm.py fetch). Without confirm: the query and the hosts (the plan)."""
+def osm_fetch_tool(tags: str = "", bbox: str = "", query: str = "", out: str = "", confirm: bool = False, http=None, extract: str = "") -> dict:
+    """3.4.0: OpenStreetMap features by tag through Overpass (osm.py fetch). Without confirm: the query and the hosts (the plan).
+    5.4.0: `extract` (a Geofabrik region, or auto) reads the tags from the day's regional extract instead (geofabrik.py)."""
     import osm
     tl = [t.strip() for t in tags.split(";") if t.strip()]
+    if extract:
+        import geofabrik
+        try:
+            if query:
+                return fail("usage", "MAP-OSM-002", "an extract is read by tags; a query of your own goes to Overpass (leave extract out)")
+            if not bbox or not tl:
+                return fail("usage", "MAP-OSM-002", "tags and bbox (W,S,E,N) are needed with extract")
+            region = None if extract.strip().lower() in ("auto", "true") else extract.strip()
+            if not confirm:
+                p = geofabrik.plan(bbox, region, tl, http)
+                return {"ok": p["refusal"] is None, **p, "next": "show the person the file(s) and their size and call again with confirm=true" if p["refusal"] is None
+                        else "nothing is downloaded: " + p["refusal"]}
+            b = [float(v) for v in bbox.split(",")]
+            import hashlib
+            q = f"geofabrik:{extract.strip().lower()}:{osm.query(tl, b)}"
+            name = f"osm_{hashlib.sha256(q.encode()).hexdigest()[:12]}.gpkg"       # the name `source: {type: osm, tags, bbox, extract}` looks for
+            dest = Path(out) if out else gc.data_dir("osm") / name
+            if not dest.is_absolute():
+                dest = gc.data_dir("osm") / dest
+            r = geofabrik.fetch(tl, b, dest, region=region, http=http)
+            if dest.name != name and dest.is_file():
+                import shutil
+                shutil.copyfile(dest, dest.parent / name)
+                shutil.copyfile(dest.with_suffix(".json"), (dest.parent / name).with_suffix(".json"))
+            r["path"] = str(dest)
+            r["source"] = {"type": "osm", "tags": tl, "bbox": b, "extract": extract.strip()}
+            return r
+        except osm.OsmError as ex:
+            return _tool_fail(ex)
     try:
         if not confirm:
             return {"ok": True, **osm.plan(tl, bbox or None, query or None), "next": "show the person the query and call again with confirm=true"}

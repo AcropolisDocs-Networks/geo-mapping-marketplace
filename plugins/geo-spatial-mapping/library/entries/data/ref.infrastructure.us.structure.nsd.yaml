@@ -1,0 +1,76 @@
+id: ref.infrastructure.us.structure.nsd
+type: infrastructure
+rev: 1
+status: active
+title: 'USGS National Structures Dataset: schools, hospitals, fire and police stations (staged by state)'
+summary: 'The public structures The National Map carries, as points with a name, an address and a kind: schools and colleges, hospitals and medical centres, fire
+  stations and EMS, law enforcement, prisons, state capitols, post offices, cemeteries, campgrounds and more. The state file over the map''s window is found
+  through the TNM Access products API, downloaded once and kept, and the window is read from it.'
+tags:
+  geography: [us]
+  level: [site]
+  domain: [general, hazard]
+  use_for: [site-map, context-basemap, label-reference]
+  avoid_for: [engineering-grade, site-precision, legal-boundary]
+  scale: [state, metro, local, site]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'Schools, hospitals, fire stations or police stations of a city, county or state from one federal source, with addresses (source.where: ftype = 730 for
+  education, 800 for health, 740 for emergency response and law enforcement).'
+- An anchor-institution or public-safety layer under a coverage or a program map.
+avoid_when:
+- 'Completeness for one kind is the point: a state education or health agency''s own list is fuller and newer; this is what USGS and volunteers have gathered.'
+- 'A structure''s outline is wanted: these are points (centroids or entrances, said in pointlocationtype_desc).'
+- The map is outside the United States and its territories.
+pairs_with: [ref.boundary.us.school-unified.cb500k]
+crs: EPSG:4269
+delivery:
+  mode: fetch
+  format: GeoPackage in a zip, one a state (80 to 900 MB); read for the map's window from the kept file
+  geometry: point
+  window:
+    reader: tnm
+    key: structures
+    layer: Struct_Point
+    layers: [Struct_Point]
+    cap_mb: 1000
+    max_span_deg: 12
+  columns: [permanent_identifier, name, ftype, fcode, fcode_desc, address, city, state, zipcode, pointlocationtype_desc]
+  note: 'In a MapSpec: source: {type: ref, id: ref.infrastructure.us.structure.nsd, where: "ftype = 730"}. ftype: 730 education, 740 emergency response and law
+    enforcement, 780 mail and shipping, 800 health and medical, 820 public attractions and landmark buildings (cemeteries among them), 830 government and
+    military, 880 weather, 710 water supply. fcode narrows it (73002 school, 73003 school elementary, 74026 fire station and EMS, 74034 law enforcement, 80012
+    hospital and medical centre). Only the states whose outline meets the window are read. By hand: tnm.py plan structures --bbox=W,S,E,N names the file and
+    its size before anything is downloaded.'
+source:
+  publisher: US Geological Survey, National Geospatial Program
+  product: National Structures Dataset (NSD), staged products
+  url: https://www.usgs.gov/national-geospatial-technical-operations-center/structures
+  api: https://tnmaccess.nationalmap.gov/api/v1/docs
+url_verified_on: '2026-11-25'
+vintage:
+  current: 'state files published February 2026 (each file names its date)'
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Structures: USGS National Structures Dataset, public domain.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
+  check:
+    kind: http_get
+    url: https://tnmaccess.nationalmap.gov/api/v1/datasets
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.4.0, open data portals P4.5). Verified from the build workspace on 2026-11-25: for a Providence window (-71.5,41.75,-71.42,41.82) the products API named the Rhode Island file (published 2026-02-27; the catalog said 84.8 MB and the file is 80.9 MB, so the kept copy is checked against what was downloaded); Struct_Point read 108 structures, 47 of them education (ftype 730). A window that meets Massachusetts reads both states. Drawn through the road over Gilbert (Arizona, 611 MB) as schools.'

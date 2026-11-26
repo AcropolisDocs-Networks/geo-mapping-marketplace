@@ -35,15 +35,24 @@ BASE_URL = f"https://{BUCKET_HOST}/"
 DEFAULT_CAP = 300_000_000
 BLOCK = 1 << 20                     # read-ahead within one range request
 RELEASE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.\d+$")
-TYPES = {"base": ("land", "water", "land_cover", "bathymetry", "infrastructure"), "divisions": ("division_area",), "buildings": ("building", "building_part"),
-         "transportation": ("segment",)}
+TYPES = {"base": ("land", "water", "land_cover", "bathymetry", "infrastructure"), "divisions": ("division_area", "division", "division_boundary"),
+         "buildings": ("building", "building_part"), "transportation": ("segment", "connector"),
+         "places": ("place",), "addresses": ("address",)}          # 5.4.0 (open data portals P4.1): places, addresses, divisions, boundaries, connectors
 COLUMNS = ["id", "subtype", "class", "bbox", "geometry"]
 # 1.16.0 (Day 15 issues 7 and 15): the columns a type is read with beyond COLUMNS; `names` comes back as `name` (its primary name). Day 15 read
 # buildings, roads and piers through DuckDB on S3 (proxy-injected AWS keys broke it) with a "bbox inside the window" filter that dropped the long
 # segments crossing its edge; this reader is anonymous HTTPS and keeps every feature whose bbox meets the window.
 TYPE_COLUMNS = {"building": ["names", "height", "min_height", "num_floors", "min_floor", "roof_shape", "has_parts"],
                 "building_part": ["names", "height", "min_height", "num_floors", "min_floor", "building_id"],
-                "segment": ["names", "subtype", "class"], "infrastructure": ["names", "height"], "water": ["names"], "land": ["names"]}
+                "segment": ["names", "subtype", "class"], "infrastructure": ["names", "height"], "water": ["names"], "land": ["names"],
+                # 5.4.0: a place comes back with name, category (its taxonomy's primary), brand, address, locality, region, country, postcode and website;
+                # e-mail addresses, telephone numbers and social accounts are not read
+                "place": ["names", "basic_category", "taxonomy", "confidence", "operating_status", "brand", "addresses", "websites"],
+                "address": ["country", "postcode", "postal_city", "street", "number", "unit"],
+                "division": ["names", "country", "region", "admin_level", "population", "wikidata", "parent_division_id"],
+                "division_boundary": ["country", "region", "admin_level", "is_land", "is_territorial", "is_disputed"],
+                "division_area": ["names", "country", "region", "admin_level", "division_id", "is_land", "is_territorial"],
+                "connector": []}
 
 
 class CapExceeded(Exception):
@@ -62,13 +71,13 @@ def _check(release: str, theme: str, typ: str) -> str:
     return f"release/{release}/theme={theme}/type={typ}/"
 
 
-def _url_ok(url: str, prefix: str) -> None:
+def _url_ok(url: str, prefix: str, host: str = BUCKET_HOST) -> None:
     u = urllib.parse.urlsplit(url)
-    if u.scheme != "https" or (u.hostname or "").lower() != BUCKET_HOST or u.port not in (None, 443):
-        raise Refused(f"overture_io reads only https://{BUCKET_HOST}/")
+    if u.scheme != "https" or (u.hostname or "").lower() != host or u.port not in (None, 443):
+        raise Refused(f"this reader reads only https://{host}/")
     path = urllib.parse.unquote(u.path.lstrip("/"))
     if path and not path.startswith(prefix):
-        raise Refused(f"overture_io reads only {prefix}")
+        raise Refused(f"this reader reads only {prefix}")
 
 
 def _http(http=None):
@@ -128,14 +137,14 @@ class Budget:
             self.used += n
             self.requests += 1
         if self.used > self.cap:
-            raise CapExceeded(f"the window needs more than {self.cap / 1e6:,.0f} MB of Overture data (read {self.used / 1e6:,.1f} MB so far)")
+            raise CapExceeded(f"the window needs more than {self.cap / 1e6:,.0f} MB of this source's data (read {self.used / 1e6:,.1f} MB so far)")
 
 
 class RangeFile(io.RawIOBase):
     """A read-only, seekable file over HTTPS range GETs, for pyarrow. Each request reads at least BLOCK bytes ahead."""
 
-    def __init__(self, http, url: str, size: int, budget: Budget, prefix: str):
-        _url_ok(url, prefix)
+    def __init__(self, http, url: str, size: int, budget: Budget, prefix: str, host: str = BUCKET_HOST):
+        _url_ok(url, prefix, host)                              # 5.4.0: `host` lets the generic GeoParquet reader (window_read.py) use this file object
         self.http, self.url, self.size, self.budget, self.pos = http, url, int(size), budget, 0
         self._buf_start, self._buf = 0, b""
 
@@ -321,10 +330,55 @@ def read_window(release: str, typ: str, bbox, *, theme: str = "base", http=None,
         return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs="EPSG:4326"), cost
     t = pa.concat_tables(tables, promote_options="default")
     geom = shapely.from_wkb(t.column("geometry").to_numpy(zero_copy_only=False))
-    data = {c: t.column(c).to_pylist() for c in t.column_names if c not in ("geometry", "bbox")}
-    if "names" in data:                                       # 1.16.0: the primary name as a plain column
-        data["name"] = [(n or {}).get("primary") if isinstance(n, dict) else None for n in data.pop("names")]
+    data = flat_columns(t)
     return gpd.GeoDataFrame(data, geometry=list(geom), crs="EPSG:4326"), cost
+
+
+def flat_columns(t) -> dict:
+    """A table's columns as plain values: the nested ones Overture uses are read down to the one value a map needs. `names` gives `name` (its
+    primary name, 1.16.0); 5.4.0: `taxonomy` gives `category`, `brand` its name, the first of `addresses` gives address, locality, region,
+    country and postcode, the first of `websites` gives `website`. A nested column this does not know is left out."""
+    import pyarrow as pa
+    import pyarrow.compute as pc
+    names = set(t.column_names)
+    data: dict = {}
+
+    def field(col: str, *path):
+        a = t.column(col)
+        try:
+            for part in path:
+                a = pc.struct_field(a, part)
+            return a.to_pylist()
+        except (pa.ArrowInvalid, KeyError, pa.ArrowNotImplementedError):
+            return [None] * t.num_rows
+
+    for c in t.column_names:
+        if c in ("geometry", "bbox"):
+            continue
+        typ = t.schema.field(c).type
+        if c == "names":
+            data["name"] = field("names", "primary")
+        elif c == "taxonomy":
+            cat = field("taxonomy", "primary")
+            basic = t.column("basic_category").to_pylist() if "basic_category" in names else [None] * t.num_rows
+            data["category"] = [a or b for a, b in zip(cat, basic)]
+        elif c == "basic_category":
+            if "taxonomy" not in names:
+                data["category"] = t.column(c).to_pylist()
+        elif c == "brand":
+            data["brand"] = field("brand", "names", "primary")
+        elif c == "addresses":
+            first = [(x[0] if x else None) for x in t.column(c).to_pylist()]
+            for out, key in (("address", "freeform"), ("locality", "locality"), ("region", "region"), ("country", "country"), ("postcode", "postcode")):
+                if out not in data:
+                    data[out] = [(a or {}).get(key) if isinstance(a, dict) else None for a in first]
+        elif c == "websites":
+            data["website"] = [(x[0] if x else None) for x in t.column(c).to_pylist()]
+        elif pa.types.is_nested(typ):
+            continue
+        else:
+            data[c] = t.column(c).to_pylist()
+    return data
 
 
 # ------------------------------------------------------------------------------------------------ detailed ground: one z8 quadkey tile a variant

@@ -1,0 +1,78 @@
+id: ref.gazetteer.world.place.foursquare-os
+type: gazetteer
+rev: 1
+status: active
+title: 'Foursquare Open Source Places (points of interest, worldwide; on Source Cooperative)'
+summary: 'More than 100 million places of interest worldwide from Foursquare, with names, categories and addresses, under the Apache 2.0 licence: shops, restaurants,
+  services, venues and landmarks as people check in to them. The map''s window is read by range request from the copy on Source Cooperative.'
+tags:
+  geography: [world]
+  level: [site, place]
+  domain: [general]
+  use_for: [site-map, label-reference, context-basemap, dot-density]
+  avoid_for: [engineering-grade, site-precision, legal-boundary]
+  scale: [regional, metro, local, site]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T2]
+  license_class: [open]
+  quality: [commercial]
+use_when:
+- 'Shops, food, services or venues of one kind in a city or region, where consumer places matter more than civic ones (source.where: category LIKE ''%Coffee Shop%'').'
+- A second look at where places are, beside Overture or OpenStreetMap, before one is trusted.
+avoid_when:
+- 'The newest places are needed: this copy is the February 2025 release; Foursquare publishes newer ones on its own portal.'
+- 'Completeness is expected: places come from check-ins and partners, and closed ones stay listed with a date_closed.'
+- The window is a continent; a window of at most 12 degrees is read.
+pairs_with: [ref.gazetteer.world.place.overture]
+distinct_from:
+- id: ref.gazetteer.world.place.overture
+  why: Overture merges Meta, Microsoft and other sources, monthly, with a confidence score
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: GeoParquet (Source Cooperative), read for the map's window by HTTPS range request
+  geometry: point
+  window:
+    reader: geoparquet
+    title: Foursquare OS Places, release 2025-02-06, on Source Cooperative
+    list: https://data.source.coop/fused/?list-type=2&prefix=fsq-os-places/2025-02-06/places/
+    bbox: bbox
+    geometry: geometry
+    columns: [fsq_place_id, name, address, locality, region, postcode, country, date_created, date_closed, website]
+    first_of: {category: fsq_category_labels}
+    cap_mb: 400
+    max_span_deg: 12
+  columns: [fsq_place_id, name, category, address, locality, region, postcode, country, date_created, date_closed, website]
+  note: 'In a MapSpec: source: {type: ref, id: ref.gazetteer.world.place.foursquare-os, where: "country = ''KE'' AND date_closed IS NULL"}. By hand:
+    window_read.py read ref.gazetteer.world.place.foursquare-os --bbox=W,S,E,N. category is the first of the place''s category labels, written as a path
+    (Dining and Drinking > Cafe, Coffee, and Tea House > Coffee Shop). Telephone numbers, e-mail addresses and social accounts are in the files and are never read.'
+source:
+  publisher: Foursquare Labs, Inc., repartitioned by Fused on Source Cooperative
+  product: Foursquare Open Source Places, release 2025-02-06
+  url: https://data.source.coop/fused/fsq-os-places/README.md
+  page: https://opensource.foursquare.com/os-places/
+url_verified_on: '2026-11-25'
+vintage:
+  current: '2025-02-06'
+  cadence: irregular
+license:
+  class: open
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Places: Foursquare Open Source Places, © Foursquare Labs, Inc. (Apache License 2.0).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://data.source.coop/fused/fsq-os-places/README.md
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.4.0, open data portals P4.3; the treatment of exception E2: a Source Cooperative product enters as a library entry read directly). Verified from the build workspace on 2026-11-25: the bucket listing answered 200 with 81 files; the Nairobi window (36.65,-1.45,37.05,-1.15) read 35,394 places (30.7 MB in 159 requests, 131 s the first time, while the 81 footers were kept); Lagos then read 14,734 places in 4.3 s from the kept index; London read 243,655 (128 MB, 125 s).'

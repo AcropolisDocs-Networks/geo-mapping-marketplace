@@ -1,10 +1,10 @@
 id: ref.infrastructure.world.osm.geofabrik
 type: infrastructure
-rev: 2
+rev: 3
 status: active
 title: OpenStreetMap extracts by state or country (Geofabrik)
-summary: Daily OpenStreetMap extracts per continent, country and US state as .osm.pbf files from Geofabrik; the plugin cannot read PBF yet, so the person
-  converts the extract with ogr2ogr and supplies the result.
+summary: 'Daily OpenStreetMap extracts per continent, country and US state as .osm.pbf files from Geofabrik (554 regions). The region over the map''s window
+  is downloaded once, kept 30 days, and the tags asked for are read from it for the box: the same layers an Overpass fetch gives, for areas Overpass does not take.'
 tags:
   geography:
   - world
@@ -41,27 +41,33 @@ tags:
   quality:
   - community
 use_when:
-- Local streets, buildings or points of interest for a metro or local map, from one state extract converted to GeoPackage.
+- 'Streets, buildings or points of interest by tag for a whole state or country, where the public Overpass API is for a city (a box over one square degree).'
+- 'Several layers of one region: the extract is downloaded once and each set of tags is read from the kept file in seconds.'
 - A road network for geo-ops distance work in a market where TIGER is too coarse or the market is outside the United States.
 avoid_when:
-- 'A whole-country extract is wanted in one layer: the United States file is many gigabytes; take the state file and clip.'
+- 'The file is above 800 MB (the United States, Germany, California): the read is refused and names the smaller regions inside it; name one.'
+- 'The session runs only in the cloud workspace: download.geofabrik.de does not answer there; the fetch runs on your computer (the osm_fetch tool).'
+- 'A small area or today''s edits are wanted: Overpass answers in seconds and is current to the minute; an extract is yesterday''s.'
 - 'The output database is redistributed: ODbL share-alike applies to a derived database, and the map must credit OpenStreetMap contributors.'
 pairs_with:
 - ref.public-service.world.osm.overpass
 crs: EPSG:4326
 delivery:
-  mode: user-supplied
-  format: .osm.pbf (converted by the person to GeoPackage with ogr2ogr)
-  note: 'Download the state file from download.geofabrik.de/north-america/us/<state>-latest.osm.pbf (e.g. arizona-latest.osm.pbf; canada/<province>-latest.osm.pbf;
-    mexico-latest.osm.pbf), then convert: ogr2ogr -f GPKG arizona.gpkg arizona-latest.osm.pbf lines -where "highway IS NOT NULL" (layers: points, lines,
-    multilinestrings, multipolygons, other_relations; an OSM_CONFIG_FILE picks the tags). Supply the GeoPackage. Verified from the user''s computer on 2026-11-07:
-    the region index download.geofabrik.de/index-v1.json lists 554 extracts with their .osm.pbf addresses, and the Arizona file answered (a redirect to
-    the current file).'
+  mode: fetch
+  tool: osm_fetch
+  format: .osm.pbf, one a region a day, read with GDAL's OSM driver (points, lines, multipolygons); written as GeoPackage layers points, lines, polygons
+  note: 'In a MapSpec: source: {type: osm, tags: ["highway=primary", "highway=trunk"], extract: auto} (or extract: us/arizona). By tool: osm_fetch tags=...
+    bbox=W,S,E,N extract=auto, first without confirm (the file and its size), then with confirm=true. By hand: geofabrik.py plan | fetch | regions. The
+    region is the smallest whose US state or country meets the window, from the region index (index-v1-nogeom.json, 554 regions with ISO codes); a window over
+    several states reads each (six at most). A file of 800 MB or more is refused with the regions inside it named. The extract is kept under
+    .geo-mapping/cache/geofabrik/ for 30 days. Route relations (multilinestrings) are not read. A .osm.pbf you already have: geofabrik.py read FILE "tags"
+    --bbox=... --out F.gpkg. The free GeoPackage and Shapefile zips Geofabrik also lists (506 regions) are not used: they did not answer from the Cowork
+    sandbox on 2026-11-25 (no bytes in 100 s) while the .osm.pbf did, and the PBF exists for every region.'
 source:
   url: https://download.geofabrik.de/index-v1.json
   publisher: Geofabrik GmbH (OpenStreetMap data)
   product: Geofabrik OpenStreetMap extracts
-url_verified_on: '2026-11-07'
+url_verified_on: '2026-11-25'
 vintage:
   current: daily extracts
   cadence: live
@@ -74,8 +80,8 @@ license:
   note: 'Open Database License 1.0: attribution, and a derived database (not a rendered map) carries the same licence (MAP-LIC-004).'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-07'
-  verify_by: '2027-05-07'
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-05-25'
   changelog:
   - rev: 1
     date: '2026-11-04'
@@ -85,3 +91,12 @@ maintenance:
   - rev: 2
     date: '2026-11-07'
     note: 'Active: download.geofabrik.de answered from the user''s computer on 2026-11-07 (index-v1.json, 554 regions; the Arizona extract redirects to the current file). Still user-supplied: the plugin reads the converted GeoPackage, not the PBF.'
+  - rev: 3
+    date: '2026-11-25'
+    note: 'Fetched and read by the plugin (5.4.0, open data portals P4.4). Verified in two halves on 2026-11-25. From the user''s computer (the Cowork sandbox):
+      the region index answered 200 (522,918 bytes, 554 regions, 1.5 s); delaware-latest.osm.pbf handed off (307) to delaware-261124.osm.pbf and downloaded (22,290,527
+      bytes, 19.7 s); liechtenstein likewise (3,527,490 bytes). In the build workspace, on those same files: the primary, trunk and motorway roads of all Delaware
+      (a box of 1.2 square degrees, more than Overpass is asked for) read as 6,479 lines (1,853 km) in 2 s; every building, 113,246 polygons, in 10 s from the
+      kept file; schools, hospitals, pillar hydrants and railways by four tag sets; and a map of the state''s main roads was built through the build from the kept
+      extract (source.extract: us/delaware), credited to Geofabrik and OpenStreetMap. Not run as one piece inside the installed plugin: the cloud workspace cannot
+      reach download.geofabrik.de, and the sandbox on the computer had no room to install the readers.'

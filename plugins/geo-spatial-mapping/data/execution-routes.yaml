@@ -23,6 +23,12 @@ steps:
   imagery:
     run_on: [cloud, cowork-vm, host]
     how: a role raster layer on a library imagery entry (Sentinel-2, Landsat, NAIP); the build reads the window itself through imagery.py. Earth Search, Planetary Computer and their public files answer with no key from all three places. imagery.py plan lists the scenes and the cost before anything is read (5.3.0)
+  window-read:
+    run_on: [cloud, cowork-vm, host]
+    how: a layer on a library entry kept as large files in a public bucket (Overture places and divisions, Foursquare places, the USGS staged products) is read by the build for the map's window (window_read.py; plan names the cost first). The Overture, Source Cooperative and National Map hosts answer with no key from all three places (5.4.0)
+  osm-extract:
+    run_on: [host, cowork-vm]
+    how: osm_fetch extract=auto (or a layer with source.extract) reads OpenStreetMap tags from the day's Geofabrik extract, for a state or a country. download.geofabrik.de does not answer from the cloud workspace, so this runs on the map server or in the Cowork VM; the kept GeoPackage is then read by the build anywhere (5.4.0)
   build:
     run_on: [cloud, cowork-vm]
     how: build_map.py in the cloud workspace; in the Cowork VM only when doctor --fix --place cowork-vm made the venv in the work folder (O3)

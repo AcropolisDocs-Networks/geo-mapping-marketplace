@@ -57,3 +57,8 @@
 - {host: planetarycomputer.microsoft.com, url: "https://planetarycomputer.microsoft.com/api/stac/v1/", class: service}
 - {host: earth-search.aws.element84.com, url: "https://earth-search.aws.element84.com/v1", class: service}
 - {host: sentinel-cogs.s3.us-west-2.amazonaws.com, url: "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/31/N/EH/2024/1/S2A_31NEH_20240125_0_L2A/thumbnail.jpg", class: data}
+# 5.4.0 (open data portals P4): the readers for bulk sources. download.geofabrik.de answers from a person's computer and not from the cloud workspace.
+- {host: tnmaccess.nationalmap.gov,      url: "https://tnmaccess.nationalmap.gov/api/v1/datasets", class: service}
+- {host: prd-tnm.s3.amazonaws.com,       url: "https://prd-tnm.s3.amazonaws.com/",              class: data}
+- {host: data.source.coop,               url: "https://data.source.coop/fused/fsq-os-places/README.md", class: data}
+- {host: download.geofabrik.de,          url: "https://download.geofabrik.de/index-v1-nogeom.json", class: data}

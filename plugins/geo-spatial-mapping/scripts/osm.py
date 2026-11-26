@@ -102,7 +102,93 @@ def query(tags: list[str], bbox, *, timeout: int = 120, kinds: str = "nwr") -> s
     return f"[out:json][timeout:{int(timeout)}];\n(\n" + "\n".join(sets) + "\n);\nout geom;"
 
 
+def _sc(name: str) -> str:
+    """A Turbo shortcut as people write it, in double braces (built here so the source carries no template field of its own)."""
+    return "{" * 2 + name + "}" * 2
+
+
+def is_turbo(text: str | None) -> bool:
+    """Whether a query is written for Overpass Turbo: its double-brace shortcuts, or a Turbo link."""
+    t = str(text or "")
+    return "{{" in t or bool(re.match(r"\s*https?://(www\.)?overpass-turbo\.eu/", t))
+
+
+def from_turbo(text: str, bbox=None, today=None) -> tuple[str, list[str]]:
+    """5.4.0 (open data portals P4.6): an Overpass Turbo query, or the query carried by a Turbo share link, as plain Overpass QL the API takes.
+    -> (query, what was changed). Turbo's double-brace shortcuts are filled in here: bbox and center from the box given, date:1 year from
+    today, name=value constants, geocodeArea:Name as the area of that name; a style block is dropped; the output statements
+    are made `out geom`, which is what the layers are built from. A shortcut that needs Turbo's own geocoder or data is refused by name."""
+    import datetime as _dt
+    import urllib.parse as _up
+    t, notes = str(text or "").strip(), []
+    m = re.match(r"https?://(www\.)?overpass-turbo\.eu/(\S*)", t)
+    if m:
+        u = _up.urlsplit(t)
+        q = (_up.parse_qs(u.query).get("Q") or _up.parse_qs(u.fragment).get("Q") or [None])[0]
+        if not q:
+            raise OsmError("this Overpass Turbo link keeps its query on overpass-turbo.eu (a short link): open it there, choose Export, then Query, and "
+                           "give the query text", "MAP-OSM-002", gc.EXIT_USAGE)
+        t = q.strip()
+        notes.append("the query was read from the link's Q parameter")
+    n_style = len(re.findall(r"\{\{\s*style\s*:", t))
+    t = re.sub(r"\{\{\s*style\s*:.*?\}\}", "", t, flags=re.S)
+    if n_style:
+        notes.append(f"the {_sc('style')} block is Turbo's own drawing rule and was left out (the map styles the layer)")
+    consts = dict(re.findall(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^{}]*?)\s*\}\}", t))
+    t = re.sub(r"\{\{\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^{}]*?\s*\}\}\s*", "", t)
+    for k, v in consts.items():
+        t = re.sub(r"\{\{\s*" + re.escape(k) + r"\s*\}\}", lambda _m, v=v: v, t)
+    if consts:
+        notes.append(f"{len(consts)} constant(s) filled in ({', '.join(consts)})")
+    if re.search(r"\{\{\s*(bbox|center)\s*\}\}", t):
+        if bbox is None:
+            raise OsmError(f"the query uses {_sc('bbox')} or {_sc('center')}: give the box (bbox W,S,E,N) it stands for", "MAP-OSM-002", gc.EXIT_USAGE)
+        w, s_, e, n = check_bbox(bbox)
+        t = re.sub(r"\{\{\s*bbox\s*\}\}", f"{s_:g},{w:g},{n:g},{e:g}", t)
+        t = re.sub(r"\{\{\s*center\s*\}\}", f"{(s_ + n) / 2:g},{(w + e) / 2:g}", t)
+        notes.append(f"{_sc('bbox')} filled in from the box given (south, west, north, east)")
+
+    def _date(mm):
+        num, unit = float(mm.group(1) or 0), (mm.group(2) or "day").lower().rstrip("s")
+        days = {"second": 1 / 86400, "minute": 1 / 1440, "hour": 1 / 24, "day": 1, "week": 7, "month": 30.44, "year": 365.25}.get(unit)
+        if days is None:
+            raise OsmError(f"{_sc('date:' + mm.group(0))} is not a span this reads (days, weeks, months, years)", "MAP-OSM-002", gc.EXIT_USAGE)
+        base = today or _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0, tzinfo=None)
+        return (base - _dt.timedelta(days=num * days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if re.search(r"\{\{\s*date", t):
+        t = re.sub(r"\{\{\s*date\s*:?\s*([0-9.]+)?\s*([A-Za-z]+)?\s*\}\}", _date, t)
+        notes.append(f"{_sc('date')} filled in from today")
+    areas = re.findall(r"\{\{\s*geocodeArea\s*:\s*([^{}]+?)\s*\}\}", t)
+    for name in areas:
+        first = name.split(",")[0].strip().replace('"', "")
+        t = re.sub(r"\{\{\s*geocodeArea\s*:\s*" + re.escape(name) + r"\s*\}\}", f'area["name"="{first}"]', t)
+    if areas:
+        notes.append(f"{_sc('geocodeArea')} read as the area with that name (Turbo asks its geocoder for one area; a name several places share matches them "
+                     f"all: {', '.join(a_.split(',')[0].strip() for a_ in areas)})")
+    left = re.findall(r"\{\{\s*([A-Za-z]+)", t)
+    if left:
+        raise OsmError(f"the query uses Turbo's {_sc(left[0])} shortcut, which needs Turbo's own geocoder or data: write the box or the id into the query "
+                       "in its place", "MAP-OSM-002", gc.EXIT_USAGE)
+    if re.search(r"\[\s*out\s*:\s*(xml|csv|custom|popup)[^\]]*\]", t):
+        t = re.sub(r"\[\s*out\s*:\s*(xml|csv|custom|popup)[^\]]*\]", "[out:json]", t)
+        notes.append("the output format was made json")
+    elif not re.search(r"\[\s*out\s*:\s*json\s*\]", t):
+        t = "[out:json]" + ("" if t.lstrip().startswith("[") else ";\n") + t.lstrip()
+    # the usual Turbo ending (out body; >; out skel qt;) sends nodes apart from their ways; the layers are built from `out geom`
+    body = re.sub(r"\bout\s+(?:body|meta|tags|ids|skel|center|bb|qt|asc|\d+|\s)*;\s*>\s*;\s*out\s+skel(?:\s+qt)?\s*;", "out geom;", t)
+    body = re.sub(r"\bout\s*(?:body|meta|skel|qt|asc|\s)*;", "out geom;", body)
+    if body != t:
+        notes.append("the output statements were made `out geom` (each feature with its own shape)")
+        t = body
+    if not re.search(r"\bout\b[^;]*;\s*$", t.strip()):
+        t = t.rstrip() + "\nout geom;"
+    return t.strip(), notes
+
+
 def plan(tags: list[str] | None, bbox=None, own_query: str | None = None) -> dict:
+    turbo_notes: list[str] = []
+    if own_query and is_turbo(own_query):                 # 5.4.0: a query written for Overpass Turbo is read as plain Overpass QL
+        own_query, turbo_notes = from_turbo(own_query, bbox)
     q = own_query or query(tags or [], bbox)
     area = None
     if bbox is not None:
@@ -111,7 +197,9 @@ def plan(tags: list[str] | None, bbox=None, own_query: str | None = None) -> dic
     fs = []
     if area and area > 1.0:
         fs.append(finding("MAP-OSM-003", "WARN", f"the box is {area:g} square degrees: the public Overpass instance is for small areas (a city); "
-                          "a region is a Geofabrik extract (ref.infrastructure.world.osm.geofabrik)"))
+                          "a region is read from the day's Geofabrik extract (extract: auto on the layer or the tool; ref.infrastructure.world.osm.geofabrik)"))
+    if turbo_notes:
+        fs.append(finding("MAP-OSM-007", "INFO", "an Overpass Turbo query was read as Overpass QL: " + "; ".join(turbo_notes), turbo_notes))
     return {"query": q, "hosts": list(MIRRORS), "bbox_deg2": area, "credit": CREDIT, "license": LICENSE, "findings": fs,
             "note": "one POST at a time; 429/502/503/504 tried again after 2, 6 and 18 s, then the next declared mirror"}
 
@@ -150,7 +238,6 @@ def elements_to_layers(doc: dict, top_tags: int = 24) -> dict:
     """Overpass `out geom` elements -> {"points", "lines", "polygons"} GeoDataFrames (EPSG:4326). A closed way is a polygon when it carries an
     area tag (building, landuse, amenity, leisure, natural other than coastline, area=yes) and not area=no; multipolygon relations are
     assembled from their member ways (outer and inner)."""
-    import geopandas as gpd
     import shapely
     from shapely.geometry import LineString, Point, Polygon
     rows = {"points": [], "lines": [], "polygons": []}
@@ -189,6 +276,13 @@ def elements_to_layers(doc: dict, top_tags: int = 24) -> dict:
                     rows["polygons"].append({**base, "geometry": shapely.make_valid(g)})
             elif outer:
                 rows["lines"].append({**base, "geometry": shapely.line_merge(shapely.union_all(outer))})
+    return rows_to_layers(rows, top_tags)
+
+
+def rows_to_layers(rows: dict, top_tags: int = 24) -> dict:
+    """{"points" | "lines" | "polygons": [{osm_type, osm_id, tags, geometry}]} -> GeoDataFrames: the commonest tags as columns, every tag in `tags`
+    (JSON). Shared by the Overpass answer and a Geofabrik extract (geofabrik.py), so a layer reads the same from either."""
+    import geopandas as gpd
     out = {}
     for kind, rs in rows.items():
         if not rs:
@@ -435,17 +529,32 @@ def source_layer(src: dict, base: Path, bbox_wgs=None):
     b = src.get("bbox") or bbox_wgs
     if b is None:
         raise OsmError("an osm source needs tags and a bbox (or a region: block on the map)", "MAP-OSM-002", gc.EXIT_USAGE)
+    ext = src.get("extract")
+    if ext and src.get("query"):
+        raise OsmError("an extract is read by tags; a query of your own goes to Overpass (leave extract out)", "MAP-OSM-002", gc.EXIT_USAGE)
     q = src.get("query") or query(tags, b)
-    key = hashlib.sha256(q.encode()).hexdigest()[:12]
+    want = src.get("geometry")
     folder = Path(src.get("cache") or "data/osm")
     folder = folder if folder.is_absolute() else base / folder
+    one = None
+    if ext:                                             # 5.4.0 (P4.4): the day's Geofabrik extract in place of Overpass, for a region
+        q = f"geofabrik:{str(ext).lower()}:{q}"
+        if want in ("points", "lines", "polygons"):     # a layer draws one geometry: one pass over the extract, kept under its own name,
+            one = folder / f"osm_{hashlib.sha256((q + ':' + want).encode()).hexdigest()[:12]}.gpkg"   # unless the whole answer is already kept
+    key = hashlib.sha256(q.encode()).hexdigest()[:12]
     f = folder / f"osm_{key}.gpkg"
+    if one is not None and not f.is_file():
+        f = one
     if not f.is_file():
         if os.environ.get("GMAP_OFFLINE") == "1":
             raise OsmError(f"the OSM query is not cached ({f.name}) and GMAP_OFFLINE=1 forbids fetching it", "MAP-OSM-001", gc.EXIT_REFUSED)
-        fetch(tags, b, f, own_query=src.get("query"))
+        if ext:
+            import geofabrik
+            geofabrik.fetch(tags, b, f, region=None if str(ext).lower() in ("auto", "true") else str(ext), cap_mb=src.get("cap_mb"),
+                            kinds=[want] if f == one else None)
+        else:
+            fetch(tags, b, f, own_query=src.get("query"))
     rec = json.loads(f.with_suffix(".json").read_text(encoding="utf-8")) if f.with_suffix(".json").is_file() else {}
-    want = src.get("geometry")
     import pyogrio
     layers = [x[0] for x in pyogrio.list_layers(f)] if f.is_file() else []
     if not layers:

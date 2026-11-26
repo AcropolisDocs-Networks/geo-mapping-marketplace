@@ -629,7 +629,7 @@ def cmd_need(a) -> int:
 
 
 # ---------------------------------------------------------------------------------------------------------------- data
-TOOL_FOR = (("overpass", "osm_fetch"), ("ohsome", "osm_history"), ("opencellid", "coverage_fetch (adapter=opencellid)"), ("earthdata", "earthdata_search then earthdata_fetch"),
+TOOL_FOR = (("overpass", "osm_fetch"), ("geofabrik", "osm_fetch (extract=auto)"), ("ohsome", "osm_history"), ("opencellid", "coverage_fetch (adapter=opencellid)"), ("earthdata", "earthdata_search then earthdata_fetch"),
             ("black-marble", "earthdata_nightlights"), ("fcc-bdc", "fcc_bdc_coverage"), ("acs5", "census_query"), ("router", "isochrone"))
 
 
@@ -746,6 +746,16 @@ def data_plan(job: dict) -> list[dict]:
             plan.append({"need": n["theme"], "how": "imagery", "says": f"a picture read for the map's window by the draft (source: {{type: ref, id: {n['chosen']}"
                          + (", dates: START/END" if st.get("cloud_property") else "") + "}); before it, the scenes and what the read would cost: "
                          f'python3 "$GMAP_ROOT/scripts/imagery.py" plan {n["chosen"]} --bounds={box}' + (" --dates 2024-06-01/2024-09-30" if st.get("cloud_property") else "")})
+        elif isinstance((e.get("delivery") or {}).get("window"), dict):   # 5.4.0: a bulk source read for the map's window; the plan is the cost line
+            w = e["delivery"]["window"]
+            b = job["brief"].get("bbox")
+            box = ",".join(f"{float(v):g}" for v in b) if b else "W,S,E,N"
+            lay = f", layer: {w['layer']}" if len(w.get("layers") or []) > 1 else ""
+            plan.append({"need": n["theme"], "how": "window", "says": f"read for the map's window by the draft and kept (source: {{type: ref, id: {n['chosen']}{lay}"
+                         ', where: "<a condition on its columns>"}); '
+                         + (f"its layers: {', '.join(w['layers'])}; " if lay else "")
+                         + ("what the read would download, before it: " + f'python3 "$GMAP_ROOT/scripts/window_read.py" plan {n["chosen"]} --bbox={box}'
+                            if w.get("reader") != "overture" else "an Overture read says its cost in the build notes (the entry caps it)")})
         else:
             plan.append({"need": n["theme"], "how": "ref", "says": f"drawn as a library layer (source: {{type: ref, id: {n['chosen']}}}); " + ("gmap.py draft fetches it once and keeps it" if mode == "fetch" else "read for the map's window when the map is drawn" if mode == "service" else "it ships with the plugin" if mode == "bundled" else "read when the map is drawn")})
     return plan
