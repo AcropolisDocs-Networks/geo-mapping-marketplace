@@ -682,7 +682,7 @@ def _kind_of_entry(e: dict) -> str | None:
     for word, kind in (("point", "point"), ("line", "line"), ("polygon", "polygon"), ("raster", "raster"), ("grid", "raster")):
         if word in k:
             return kind
-    if dl.get("cog") or dl.get("raster") or "geotiff" in str(dl.get("format") or "").lower() or ".population.ghsl" in str(e.get("id")) or ".population.hrsl" in str(e.get("id")):
+    if dl.get("cog") or dl.get("raster") or dl.get("stac") or "geotiff" in str(dl.get("format") or "").lower() or ".population.ghsl" in str(e.get("id")) or ".population.hrsl" in str(e.get("id")):
         return "raster"                                   # 5.2.0: a library raster is drawn as a raster layer
     lv = " ".join(str(x) for x in ((e.get("tags") or {}).get("level") or []))
     if "site" in lv:
@@ -739,6 +739,13 @@ def data_plan(job: dict) -> list[dict]:
                                   if linked else f"needs the person's computer (data tool {tool}) and none is linked: ask the person to link it")})
         elif mode == "user-supplied":
             plan.append({"need": n["theme"], "how": "bring", "says": f"a file the person brings ({(e.get('delivery') or {}).get('format') or 'see the entry'}), then: gmap.py data add {n['theme']} --file <file>"})
+        elif (e.get("delivery") or {}).get("stac"):           # 5.3.0: imagery, read for the window by the build; the plan is the cost line
+            st = e["delivery"]["stac"]
+            b = job["brief"].get("bbox")
+            box = ",".join(f"{float(v):g}" for v in b) if b else "W,S,E,N"
+            plan.append({"need": n["theme"], "how": "imagery", "says": f"a picture read for the map's window by the draft (source: {{type: ref, id: {n['chosen']}"
+                         + (", dates: START/END" if st.get("cloud_property") else "") + "}); before it, the scenes and what the read would cost: "
+                         f'python3 "$GMAP_ROOT/scripts/imagery.py" plan {n["chosen"]} --bounds={box}' + (" --dates 2024-06-01/2024-09-30" if st.get("cloud_property") else "")})
         else:
             plan.append({"need": n["theme"], "how": "ref", "says": f"drawn as a library layer (source: {{type: ref, id: {n['chosen']}}}); " + ("gmap.py draft fetches it once and keeps it" if mode == "fetch" else "read for the map's window when the map is drawn" if mode == "service" else "it ships with the plugin" if mode == "bundled" else "read when the map is drawn")})
     return plan
@@ -971,6 +978,12 @@ def cmd_compose(a) -> int:
          *([] if (spec.get("elements") or {}).get("title", {}).get("text") else
            ['  no title was given: the message would be drawn as the title, and cut if it is long. Write one (map-text): gmap.py set elements.title.text="..."']),
          "  not written, so the builder decides: theme, look, positions, names, context, ground, locator, scale bar, north arrow"]
+    for ly in spec["layers"]:                             # 5.3.0: satellite imagery is a picture of one time; the person says which
+        src = ly.get("source") or {}
+        st = ((_entry(str(src.get("id"))) or {}).get("delivery") or {}).get("stac") if src.get("type") == "ref" else None
+        if st and st.get("cloud_property") and not src.get("dates"):
+            L.append(f"  layer {ly['id']} is satellite imagery and has no dates yet. Ask the person which season or year, then: "
+                     f"gmap.py set source.dates=2024-06-01/2024-09-30 --layer {ly['id']}   (source.product: true-color | false-color | ndvi)")
     out(L + rules_lines("compose") + next_lines("draft"))
     return gc.EXIT_OK
 

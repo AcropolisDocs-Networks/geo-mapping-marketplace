@@ -44,4 +44,4 @@ maintenance:
   verify_by: '2027-11-25'
   check: {kind: http_head, url: 'https://naciscdn.org/naturalearth/50m/raster/SR_50M.zip', expect: 200}
   changelog:
-  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched from the build workspace on 2026-11-25 (11,380,369 bytes; SR_50M.tif, 10,800 x 5,400, one band) and read as a raster layer. The coloured hypsometric tint (HYP_50M_SR_W, three bands) waits for the three-band drawing that comes with imagery.'}
+  - {rev: 1, date: '2026-11-25', note: 'New (5.2.0, open data portals P2.2). Fetched from the build workspace on 2026-11-25 (11,380,369 bytes; SR_50M.tif, 10,800 x 5,400, one band) and read as a raster layer. The coloured hypsometric tint is ref.terrain.world.relief.ne50-hypsometric (5.3.0).'}

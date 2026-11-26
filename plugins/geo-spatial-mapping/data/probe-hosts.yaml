@@ -53,3 +53,7 @@
 - {host: geodata.ucdavis.edu,             url: "https://geodata.ucdavis.edu/gadm/gadm4.1/gpkg/gadm41_KEN.gpkg", class: data}
 - {host: api.os.uk,                       url: "https://api.os.uk/downloads/v1/products",       class: data}
 - {host: data-gis.unep-wcmc.org,          url: "https://data-gis.unep-wcmc.org/server/rest/services?f=json", class: service}
+# 5.3.0 (open data portals P3): the catalogs imagery is found in and the public bucket Sentinel-2 is read from; each answered on 2026-11-25.
+- {host: planetarycomputer.microsoft.com, url: "https://planetarycomputer.microsoft.com/api/stac/v1/", class: service}
+- {host: earth-search.aws.element84.com, url: "https://earth-search.aws.element84.com/v1", class: service}
+- {host: sentinel-cogs.s3.us-west-2.amazonaws.com, url: "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/31/N/EH/2024/1/S2A_31NEH_20240125_0_L2A/thumbnail.jpg", class: data}

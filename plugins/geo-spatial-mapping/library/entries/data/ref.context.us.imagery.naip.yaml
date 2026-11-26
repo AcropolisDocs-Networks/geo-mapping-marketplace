@@ -1,0 +1,85 @@
+id: ref.context.us.imagery.naip
+type: context
+rev: 1
+status: active
+title: 'NAIP aerial photography, 0.3 to 1 m, the conterminous United States (USDA)'
+summary: 'Aerial photographs of every state of the conterminous United States, flown in the growing season every two or three years at 0.3 to 1 m, in red, green,
+  blue and near infrared. The map''s window is read from the newest flight and drawn as a true colour or false colour picture.'
+tags:
+  geography: [us]
+  level: [grid]
+  domain: [imagery, general]
+  use_for: [context-basemap, atlas]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level]
+  scale: [metro, local, site]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [irregular]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'A town, campus or site map in the United States needs a recent aerial photograph as its ground: roofs, streets, fields and water are all visible.'
+- 'Tree cover or irrigated land is picked out (source.product: false-color, or ndvi).'
+- 'The window is a few kilometres wide; up to about half a degree is read, to 2,400 cells across.'
+avoid_when:
+- 'A whole metro area or a state: the read is thinned to a few metres a cell and Sentinel-2 at 10 m costs far less.'
+- 'A particular date matters: each state is flown once every two or three years (source.dates picks a flight year, as 2023).'
+- 'Alaska, Hawaii or anywhere outside the United States.'
+distinct_from:
+- id: ref.context.world.imagery.sentinel-2-l2a
+  why: satellite, 10 m, the whole world, every five days
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Cloud-Optimized GeoTIFF, one file a quarter quadrangle, uint8, four bands (red, green, blue, near infrared), UTM
+  stac:
+    routes:
+    - name: planetary-computer
+      root: https://planetarycomputer.microsoft.com/api/stac/v1
+      collection: naip
+      sign: planetary-computer
+      assets: {image: image}
+    bands: {image: [red, green, blue, nir]}
+    native_m: 0.6
+    max_scenes: 6
+    max_px: 2400
+    max_span_deg: 0.5
+  second_route: 'USGS NAIP Plus ImageServer (https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer): a picture exported for a window, as a
+    service layer (source: {type: service, mode: image}), for print at a chosen size.'
+  note: 'In a MapSpec: source: {type: ref, id: ref.context.us.imagery.naip} takes the newest flight; dates: 2021 takes that year''s. The files are on Planetary
+    Computer, its addresses signed with its keyless token.'
+style:
+  titles: {true-color: Aerial photograph, false-color: False colour aerial photograph, ndvi: Vegetation index (NDVI)}
+  raster:
+    variants:
+      ndvi: {ramp: sequential, vmin: 0, vmax: 0.9, nodata: -9999, from_land: false}
+source:
+  publisher: USDA Farm Production and Conservation Business Center, National Agriculture Imagery Program, through Microsoft Planetary Computer
+  product: NAIP
+  url: https://planetarycomputer.microsoft.com/api/stac/v1/collections/naip
+  page: https://naip-usdaonline.hub.arcgis.com/
+url_verified_on: '2026-11-25'
+vintage:
+  current: 2010 to 2025, by state
+  cadence: irregular
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Imagery: USDA National Agriculture Imagery Program (NAIP).'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://planetarycomputer.microsoft.com/api/stac/v1/collections/naip
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.3.0, open data portals P3.3). Read from the build workspace on 2026-11-25: central Gilbert, Arizona, from the flight of 7 June 2025
+      (az_m_3311142_NE_12_060_20250607, 0.6 m), 2,400 by 2,149 cells of 1.6 m, 49.3 MB in 43 requests through Planetary Computer.'

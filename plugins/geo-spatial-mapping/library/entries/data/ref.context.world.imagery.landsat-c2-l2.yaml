@@ -1,0 +1,92 @@
+id: ref.context.world.imagery.landsat-c2-l2
+type: context
+rev: 1
+status: active
+title: 'Landsat imagery (Collection 2 Level-2 surface reflectance), 30 m, the whole world since 1982'
+summary: 'Forty years of satellite pictures of any place on land at 30 m, from Landsat 4, 5, 7, 8 and 9 (USGS and NASA). The map''s window is read from the least
+  cloudy scenes between two dates and drawn as a true colour picture, a false colour picture or a vegetation index: the source for then and now.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [imagery, general]
+  use_for: [context-basemap, atlas]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level]
+  scale: [national, regional, state, metro]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [live]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [authoritative]
+use_when:
+- 'A place is compared across decades: a lake that dried, a city that grew, a forest that was cleared (two layers with different source.dates, under a swipe on a web map).'
+- 'A date before 2017 is needed; Landsat 4 and 5 go back to 1982.'
+- 'A region a few hundred kilometres wide is shown; it is read to 2,400 cells across, from up to twelve scenes.'
+avoid_when:
+- 'A date since 2017 at city scale: Sentinel-2 (ref.context.world.imagery.sentinel-2-l2a) is 10 m and passes more often.'
+- 'Landsat 7 between 2003 and 2013 is the only choice: its pictures carry stripes of missing data; take pick: median over several scenes.'
+- 'Bright ground (salt flats, snow, desert) is the subject: say source.stretch [0, 0.5] or the picture burns out to white.'
+distinct_from:
+- id: ref.context.world.imagery.sentinel-2-l2a
+  why: 10 m, since 2017
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Cloud-Optimized GeoTIFF, one file a band and a scene, uint16 reflectance, in the scene's UTM zone
+  stac:
+    routes:
+    - name: earth-search
+      root: https://earth-search.aws.element84.com/v1
+      collection: landsat-c2-l2
+      assets: {red: red, green: green, blue: blue, nir: nir08, mask: qa_pixel}
+    - name: planetary-computer
+      root: https://planetarycomputer.microsoft.com/api/stac/v1
+      collection: landsat-c2-l2
+      sign: planetary-computer
+      assets: {red: red, green: green, blue: blue, nir: nir08, mask: qa_pixel}
+    cloud_property: eo:cloud_cover
+    reflectance: {scale: 0.0000275, offset: -0.2}
+    mask: {kind: bits, bad: [0, 1, 3, 4]}
+    stretch: [0.0, 0.3]
+    native_m: 30
+    max_scenes: 12
+    max_px: 2400
+    max_span_deg: 12
+  note: 'Earth Search lists Landsat too, but its files are in a requester-pays bucket (storage:requester_pays): that route is refused and said, and the
+    picture is read from Planetary Computer, which is free to read (decision D5: no cloud keys are held). In a MapSpec: source: {type: ref, id:
+    ref.context.world.imagery.landsat-c2-l2, dates: 1989-06-01/1989-09-30, product: true-color, cloud_max: 10, stretch: [0, 0.5]}.'
+style:
+  titles: {true-color: Satellite picture, false-color: False colour picture, ndvi: Vegetation index (NDVI)}
+  raster:
+    variants:
+      ndvi: {ramp: sequential, vmin: 0, vmax: 0.9, nodata: -9999, from_land: false}
+source:
+  publisher: US Geological Survey and NASA, through Microsoft Planetary Computer
+  product: Landsat Collection 2 Level-2 (surface reflectance)
+  url: https://planetarycomputer.microsoft.com/api/stac/v1/collections/landsat-c2-l2
+  page: https://www.usgs.gov/landsat-missions/landsat-collection-2-level-2-science-products
+url_verified_on: '2026-11-25'
+vintage:
+  current: 1982 to now
+  cadence: live
+license:
+  class: public-domain
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Imagery: Landsat, courtesy of the U.S. Geological Survey.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://planetarycomputer.microsoft.com/api/stac/v1/collections/landsat-c2-l2
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.3.0, open data portals P3.3 and P3.4). Read from the build workspace on 2026-11-25: the Aral Sea in 1989 (five Landsat 4 and 5 scenes of 7 August to
+      2 September, 77.6 MB in 74 requests) and in 2024 (Landsat 8 and 9 scenes of 23 to 25 August), each 1,981 by 2,400 cells of 124 m, through Planetary Computer; the
+      Earth Search route was refused as requester-pays both times.'

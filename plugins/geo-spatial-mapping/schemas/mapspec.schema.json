@@ -1026,6 +1026,14 @@
               "from_land": {
                 "type": "boolean",
                 "description": "ramp sequential: the continuous ramp starts at the land colour so low values fade into the ground (default true)"
+              },
+              "colors": {
+                "enum": ["publisher", "brand"],
+                "description": "ramp categorical, a library raster whose entry carries its publisher's class colours (land cover): publisher (default) draws those, brand the brand's categorical colours (5.2.0; the schema refused it until 5.3.0)"
+              },
+              "rgb": {
+                "description": "5.3.0: draw three bands as a colour picture (red, green, blue), as they are, with no ramp and no legend: true for bands 1, 2, 3, or the three band numbers ([4, 1, 2]). Taken for granted for satellite and aerial imagery fetched by the build",
+                "oneOf": [{"type": "boolean"}, {"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 3, "maxItems": 3}]
               }
             }
           },

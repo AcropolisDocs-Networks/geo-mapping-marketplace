@@ -514,6 +514,8 @@ def check_blocks(blocks: list[dict], layers: list[dict], classified: dict) -> li
             continue
         if str((ly.get("symbol") or {}).get("shape", "")).lower() == "none":
             continue                                     # 1.2.0: a label-only point layer draws no symbol, so it needs no key
+        if ly.get("_picture"):
+            continue                                     # 5.3.0: a satellite or aerial picture is shown as it is; the map symbolizes nothing in it
         if ly.get("_named_on_map"):
             continue                                     # 1.22.0: named on the map in place of its key (legend.direct); MAP-STORY-007 if a name found no room
         if meaningful and ly["id"] not in have:

@@ -1,0 +1,48 @@
+id: ref.terrain.world.relief.ne50-hypsometric
+type: terrain
+rev: 1
+status: active
+title: 'World hypsometric tint with shaded relief and water, 50m (Natural Earth, a colour picture)'
+summary: 'A colour picture of the whole world, 10,800 by 5,400 cells: lowlands green, uplands tan, mountains grey and white, shaded by relief, with the sea and lakes in blue.
+  A ready-made physical backdrop for world and continental maps, drawn as it is.'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [general]
+  use_for: [context-basemap, atlas]
+  avoid_for: [engineering-grade, site-precision, legal-boundary]
+  scale: [world, national]
+  detail: [generalized]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [static]
+  tier: [T1, T2]
+  license_class: [public-domain]
+  quality: [community]
+use_when:
+- 'A world or continental map wants a physical backdrop in colour under a few points, lines or labels: draw it as a raster layer under the others.'
+avoid_when:
+- 'The map carries a choropleth or any colour-coded data: the backdrop''s colours would compete with the data''s (use the grey shaded relief, light).'
+- 'The map is regional or finer: the cells are kilometres across.'
+- The brand's palette must rule the whole sheet; this is Natural Earth's own colouring.
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: GeoTIFF in a zip, uint8, three bands (red, green, blue), EPSG:4326, cells of 1/30 degree
+  size_mb: 102.2
+  raster: {url: 'https://naciscdn.org/naturalearth/50m/raster/HYP_50M_SR_W.zip', zipped: true}
+style:
+  title: Physical relief
+  raster: {rgb: true}
+source: {publisher: Natural Earth, product: 'Cross Blended Hypso with Shaded Relief and Water, 50m (HYP_50M_SR_W)', url: 'https://naciscdn.org/naturalearth/50m/raster/HYP_50M_SR_W.zip',
+  file_sha256: 57d89405e8f7d1e5d1cca11701d394b3d45aea75b301a6992ad5571eff64527a}
+url_verified_on: '2026-11-25'
+vintage: {current: Natural Earth 5.1.1, cadence: static}
+license: {class: public-domain, attribution_text: Made with Natural Earth., redistribute_ok: true, commercial_ok: true, bulk_ok: true}
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check: {kind: http_head, url: 'https://naciscdn.org/naturalearth/50m/raster/HYP_50M_SR_W.zip', expect: 200}
+  changelog:
+  - {rev: 1, date: '2026-11-25', note: 'New (5.3.0, open data portals P2.2, held back from 5.2.0 until three-band drawing). Fetched from the build workspace on 2026-11-25 (102,197,904 bytes; HYP_50M_SR_W.tif, 10,800 x 5,400, three bands) and drawn as a colour picture under a map of the Mediterranean.'}

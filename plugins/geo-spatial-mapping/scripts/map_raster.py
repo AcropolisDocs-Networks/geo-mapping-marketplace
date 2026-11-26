@@ -681,7 +681,7 @@ def _source_path(plan, l, win, shape=(512, 512)) -> tuple[str, dict | None, list
     if src == "pop":
         import raster_fetch as rf
         try:
-            r = rf.raster_for(info["entry_id"], window_wgs84(plan, win), variant=(l.spec.get("source") or {}).get("variant"))
+            r = rf.raster_for(info["entry_id"], window_wgs84(plan, win), variant=(l.spec.get("source") or {}).get("variant"), params=l.spec.get("source") or {})
         except Exception as ex:  # noqa: BLE001 - RasterFetchError, or a service failure under it
             raise RasterLayerError(f"layer '{l.id}': {ex}", gc.EXIT_RUNTIME)
         return r["path"], r["record"], r["findings"]
@@ -722,10 +722,30 @@ def raster_layer(plan, l, win, shape) -> None:
     plan.findings += [{**f, "layer": l.id} for f in fs]
     info = rio.open_info(path)
     shp = native_limited(shape, win, info, plan.crs)
+    # 5.3.0: a colour picture (satellite or aerial imagery, a tinted relief) is drawn as it is: three bands as red, green and blue, no ramp and
+    # no legend. Asked with raster: {rgb: true} (or [3, 2, 1]); taken for granted for imagery this build fetched and for an entry that says so.
+    rgb = given.get("rgb", edef.get("rgb"))
+    if rgb is None:
+        rgb = bool(fetch_rec and fetch_rec.get("product") in ("true-color", "false-color"))
+    picture = bool(rgb) and int(info.get("bands") or 0) >= 3
+    if rgb and not picture:
+        raise RasterLayerError(f"layer '{l.id}': raster.rgb needs a file with three bands; {Path(path).name} has {info.get('bands')}")
     try:
-        g = rio.read_window(path, win, plan.crs, out_shape=shp, band=cfg["band"], resampling=cfg["resampling"], nodata=cfg["nodata"])
+        g = rio.read_window(path, win, plan.crs, out_shape=shp, band=([int(b) for b in rgb] if isinstance(rgb, (list, tuple)) else [1, 2, 3]) if picture else cfg["band"],
+                            resampling=str(given.get("resampling") or "bilinear") if picture else cfg["resampling"], nodata=cfg["nodata"])
     except rio.RasterError as ex:
         raise RasterLayerError(f"layer '{l.id}': {ex}", gc.EXIT_RUNTIME)
+    pic = None
+    if picture:
+        pm = np.ma.asarray(g.array)
+        seen = ~np.ma.getmaskarray(pm).any(axis=0)
+        px = np.ma.filled(pm, 0)
+        if str(info.get("dtype")) != "uint8":                 # a picture kept in another type is scaled to its own 2nd to 98th percentile
+            v = px[:, seen] if seen.any() else px.reshape(3, -1)
+            lo_, hi_ = (np.percentile(v, 2), np.percentile(v, 98)) if v.size else (0.0, 1.0)
+            px = np.clip((px.astype(float) - lo_) / max(float(hi_ - lo_), 1e-9), 0, 1) * 255
+        pic = np.concatenate([np.clip(px, 0, 255).astype("uint8"), np.where(seen, 255, 0).astype("uint8")[None]])
+        g = type("G", (), {"array": np.ma.masked_array(px[0].astype(float), mask=~seen), "bounds": g.bounds, "transform": g.transform})()
     a = np.ma.masked_invalid(np.ma.asarray(g.array, dtype=float))
     if cfg["nodata"] is not None:
         a = np.ma.masked_where(np.ma.filled(a, np.nan) == float(cfg["nodata"]), a)
@@ -737,7 +757,18 @@ def raster_layer(plan, l, win, shape) -> None:
     unit = cfg["unit"]
     legend_title = title + (f" ({unit})" if unit and unit not in title else "")
     lspec = l.spec | {"title": legend_title, "legend": {**(l.spec.get("legend") or {}), "title": legend_title}}
-    if cfg["ramp"] == "categorical":
+    if pic is not None:
+        png = png_bytes(pic)
+        l.legend_block = None
+        l.spec["_picture"] = True                         # the legend check passes a picture by (MAP-CART-005)
+        l.colors, l.palette_kind = [], None
+        if fetch_rec and fetch_rec.get("scene_dates"):
+            d0, d1 = fetch_rec["scene_dates"]
+            plan.notes.append(f"layer '{l.id}': a picture taken {d0 if d0 == d1 else f'between {d0} and {d1}'} ({len(fetch_rec.get('scenes') or [])} scene(s), "
+                              f"{fetch_rec.get('collection')}); say the date on the map where it matters")
+        what = {"true-color": "true colour (red, green, blue)", "false-color": "false colour (near infrared, red, green)"}.get(str((fetch_rec or {}).get("product")), "three bands as red, green and blue")
+        how = f"as a picture in {what}, as its publisher's values give it; nothing is coloured by the map"
+    elif cfg["ramp"] == "categorical":
         vals = np.unique(a.compressed())
         import map_look
         publisher = bool(own) and str(given.get("colors") or "publisher").lower() != "brand" and all(own.get(float(v), {}).get("color") for v in vals)
@@ -845,6 +876,22 @@ def raster_layer(plan, l, win, shape) -> None:
     _finish(plan, l, rec)
 
 
+def is_picture_spec(ly: dict, entry: dict | None = None) -> bool:
+    """5.3.0: whether a layer will be drawn as a colour picture (imagery in true or false colour, or three bands asked as red, green, blue),
+    known from its MapSpec and its library entry before anything is read."""
+    if not isinstance(ly, dict) or ly.get("role") != "raster":
+        return False
+    r = ly.get("raster") or {}
+    if r.get("rgb") is not None:
+        return bool(r["rgb"])
+    src = ly.get("source") or {}
+    d = (entry or {}).get("delivery") or {}
+    if d.get("stac"):
+        prod = str(src.get("product") or src.get("variant") or d["stac"].get("default_product") or "true-color").lower().strip().replace("colour", "color").replace("_", "-").replace(" ", "-")
+        return prod in ("true-color", "false-color")
+    return bool((((entry or {}).get("style") or {}).get("raster") or {}).get("rgb"))
+
+
 def entry_classes(entry) -> dict:
     """{value: {label, color}} from a library entry's `style.classes` (5.2.0): the publisher's own legend for a classed raster (land cover).
     The MapSpec still names no colour: the entry carries the publisher's, the way a service picture carries its own."""
@@ -859,7 +906,13 @@ def entry_classes(entry) -> dict:
 
 
 def _fetch_step(rec: dict) -> str:
-    if rec.get("tiles") and "ghsl" not in str(rec.get("entry")):
+    if rec.get("scenes"):                                  # 5.3.0: imagery names its scenes, so the picture can be found again
+        ids = [str(x.get("id")) for x in rec["scenes"]]
+        when = rec.get("scene_dates") or [None, None]
+        span = when[0] if when[0] == when[1] else f"{when[0]} to {when[1]}"
+        what = (f"{rec.get('product')} from {len(ids)} scene(s) of {rec.get('collection')} on {rec.get('route')} ({span}; {rec.get('pick')}): " + ", ".join(ids[:6])
+                + (f" and {len(ids) - 6} more" if len(ids) > 6 else ""))
+    elif rec.get("tiles") and "ghsl" not in str(rec.get("entry")):
         what = f"tile(s) {', '.join(rec['tiles'])} of {rec.get('entry')}" + (f", every {rec['factor']}th cell" if int(rec.get("factor") or 1) > 1 else "")
     elif rec.get("tiles"):
         what = f"GHSL tile(s) {', '.join(rec['tiles'])}"

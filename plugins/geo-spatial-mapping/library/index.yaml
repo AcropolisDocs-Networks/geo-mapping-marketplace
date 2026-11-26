@@ -553,6 +553,13 @@ entries:
   rev: 1
   tags_digest: a454af9c472c
   entry_digest: 69c5f3fbfc34
+- id: ref.context.us.imagery.naip
+  file: entries/data/ref.context.us.imagery.naip.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: 29b3145d35ae
+  entry_digest: e4fd5ea35918
 - id: ref.context.us.landcover.nlcd
   file: entries/data/ref.context.us.landcover.nlcd.yaml
   type: context
@@ -644,6 +651,20 @@ entries:
   rev: 1
   tags_digest: d4f0a17f5c83
   entry_digest: 4cce59b3390c
+- id: ref.context.world.imagery.landsat-c2-l2
+  file: entries/data/ref.context.world.imagery.landsat-c2-l2.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: bae3e7d1833e
+  entry_digest: bd8a6f16ec93
+- id: ref.context.world.imagery.sentinel-2-l2a
+  file: entries/data/ref.context.world.imagery.sentinel-2-l2a.yaml
+  type: context
+  status: active
+  rev: 1
+  tags_digest: ce9aa3c9d2c4
+  entry_digest: 8afed69ded81
 - id: ref.context.world.lakes.ne10
   file: entries/data/ref.context.world.lakes.ne10.yaml
   type: context
@@ -1841,10 +1862,17 @@ entries:
   rev: 2
   tags_digest: a0291820f14f
   entry_digest: d3cf7302cac8
+- id: ref.terrain.world.relief.ne50-hypsometric
+  file: entries/data/ref.terrain.world.relief.ne50-hypsometric.yaml
+  type: terrain
+  status: active
+  rev: 1
+  tags_digest: 320ee89e9278
+  entry_digest: f8b65a62f1fd
 - id: ref.terrain.world.relief.ne50-shaded
   file: entries/data/ref.terrain.world.relief.ne50-shaded.yaml
   type: terrain
   status: active
   rev: 1
   tags_digest: 320ee89e9278
-  entry_digest: e10bea4e5033
+  entry_digest: 2c1e5fba655d

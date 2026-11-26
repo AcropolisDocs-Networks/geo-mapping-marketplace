@@ -20,6 +20,9 @@ steps:
   portal-add:
     run_on: [host, cloud, cowork-vm]
     how: source_add portal=URL on the map server (the row is saved in the person's own sources, which every project reads), or catalogs.py portal URL where the session runs (the row is saved in that place only)
+  imagery:
+    run_on: [cloud, cowork-vm, host]
+    how: a role raster layer on a library imagery entry (Sentinel-2, Landsat, NAIP); the build reads the window itself through imagery.py. Earth Search, Planetary Computer and their public files answer with no key from all three places. imagery.py plan lists the scenes and the cost before anything is read (5.3.0)
   build:
     run_on: [cloud, cowork-vm]
     how: build_map.py in the cloud workspace; in the Cowork VM only when doctor --fix --place cowork-vm made the venv in the work folder (O3)

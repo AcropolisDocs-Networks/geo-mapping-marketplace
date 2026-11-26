@@ -1,6 +1,6 @@
 # geo-spatial-mapping: maps for Claude
 
-The marketplace for **geo-spatial-mapping** 5.2.0, built for Claude Cowork: cartographic maps from a request or your own geodata (print maps as SVG,
+The marketplace for **geo-spatial-mapping** 5.3.0, built for Claude Cowork: cartographic maps from a request or your own geodata (print maps as SVG,
 PDF and PNG, interactive web maps, data conversion and analysis, public data services, travel-time areas and terrain).
 
 ## Install (Claude Cowork)
@@ -9,7 +9,7 @@ PDF and PNG, interactive web maps, data conversion and analysis, public data ser
 2. Choose **Add**, then **Add marketplace**, and enter `AcropolisDocs-Networks/geo-mapping-marketplace`.
 3. Find **geo-spatial-mapping** under **Discover** and choose **Install**.
 
-Or from the file: download `geo-spatial-mapping_v5.2.0.plugin` from this repository's [latest release](https://github.com/AcropolisDocs-Networks/geo-mapping-marketplace/releases/latest),
+Or from the file: download `geo-spatial-mapping_v5.3.0.plugin` from this repository's [latest release](https://github.com/AcropolisDocs-Networks/geo-mapping-marketplace/releases/latest),
 then in **Customize → Plugins** choose the upload option and select it.
 
 Python 3.11 or newer must be on the computer. The first start installs the plugin's Python packages by itself into a private environment

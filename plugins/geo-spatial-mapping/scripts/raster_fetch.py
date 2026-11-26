@@ -115,8 +115,19 @@ def file_block(entry) -> dict | None:
     return r if isinstance(r, dict) and (r.get("url") or r.get("files")) else None
 
 
+def stac_block(entry) -> dict | None:
+    """The entry's `delivery.stac` block (5.3.0): imagery picked from a STAC catalog by window, dates and cloud cover (imagery.py reads it)."""
+    if isinstance(entry, str):
+        try:
+            entry = library_entry(entry)
+        except RasterFetchError:
+            return None
+    b = ((entry or {}).get("delivery") or {}).get("stac")
+    return b if isinstance(b, dict) and b.get("routes") else None
+
+
 def known(entry_id: str) -> bool:
-    return entry_id in ENTRIES or cog_block(entry_id) is not None or file_block(entry_id) is not None
+    return entry_id in ENTRIES or cog_block(entry_id) is not None or file_block(entry_id) is not None or stac_block(entry_id) is not None
 
 
 # --------------------------------------------------------------------------------------------------------------- COG tiles (5.2.0)
@@ -305,6 +316,7 @@ class RangedFile:
 
     def __init__(self, url: str, size: int, http):
         self.url, self.size, self.http = url, int(size), http
+        self.label = Path(url.split("?")[0]).name                    # 5.3.0: a signed address keeps its token out of every message
         self.pos = 0
         self.blocks: dict[int, bytes] = {}
         self.requests = 0
@@ -313,15 +325,18 @@ class RangedFile:
 
     def _fetch(self, b0: int, b1: int) -> None:
         if self.requests >= RANGE_MAX_REQUESTS or self.fetched > MAX_BYTES:
-            raise RasterFetchError(f"reading this window of {Path(self.url).name} needs more than {RANGE_MAX_REQUESTS} requests or {MAX_BYTES // 1_000_000} MB; "
+            raise RasterFetchError(f"reading this window of {self.label} needs more than {RANGE_MAX_REQUESTS} requests or {MAX_BYTES // 1_000_000} MB; "
                                    f"use a smaller window or the GHSL tiles ({GHSL})")
         lo, hi = b0 * RANGE_BLOCK, min(self.size, (b1 + 1) * RANGE_BLOCK) - 1
         try:
             r = self.http.get(self.url, None, expect="any", headers={"Range": f"bytes={lo}-{hi}"}, max_bytes=hi - lo + 1 + 1024)
         except oh.ServiceError as e:
-            raise RasterFetchError(f"a part of the raster could not be fetched: {oh.untrusted(e, 200)}") from None
+            msg = oh.untrusted(e, 200)
+            if "?" in self.url:                                       # a signed address: its token stays out of the message
+                msg = msg.replace(self.url.split("?", 1)[1], "...").replace(oh.redact_url(self.url).split("?", 1)[-1], "...")
+            raise RasterFetchError(f"a part of the raster could not be fetched: {msg}") from None
         if r.status != 206 or len(r.content) != hi - lo + 1:
-            raise RasterFetchError(f"the server did not send the byte range asked for (HTTP {r.status}); {Path(self.url).name} cannot be read by window")
+            raise RasterFetchError(f"the server did not send the byte range asked for (HTTP {r.status}); {self.label} cannot be read by window")
         self.requests += 1
         self.fetched += len(r.content)
         self.final_url = r.url
@@ -366,7 +381,7 @@ class RangedFile:
     def view(self) -> "RangedFile":
         """Another handle on the same file: its own position, the same blocks and counters (GDAL opens a file more than once)."""
         v = _RangedView.__new__(_RangedView)
-        v.parent, v.pos, v.size, v.url = self, 0, self.size, self.url
+        v.parent, v.pos, v.size, v.url, v.label = self, 0, self.size, self.url, self.label
         return v
 
     def opener(self, name: str):
@@ -498,8 +513,13 @@ def window_download(url: str, size: int, bounds_wgs84, root: Path, http, *, max_
 
 
 # --------------------------------------------------------------------------------------------------------------- the one call
-def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, variant: str | None = None) -> dict:
-    """A local GeoTIFF of the library raster covering the window. -> {path, record, findings, entry}."""
+def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, variant: str | None = None, params: dict | None = None) -> dict:
+    """A local GeoTIFF of the library raster covering the window. -> {path, record, findings, entry}.
+    `params` (5.3.0) is the layer's own source block: imagery reads its dates, cloud limit, product and pick from it."""
+    if entry_id not in ENTRIES and stac_block(entry_id) is not None:
+        import imagery
+        return imagery.fetch(entry_id, bounds_wgs84, {**(params or {}), **({"variant": variant} if variant and not (params or {}).get("product") else {})},
+                             cache_dir=cache_dir, http=http)
     block = None if entry_id in ENTRIES else cog_block(entry_id)
     whole = None if (entry_id in ENTRIES or block is not None) else file_block(entry_id)
     if entry_id not in ENTRIES and block is None and whole is None:

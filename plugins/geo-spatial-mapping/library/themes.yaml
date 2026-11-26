@@ -60,7 +60,7 @@ themes:
     says: "Elevation models (bare earth)"
     words: [elevation, dem, terrain, relief, hillshade, contours, slope, viewshed, line of sight, topography]
     entries: [terrain.us.dem.3dep, terrain.ca.dem.mrdem, terrain.fr.dem.rge-alti, terrain.jp.dem.gsi, terrain.se.dem.lantmateriet-mhm, terrain.be-vlg.dem.dhmv, terrain.au.dem.ga-lidar-5m,
-              terrain.world.dem.copernicus-glo30, terrain.world.dem.nasadem, terrain.world.dem.opentopography, terrain.world.dem.terrarium, terrain.arctic.dem.arcticdem, terrain.antarctica.dem.rema, terrain.world.relief.ne50-shaded]
+              terrain.world.dem.copernicus-glo30, terrain.world.dem.nasadem, terrain.world.dem.opentopography, terrain.world.dem.terrarium, terrain.arctic.dem.arcticdem, terrain.antarctica.dem.rema, terrain.world.relief.ne50-shaded, terrain.world.relief.ne50-hypsometric]
     note: "Bare earth: buildings and trees are not in these, so a line of sight over them sees more than is there."
   lidar:
     says: "Lidar point clouds and surface models"
@@ -135,9 +135,15 @@ themes:
     words: [weather, climate, temperature, rain, rainfall, precipitation, wind, forecast, normals, heat]
     entries: ["public-service.us.weather.*", public-service.world.weather.open-meteo, "public-service.world.weather.*", "public-service.*.weather.*",
               public-service.world.climate.copernicus-cds, "statistic.world.climate.*", statistic.us.climate.noaa-normals]
+  satellite-imagery:
+    says: "Satellite and aerial pictures of the ground"
+    words: [satellite, satellite image, satellite imagery, imagery, aerial, aerial photo, aerial photography, orthophoto, sentinel, landsat, naip, ndvi, true colour, true color,
+            then and now, before and after]
+    entries: [context.world.imagery.sentinel-2-l2a, context.world.imagery.landsat-c2-l2, context.us.imagery.naip]
+    note: "Satellite pictures need their dates (source.dates). Sentinel-2 is 10 m since 2017; Landsat is 30 m since 1982; NAIP is under a metre, United States only, one flight every two or three years."
   night-lights-imagery:
     says: "Night lights, satellite and street-level pictures"
-    words: [night lights, nightlights, lights at night, black marble, viirs, satellite, imagery, earth observation, street view, street-level]
+    words: [night lights, nightlights, lights at night, black marble, viirs, earth observation, street view, street-level]
     entries: [statistic.world.night-lights.black-marble, public-service.world.earth-observation.nasa-earthdata, basemap-provider.nasa-gibs, public-service.world.street-imagery.mapillary]
     note: "Black Marble and the other NASA Earthdata products need the person's Earthdata token, which is on their computer, not in the cloud workspace."
   energy:

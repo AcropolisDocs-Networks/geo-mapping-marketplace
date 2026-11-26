@@ -1950,6 +1950,14 @@ def add_context(plan: Plan) -> None:
     has_tiles = any(b.get("kind") == "tiles" for b in plan.basemap)
     roles = ["points" if l.wedge_info else l.role for l in plan.layers]       # sector wedges are site geometry, not an area fill
     preset, kinds = context_kinds(cfg, roles, has_tiles)
+    import map_raster
+    if kinds and any(map_raster.is_picture_spec(l.spec, l.entry) for l in plan.layers):
+        # 5.3.0: a satellite or aerial picture shows its own water and towns; the pack's would be painted over the photograph (and Natural Earth's
+        # lake is the lake of another year). Each is kept only when the map asks for it by name (context: {water: true, urban: true}).
+        drop = [k for k in kinds if (k == "urban" and cfg.get("urban") is not True) or (k in ("lakes", "rivers") and cfg.get("water") is not True)]
+        if drop:
+            kinds = [k for k in kinds if k not in drop]
+            plan.notes.append(f"context pack: {', '.join(drop)} left out; the picture shows its own (context: {{water: true}} or {{urban: true}} draws them over it)")
     if kinds and bundled_mode(plan.spec) == "none" and not has_tiles and not plan.vector_ground:
         return                                                                 # 1.21.0: basemap.bundled: none, a bare page
     if plan.vector_ground:

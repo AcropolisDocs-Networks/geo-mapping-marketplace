@@ -1,0 +1,93 @@
+id: ref.context.world.imagery.sentinel-2-l2a
+type: context
+rev: 1
+status: active
+title: 'Sentinel-2 imagery (Level-2A surface reflectance), 10 m, the whole world since 2017'
+summary: 'Satellite pictures of any place on land every five days since 2017 at 10 m, from the European Copernicus programme. The map''s window is read from the
+  least cloudy scenes between two dates and drawn as a true colour picture, a false colour picture or a vegetation index (NDVI).'
+tags:
+  geography: [world]
+  level: [grid]
+  domain: [imagery, general]
+  use_for: [context-basemap, atlas]
+  avoid_for: [engineering-grade, legal-boundary, parcel-level]
+  scale: [regional, state, metro, local]
+  detail: [detailed]
+  audience: [any]
+  confidentiality: [public]
+  freshness: [live]
+  tier: [T1, T2]
+  license_class: [attribution]
+  quality: [authoritative]
+use_when:
+- 'A map needs what a place looked like from above on a date since 2017: a city, a coast, a flood, a harvest, a burn scar (source.dates is required).'
+- 'Vegetation is shown or compared between two seasons or years (source.product: ndvi).'
+- 'A window up to about 60 km wide is read at the full 10 m; a wider one is read coarser, to 2,400 cells across, and the build says so.'
+avoid_when:
+- 'The date is before 2017: Landsat (ref.context.world.imagery.landsat-c2-l2) goes back to 1982.'
+- 'Streets and buildings must be seen: 10 m shows blocks, not houses. In the United States NAIP (ref.context.us.imagery.naip) is 0.6 m.'
+- 'The place is cloudy all season: raise source.cloud_max, widen source.dates, or take pick: median over several scenes.'
+pairs_with: [ref.context.world.landcover.esa-worldcover]
+distinct_from:
+- id: ref.context.world.imagery.landsat-c2-l2
+  why: 30 m, back to 1982
+crs: EPSG:4326
+delivery:
+  mode: fetch
+  format: Cloud-Optimized GeoTIFF, one file a band and a scene, uint16 reflectance, in the scene's UTM zone
+  stac:
+    routes:
+    - name: earth-search
+      root: https://earth-search.aws.element84.com/v1
+      collection: sentinel-2-l2a
+      assets: {red: red, green: green, blue: blue, nir: nir, mask: scl}
+      reflectance: {scale: 0.0001, offset: -0.1, offset_applied_property: 'earthsearch:boa_offset_applied'}
+    - name: planetary-computer
+      root: https://planetarycomputer.microsoft.com/api/stac/v1
+      collection: sentinel-2-l2a
+      sign: planetary-computer
+      assets: {red: B04, green: B03, blue: B02, nir: B08, mask: SCL}
+      reflectance: {scale: 0.0001, offset: -0.1, offset_from: {property: 's2:processing_baseline', value: '04.00'}}
+    cloud_property: eo:cloud_cover
+    mask: {kind: classes, bad: [0, 1, 3, 8, 9, 10]}
+    stretch: [0.0, 0.3]
+    native_m: 10
+    max_scenes: 6
+    max_px: 2400
+    max_span_deg: 6
+  note: 'In a MapSpec: source: {type: ref, id: ref.context.world.imagery.sentinel-2-l2a, dates: 2024-06-01/2024-09-30, product: true-color | false-color | ndvi,
+    pick: least-cloudy | median, cloud_max: 20, stretch: [0, 0.3]}. imagery.py plan lists the scenes and what the read would cost before anything is read. The
+    public files on AWS (Earth Search) are read first; Planetary Computer is the second route, its addresses signed with its keyless token.'
+style:
+  titles: {true-color: Satellite picture, false-color: False colour picture, ndvi: Vegetation index (NDVI)}
+  raster:
+    variants:
+      ndvi: {ramp: sequential, vmin: 0, vmax: 0.9, nodata: -9999, from_land: false}
+source:
+  publisher: European Space Agency and the European Commission (Copernicus), through Element 84 Earth Search and Microsoft Planetary Computer
+  product: Sentinel-2 MSI Level-2A
+  url: https://earth-search.aws.element84.com/v1/collections/sentinel-2-l2a
+  registry: https://registry.opendata.aws/sentinel-2-l2a-cogs/
+url_verified_on: '2026-11-25'
+vintage:
+  current: 2017 to now, a new scene every five days
+  cadence: live
+license:
+  class: attribution
+  redistribute_ok: true
+  commercial_ok: true
+  bulk_ok: true
+  attribution_text: 'Imagery: contains modified Copernicus Sentinel data, processed by ESA.'
+maintenance:
+  owner: acropolisdocs
+  reviewed_on: '2026-11-25'
+  verify_by: '2027-11-25'
+  check:
+    kind: http_get
+    url: https://earth-search.aws.element84.com/v1/collections/sentinel-2-l2a
+    expect: 200
+  changelog:
+  - rev: 1
+    date: '2026-11-25'
+    note: 'New (5.3.0, open data portals P3.3). Read from the build workspace on 2026-11-25: a true colour window of Lagos from scene S2A_31NEH_20240125_0_L2A (cloud 0.6
+      percent), 2,400 by 1,601 cells of 28 m from the 20 m overview, 54.5 MB in 47 requests through Earth Search.'

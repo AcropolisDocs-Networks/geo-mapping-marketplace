@@ -10,7 +10,7 @@ description: >
 Read this to answer "what data do we have?" or to explain why a source behaves as it does. The tables are generated from the
 library at build time, so they always match the entries; do not edit them by hand. For a ranked answer to a specific need use `geo-find-data`.
 
-Library: 262 entries (253 active); basemap-provider 18, boundary 53, boundary-derived 2, context 34, crosswalk 1, gazetteer 12, infrastructure 21, map-type 13, palette 2, public-service 56, statistic 26, symbol-set 1, template 6, terrain 17.
+Library: 266 entries (257 active); basemap-provider 18, boundary 53, boundary-derived 2, context 37, crosswalk 1, gazetteer 12, infrastructure 21, map-type 13, palette 2, public-service 56, statistic 26, symbol-set 1, template 6, terrain 18.
 
 ### Usable now
 
@@ -76,6 +76,7 @@ Library: 262 entries (253 active); basemap-provider 18, boundary 53, boundary-de
 | `ref.context.uk.rivers.os-open-rivers` | OS Open Rivers: watercourses of Great Britain (Ordnance Survey) | Ordnance Survey, 2026-10 | downloaded on first use | attribution |  |
 | `ref.context.us.hazard.fema-nfhl` | FEMA National Flood Hazard Layer (flood hazard zones) | FEMA, effective NFHL (continuously updated as studies take effect) | web service | public-domain |  |
 | `ref.context.us.hydrography.nhdplus-hr` | National Hydrography Dataset Plus High Resolution (USGS map service) | US Geological Survey, The National Map, NHDPlus HR, data refreshed October 2022 | web service | public-domain |  |
+| `ref.context.us.imagery.naip` | NAIP aerial photography, 0.3 to 1 m, the conterminous United States (USDA) | USDA Farm Production and Conservation Business Center, National Agriculture Imagery Program, through Microsoft Planetary Computer, 2010 to 2025, by state | downloaded on first use | public-domain |  |
 | `ref.context.us.landcover.nlcd` | NLCD land cover (MRLC web map service) | Multi-Resolution Land Characteristics (MRLC) Consortium, USGS, NLCD 2021 (service); Annual NLCD 2024 (download) | web service | public-domain |  |
 | `ref.context.us.water-area.tiger` | US area water by county (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
 | `ref.context.us.water-linear.tiger` | US linear water by county (Census TIGER/Line) | US Census Bureau, 2025 | downloaded on first use | public-domain |  |
@@ -88,6 +89,8 @@ Library: 262 entries (253 active); basemap-provider 18, boundary 53, boundary-de
 | `ref.context.world.geographic-lines.ne50` | Equator, tropics, polar circles and the date line (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.context.world.glaciers.ne50` | World glaciers and ice caps, 50m (Natural Earth) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.context.world.ground.overture` | Overture Maps land and water (base theme), for detailed ground anywhere | Overture Maps Foundation, 2026-10-21.0 | downloaded on first use | share-alike |  |
+| `ref.context.world.imagery.landsat-c2-l2` | Landsat imagery (Collection 2 Level-2 surface reflectance), 30 m, the whole world since 1982 | US Geological Survey and NASA, through Microsoft Planetary Computer, 1982 to now | downloaded on first use | public-domain |  |
+| `ref.context.world.imagery.sentinel-2-l2a` | Sentinel-2 imagery (Level-2A surface reflectance), 10 m, the whole world since 2017 | European Space Agency and the European Commission (Copernicus), through Element 84 Earth Search and Microsoft Planetary Computer, 2017 to now, a new scene every five days | downloaded on first use | attribution |  |
 | `ref.context.world.lakes.ne10` | World lakes and reservoirs, 10m (Natural Earth) | Natural Earth 5.1.2 | bundled (1.26 MB) | public-domain |  |
 | `ref.context.world.lakes.ne110` | World lakes, 110m (Natural Earth) | Natural Earth 5.0.0 | bundled (0.02 MB) | public-domain |  |
 | `ref.context.world.lakes.ne50` | World lakes, 50m (Natural Earth) | Natural Earth 5.1.1 | bundled (0.13 MB) | public-domain |  |
@@ -230,6 +233,7 @@ Library: 262 entries (253 active); basemap-provider 18, boundary 53, boundary-de
 | `ref.terrain.world.dem.nasadem` | NASADEM (reprocessed SRTM, 1 arc second), 60 N to 56 S, with an Earthdata token | NASA JPL, distributed by the NASA Land Processes DAAC (LP DAAC), NASADEM 001 (2020), SRTM data of February 2000 | downloaded on first use | public-domain |  |
 | `ref.terrain.world.dem.opentopography` | OpenTopography global DEMs (SRTM, Copernicus, ALOS, NASADEM) | OpenTopography (San Diego Supercomputer Center, UC San Diego), per dataset | downloaded on first use | attribution |  |
 | `ref.terrain.world.dem.terrarium` | Terrain Tiles on AWS (Mapzen Terrarium), world elevation | Mapzen (Linux Foundation), hosted on the Registry of Open Data on AWS, joerd build of the tileset (sources listed in the attribution document; 3DEP and SRTM v3 for the US and the world between 60 N and 56 S) | downloaded on first use | attribution |  |
+| `ref.terrain.world.relief.ne50-hypsometric` | World hypsometric tint with shaded relief and water, 50m (Natural Earth, a colour picture) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 | `ref.terrain.world.relief.ne50-shaded` | World shaded relief, 50m (Natural Earth, a picture of relief) | Natural Earth 5.1.1 | downloaded on first use | public-domain |  |
 
 ### Not usable yet
