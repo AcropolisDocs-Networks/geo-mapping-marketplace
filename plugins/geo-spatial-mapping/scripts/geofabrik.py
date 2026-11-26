@@ -109,39 +109,68 @@ def children(region_id: str, regions: list[dict]) -> list[dict]:
     return sorted((r for r in regions if r.get("parent") == region_id), key=lambda r: r["id"])
 
 
-def codes_over(bbox) -> list[str]:
-    """ISO codes of what the window meets, from the bundled outlines: US-AZ for a US state, KE for a country."""
+SLIVER = 0.01           # 5.4.1: a region holding less than 1% of the window's land is left out of extract: auto, and said so
+OVERPASS_DEG2 = 1.0     # a window up to this many square degrees is one Overpass takes (osm.py warns above it)
+
+
+def code_shares(bbox) -> dict[str, float]:
+    """5.4.1: each ISO code the window meets (US-AZ for a US state, KE for a country, from the bundled outlines) with its share of the land
+    in the window (0..1, by equal area). A code whose outline only touches the box has a share near 0."""
     import geopandas as gpd
     import shapely
     box = shapely.box(*osm.check_bbox(bbox))
     base = gc.plugin_root() / "assets" / "basemaps"
-    out: list[str] = []
+    parts: list[tuple[str, object]] = []
     try:
         st = gpd.read_parquet(base / "us_states_cb.parquet")[["STUSPS", "geometry"]]
-        out += ["US-" + str(c) for c in st[st.geometry.intersects(box)]["STUSPS"]]
+        st = st[st.geometry.intersects(box)]
+        parts += [("US-" + str(c), g) for c, g in zip(st["STUSPS"], st.geometry)]
     except Exception:  # noqa: BLE001
         pass
     try:
         co = gpd.read_parquet(base / "ne_50m_countries.parquet")[["ISO_A2_EH", "geometry"]]
-        for c in co[co.geometry.intersects(box)]["ISO_A2_EH"]:
+        co = co[co.geometry.intersects(box)]
+        have_us = any(c.startswith("US-") for c, _g in parts)
+        for c, g in zip(co["ISO_A2_EH"], co.geometry):
             c = str(c).upper()
-            if len(c) == 2 and c.isalpha() and not (c == "US" and out):
-                out.append(c)
+            if len(c) == 2 and c.isalpha() and not (c == "US" and have_us):
+                parts.append((c, g))
     except Exception:  # noqa: BLE001
         pass
+    if not parts:
+        return {}
+    cut = gpd.GeoSeries([g.intersection(box) for _c, g in parts], crs="EPSG:4326").to_crs("EPSG:6933").area.tolist()
+    land = sum(cut) or 1.0
+    out: dict[str, float] = {}
+    for (c, _g), a in zip(parts, cut):
+        out[c] = out.get(c, 0.0) + a / land
     return out
 
 
-def over(bbox, regions: list[dict]) -> list[dict]:
-    """The smallest region carrying each code the window meets (a US state's own file; a country's; the group file when a country has none)."""
+def codes_over(bbox) -> list[str]:
+    """ISO codes of what the window meets, from the bundled outlines: US-AZ for a US state, KE for a country."""
+    return list(code_shares(bbox))
+
+
+def over(bbox, regions: list[dict], sliver: float = SLIVER) -> list[dict]:
+    """The smallest region carrying each code the window meets (a US state's own file; a country's; the group file when a country has none).
+    5.4.1: each region carries `share` (of the window's land); one below `sliver` is left out and listed by `left_out`."""
+    return pick(bbox, regions, sliver)[0]
+
+
+def pick(bbox, regions: list[dict], sliver: float = SLIVER) -> tuple[list[dict], list[dict]]:
+    """(the regions read for the window, the regions left out as slivers), each with its share of the window's land."""
     got: dict = {}
-    for code in codes_over(bbox):
+    for code, share in code_shares(bbox).items():
         hit = [r for r in regions if code in r["iso"]]
         if not hit:
             continue
         r = min(hit, key=lambda r: (len(r["iso"]), len(r["id"])))
-        got[r["id"]] = r
-    return sorted(got.values(), key=lambda r: r["id"])
+        prev = got.get(r["id"])
+        got[r["id"]] = {**r, "share": round((prev["share"] if prev else 0.0) + share, 4)}
+    rows = sorted(got.values(), key=lambda r: r["id"])
+    take = [r for r in rows if r["share"] >= sliver] or rows
+    return take, [r for r in rows if r not in take]
 
 
 def _day(text) -> str | None:
@@ -167,12 +196,13 @@ def size_of(url: str, http=None) -> tuple[int | None, str | None]:
 def plan(bbox=None, region: str | None = None, tags: list[str] | None = None, http=None, cap_mb: float | None = None) -> dict:
     regions = index(http)
     cap = float(cap_mb or CAP_MB)
+    left_out: list[dict] = []
     if region and str(region).lower() != "auto":
         take = [find(region, regions)]
     else:
         if bbox is None:
             raise GeofabrikError("name the region (us/arizona, kenya) or give the box it is picked from", "MAP-OSM-002", gc.EXIT_USAGE)
-        take = over(bbox, regions)
+        take, left_out = pick(bbox, regions)
         if not take:
             raise GeofabrikError("no Geofabrik region was found for this window (open sea, or a place the bundled outlines do not name): name the "
                                  "region yourself (geofabrik.py regions TEXT)", "MAP-OSM-002", gc.EXIT_USAGE)
@@ -180,22 +210,53 @@ def plan(bbox=None, region: str | None = None, tags: list[str] | None = None, ht
     for r in take:
         kept = kept_file(r)
         n, when = (kept[1].get("bytes"), kept[1].get("last_modified")) if kept else size_of(r["pbf"], http)
-        files.append({"region": r["id"], "name": r["name"], "url": r["pbf"], "bytes": n, "last_modified": when, "kept": bool(kept)})
+        row = {"region": r["id"], "name": r["name"], "url": r["pbf"], "bytes": n, "last_modified": when, "kept": bool(kept)}
+        if "share" in r:
+            row["share"] = r["share"]
+        files.append(row)
         total += 0 if kept else int(n or 0)
+    options: list[str] = []
     if len(take) > MAX_REGIONS:
         refusal = (f"the window meets {len(take)} regions ({', '.join(r['id'] for r in take)}); at most {MAX_REGIONS} are read for one map. Name the one "
                    "region the map is about (extract: <id>; the rest of the window stays empty), or draw a smaller window")
     elif total / 1e6 > cap:
         big = max((f for f in files if not f["kept"]), key=lambda f: f["bytes"] or 0)
         kids = [c["id"] for c in children(big["region"], regions)]
+        options = _options(files, cap, bbox)
         refusal = (f"{big['name']} is {(big['bytes'] or 0) / 1e6:,.0f} MB; the cap is {cap:g} MB a read. " +
                    (f"It is published in parts: {', '.join(kids[:16])}{' ...' if len(kids) > 16 else ''}; name the one the window is in (extract: <id>). " if kids else "") +
-                   "Or say a higher cap (cap_mb)")
+                   ("".join(o + ". " for o in options)) + "Or say a higher cap (cap_mb)")
     cost = (f"{sum(1 for f in files if not f['kept'])} file(s) to download ({total / 1e6:,.0f} MB), kept {KEEP_DAYS} days; "
             f"{sum(1 for f in files if f['kept'])} already kept. The tags are then read from the file for the box")
-    return {"regions": files, "cost": cost, "cap_mb": cap, "refusal": refusal, "hosts": [HOST], "credit": CREDIT, "license": osm.LICENSE,
-            "tags": tags or [], "bbox": list(osm.check_bbox(bbox)) if bbox is not None else None,
-            "note": "one extract a region a day; a kept file is used again for 30 days (refresh takes today's)"}
+    out = {"regions": files, "cost": cost, "cap_mb": cap, "refusal": refusal, "hosts": [HOST], "credit": CREDIT, "license": osm.LICENSE,
+           "tags": tags or [], "bbox": list(osm.check_bbox(bbox)) if bbox is not None else None,
+           "note": "one extract a region a day; a kept file is used again for 30 days (refresh takes today's)"}
+    if options:
+        out["options"] = options
+    if left_out:                                       # 5.4.1: said, never silent: the part of the window in a sliver region stays empty
+        out["left_out"] = [{"region": r["id"], "name": r["name"], "share": r["share"]} for r in left_out]
+        out["note"] += ("; left out, each under 1% of the window's land: " +
+                        ", ".join(f"{r['name']} ({r['share'] * 100:.1f}%)" for r in left_out) + " (name one with extract: <id> to read it)")
+    return out
+
+
+def _options(files: list[dict], cap: float, bbox) -> list[str]:
+    """5.4.1: what can be read instead when the window's extracts are over the cap. Overpass first when the window is small enough for it
+    (the whole window, one request); then each single region that fits the cap, the one holding most of the window's land first, since
+    extract: names one region."""
+    out: list[str] = []
+    if bbox is not None:
+        w, s, e, n = osm.check_bbox(bbox)
+        area = (e - w) * (n - s)
+        if area <= OVERPASS_DEG2:
+            out.append(f"The window is {area:.2g} square degrees, small enough for Overpass: leave extract out and the whole window is read")
+    fit = [f for f in files if (f["kept"] or (f["bytes"] or 0) / 1e6 <= cap) and "share" in f]
+    if len(fit) < len(files):
+        for f in sorted(fit, key=lambda f: (-f["share"], f["bytes"] or 0))[:2]:
+            mb = 0 if f["kept"] else (f["bytes"] or 0) / 1e6
+            out.append(f"extract: {f['region']} ({f['name']}, {'kept' if f['kept'] else f'{mb:,.1f} MB'}) holds {f['share'] * 100:.0f}% of the "
+                       "window's land; the rest of the window stays empty")
+    return out
 
 
 def _slug(region_id: str) -> str:
@@ -217,12 +278,20 @@ def kept_file(region: dict, max_age_days: int = KEEP_DAYS) -> tuple[Path, dict] 
     return f, rec
 
 
+def _until(rec: dict) -> str | None:
+    """5.4.1: the last day a kept extract is used again (retrieved + 30 days)."""
+    try:
+        return (dt.date.fromisoformat(str(rec["retrieved_at"])) + dt.timedelta(days=KEEP_DAYS)).isoformat()
+    except (KeyError, ValueError):
+        return None
+
+
 def download(region: dict, http=None, refresh: bool = False, cap_mb: float = CAP_MB) -> tuple[Path, dict]:
     """The region's .osm.pbf in the cache, with a record of where it came from. Kept; used again for 30 days."""
     if not refresh:
         hit = kept_file(region)
         if hit:
-            return hit[0], {**hit[1], "kept": True}
+            return hit[0], {**hit[1], "kept": True, "downloaded": False, "kept_until": _until(hit[1])}
     if os.environ.get("GMAP_OFFLINE") == "1":
         raise GeofabrikError(f"offline (GMAP_OFFLINE=1): the extract of {region['name']} is not kept and nothing is fetched", "MAP-OSM-001", gc.EXIT_REFUSED)
     f = cache_root() / f"{_slug(region['id'])}.osm.pbf"
@@ -236,7 +305,7 @@ def download(region: dict, http=None, refresh: bool = False, cap_mb: float = CAP
            "bytes": f.stat().st_size, "last_modified": _day(h.get("last-modified")), "sha256": getattr(r, "sha256", None),
            "retrieved_at": dt.date.today().isoformat(), "seconds": round(time.time() - t0, 1)}
     f.with_name(f.name + ".json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
-    return f, {**rec, "kept": False}
+    return f, {**rec, "kept": True, "downloaded": True, "kept_until": _until(rec)}
 
 
 # ---------------------------------------------------------------------------------------------------------------- reading a .osm.pbf
@@ -394,7 +463,7 @@ def fetch(tags: list[str], bbox, out, *, region: str | None = None, http=None, r
             parts[k].append(g)
         for k, n in seen.items():
             seen_all[k] = seen_all.get(k, 0) + n
-        files.append({k: rec.get(k) for k in ("region", "name", "from", "bytes", "last_modified", "retrieved_at", "kept")})
+        files.append({k: rec.get(k) for k in ("region", "name", "from", "bytes", "last_modified", "retrieved_at", "kept", "downloaded", "kept_until")})
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     if out.exists():
@@ -413,14 +482,17 @@ def fetch(tags: list[str], bbox, out, *, region: str | None = None, http=None, r
     dates = sorted({str(f.get("last_modified") or f.get("retrieved_at")) for f in files})
     rec = {"fetch_version": 1, "entry": ENTRY, "host": HOST, "via": "geofabrik", "regions": files, "tags": list(tags),
            "bbox": list(osm.check_bbox(bbox)) if bbox is not None else None, "read": seen_all, "kinds": [k for k in KINDS if not kinds or k in kinds], "counts": counts, "seconds": round(time.time() - t0, 1),
-           "retrieved_at": os.environ.get("GMAP_FIXED_DATE") or dt.date.today().isoformat(), "findings": fs, "file": str(out) if counts else None,
+           "retrieved_at": os.environ.get("GMAP_FIXED_DATE") or dt.date.today().isoformat(), "findings": fs, "file": str(out) if counts else None, "left_out": p.get("left_out") or [],
            "provenance": {"source": f"OpenStreetMap, Geofabrik extract of {', '.join(f['name'] for f in files)}", "license": osm.LICENSE, "attribution": CREDIT,
                           "library_ref": ENTRY, "vintage": f"extract of {'; '.join(dates)}",
                           "note": "counts are what OpenStreetMap contributors have mapped; route relations (multilinestrings) are not read"}}
     out.with_suffix(".json").write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
     gc.ledger_note(outputs=[str(out)] if counts else None)
-    return {"ok": True, "file": rec["file"], "record": str(out.with_suffix(".json")), "layers": counts, "regions": files, "seconds": rec["seconds"],
-            "findings": fs, "credit": CREDIT}
+    res = {"ok": True, "file": rec["file"], "record": str(out.with_suffix(".json")), "layers": counts, "regions": files, "seconds": rec["seconds"],
+           "findings": fs, "credit": CREDIT}
+    if p.get("left_out"):                              # 5.4.1: the slivers of the window that were not read, said in the answer and the record
+        res["left_out"] = p["left_out"]
+    return res
 
 
 def main(argv=None) -> int:

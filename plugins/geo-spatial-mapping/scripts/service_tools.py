@@ -1368,14 +1368,20 @@ def set_roots(uris) -> list[str]:
 
 def located(res: dict, folder: Path) -> dict:
     """2.4.0 (I-21): every file path in a result also as `relative_path` (to the work folder) and `vm_path` ($HOME/mnt/<folder name>/...,
-    where the Cowork VM sees a connected folder), so the next step uses it without guessing."""
+    where the Cowork VM sees a connected folder), so the next step uses it without guessing.
+    5.4.1: the VM mounts the CONNECTED folder, which may hold the work folder further down (C:\\temp\\project connected, the work folder
+    C:\\temp\\project\\maps\\day1). The mount is the client's root that holds the work folder (the innermost, when roots nest); a client that
+    sends no roots leaves the work folder itself as the mount, and the answer says so (vm_path_assumed)."""
+    mount, assumed = vm_mount_of(folder)
+
     def one(v):
         try:
-            p = Path(str(v))
-            rel = p.resolve().relative_to(folder.resolve()).as_posix()
+            p = Path(str(v)).resolve()
+            rel = p.relative_to(folder.resolve()).as_posix()
+            in_mount = p.relative_to(mount).as_posix()
         except (OSError, ValueError):
             return None
-        return {"relative_path": rel, "vm_path": f"$HOME/mnt/{folder.name}/{rel}"}
+        return {"relative_path": rel, "vm_path": f"$HOME/mnt/{mount.name}/{in_mount}"}
     out = dict(res)
     places = {}
     for k in PATH_KEYS:
@@ -1390,7 +1396,30 @@ def located(res: dict, folder: Path) -> dict:
         out.update(places["path"])
     if places:
         out["locations"] = places
+        out["vm_mount"] = f"$HOME/mnt/{mount.name}"
+        if assumed:
+            out["vm_path_assumed"] = (f"no connected folders were shared by the app, so {folder.name} is taken as the connected folder; if you connected "
+                                      "a folder above it, the file is under $HOME/mnt/<that folder's name>/ with the rest of its path")
     return out
+
+
+def vm_mount_of(folder: Path) -> tuple[Path, bool]:
+    """5.4.1: (the connected folder the Cowork VM mounts that holds `folder`, whether that is assumed). From the client's roots, the
+    innermost one that holds the folder; with none known, the folder itself (assumed)."""
+    try:
+        f = Path(folder).resolve()
+    except OSError:
+        return Path(folder), True
+    best = None
+    for r in ROOTS.get("folders") or []:
+        try:
+            root = Path(r).resolve()
+            f.relative_to(root)
+        except (OSError, ValueError):
+            continue
+        if best is None or len(root.parts) > len(best.parts):
+            best = root
+    return (best, False) if best is not None else (f, True)
 
 
 def in_work_folder(work_folder: str, fn, *a, **k) -> dict:

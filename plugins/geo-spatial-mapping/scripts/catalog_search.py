@@ -493,12 +493,72 @@ def search(query: str, sources=None, bbox=None, limit: int = 10, http=None, stac
             results += rows
         except (oh.ServiceError, catalogs.CatalogError, ValueError, KeyError, TypeError) as e:
             per[s] = {"count": 0, "error": oh.untrusted(str(e), 200), "rule": getattr(e, "rule", None)}
+    if bb is not None:                                    # 5.4.1: results ranked by where they are, and the ones provably elsewhere left out
+        results, gone = by_place(results, bb, place_words(region, place), srcs)
+        for s, n in gone.items():
+            per.setdefault(s, {"count": 0})["left_out_elsewhere"] = n
+            per[s]["count"] = max(0, per[s].get("count", 0) - n)
     out = {"ok": True, "query": query, "bbox": bb, "sources": srcs, "results": results, "per_source": per, "notice": NOTICE}
+    if bb is not None and any(r.get("where") == "unknown" for r in results):
+        out["place_note"] = ("results marked where=unknown come from catalogs that state no place for them (Socrata Discovery, some data.gov "
+                             "records) and do not name this one: they are listed last; read the publisher before using one")
     if geo:
         out["geography"] = geo
     if region:
         out["adapters"] = ranked_adapters
     return out
+
+
+PLACE_STOP = STOP | {"county", "city", "town", "state", "region", "district", "province", "municipality", "village", "borough", "parish",
+                     "metro", "area", "greater", "north", "south", "east", "west", "us", "usa", "united", "states"}
+WHERE_RANK = {"in": 0, "named": 1, "wide": 2, "unknown": 3}
+WIDE_RATIO = 100.0          # a result whose box is over 100 times the search box is a national or world layer, not a local one
+
+
+def place_words(region: str | None, place: str | None = None) -> list[str]:
+    """5.4.1: the words that name the search's place (Gilbert, Arizona -> gilbert, arizona), without the generic ones (county, city)."""
+    txt = " ".join(t for t in (region, place) if t)
+    return [w for w in words(txt) if w not in PLACE_STOP and len(w) > 2 and not w.isdigit()]
+
+
+def _area(b) -> float:
+    return max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
+
+
+def where_of(r: dict, bb, names: list[str]) -> str:
+    """in (its box meets the search box at local scale), wide (its box meets it but is a national or world layer), named (no box, but its
+    text names the place), elsewhere (its box is somewhere else), unknown (no box and the place is not named)."""
+    b = r.get("bbox")
+    if b and len(b) == 4:
+        try:
+            b = [float(v) for v in b]
+        except (TypeError, ValueError):
+            b = None
+    if b and len(b) == 4:
+        if not boxes_touch(b, bb):
+            return "elsewhere"
+        return "wide" if _area(b) > WIDE_RATIO * max(_area(bb), 1e-9) else "in"
+    hay = " ".join(str(r.get(k) or "") for k in ("title", "publisher", "organization", "domain", "access_url", "description")).lower()
+    return "named" if names and any(n in hay for n in names) else "unknown"
+
+
+def by_place(results: list[dict], bb, names: list[str], order: list[str]) -> tuple[list[dict], dict[str, int]]:
+    """5.4.1: results that are provably elsewhere are left out (counted by source); the rest are ranked in, named, wide, unknown, and within
+    that by the source's place in the order (the person's own portals first) and the score. Library rows keep their place at the top."""
+    pos = {s: i for i, s in enumerate(order)}
+    keep, gone = [], {}
+    for i, r in enumerate(results):
+        if r.get("source") == "library":
+            keep.append((-1, 0, 0, i, r))
+            continue
+        w = where_of(r, bb, names)
+        if w == "elsewhere":
+            gone[r.get("source")] = gone.get(r.get("source"), 0) + 1
+            continue
+        r = {**r, "where": w}
+        keep.append((WHERE_RANK[w], pos.get(r.get("source"), len(pos)), -float(r.get("score") or 0), i, r))
+    keep.sort(key=lambda t: t[:4])
+    return [t[4] for t in keep], gone
 
 
 def to_find_record(r: dict) -> dict:
