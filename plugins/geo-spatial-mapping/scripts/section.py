@@ -4,7 +4,7 @@
     elements:
       section:
         on: true
-        line: [[-112.25, 36.12], [-112.10, 36.10]]     # A and A' in lon/lat, or {layer: cut} (the first line of a line layer)
+        line: [[-112.25, 36.12], [-112.10, 36.10]]     # A and A' in lon/lat (5.5.0: or more points, a route), or {layer: cut} (the whole line)
         dem: dem.tif                                    # optional: else the DEM of the map's hillshade
         sun: auto                                       # auto: the hillshade's one sun; {azimuth, altitude}; off
         exaggeration: auto                              # auto: true scale when the box is tall enough, else the least of 2, 3, 5, 10
@@ -35,6 +35,7 @@ import textmeasure as tm  # noqa: E402
 
 WGS84 = "EPSG:4326"
 RUN_IN_MAX_M = 20000.0
+MAX_SAMPLES = 2000
 MAX_SUN_OFF_DEG = 45.0
 MIN_PLOT_H_MM = 14.0
 MAX_PLOT_H_MM = 70.0
@@ -65,6 +66,25 @@ def cut_points(a, b, spacing_m: float, before_m: float = 0.0, after_m: float = 0
     return np.column_stack([lon, lat]), d, float(D)
 
 
+def poly_points(verts, spacing_m: float):
+    """5.5.0 (D26-15): points every `spacing_m` along a polyline of lon/lat vertices, each leg on its geodesic, and their distance from the
+    first vertex. -> (points n x 2, distances, total length, the distance of each vertex)."""
+    from pyproj import Geod
+    g = Geod(ellps="WGS84")
+    pts, ds, at, total = [], [], [0.0], 0.0
+    for (a, b) in zip(verts[:-1], verts[1:]):
+        az, _back, L = g.inv(a[0], a[1], b[0], b[1])
+        n = max(2, int(math.ceil(L / max(spacing_m, 1.0))) + 1)
+        d = np.linspace(0.0, L, n)
+        lon, lat, _ = g.fwd(np.full(n, a[0]), np.full(n, a[1]), np.full(n, az), d)
+        first = 0 if not pts else 1                       # each leg after the first starts where the last one ended
+        pts.append(np.column_stack([lon, lat])[first:])
+        ds.append(d[first:] + total)
+        total += float(L)
+        at.append(total)
+    return np.vstack(pts), np.concatenate(ds), total, at
+
+
 def shadow_line(d: np.ndarray, z: np.ndarray, tan_alt: float, sun_ahead: bool) -> np.ndarray:
     """The height of the highest sun ray over each sample: walking from the sunward end, H = max(z, H_prev - step x tan(altitude))."""
     zz = np.where(np.isfinite(z), z, -1e9)
@@ -77,12 +97,26 @@ def shadow_line(d: np.ndarray, z: np.ndarray, tan_alt: float, sun_ahead: bool) -
     return h
 
 
-def compute(dem_path, a, b, sun: dict | None) -> dict:
-    """The cut's profile and, with a sun, its shadow line. -> {d, z, shadow (or None), length_m, sun_off_deg, notes}."""
+def compute(dem_path, a, b, sun: dict | None, verts=None) -> dict:
+    """The cut's profile and, with a sun, its shadow line. -> {d, z, shadow (or None), length_m, sun_off_deg, notes}. 5.5.0 (D26-15): `verts`
+    (three or more lon/lat points) profiles the whole polyline, leg by leg on the geodesic, at most 2,000 samples; a sun's shadow is for a
+    straight cut only."""
     import raster_io as rio
     import terrain as tr
     spacing = max(5.0, tr.dem_resolution_m(dem_path))
     notes: list[str] = []
+    if verts is not None and len(verts) > 2:
+        from pyproj import Geod
+        total = sum(Geod(ellps="WGS84").inv(p[0], p[1], q[0], q[1])[2] for p, q in zip(verts[:-1], verts[1:]))
+        pts0, d0, D, at = poly_points(verts, max(spacing, total / (MAX_SAMPLES - 1)))
+        z0 = rio.sample(dem_path, pts0, WGS84)
+        if not np.isfinite(z0).any():
+            raise SectionError("the DEM holds no elevation along the cut")
+        if sun:
+            notes.append("section: the cut bends, so no shadow line is drawn (a shadow is worked along one straight cut)")
+        notes.append(f"section: along the whole line, {len(verts)} points and {len(verts) - 1} legs, sampled every {d0[1] - d0[0]:,.0f} m on the geodesic")
+        return {"d": d0, "z": z0, "shadow": None, "length_m": D, "spacing_m": float(d0[1] - d0[0]), "bearing": bearing(verts[0], verts[-1]), "sun_off_deg": None,
+                "sun": None, "run_in_m": 0.0, "notes": notes, "vertex_at": at}
     brg = bearing(a, b)
     run_in, sun_ahead, off, tan_eff = 0.0, True, None, None
     if sun:
@@ -125,6 +159,21 @@ def along_cut(a, b, lonlat) -> tuple[float, float]:
     return (px - ax) * ux + (py - ay) * uy, abs(-(px - ax) * uy + (py - ay) * ux)
 
 
+def along_poly(verts, lonlat) -> tuple[float, float]:
+    """5.5.0 (D26-15): (distance along a polyline from its first point, distance off it), in metres, of a point: the nearest place on it, in an
+    equidistant projection centred on the line."""
+    import shapely
+    from pyproj import Transformer
+    lon0 = float(np.mean([v[0] for v in verts]))
+    lat0 = float(np.mean([v[1] for v in verts]))
+    tr = Transformer.from_crs(WGS84, f"+proj=aeqd +lat_0={lat0} +lon_0={lon0} +units=m", always_xy=True)
+    xs, ys = tr.transform([v[0] for v in verts], [v[1] for v in verts])
+    ln = shapely.LineString(list(zip(xs, ys)))
+    px, py = tr.transform(lonlat[0], lonlat[1])
+    p = shapely.Point(px, py)
+    return float(ln.project(p)), float(ln.distance(p))
+
+
 def _nice_step(span: float, target: int = 5) -> float:
     raw = span / max(target, 1)
     mag = 10 ** math.floor(math.log10(raw)) if raw > 0 else 1
@@ -165,6 +214,11 @@ def svg(prof: dict, cfg: dict, t: dict, w_mm: float = 120.0, label_pt: float = 7
     plot_h = min(MAX_PLOT_H_MM, true_h * ve)
     if true_h * ve > MAX_PLOT_H_MM:
         notes.append(f"section: the box is held to {MAX_PLOT_H_MM:g} mm high; a shorter cut or a wider box (w_mm) shows it at true scale")
+    min_gap = (label_pt - 2) * PT * 1.6                  # 5.5.0 (D26-15): height labels never overprint ("2,000 -2,000 -4,000")
+    while plot_h / max(1.0, (top - base) / step_z) < min_gap and step_z < (top - base):
+        step_z *= 2
+        base = math.floor(zmin / step_z) * step_z
+        top = math.ceil(zmax / step_z) * step_z
     kz = plot_h / (top - base)
     x0, y_top = pad + 9.0, pad + title_h + sub_h + 2.0
     y_base = y_top + plot_h
@@ -257,14 +311,17 @@ def svg(prof: dict, cfg: dict, t: dict, w_mm: float = 120.0, label_pt: float = 7
         out.append(f'<path d="M{sd.num(x)} {sd.num(y_base)}v1" stroke="{ink}" stroke-width="0.15"/>')
         out.append(sd.text(x, y_base + 1.2 + (label_pt - 2) * PT, f"{dd / 1000:g}" + (" km" if dd + step_d > D else ""), label_pt - 2, ink, anchor="middle", num_cls=True))
         dd += step_d
+    for va in (prof.get("vertex_at") or [])[1:-1]:      # 5.5.0 (D26-15): where the line bends, a tick on the ground's base
+        out.append(f'<path d="M{sd.num(X(va))} {sd.num(y_base)}v-1.6" stroke="{ink}" stroke-width="0.25" stroke-dasharray="0.4 0.3"/>')
     ends = list(cfg.get("ends") or ["A", "A′"])
     out.append(sd.text(X(0), y_top - 1.0, str(ends[0]), label_pt, ink, weight=700, anchor="start"))
     out.append(sd.text(X(D), y_top - 1.0, str(ends[-1]), label_pt, ink, weight=700, anchor="end"))
     # names along the cut, and the low point
     a, b = prof["a"], prof["b"]
+    verts = prof.get("verts")
     for lab in cfg.get("labels") or []:
         try:
-            at, off = along_cut(a, b, lab["at"])
+            at, off = along_poly(verts, lab["at"]) if verts and len(verts) > 2 else along_cut(a, b, lab["at"])
         except (KeyError, TypeError, IndexError):
             continue
         if off > 1000.0 or not (0 <= at <= D):
@@ -287,27 +344,42 @@ def svg(prof: dict, cfg: dict, t: dict, w_mm: float = 120.0, label_pt: float = 7
     return "".join(out), [0.0, 0.0, round(w_mm, 3), round(H, 3)], notes
 
 
-def endpoints(cfg: dict, plan) -> tuple[tuple, tuple]:
+def cut_vertices(cfg: dict, plan) -> list[tuple]:
+    """5.5.0 (D26-15): the cut as lon/lat vertices: the whole line of a line layer (its parts joined in order), or the points given."""
     line = cfg.get("line")
     if isinstance(line, dict) and line.get("layer"):
         lyr = next((l for l in plan.layers if l.id == line["layer"]), None)
         if lyr is None or lyr.kind != "line" or not len(lyr.gdf):
             raise SectionError(f"elements.section.line.layer '{line['layer']}' is not a line layer of this map")
-        g = lyr.gdf.to_crs(WGS84).geometry.iloc[0]
-        g = max(g.geoms, key=lambda q: q.length) if g.geom_type == "MultiLineString" else g
-        c = list(g.coords)
-        return (c[0][0], c[0][1]), (c[-1][0], c[-1][1])
+        import shapely
+        gs = [g for g in lyr.gdf.to_crs(WGS84).geometry if g is not None and not g.is_empty]
+        if line.get("straight"):                        # the 1.20 cut: the first line's two ends only
+            g = gs[0]
+            g = max(g.geoms, key=lambda q: q.length) if g.geom_type == "MultiLineString" else g
+            c = list(g.coords)
+            return [(c[0][0], c[0][1]), (c[-1][0], c[-1][1])]
+        merged = shapely.line_merge(shapely.union_all(gs)) if len(gs) > 1 or gs[0].geom_type == "MultiLineString" else gs[0]
+        g = max(merged.geoms, key=lambda q: q.length) if merged.geom_type == "MultiLineString" else merged
+        return [(float(x), float(y)) for x, y, *_ in g.coords]
     try:
-        (a, b) = line
-        return (float(a[0]), float(a[1])), (float(b[0]), float(b[1]))
-    except (TypeError, ValueError):
-        raise SectionError("elements.section.line is two lon/lat points [[lon, lat], [lon, lat]] or {layer: <a line layer>}") from None
+        pts = [(float(p[0]), float(p[1])) for p in line]
+    except (TypeError, ValueError, IndexError):
+        raise SectionError("elements.section.line is two or more lon/lat points [[lon, lat], ...] or {layer: <a line layer>}") from None
+    if len(pts) < 2:
+        raise SectionError("elements.section.line needs at least two points")
+    return pts
+
+
+def endpoints(cfg: dict, plan) -> tuple[tuple, tuple]:
+    v = cut_vertices(cfg, plan)
+    return v[0], v[-1]
 
 
 def for_map(plan, cfg: dict) -> dict:
     """Everything the render needs from elements.section: {figure: a place_figures item, line: (a, b), ends, notes}. The DEM is the section's
     own (cfg.dem, beside the MapSpec) or the hillshade's; the sun the hillshade's one sun (sun: auto), the one given, or none."""
-    a, b = endpoints(cfg, plan)
+    verts = cut_vertices(cfg, plan)
+    a, b = verts[0], verts[-1]
     dem = cfg.get("dem")
     relief = next((x for x in (plan.basemap or []) if x.get("kind") == "hillshade"), None)
     if dem:
@@ -323,24 +395,28 @@ def for_map(plan, cfg: dict) -> dict:
         sun = {"azimuth": float(s.get("azimuth", 315)), "altitude": float(s.get("altitude", 45))}
     elif s == "auto" and relief is not None and relief.get("sun") and not relief["sun"].get("multidirectional"):
         sun = {"azimuth": relief["sun"]["azimuth"], "altitude": relief["sun"]["altitude"]}
-    prof = compute(dem, a, b, sun)
-    prof["a"], prof["b"] = a, b
+    prof = compute(dem, a, b, sun, verts=verts)
+    prof["a"], prof["b"], prof["verts"] = a, b, verts
     inner, box, notes = svg(prof, cfg, plan.tokens, float(cfg.get("w_mm", 120.0)))
     ends = list(cfg.get("ends") or ["A", "A′"])
     item = {"_svg": inner, "_box": box, "title": str(cfg.get("title") or "Section"), "position": cfg.get("position", "lower-left"),
             "w_mm": box[2], "h_mm": box[3]}
     if cfg.get("rect_mm"):
         item["rect_mm"] = cfg["rect_mm"]
-    return {"figure": item, "line": (a, b), "ends": ends, "notes": prof["notes"] + notes, "profile": prof}
+    return {"figure": item, "line": verts, "ends": ends, "notes": prof["notes"] + notes, "profile": prof}
 
 
-def map_line(plan, frame, a, b, ends, t: dict, label_pt: float, to_sheet) -> str:
-    """The cut on the map: a dashed line in the section's ray colour and its end letters, haloed like the map's labels."""
+def map_line(plan, frame, verts, ends, t: dict, label_pt: float, to_sheet) -> str:
+    """The cut on the map: a dashed line in the section's ray colour and its end letters, haloed like the map's labels. 5.5.0 (D26-15): along
+    the same line the profile follows (every leg on its geodesic), not a straight cut between the ends."""
     import geopandas as gpd
     import shapely
     cat = list(t.get("categorical") or [t["emphasis"]])
     col = cat[4] if len(cat) > 4 else t["emphasis"]
-    g = gpd.GeoDataFrame(geometry=[shapely.LineString([a, b])], crs=WGS84).to_crs(plan.crs)
+    from pyproj import Geod
+    total = sum(Geod(ellps="WGS84").inv(a_[0], a_[1], b_[0], b_[1])[2] for a_, b_ in zip(list(verts)[:-1], list(verts)[1:]))
+    pts, _d, _D, _at = poly_points(list(verts), max(1.0, total / 599))
+    g = gpd.GeoDataFrame(geometry=[shapely.LineString([tuple(p) for p in pts])], crs=WGS84).to_crs(plan.crs)
     geoms, keep = to_sheet(g, frame, False)
     if not len(geoms) or not keep[0] or geoms[0] is None or geoms[0].is_empty:
         return ""

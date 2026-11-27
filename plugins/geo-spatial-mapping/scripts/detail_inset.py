@@ -136,15 +136,53 @@ def for_map(plan, cfg: dict, legend_w: float | None = None) -> dict:
     t = plan.tokens
     inner += (f'<rect x="0.15" y="0.15" width="{w_mm - 0.3:.2f}" height="{h_mm - 0.3:.2f}" fill="none" stroke="{t["label"]}" stroke-width="0.3"/>')
     title = str(cfg.get("title") or "Detail")
+    findings: list[dict] = []
     if cfg.get("title"):                                    # its name, in the upper left of the inset, as the map's title is in the map's
         import svg_draw as sd
         lpt = float((plan.tpl.get("fonts") or {}).get("label") or 7.0)
-        inner += sd.text(2.0, 1.6 + lpt * 0.3528, title, lpt, t["label"], weight=600, halo=t["label_halo"], halo_w=max(0.3, lpt * 0.3528 * 0.22))
+        lines, size, cut = title_lines(title, w_mm - 4.0, lpt)
+        y = 1.6 + size * 0.3528
+        for ln in lines:                                    # 5.5.0 (D26-11): wrapped or set smaller to fit; never clipped at the inset's edge
+            inner += sd.text(2.0, y, ln, size, t["label"], weight=600, halo=t["label_halo"], halo_w=max(0.3, size * 0.3528 * 0.22))
+            y += size * 0.3528 * 1.2
+        if cut:
+            findings.append({"id": "MAP-SPEC-005", "severity": "WARN", "detail": title,
+                             "message": f"the detail inset's title does not fit in {w_mm:g} mm even on two lines at {size:g} pt; it was shortened. Give a shorter title or a wider inset (w_mm)"})
+    own_ids = {x.get("id") for x in cfg.get("layers") or [] if isinstance(x, dict)}
+    # 5.5.0 (D26-11): the detail's own layers and its own ground are credited like the map's (source line, provenance, terms); a NAIP picture
+    # drawn only in the inset appeared nowhere
+    credit_layers = [l for l in sub.layers + list(getattr(sub, "helpers", None) or []) if l.id in own_ids]
+    credit_basemap = [b for b in sub.basemap if b.get("entry") or b.get("record")] if isinstance(cfg.get("basemap"), dict) else []
     fig = {"_svg": inner, "_box": [0.0, 0.0, w_mm, h_mm], "title": title, "position": str(cfg.get("position") or "lower-left"), "w_mm": w_mm, "h_mm": h_mm}
     vis = frame.visible
     den = (r.report.get("scale") or {}).get("ratio")
-    return {"figure": fig, "window": tuple(float(v) for v in vis), "findings": [],          # the same layers are judged on the map itself; the detail has no legend, title or sources of its own to check
+    return {"figure": fig, "window": tuple(float(v) for v in vis), "findings": findings, "credit_layers": credit_layers, "credit_basemap": credit_basemap,
             "notes": [f"detail inset '{title}': {w_mm:g} x {h_mm:g} mm" + (f" at {den}" if den else "") + ", its window outlined on the map"]}
+
+
+def title_lines(title: str, room_mm: float, pt: float) -> tuple[list[str], float, bool]:
+    """5.5.0 (D26-11): the inset title in its room: as set, then up to 15% smaller, then on two lines, then shortened (said). -> (lines, pt, shortened)."""
+    import textmeasure as tm
+    for size in (pt, round(pt * 0.92, 2), round(pt * 0.85, 2)):
+        if tm.width_mm(title, size, weight=600) <= room_mm:
+            return [title], size, False
+    size = round(pt * 0.92, 2)
+    words, lines, cur = title.split(), [], ""
+    for w in words:
+        trial = (cur + " " + w).strip()
+        if cur and tm.width_mm(trial, size, weight=600) > room_mm:
+            lines.append(cur)
+            cur = w
+        else:
+            cur = trial
+    lines.append(cur)
+    if len(lines) <= 2 and all(tm.width_mm(x, size, weight=600) <= room_mm for x in lines):
+        return lines, size, False
+    first = lines[0]
+    rest = " ".join(lines[1:])
+    while rest and tm.width_mm(rest + "…", size, weight=600) > room_mm:
+        rest = rest[:-1]
+    return [first, rest.rstrip() + "…"], size, True
 
 
 def window_outline(frame, win: tuple, t: dict) -> str:

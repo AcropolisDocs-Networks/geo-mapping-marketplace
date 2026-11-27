@@ -549,6 +549,20 @@ def classify(values, method="quantile", classes=5, manual_breaks=None, fmt: Numb
 # ---------------------------------------------------------------------------------------------------------------- normalization
 RAW_COUNT_HINT = re.compile(r"(^|[_\s])(count|cnt|total|num|number|n|pop|population|sites|towers|sum|households|hh|jobs|employees)([_\s]|$)", re.I)
 RATE_HINT = re.compile(r"(per|pct|percent|ratio|rate|share|density|avg|average|mean|median|index|score|_pc$|per_)", re.I)
+# 5.5.0 (D26-27): a measure with a unit (depth in metres, a temperature, a slope) is not a count, whatever its values look like
+MEASURE_FIELD = re.compile(r"(?:^|_)(m|km|cm|mm|ft|mi|nmi|c|f|k|degc|degf|deg|pct|kmh|mph|ms|m2|km2|ha|db|dbm|mbps|hz|mhz|ghz|years?|yrs?|hours?|hrs?|"
+                           r"min|mins|minutes|s|sec|secs|seconds|days?)$", re.I)
+MEASURE_UNIT = re.compile(r"\((?:m|km|cm|mm|ft|mi|nmi|°\s*[cf]?|deg|%|m²|km²|ha|db|dbm|mbps|mhz|ghz|years?|hours?|min|minutes|s|days?)\)|"
+                          r"\b(?:metres?|meters?|kilometres?|kilometers?|feet|miles|degrees?|celsius|fahrenheit|elevation|depth|height|"
+                          r"temperature|slope|speed|minutes|hours|years)\b", re.I)
+
+
+def is_measure(name: str, unit_text: str = "", stated: bool | None = None) -> bool:
+    """5.5.0 (D26-27): True when a value field is a measure with a unit (its name ends in one, `_m`, `_km`, `_c`, `_pct`; or its legend
+    title names one, "Depth (m)", "metres"), or the layer says so (classification.measure: true)."""
+    if stated is not None:
+        return bool(stated)
+    return bool(MEASURE_FIELD.search(str(name or ""))) or bool(MEASURE_UNIT.search(str(unit_text or "")))
 
 
 def normalization_check(name: str, values, areas=None, populations=None) -> dict:

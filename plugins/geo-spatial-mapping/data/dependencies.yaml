@@ -1,4 +1,4 @@
-# `pip install -r requirements.txt` installs every row except the optional extras (mapclassify, contextily, cartopy, rasterio, contourpy, h3, duckdb, imageio-ffmpeg, scipy, playwright, psycopg, uharfbuzz, keyring, duckdb-spatial, laspy, py7zr), which are in requirements-optional.txt.
+# `pip install -r requirements.txt` installs every row except the optional extras (mapclassify, contextily, cartopy, rasterio, contourpy, h3, duckdb, imageio-ffmpeg, scipy, scikit-image, playwright, psycopg, uharfbuzz, keyring, duckdb-spatial, laspy, py7zr), which are in requirements-optional.txt.
 # Not pip packages, so not rows: `qgis` (PyQGIS) is imported only by qgis_build_layout.py and qgis_project.py's optional check, which run inside
 # QGIS's own Python (qgis_process), never the plugin's; tests/test_dependencies.py lists it as provided by QGIS.
 # GTFS (0.10.0) needs no row of its own: gtfs.py uses the standard library with geopandas and shapely, and decodes GTFS-Realtime itself.
@@ -37,6 +37,7 @@
 - {name: rasterio,   import: rasterio,   pip: rasterio,   profiles: [map, raster], level: SOFT, why: "raster inputs: GeoTIFF and COG windows, zonal statistics, hillshade, DEM fetch (raster_io, terrain, terrain_fetch); rasterio 1.4+ with GDAL 3.6+"}
 - {name: contourpy,  import: contourpy,  pip: contourpy,  profiles: [map, raster], level: SOFT, why: "contour lines from a DEM (raster_io.contours); installed with matplotlib, imported directly"}
 - {name: scipy,      import: scipy,      pip: scipy,      profiles: [raster], level: SOFT, why: "the terrain tiles of a 3D web page (with rasterio); faster cluster baking for large point layers on the MapLibre page (shapely's index does it without); without it a 3D page is drawn on flat ground"}
+- {name: scikit-image, import: skimage, pip: scikit-image, profiles: [raster], level: SOFT, why: "fills a DEM's hollows fast for geo_ops depressions (morphological reconstruction); without it the plugin's own priority flood does it, slower on a large DEM"}
 - {name: h3,         import: h3,         pip: h3,         profiles: [map, h3], level: SOFT, why: "hex aggregation: role hexbin (and heat), geo_ops hexbin and grid shape hex, geo-analyze hexbin; H3 4.x"}
 - {name: openpyxl,    import: openpyxl,   pip: openpyxl,    profiles: [map], level: SOFT, why: "XLSX tables for joins, site lists and trackers (table_join)"}
 - {name: python-pptx, import: pptx,       pip: python-pptx, profiles: [], level: SOFT, why: "slide output through map-pptx-adapter"}

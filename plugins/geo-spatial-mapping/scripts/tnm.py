@@ -22,6 +22,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -144,6 +145,31 @@ def _touches(box, b) -> bool:
 
 
 _STATES = None
+_HU2 = None
+
+
+def hu2_over(bbox) -> list[str] | None:
+    """5.5.0 (D26-01): the two-digit codes of the hydrologic regions (HU-2) whose outline (USGS WBD, bundled, generalized) meets the window;
+    None when the outline is not at hand. A region's box reaches far past its shape: Arizona's window took the Missouri region (554 MB)."""
+    global _HU2
+    try:
+        if _HU2 is None:
+            import geopandas as gpd
+            _HU2 = gpd.read_parquet(gc.plugin_root() / "assets" / "basemaps" / "us_wbd_hu2.parquet")[["huc2", "geometry"]]
+        import shapely
+        hit = _HU2[_HU2.geometry.intersects(shapely.box(*_box(bbox)))]
+        return [str(c).zfill(2) for c in hit["huc2"]]
+    except Exception:  # noqa: BLE001 - without the outlines every region whose box touches is taken
+        return None
+
+
+
+
+def _hu_code(item: dict) -> str | None:
+    """The HU-2 region a hydrologic-unit product is for, from its file name (WBD_15_HU2_GPKG.zip, NHD_H_1506_HU4_GPKG.zip): its first two digits."""
+    f = Path(item["url"]).name
+    m = re.search(r"_(\d{2,8})_HU\d", f, re.I) or re.search(r"_(\d{2,8})_", f)
+    return m.group(1)[:2] if m else None
 
 
 def states_over(bbox) -> list[str] | None:
@@ -179,6 +205,12 @@ def pick_vector(items: list[dict], bbox, cap_mb: float | None = None, max_files:
             kinds.setdefault(str(i.get("extent") or ""), []).append(i)
     if not kinds:
         return []
+    hu = hu2_over(b)
+    if hu is not None:                                       # 5.5.0 (D26-01): a hydrologic unit is kept only where its region's outline meets the window
+        for k in [k for k in kinds if re.match(r"HU-?\d", k, re.I)]:
+            kept = [i for i in kinds[k] if _hu_code(i) is None or _hu_code(i) in hu]
+            if kept:
+                kinds[k] = kept
     over = states_over(b)
     if over is not None and "State" in kinds:               # a state's box reaches over its neighbours; its shape does not
         all_names = [str(n) for n in _STATES["NAME"]]

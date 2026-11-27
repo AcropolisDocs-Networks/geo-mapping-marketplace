@@ -440,6 +440,119 @@ def leader_labels(plan, cands, frame, taken: list[Rect], size_pt: float, weight:
     return "".join(out), rects, n
 
 
+STACK_CLUSTER_MM = 10.0           # 5.6.0 (Q-06): labels left out within this distance of each other form one cluster
+STACK_MIN = 2                     # ...and a cluster of at least this many is set as a column off it
+STACK_OFFSETS_MM = (6.0, 10.0, 15.0, 22.0, 30.0)
+STACK_ROW = 1.45                  # the column's line spacing, in label heights
+MERGE_MM = 0.6                    # 5.6.0 (Q-06): two names whose points are closer than this on the sheet point at one dot
+MERGE_MAX = 2                     # ...and at most this many names are joined (a crowd of dots is a cluster, set as a column)
+
+
+def merge_same_dot(cands, merge_mm: float = MERGE_MM) -> tuple[list, list[str]]:
+    """5.6.0 (Q-06): candidates whose points fall on one dot become one label, its names joined with a middle dot in priority order
+    ("Provincetown · Cape Cod"). -> (candidates, the merged texts)."""
+    out, merged = [], []
+    for c in sorted(cands, key=lambda c: -c.priority):
+        hit = next((o for o in out if o.kind == "point" and c.kind == "point" and math.hypot(o.x - c.x, o.y - c.y) < merge_mm
+                    and len(o.text.split(" · ")) < MERGE_MAX), None)
+        if hit is None:
+            out.append(c)
+        elif c.text not in hit.text.split(" · "):
+            hit.text = f"{hit.text} · {c.text}"
+            merged.append(hit.text)
+    return out, merged
+
+
+def _clusters(cands, reach: float) -> list[list]:
+    """Single-linkage groups of point candidates on the sheet."""
+    left = list(cands)
+    groups = []
+    while left:
+        g = [left.pop(0)]
+        grew = True
+        while grew:
+            grew = False
+            for c in list(left):
+                if any(math.hypot(c.x - o.x, c.y - o.y) <= reach for o in g):
+                    g.append(c)
+                    left.remove(c)
+                    grew = True
+        groups.append(g)
+    return groups
+
+
+def _cross(a, b) -> bool:
+    """Whether two segments ((x0, y0), (x1, y1)) cross."""
+    (p1, p2), (p3, p4) = a, b
+
+    def o(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    return (o(p1, p2, p3) * o(p1, p2, p4) < 0) and (o(p3, p4, p1) * o(p3, p4, p2) < 0)
+
+
+def stack_column(group, size_pt: float, area: Rect, taken: list[Rect], weight: int = 400):
+    """The first column off the cluster that fits: right of it, then left, at STACK_OFFSETS_MM; its rows in the points' top-to-bottom order,
+    and swapped until no two leaders cross. -> [(candidate, label rect, text x, baseline, anchor, leader end)] or None."""
+    h = size_pt * PT
+    row = h * STACK_ROW
+    pts = sorted(group, key=lambda c: c.y)
+    ws = {id(c): tm.width_mm(c.text, size_pt, weight) for c in pts}
+    total = row * len(pts)
+    cy = sum(c.y for c in pts) / len(pts)
+    top = min(max(cy - total / 2, area.y0 + 0.5), area.y1 - total - 0.5)
+    xmin, xmax = min(c.x - c.radius for c in pts), max(c.x + c.radius for c in pts)
+    for off in STACK_OFFSETS_MM:
+        for side in (1, -1):
+            xc = xmax + off if side > 0 else xmin - off
+            slots = [top + row * (k + 0.5) for k in range(len(pts))]
+            order = list(range(len(pts)))
+            for _ in range(len(pts) ** 2 + 1):                     # untangle: each swap of a crossing pair shortens the leaders
+                segs = [((pts[i].x, pts[i].y), (xc, slots[order.index(i)])) for i in range(len(pts))]
+                pair = next(((i, j) for i in range(len(pts)) for j in range(i + 1, len(pts)) if _cross(segs[i], segs[j])), None)
+                if pair is None:
+                    break
+                a, b = order.index(pair[0]), order.index(pair[1])
+                order[a], order[b] = order[b], order[a]
+            rows, ok = [], True
+            for k, i in enumerate(order):
+                c = pts[i]
+                w = ws[id(c)]
+                y = slots[k]
+                x0 = xc + 0.6 if side > 0 else xc - 0.6 - w
+                r = Rect(x0 - 0.3, y - h * 0.55, x0 + w + 0.3, y + h * 0.45)
+                if not _free(r, area, taken + [q[1] for q in rows], 0.3):
+                    ok = False
+                    break
+                rows.append((c, r, x0, y + h * 0.35, "start", (xc, y)))
+            if ok:
+                return rows
+    return None
+
+
+def stack_labels(plan, cands, frame, taken: list[Rect], size_pt: float, min_size: int = STACK_MIN, weight: int = 400) -> tuple[str, list[Rect], list]:
+    """5.6.0 (Q-06): the labels a point layer could not place beside their symbols, where they crowd (Southampton, Dartmouth and Plymouth
+    at ocean scale), set as a column off the cluster with a thin leader from each point to its name; leaders never cross. A cluster whose
+    column does not fit anywhere is left to the single leaders. -> (svg, the rects taken, the candidates placed)."""
+    t = plan.tokens
+    out, rects, done = [], [], []
+    for g in _clusters([c for c in cands if c.kind == "point"], STACK_CLUSTER_MM):
+        if len(g) < min_size:
+            continue
+        rows = stack_column(g, size_pt, frame.rect, taken + rects, weight)
+        if not rows:
+            continue
+        parts = []
+        for c, r, x0, base, _a, (ex, ey) in rows:
+            d = max(math.hypot(ex - c.x, ey - c.y), 1e-6)
+            sx, sy = c.x + (ex - c.x) * c.radius / d, c.y + (ey - c.y) * c.radius / d
+            parts.append(_leader(sx, sy, ex, ey, t["label"], t["label_halo"], 0.18)
+                         + sd.text(x0, base, c.text, size_pt, t["label"], halo=t["label_halo"], halo_w=max(0.3, size_pt * PT * 0.22), weight=weight))
+            rects.append(r)
+            done.append(c)
+        out.append('<g class="gm-callout-stack">' + "".join(parts) + "</g>")
+    return "".join(out), rects, done
+
+
 # ---------------------------------------------------------------------------------------------------------------- data as of
 def time_sensitive_layers(plan) -> list[tuple[str, str | None]]:
     """(layer id, the date its data is as of) for every layer whose data changes over time: a service capture, or a library entry whose
@@ -563,16 +676,26 @@ def place_figures(plan, map_rect: Rect, placed: dict, cfg: dict, base: Path) -> 
             left, low = corner.endswith("left"), corner.startswith("lower")
             x0 = map_rect.x0 + FIGURE_MARGIN_MM if left else map_rect.x1 - FIGURE_MARGIN_MM - w
             y0 = map_rect.y1 - FIGURE_MARGIN_MM - h if low else map_rect.y0 + FIGURE_MARGIN_MM
-            r = Rect(x0, y0, x0 + w, y0 + h)
-            for _try in range(6):                                 # step away from the edge past anything already in the corner
-                hit = [t_ for t_ in taken + rects if r.hits(t_)]
-                if not hit:
-                    break
-                if low:
-                    y0 = min(t_.y0 for t_ in hit) - FIGURE_GAP_MM - h
-                else:
-                    y0 = max(t_.y1 for t_ in hit) + FIGURE_GAP_MM
+            w0, h0 = w, h
+            for scale in ((1.0, 0.85, 0.7, 0.6) if it.get("_svg") is not None else (1.0,)):
+                # 5.5.0 (D26-20): a figure the plugin drew (a detail inset, a section) is made smaller before it is left out
+                w, h = w0 * scale, h0 * scale
+                x0 = map_rect.x0 + FIGURE_MARGIN_MM if left else map_rect.x1 - FIGURE_MARGIN_MM - w
+                y0 = map_rect.y1 - FIGURE_MARGIN_MM - h if low else map_rect.y0 + FIGURE_MARGIN_MM
                 r = Rect(x0, y0, x0 + w, y0 + h)
+                for _try in range(6):                                 # step away from the edge past anything already in the corner
+                    hit = [t_ for t_ in taken + rects if r.hits(t_)]
+                    if not hit:
+                        break
+                    if low:
+                        y0 = min(t_.y0 for t_ in hit) - FIGURE_GAP_MM - h
+                    else:
+                        y0 = max(t_.y1 for t_ in hit) + FIGURE_GAP_MM
+                    r = Rect(x0, y0, x0 + w, y0 + h)
+                if not (r.y0 < map_rect.y0 or r.y1 > map_rect.y1):
+                    if scale < 1.0:
+                        notes.append(f"figure '{it.get('title') or 'figure'}' set at {scale:.0%} of its size to fit the {corner} corner")
+                    break
             if r.y0 < map_rect.y0 or r.y1 > map_rect.y1:
                 fs.append({"id": "MAP-SPEC-005", "severity": "WARN", "message": f"elements.figures item {k + 1} does not fit in the {corner} corner beside the "
                            "elements there; give rect_mm or a smaller w_mm", "detail": str(src)})
@@ -582,6 +705,7 @@ def place_figures(plan, map_rect: Rect, placed: dict, cfg: dict, base: Path) -> 
                    f'height="{sd.num(r.h)}" viewBox="{" ".join(sd.num(v) for v in box)}" preserveAspectRatio="xMidYMid meet" overflow="hidden">'
                    f"<title>{sd.esc(str(title))}</title>{inner}</svg></g>")
         rects.append(r)
+        it["_placed"] = True
         notes.append(f"figure '{title}' at {r.x0:.1f}, {r.y0:.1f} mm, {r.w:.1f} x {r.h:.1f} mm")
     return "".join(out), rects, fs, notes
 

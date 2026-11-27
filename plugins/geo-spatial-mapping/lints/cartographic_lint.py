@@ -54,6 +54,9 @@ def check_001(plan) -> list[dict]:
         if (l.spec.get("classification") or {}).get("method") == "categorical":
             continue
         unit = str(((l.spec.get("legend") or {}).get("title")) or "")
+        stated = (l.spec.get("classification") or {}).get("measure")
+        if cf.is_measure(l.value_field, unit, stated if isinstance(stated, bool) else None):
+            continue                                       # 5.5.0 (D26-27): depth in metres is a measure, not a raw count
         res = cf.normalization_check(l.value_field, l.gdf[l.value_field].to_numpy(dtype="float64", na_value=np.nan), areas=_areas(l, plan.crs))
         if res["raw_count_suspected"] and not re.search(r"\b(per|%|percent|share|rate|ratio|density|average|median|mean)\b", unit, re.I):
             _gate(out, l, "MAP-CART-001", "BLOCK",
@@ -270,6 +273,27 @@ def _better_template(plan) -> str | None:
         return None
 
 
+ASPECT_MISMATCH = 1.5         # 5.5.0 (Q-10): the subject's shape and the frame's differ by more than this
+
+
+def aspect_mismatch(plan) -> str | None:
+    """5.5.0 (Q-03, Q-10): when the data's shape and the template's map frame differ by more than ASPECT_MISMATCH (Gilbert, tall, in a wide
+    slide with a dead third), the template that fits, or a main map with a detail inset; None when they agree."""
+    try:
+        x0, y0, x1, y1 = plan.extent
+        asp = (x1 - x0) / max(1e-9, (y1 - y0))
+        m = (plan.tpl or {}).get("map") or {}
+        fasp = float(m.get("w")) / float(m.get("h"))
+    except Exception:  # noqa: BLE001
+        return None
+    k = max(asp / fasp, fasp / asp)
+    if k <= ASPECT_MISMATCH:
+        return None
+    better = _better_template(plan)
+    return (f"the data is {asp:.2f} times as wide as it is tall and the frame {fasp:.2f}: the shapes differ {k:.1f} times, so the frame is padded "
+            "with surroundings; " + (better + ", " if better else "") + "or a main map with a detail inset (elements.detail) frames it tighter")
+
+
 def check_009(plan, report) -> list[dict]:
     out = []
     if (report or {}).get("picture_led"):           # 1.19.0 (Day 17 issue B3): the picture fills the frame; the points over it are annotation
@@ -286,6 +310,10 @@ def check_009(plan, report) -> list[dict]:
                            + (f" ({better}, or template: auto-social / auto-slide to pick by shape)" if better else ""), ext))
     elif cover is not None and cover < 0.03:
         out.append(finding("MAP-CART-009", "INFO", "the data covers very little of the frame", cover))
+    else:
+        mis = aspect_mismatch(plan)                 # 5.5.0 (Q-03, Q-10): a tall town in a wide slide, padded with context
+        if mis:
+            out.append(finding("MAP-CART-009", "INFO", mis, None))
     clipped = (report or {}).get("clipped_features")
     if clipped:
         if full_bleed(plan, report):

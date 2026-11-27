@@ -839,6 +839,22 @@ def adopt_ledger_rows(events: list[dict], rows: list[dict], commands: dict) -> i
     return n
 
 
+def ledger_cause(r: dict) -> str:
+    """5.5.0 (T-05): one line of cause from a ledger row: the crash site and message, else the first finding, else the last line the script
+    wrote to stderr; "the shell line hid it" only when the ledger has nothing more."""
+    if r.get("crash_site"):
+        return f"crash at {r['crash_site']}" + (f": {r['exception_msg']}" if r.get("exception_msg") else "")
+    if r.get("first_finding"):
+        return f"first finding {r['first_finding']}"
+    if r.get("last_line"):
+        return f"it said: {str(r['last_line'])[:200]}"
+    fs = list((r.get("findings") or {}).items())
+    if fs:
+        blk = [k for k, v in fs if v == "BLOCK"]
+        return f"first finding {(blk or [fs[0][0]])[0]}"
+    return "the shell line hid it, the plugin's run ledger recorded it"
+
+
 def apply_ledger(events: list[dict], rows: list[dict]) -> int:
     """Join each map call to the ledger lines its scripts wrote (same script, started inside the call's window). A line with a non-zero exit
     marks the call failed whatever the shell printed (`| tail`, `> file`, `2>&1`); a line with dropped items marks it degraded (X-04).
@@ -866,11 +882,18 @@ def apply_ledger(events: list[dict], rows: list[dict]) -> int:
             r = bad[-1]
             code = int(r["exit"]) if isinstance(r["exit"], int) else 1
             cls = "crash" if r.get("exception") else EXIT_CLASS.get(code, "failed")
-            e.update(status="failed", error_class=cls, exit_code=code, exception=r.get("exception"), crash_site=None, via="ledger",
+            e.update(status="failed", error_class=cls, exit_code=code, exception=r.get("exception"), crash_site=r.get("crash_site"), via="ledger",
                      evidence=f"{r['script']}.py exited {code}" + (f" ({r['exception']})" if r.get("exception") else "")
-                     + "; the shell line hid it, the plugin's run ledger recorded it")
+                     + "; " + ledger_cause(r))
             for fid, sev in (r.get("findings") or {}).items():
                 e.setdefault("findings", {})[fid] = sev or "?"
+        elif bad and e["status"] == "failed":
+            # 5.5.0 (T-04): the transcript showed a failure but not where; the ledger kept the crash site and the cause
+            r = bad[-1]
+            if r.get("crash_site") and not e.get("crash_site"):
+                e.update(crash_site=r["crash_site"], error_class="crash", exception=e.get("exception") or r.get("exception"))
+            if r.get("last_line") or r.get("first_finding"):
+                e["cause"] = ledger_cause(r)
         drop = [d for r in mrows for d in (r.get("degraded") or [])]
         if drop and e["status"] == "ok":
             e.update(status="degraded", degraded=list(dict.fromkeys(drop)))
@@ -1134,6 +1157,7 @@ def build(path: Path, how: str, *, since: str | None = None, until: str | None =
     outputs, miss = session_outputs(calls, events, records, why=True)
     try:                                                 # 4.2.0: which outputs were handed to the person; the others are tries that were set aside
         sent = {FORMAT_EXT.sub("", q.name) for q, _n in delivered_files(calls, events)}
+        sent |= sent_stems(calls)                        # 5.5.0 (T-02): what SendUserFile or device_commit_files handed over is handed over
         for x in outputs:
             x["delivered"] = FORMAT_EXT.sub("", Path(x["path"]).name) in sent
     except Exception:  # noqa: BLE001
@@ -1245,6 +1269,8 @@ def session_outputs(calls: list[dict], events: list[dict], records: list[dict], 
         before = len(found)
 
         def add(p: Path, how: str):
+            if is_temp_base(p):                              # 5.5.0 (T-01): a video's base map is a step of the video
+                return
             if p.is_file() and str(p) not in found:
                 found[str(p)] = {"path": str(p), "spec": spec, "call": e["n"], "how": how}
         for o in e.get("_ledger_outputs") or []:
@@ -1302,6 +1328,14 @@ def session_outputs(calls: list[dict], events: list[dict], records: list[dict], 
 
 
 COPY_STEM = re.compile(r"_(?:poster|qa|web)$", re.I)
+# 5.5.0 (T-01, T-03): a video's base maps are drawn in a temporary work folder (events_anim.build_base, the flythrough and animation
+# scripts); they are steps of the video, never outputs handed over nor maps of their own on the road
+TEMP_BASE = re.compile(r"(?:^|[\\/])(?:gm-events-|gm-story-|gm-fly-|gm-anim-|gm-heat-|gm-video-)[^\\/]*[\\/]", re.I)
+
+
+def is_temp_base(p) -> bool:
+    s = str(p)
+    return bool(TEMP_BASE.search(s)) or "/.events-base." in s or ".events-base." in Path(s).name
 FORMAT_EXT = re.compile(r"\.(?:png|svg|pdf|mp4|gif|webm|html|jpe?g)$", re.I)
 DELIVERED_EXT = (".png", ".svg", ".pdf", ".mp4", ".gif", ".webm", ".html", ".jpg", ".jpeg")
 OUTPUTS_FOLDER = Path("/mnt/user-data/outputs")
@@ -1314,7 +1348,12 @@ def plugin_mark(p: Path) -> bool:
         if side.is_file():
             return True
     try:
-        head = p.read_bytes()[:400_000] if p.stat().st_size < 400_000_000 else b""
+        size = p.stat().st_size
+        with open(p, "rb") as fh:
+            head = fh.read(400_000)
+            if p.suffix.lower() in (".mp4", ".webm") and size > 400_000:
+                fh.seek(max(0, size - 400_000))           # 5.5.0 (T-02): an MP4's metadata (moov) is often at its end
+                head += fh.read(400_000)
     except OSError:
         return False
     suf = p.suffix.lower()
@@ -1327,6 +1366,26 @@ def plugin_mark(p: Path) -> bool:
     if suf == ".pdf":
         return b"geo-mapping" in head
     return False
+
+
+def sent_stems(calls: list[dict]) -> set:
+    """5.5.0 (T-02): the stems of every file the session explicitly handed over (SendUserFile, device_commit_files, Artifact), mark or not.
+    An MP4 whose metadata sits at its end was read as unmarked and called set aside although it was sent."""
+    out = set()
+    for c in calls:
+        tool, inp = c.get("tool") or "", c.get("input") or {}
+        raw: list[str] = []
+        if tool == "SendUserFile":
+            raw = [str(x) for x in inp.get("files") or []]
+        elif tool.endswith("device_commit_files"):
+            raw = [str(f.get("stagedPath") or f.get("path") or "") for f in inp.get("files") or [] if isinstance(f, dict)]
+        elif tool == "Artifact":
+            raw = [str(x) for x in ([inp.get("file_path")] + list(inp.get("file_paths") or [])) if x]
+        for r in raw:
+            n = Path(r.replace("\\", "/")).name
+            if n and Path(n).suffix.lower() in DELIVERED_EXT:
+                out.add(FORMAT_EXT.sub("", n))
+    return out
 
 
 def delivered_files(calls: list[dict], events: list[dict]) -> list[tuple[Path, int]]:
@@ -1528,7 +1587,7 @@ def fix_spec(failed: list[dict], events: list[dict]) -> list[dict]:
             owner = None
         out.append({"id": f"F-{i}", "class": cls, "disposition": disp, "owner": owner or (f"scripts/{script}.py" if script and script in plugin_inventory_cache()["scripts"] else script),
                     "crash_site": first.get("crash_site"), "exception": first.get("exception"), "exit_code": first.get("exit_code"),
-                    "calls": [x["n"] for x in es], "lane": first["lane"], "evidence": first.get("evidence"),
+                    "calls": [x["n"] for x in es], "lane": first["lane"], "evidence": "; ".join(x for x in (first.get("evidence"), first.get("cause")) if x) or None,
                     "recovered": later_ok, "severity": "low" if later_ok else ("high" if disp == "product" else "medium"),
                     "diagnosis": "DIAGNOSIS PENDING (F-%d)" % i if disp == "product" else None,
                     "reading": None if disp == "product" else READING.get(disp, "")})

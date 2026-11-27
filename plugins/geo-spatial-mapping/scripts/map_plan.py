@@ -114,7 +114,10 @@ def names_config(spec: dict) -> dict:
             # 2.6.0 (V-06): one ink for every name over data (dark on a page-colour halo, the halo wider over dark classes); adaptive is 2.5's
             "ink": str(n.get("ink") or "uniform") if str(n.get("ink") or "uniform") in ("uniform", "adaptive") else "uniform",
             # 3.0.0 (G-08): places the message names are labelled at any scale tier
-            "message_places": n.get("message_places", True) is not False}
+            "message_places": n.get("message_places", True) is not False,
+            # 5.5.0 (Q-02): names kept near a line or point subject, and the seas and land shapes when the subject is at sea
+            "near_subject": n.get("near_subject", True) is not False, "near_subject_mm": n.get("near_subject_mm"),
+            "marine": n.get("marine", "auto")}
 
 
 PLACE_NAMES = "assets/basemaps/ne_10m_place_names.parquet"     # 1.5.0: the 26 other-language names of the 10m places, by ne_id
@@ -987,6 +990,101 @@ def message_subject(spec: dict, data_layers: list) -> list:
     return out
 
 
+ROUTE_SPAN_DEG = 40.0        # 5.5.0 (Q-12): a line subject wider than this in longitude is a long route
+
+
+def route_projection(layers, spec: dict, hint_only: bool = False) -> dict | None:
+    """5.5.0 (Q-12): a two-point equidistant projection on the ends of the longest line the message names (or the longest line layer), for
+    `crs: {display: route}`; with hint_only, the note that suggests it when such a route spans more than ROUTE_SPAN_DEG of longitude."""
+    import map_emphasis
+    lines = [l for l in map_emphasis.subject_layers(spec, layers) if l.kind == "line" and len(l.gdf)] or \
+            [l for l in layers if l.kind == "line" and l.role not in ("context",) and len(l.gdf)]
+    if not lines:
+        return None
+    best = None
+    for l in lines:
+        g = l.gdf.to_crs("EPSG:4326") if l.gdf.crs is not None else None
+        if g is None:
+            continue
+        for geom in g.geometry.values:
+            if geom is None or geom.is_empty:
+                continue
+            parts = list(getattr(geom, "geoms", [geom]))
+            c0, c1 = list(parts[0].coords)[0], list(parts[-1].coords)[-1]
+            span = abs(c1[0] - c0[0])
+            if best is None or span > best[0]:
+                best = (span, c0, c1, l.id)
+    if best is None or best[0] < (ROUTE_SPAN_DEG if hint_only else 1.0):
+        return None
+    span, a, b, lid = best
+    if hint_only:
+        return {"note": f"crs: the line '{lid}' spans {span:.0f} degrees of longitude; crs: {{display: route}} draws it in a two-point equidistant "
+                        "projection on its ends, so its length is true and the far north is not enlarged"}
+    proj = f"+proj=tpeqd +lon_1={a[0]:.4f} +lat_1={a[1]:.4f} +lon_2={b[0]:.4f} +lat_2={b[1]:.4f} +datum=WGS84 +units=m +no_defs"
+    return {"proj": proj, "note": f"crs route: two-point equidistant on the ends of '{lid}' ({a[0]:.2f}, {a[1]:.2f} to {b[0]:.2f}, {b[1]:.2f}): "
+                                  "distances from either end are true, and the route is not stretched toward the pole"}
+
+
+REACH_GROWTH_MAX = 0.30      # 5.5.0 (Q-03): a named place outside the data is brought into the frame when it grows the frame's area by less
+REACH_MIN_SHARE = 0.03       # and when less than this share of the frame shows it (a corner sliver of the gulf is not the gulf in the frame)
+
+
+def spec_texts(spec: dict) -> str:
+    """The words a reader is told: the message, the title and subtitle, and each layer's legend title, label, class labels and group headings."""
+    el = (spec.get("elements") or {}).get("title") or {}
+    out = [str(spec.get("message") or ""), str(el.get("text") or ""), str(el.get("subtitle") or "")]
+    for ly in spec.get("layers") or []:
+        if not isinstance(ly, dict):
+            continue
+        lg = ly.get("legend") if isinstance(ly.get("legend"), dict) else {}
+        out += [str(lg.get("title") or ""), str(lg.get("label") or "")]
+        c = ly.get("classification") if isinstance(ly.get("classification"), dict) else {}
+        labs = c.get("labels")
+        out += [str(x) for x in (labs.values() if isinstance(labs, dict) else labs or [])]
+        out += [str(g.get("label") or "") for g in c.get("groups") or [] if isinstance(g, dict)]
+    return " ".join(out)
+
+
+def reach_named_places(spec: dict, extent: tuple, display) -> tuple[tuple, str | None]:
+    """5.5.0 (Q-03): a sea, gulf, bay or strait the map's words name (Natural Earth's geography labels, bundled) whose point lies outside the
+    frame is brought into it, when that grows the frame's area by less than REACH_GROWTH_MAX. Arizona's legend named the Gulf of California
+    and the frame stopped at the border. `extent: {reach_named: false}` turns it off. -> (extent, note or None)."""
+    import geopandas as gpd
+    import re as _re
+    text = spec_texts(spec)
+    if not text.strip():
+        return extent, None
+    try:
+        g = gpd.read_parquet(gc.plugin_root() / "assets" / "basemaps" / "ne_10m_marine_areas.parquet")
+    except Exception:  # noqa: BLE001
+        return extent, None
+    hit = g[[bool(_re.search(r"(?<![A-Za-z])" + _re.escape(str(n)) + r"(?![A-Za-z])", text)) for n in g["name"].astype(str)]]
+    if not len(hit):
+        return extent, None
+    import shapely
+    areas = hit.to_crs(display)
+    x0, y0, x1, y1 = extent
+    a0 = max((x1 - x0) * (y1 - y0), 1e-9)
+    frame_box = shapely.box(x0, y0, x1, y1)
+    grown, names = list(extent), []
+    for nm, poly in zip(hit["name"].astype(str), areas.geometry):
+        if poly is None or poly.is_empty or poly.intersection(frame_box).area / a0 >= REACH_MIN_SHARE:
+            continue                                         # already in the frame, more than a sliver of it
+        # the nearest part of the water (the head of the Gulf of California), and a little of it past that point
+        from shapely.ops import nearest_points
+        p = nearest_points(poly, frame_box)[0]
+        reach = 0.12 * min(x1 - x0, y1 - y0)
+        q = poly.intersection(p.buffer(reach))
+        p = q.centroid if not q.is_empty else p
+        pad_x, pad_y = 0.04 * (x1 - x0), 0.04 * (y1 - y0)
+        c = [min(grown[0], p.x - pad_x), min(grown[1], p.y - pad_y), max(grown[2], p.x + pad_x), max(grown[3], p.y + pad_y)]
+        if (c[2] - c[0]) * (c[3] - c[1]) / a0 - 1 <= REACH_GROWTH_MAX:
+            grown, names = c, names + [nm]
+    if not names:
+        return extent, None
+    return tuple(grown), f"extent: widened to take in {', '.join(names)}, which the map's words name (extent: {{reach_named: false}} keeps the data's frame)"
+
+
 def subject_extent(subject: list, all_bounds: tuple) -> tuple:
     """The box round the subject in display coordinates, never narrower than SUBJECT_MIN_SHARE of the data's longer side: one site or one
     block still gets a window with its surroundings in it, not a frame with nothing else on it."""
@@ -1199,7 +1297,16 @@ def postload(layer: dict, gdf, base: Path, ctx_layers: dict | None = None, measu
         col, vals = flt.get("column"), flt.get("in")
         if col not in gdf.columns or not isinstance(vals, list) or not vals:
             raise PlanError(f"layer '{lid}': filter needs column (one of {', '.join(c for c in gdf.columns if c != gdf.geometry.name)}) and a list in:", gc.EXIT_USAGE)
-        keep = gdf[col].astype(str).isin([str(v) for v in vals])
+        want = {str(v) for v in vals}
+        bools = [v for v in vals if isinstance(v, bool)]
+        if bools:
+            # 5.5.0 (D26-22): YAML reads an unquoted false/true (and yes/no) as a boolean; against a text column it is the word that was meant
+            want |= {str(v).lower() for v in bools} | {("yes" if v else "no") for v in bools}
+            out["notes"].append(f"filter {col}: {', '.join(str(v).lower() for v in bools)} read as YAML true/false; compared as the word too (quote it to be sure)")
+        if str(gdf[col].dtype) == "bool":
+            keep = gdf[col].isin([v for v in vals if isinstance(v, bool)] + [str(v).lower() == "true" for v in vals if str(v).lower() in ("true", "false")])
+        else:
+            keep = gdf[col].astype(str).isin(want) | gdf[col].astype(str).str.lower().isin({w.lower() for w in want if w.lower() in ("true", "false", "yes", "no")})
         if not keep.any() and not legend_only(layer):
             raise PlanError(f"layer '{lid}': filter {col} in {vals} keeps no feature", gc.EXIT_USAGE)
         out["steps"].append(f"kept {int(keep.sum())} of {len(gdf)} feature(s) where {col} is {', '.join(map(str, vals))}")
@@ -1752,6 +1859,14 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
     choice = ce.choose_display(wgs, "thematic" if area_stat else "reference", area_stat=area_stat or None, tiles=bool(tiles_rec), prefer=crs_spec.get("prefer"),
                               legacy=map_look.look_of(spec) == "classic")
     tiles_own_crs = bool(tiles_rec) and crs_spec.get("display") not in (None, "auto", "EPSG:3857")     # 1.11.0: the composite is warped to it
+    route_crs = route_projection(layers, spec) if str(crs_spec.get("display") or "").lower() == "route" else None
+    if route_crs:                                       # 5.5.0 (Q-12): distances true along a long route, the far north not enlarged
+        crs_spec = {**crs_spec, "display": route_crs["proj"]}
+        pre_notes.append(route_crs["note"])
+    elif crs_spec.get("display") in (None, "auto") and not tiles_rec:
+        hint = route_projection(layers, spec, hint_only=True)
+        if hint:
+            pre_notes.append(hint["note"])
     cs = ce.mapspec_crs(choice, "EPSG:3857" if tiles_rec and not tiles_own_crs else crs_spec.get("display"))
     display = cs["display"]
     crs_info = {"display": display, "rationale": cs["rationale"], "name": choice["name"], "equal_area": ce.is_equal_area(display),
@@ -1826,6 +1941,10 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         extent = tuple(float(v) for v in _gpd.GeoSeries([_BUILD["region"].frame_geometry], crs="EPSG:4326").to_crs(display).total_bounds)
     else:
         extent = project_bbox(wgs, display)
+    if mode_e != "bbox" and ext.get("reach_named", True) is not False:
+        extent, reach_note = reach_named_places(spec, extent, display)       # 5.5.0 (Q-03): the Gulf the legend names is in the frame
+        if reach_note:
+            pre_notes.append(reach_note)
     if far_lines:
         for l in layers:
             if l.id in far_lines:
@@ -1864,6 +1983,7 @@ def prepare(spec_path, *, mode: str | None = None, brand: str | None = None, tem
         style_layer(plan, l)
     import map_emphasis
     map_emphasis.assign(plan)                 # 1.13.0: the layers the message names at full strength, the others quieter
+    map_emphasis.subject_boost(plan)          # 5.5.0 (Q-01): a line or point subject made the strongest mark
     if direct_labels:
         apply_direct_labels(plan)             # 1.22.0: lines and categories named on the map leave the legend (legend.direct)
     plan.notes += tiles_notes
@@ -2256,6 +2376,12 @@ def assign_palette(plan: Plan) -> None:
             continue
         if outline and (ly.get("symbol") or {}).get("stroke"):
             continue
+        pn = str((ly.get("palette") or {}).get("name") or "")
+        if pn == "brand_neutral" and not outline:      # 5.5.0 (D26-04): an unclassed line or point layer honours palette: brand_neutral
+            nc = _neutral(t, 3)
+            ly["symbol"] = dict(ly.get("symbol") or {}, color=nc)
+            plan.notes.append(f"layer '{l.id}' takes a mid brand neutral ({nc}) from palette: brand_neutral")
+            continue
         free = [i for i in order if palette[i].upper() not in used]
         far = [i for i in free if apart(palette[i])] if plan.look != "classic" else []
         i = far[0] if far else (free[0] if free else order[k % len(order)])
@@ -2268,6 +2394,41 @@ def assign_palette(plan: Plan) -> None:
             continue
         ly["symbol"] = dict(ly.get("symbol") or {}, color=f"@brand.categorical.{i}")
         plan.notes.append(f"layer '{l.id}' named no color, so it takes brand palette color categorical.{i} ({palette[i]})")
+
+
+CLASS_TWIN_DE = 10.0          # 5.5.0 (D26-04): two classes of one layer closer than this (CIEDE2000, normal vision) read as one
+
+
+CLASS_PAIR_DE = 20.0          # 5.5.0 (Q-08): the two largest classes of a categorical layer, which meet most on the map, keep this far apart
+
+
+def class_colour_twins(lid: str, labels: list, colors: list, counts: list | None = None) -> list[dict]:
+    """5.5.0 (D26-04): MAP-CART-044 (WARN) when two classes of one layer resolve to the same colour, or to colours closer than CLASS_TWIN_DE
+    (the closed basins and the Colorado drainage were one blue: @brand.accent is @brand.categorical.0 in the acropolisdocs brand)."""
+    import colorlib
+    out = []
+    for i in range(len(colors)):
+        for j in range(i + 1, len(colors)):
+            a, b = str(colors[i]), str(colors[j])
+            if not (a.startswith("#") and b.startswith("#")):
+                continue
+            de = 0.0 if a.upper() == b.upper() else float(colorlib.delta_e(a, b))
+            if de < CLASS_TWIN_DE:
+                li = labels[i] if i < len(labels) else i
+                lj = labels[j] if j < len(labels) else j
+                out.append({"id": "MAP-CART-044", "severity": "WARN", "layer": lid, "detail": {"classes": [str(li), str(lj)], "colors": [a, b], "delta_e": round(de, 1)},
+                            "message": f"layer '{lid}': classes '{li}' and '{lj}' are " + ("the same colour" if de == 0 else f"only {de:.1f} apart (10 reads as two)")
+                                       + f" ({a}, {b}); a reader cannot tell them apart. Note @brand.accent is @brand.categorical.0; give one of them another colour"})
+    if counts and len(counts) >= 2 and len(colors) >= 2 and not out:
+        order = sorted(range(min(len(counts), len(colors))), key=lambda k: -float(counts[k] or 0))[:2]
+        a, b = str(colors[order[0]]), str(colors[order[1]])
+        if a.startswith("#") and b.startswith("#"):
+            de = float(colorlib.cvd_min_delta_e(a, b))
+            if de < CLASS_PAIR_DE:
+                out.append({"id": "MAP-CART-044", "severity": "WARN", "layer": lid, "detail": {"classes": [str(labels[order[0]]), str(labels[order[1]])], "delta_e": round(de, 1)},
+                            "message": f"layer '{lid}': its two largest classes '{labels[order[0]]}' and '{labels[order[1]]}' are {de:.1f} apart under colour-vision "
+                                       f"simulation; they meet most on the map and need {CLASS_PAIR_DE:g}: give one of them a colour of another hue"})
+    return out
 
 
 def titled(ly: dict, l: LayerPlan) -> dict:
@@ -2476,6 +2637,8 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
                 raise PlanError(f"layer '{l.id}': classification.colors has {len(cc)} entries but there are {res.k} {what} ({', '.join(res.labels)})", gc.EXIT_USAGE)
             colors = [colors[i] if x in (None, "", "auto") else resolve_color(x, t, f"layer '{l.id}' class color") for i, x in enumerate(cc)]
             pk = "status" if res.kind == "categorical" else pk
+        if res.kind == "categorical":
+            plan.findings += class_colour_twins(l.id, list(res.labels), list(colors), counts=list(getattr(res, "counts", None) or []))
         integer_style = bool(getattr(res, "integer_data", False)) and int(getattr(res, "decimals", 0) or 0) == 0 and c.get("label_style") != "continuous"
         if res.kind != "categorical" and plan.look == "classic":
             res.labels = cf.classic_labels(res.labels, integer_style)       # 1.2.0: the classic look keeps "a to under b"
@@ -2519,6 +2682,8 @@ def style_layer(plan: Plan, l: LayerPlan) -> None:
             if (ly.get("source") or {}).get("type") == "h3":
                 swatch = "hexagon"
             l.legend_block = lg.class_block(titled(ly, l), res, colors, t, swatch=swatch)
+        if c.get("groups") and l.legend_block is not None:   # 5.5.0 (D26-42): grouped headings over the classes
+            l.notes += lg.apply_groups(l.legend_block, c["groups"])
         if (ly.get("source") or {}).get("type") == "h3":
             h3_cells_style(plan, l, ly, res, t)
     import map_look

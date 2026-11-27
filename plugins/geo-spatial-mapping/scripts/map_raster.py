@@ -1186,7 +1186,7 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
     attribution = rec.get("attribution")
     src_name = {"3dep": "USGS 3D Elevation Program (3DEP) bare-earth DEM", "terrarium": "Terrain Tiles on AWS (Mapzen Terrarium)",
                 "copernicus": "Copernicus DEM GLO-30 (surface model)", **{k: tf.source_info(k).get("title") or k for k in DEM_FETCHED}}.get(
-                    rec.get("source"), f"DEM supplied by the person ({Path(dem_path).name})")
+                    rec.get("source"), (entry or {}).get("title") or f"DEM supplied by the person ({Path(dem_path).name})")
     if rec.get("source") == "mosaic":                                  # 2.5.0 (T-03): every source the window used, by its share
         nm = {"3dep": "USGS 3DEP", "copernicus": "Copernicus DEM GLO-30", "terrarium": "Terrain Tiles on AWS", **{k: tf.source_info(k).get("credit") or k for k in DEM_FETCHED}}
         src_name = "DEM mosaic of " + " and ".join(f"{nm.get(x['source'], x['source'])} ({x['share']:.0%})" for x in rec.get("sources") or [])
@@ -1205,7 +1205,8 @@ def relief_item(plan, dem_path: str, rec: dict, win, shape, *, opacity: float, z
               "attribution_text": attribution, "crs_original": str(rec.get("crs") or "unknown"), "crs_used": plan.crs,
               "transformations": [step] + ([f"DEM fetched {rec.get('retrieved_at')}: {pub.get('request_count', 0)} request(s), {pub.get('request_bytes', 0) / 1e6:.1f} MB"
                                             + (" (from the cache)" if rec.get("cached") else "")] if rec.get("source") in ("3dep", "terrarium", "copernicus", "mosaic") + DEM_FETCHED else
-                                           [f"a DEM supplied by the person ({Path(dem_path).name}); nothing was fetched"]),
+                                           [f"a DEM read from {Path(dem_path).name}, fetched earlier from library entry {entry.get('id')}" if entry else
+                                            f"a DEM supplied by the person ({Path(dem_path).name}); nothing was fetched"]),
               "row_count": 0, "library_ref": entry_rec.get("id") if entry else None, "library_rev": entry_rec.get("rev") if entry else None,
               "sha256": rec.get("sha256") or _sha(dem_path), "terrain": pub}
     extra = []
@@ -1372,6 +1373,9 @@ def terrain_context(plan, win, shape, why: str, explicit: bool, tier: str) -> No
     z = exaggeration(cfg["exaggeration"], tier)
     try:
         entry = _dem_entry(r["record"])
+        tent = (plan.spec.get("terrain") or {}).get("entry")
+        if entry is None and tent:                        # 5.5.0 (D26-09): a file the job fetched from the library is credited to that entry
+            entry = _dem_entry({"entry": str(tent) if str(tent).startswith("ref.") else f"ref.{tent}"})
         op = relief_opacity_auto(plan) if cfg.get("opacity_auto") else cfg["opacity"]
         cfg = {**cfg, "opacity": op}
         item = relief_item(plan, r["path"], r["record"], win, None, opacity=op, z=z, layer_id="terrain", entry=entry, title="Relief",

@@ -67,7 +67,7 @@ def load_values(v, duration: float | None) -> dict:
         sp = {} if sp is True else None
     return {"layer": str(v["layer"]), "columns": [str(c) for c in cols] if cols else None, "column_prefix": v.get("column_prefix"),
             "interpolate": mode, "cyclic": bool(v.get("cyclic")), "start": start, "end": end, "sparkline": sp,
-            "opacity": float(v.get("opacity", 0.0)) or None}
+            "opacity": float(v.get("opacity", 0.0)) or None, "outline": v.get("outline", True) is not False}
 
 
 def load_flow(f, duration: float | None) -> dict:
@@ -83,6 +83,8 @@ def load_flow(f, duration: float | None) -> dict:
     dash = {"length_mm": 3.0, "gap_mm": 7.0, "speed_mm_s": 9.0, **(dash if isinstance(dash, dict) else {})} if dash is not False else None
     front = f.get("front", True)
     front = {"glow": True, **(front if isinstance(front, dict) else {})} if front is not False else None
+    if front is not None and front.get("marker") not in (None, "auto", "point", "none", False):
+        raise MotionError(f"flow.front.marker is point, none or auto, not '{front.get('marker')}'")
     return {"layer": str(f["layer"]), "from": f.get("from"), "measure_field": f.get("measure_field"), "snap_m": float(f.get("snap_m", 400)),
             "gap_m": float(f.get("gap_m", 0)), "densify_m": float(f.get("densify_m", 25)), "start": start, "arrive_s": arrive,
             "width_mm": float(f["width_mm"]) if f.get("width_mm") else None, "dry": f.get("dry", True) is not False, "dash": dash,
@@ -239,9 +241,13 @@ class Values:
                 continue
             for p in parts:
                 d.polygon(p, fill=tuple(int(x) for x in c) + (self.alpha,))
-        for parts in self.polys:
-            for p in parts:
-                d.line(p + [p[0]], fill=self.edge + (150,), width=SS)
+        if self.cfg.get("outline", True):
+            # 5.5.0 (D26-24): only the features that have a value at t are outlined; a track cut into 160 cells read as a white ladder
+            for parts, v in zip(self.polys, vals):
+                if not np.isfinite(v):
+                    continue
+                for p in parts:
+                    d.line(p + [p[0]], fill=self.edge + (150,), width=SS)
         return ov.resize((W, H), Image.LANCZOS)
 
     def series(self) -> np.ndarray:
@@ -250,6 +256,26 @@ class Values:
 
 
 # --------------------------------------------------------------------------------------------------------------------------- flow
+def _token_hex(tokens: dict, ref) -> str:
+    """'@brand.status.danger' or '#rrggbb' -> '#rrggbb' (5.5.0: a flow marker's colour)."""
+    s = str(ref or "")
+    if not s.startswith("@"):
+        return s
+    cur = tokens
+    for k in s.lstrip("@").split(".")[1:]:
+        if isinstance(cur, dict):
+            cur = cur.get(k)
+        elif isinstance(cur, (list, tuple)) and k.isdigit() and int(k) < len(cur):
+            cur = cur[int(k)]
+        else:
+            cur = None
+    return str(cur) if isinstance(cur, str) else str(tokens.get("emphasis"))
+
+
+def _rgb_page(flow) -> tuple:
+    return getattr(flow, "page", (255, 255, 255))
+
+
 class Flow:
     """A line layer filled from its source over time: the water to its head, dashes moving downstream, a glow at each head."""
 
@@ -297,13 +323,25 @@ class Flow:
             self.max_m = res["max_m"]
             self.note = (f"flow along '{cfg['layer']}': {res['reached_m'] / 1000:,.1f} of {res['total_m'] / 1000:,.1f} km reached from the source, "
                          f"the farthest {res['max_m'] / 1000:,.1f} km" + (f"; {res['gaps']} gap(s) bridged" if res["gaps"] else ""))
+        self.parts_xy = [(i, np.asarray(c, dtype=float), np.asarray(d, dtype=float)) for i, c, d in parts]     # 5.5.0: display coordinates (a profile reads them)
         self.parts = [(i, np.array([[v * SS for v in to_px(x, y)] for x, y in c]), d) for i, c, d in parts]
+        fr = cfg.get("front") or {}
+        mk = fr.get("marker", "auto")
+        # 5.5.0 (D26-33, Q-01): a single route (a ship, a vehicle) carries a solid marker at its front, the strongest mark on the frame; a
+        # network keeps the soft glow at each head
+        self.marker = cfg.get("front") is not None and ((mk == "point") or (mk in ("auto", None) and len({i for i, _, _ in parts}) == 1))
+        self.marker_r = max(2, int(round(float(fr.get("size_mm") or 3.0) / 2 * ppm * SS)))
+        mc = fr.get("colour") or fr.get("color")
+        self.marker_col = _rgb(_token_hex(tokens, mc) if mc else ((tokens.get("status") or {}).get("danger") or tokens["emphasis"]))
+        self.marker_halo = fr.get("halo", True) is not False
         w_mm = cfg["width_mm"] or max(0.6, float(getattr(layer, "stroke_w_mm", 0.6) or 0.6) * 1.6)
         self.w = max(1, int(round(w_mm * ppm * SS)))
         self.water = _rgb(getattr(layer, "stroke", None) or tokens["emphasis"])
         # the channel still to fill: the water's own colour mixed far toward the page, so it reads as the same canal, empty
         bg = _rgb(tokens.get("background", "ffffff"))
         self.dry = tuple(int(w * 0.32 + b * 0.68) for w, b in zip(self.water, bg))
+        self.page = bg
+        self.crs_display = crs_disp
         self.foam = tuple(int(255 - (255 - c) * 0.15) for c in self.water)
         self.glow = tuple(min(255, int(c * 0.5 + 255 * 0.5)) for c in self.water)
         self.arrive = cfg["arrive_s"] or 20.0
@@ -322,6 +360,72 @@ class Flow:
 
     def front_m(self, t: float) -> float:
         return max(0.0, (t - self.cfg["start"])) * self.speed
+
+    def progress(self, t: float) -> float:
+        """5.5.0 (D26-23): how far along the flow is at t, 0 to 1 (a chart's marker and a day counter read it, so they cannot drift)."""
+        return float(min(1.0, self.front_m(t) / max(self.max_m, 1e-9)))
+
+    def time_at_m(self, m: float) -> float:
+        """The video second the front reaches m metres along (a story beat tied to a distance)."""
+        return float(self.cfg["start"] + max(0.0, m) / max(self.speed, 1e-9))
+
+    def head_px(self, t: float) -> list:
+        """The front's position(s) in frame pixels at t (one per part still filling; the end when it has arrived)."""
+        fm = min(self.front_m(t), self.max_m)
+        out = []
+        for _, P, r in self.parts:
+            ok = np.isfinite(r)
+            if not ok.any():
+                continue
+            rr = np.where(ok, r, np.nan)
+            if fm >= np.nanmax(rr):
+                if fm >= self.max_m and np.nanmax(rr) >= self.max_m - 1e-6:
+                    k = int(np.nanargmax(rr))
+                    out.append(tuple(P[k] / SS))
+                continue
+            below = np.flatnonzero(ok & (r <= fm))
+            if not len(below):
+                continue
+            k = below.max()
+            if k + 1 < len(P) and ok[k + 1] and r[k + 1] > r[k]:
+                f = (fm - r[k]) / (r[k + 1] - r[k])
+                out.append(tuple((P[k] + (P[k + 1] - P[k]) * f) / SS))
+        return out
+
+    def profile(self, raster: str | None = None, column: str | None = None, layer=None, samples: int = 240) -> tuple:
+        """5.5.0 (D26-23): a value along the flow, by distance: from a raster sampled at `samples` points, or a column of the flow layer.
+        -> (distance m, value) arrays, in order of distance."""
+        ds, vs = [], []
+        if column is not None:
+            if layer is None or column not in layer.gdf.columns:
+                raise MotionError(f"chart.column: the flow layer has no column '{column}'")
+            col = np.asarray(layer.gdf[column], dtype=float)
+            for i, _c, d in self.parts_xy:
+                ok = np.isfinite(d)
+                ds += list(d[ok])
+                vs += [col[i]] * int(ok.sum())
+        elif raster:
+            import rasterio
+            from pyproj import Transformer
+            allp = np.concatenate([np.c_[c[np.isfinite(d)], d[np.isfinite(d)]] for _i, c, d in self.parts_xy]) if self.parts_xy else np.zeros((0, 3))
+            if not len(allp):
+                raise MotionError("chart: the flow has no measured line to sample")
+            allp = allp[np.argsort(allp[:, 2])]
+            want = np.linspace(allp[0, 2], allp[-1, 2], max(8, int(samples)))
+            xs, ys = np.interp(want, allp[:, 2], allp[:, 0]), np.interp(want, allp[:, 2], allp[:, 1])
+            with rasterio.open(raster) as src:
+                crs_from = getattr(self, "crs_display", None)
+                import water_ops as _wo
+                if crs_from is not None and src.crs is not None and not _wo._same_crs(src.crs, crs_from):
+                    xs, ys = Transformer.from_crs(crs_from, src.crs, always_xy=True).transform(xs, ys)
+                vals = np.array([v[0] for v in src.sample(zip(xs, ys))], dtype=float)
+                if src.nodata is not None:
+                    vals[vals == src.nodata] = np.nan
+            ds, vs = list(want), list(vals)
+        else:
+            raise MotionError("chart kind profile needs raster: FILE or column: NAME (a value along the flow)")
+        o = np.argsort(ds)
+        return np.asarray(ds, dtype=float)[o], np.asarray(vs, dtype=float)[o]
 
     def real_hours(self, t: float) -> float:
         """Real hours since the start at speed_kmh (for a counter)."""
@@ -371,6 +475,14 @@ class Flow:
                         i = j + 1
                     else:
                         i += 1
+        if self.marker:
+            R = self.marker_r
+            for hx, hy in self.head_px(t):
+                X, Y = hx * SS, hy * SS
+                if self.marker_halo:
+                    h_ = R + max(SS, int(R * 0.45))
+                    d.ellipse([X - h_, Y - h_, X + h_, Y + h_], fill=_rgb_page(self) + (255,))
+                d.ellipse([X - R, Y - R, X + R, Y + R], fill=self.marker_col + (255,))
         ov = ov.resize((W, H), Image.LANCZOS)
         gl = gl.resize((W, H), Image.LANCZOS).filter(ImageFilter.GaussianBlur(max(2, self.w // 2)))
         out = Image.new("RGBA", (W, H), (0, 0, 0, 0))

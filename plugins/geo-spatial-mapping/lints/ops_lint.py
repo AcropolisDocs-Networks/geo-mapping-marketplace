@@ -38,7 +38,8 @@ OP_NAMES = ("buffer", "centroid", "representative_point", "clip", "intersect", "
             "spatial_join", "nearest", "dissolve", "explode", "dedupe", "repair", "make_valid", "simplify", "antimeridian_split", "convex_hull",
             "concave_hull", "voronoi", "area", "length", "count_in", "sum_in", "population_covered", "coverage_share", "overlap", "grid", "hexbin",
             "raster_zonal", "line_of_sight", "viewshed", "geocode", "as_of", "fill_holes", "massing", "split_by", "thin_lines", "reconcile",
-            "dot_density", "density_surface", "flow_lines", "network_nearest", "network_distance", "light_budget")
+            "dot_density", "density_surface", "flow_lines", "network_nearest", "network_distance", "light_budget",
+            "depressions", "trace_downstream", "sample_along", "sea_route")     # 5.5.0 (D26-13): water ops
 ZONAL_STATS = ("sum", "mean", "min", "max", "count", "majority", "median", "std")
 NEEDS_LAYER = ("clip", "intersect", "intersection", "union", "difference", "symmetric_difference", "spatial_join", "nearest", "count_in", "sum_in",
                "population_covered", "coverage_share", "split_by", "reconcile")

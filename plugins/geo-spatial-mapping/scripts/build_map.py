@@ -212,6 +212,29 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
             plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, window=wider, spec_edit=keyed)
             rendered = mr.render(plan)
             plan.notes.append("legend.direct: " + ", ".join(f"'{c}'" for c in crowded) + " found no room for a name on the map and stayed in the legend")
+        # 5.6.0 (Q-01): the subject's share of the attention, measured on the drawing; under map_emphasis.ATTENTION_MIN the subject is
+        # boosted again (wider, and the ground and context step back) and the map drawn once more. The draft says both numbers.
+        import map_emphasis as _me
+        ids = getattr(plan, "_subject_ids", None)
+        if ids and os.environ.get("GMAP_NO_ATTENTION") != "1" and (plan.spec.get("style") or {}).get("subject_boost") != "strong":
+            share = _me.subject_attention(rendered.svg, ids)
+            rendered.report["subject_attention"] = {"layers": list(ids), "share": share}
+            if share is not None and share < _me.ATTENTION_MIN:
+                def stronger(spec_, _prev=(keyed if crowded else spec_edit)):
+                    if _prev:
+                        _prev(spec_)
+                    if not isinstance(spec_.get("style"), dict):
+                        spec_["style"] = {}
+                    spec_["style"]["subject_boost"] = "strong"
+                plan2 = mp.prepare(spec_path, mode=mode, brand=brand, template=template, window=wider, spec_edit=stronger)
+                rendered2 = mr.render(plan2)
+                share2 = _me.subject_attention(rendered2.svg, ids)
+                if share2 is None or share2 > share:
+                    plan, rendered = plan2, rendered2
+                    rendered.report["subject_attention"] = {"layers": list(ids), "share": share2, "before": share}
+                    plan.notes.append(f"emphasis: the subject ({', '.join(ids)}) held {share:.0%} of the attention, under {_me.ATTENTION_MIN:.0%}; "
+                                      f"boosted again, it holds {share2:.0%}" if share2 is not None else
+                                      f"emphasis: the subject held {share:.0%} of the attention; boosted again")
     else:
         plan, rendered = web.plan, web.rendered            # the page's own plan: static scale bar off, bundled basemap
     # write the resolved brand back so a later default change never restyles this map

@@ -133,6 +133,7 @@ def known(entry_id: str) -> bool:
 # --------------------------------------------------------------------------------------------------------------- COG tiles (5.2.0)
 COG_MAX_TILES = 4
 COG_MAX_PX = 3000
+ANALYSIS_MAX_BYTES = 600_000_000      # 5.5.0 (D26-12): the most an analysis read (--max-px, --res) may hold, as float32 cells
 
 
 def cog_tile_name(pattern: str, lon: float, lat: float) -> str:
@@ -519,7 +520,27 @@ def window_download(url: str, size: int, bounds_wgs84, root: Path, http, *, max_
 
 
 # --------------------------------------------------------------------------------------------------------------- the one call
-def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, variant: str | None = None, params: dict | None = None) -> dict:
+def analysis_max_px(bounds_wgs84, *, max_px: int | None = None, res_m: float | None = None) -> tuple[int | None, dict]:
+    """5.5.0 (D26-12): the cells a side an analysis read may take: --max-px N, or --res METRES (cells from the window's longer side). Capped
+    by a byte budget (ANALYSIS_MAX_BYTES at 4 bytes a cell). -> (max_px or None for the entry's own cap, the cost said before the read)."""
+    import math
+    if not max_px and not res_m:
+        return None, {}
+    b = [float(v) for v in bounds_wgs84]
+    lat = math.radians((b[1] + b[3]) / 2)
+    w_m = abs(b[2] - b[0]) * 111320 * max(0.05, math.cos(lat))
+    h_m = abs(b[3] - b[1]) * 110574
+    want = int(max_px) if max_px else int(math.ceil(max(w_m, h_m) / float(res_m)))
+    cap = int(math.sqrt(ANALYSIS_MAX_BYTES / 4))
+    px = max(256, min(want, cap))
+    aspect = min(w_m, h_m) / max(w_m, h_m, 1.0)
+    cost = {"asked_px": want, "max_px": px, "capped": want > cap, "cell_m": round(max(w_m, h_m) / px, 2),
+            "estimated_bytes": int(px * px * aspect * 4), "budget_bytes": ANALYSIS_MAX_BYTES}
+    return px, cost
+
+
+def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, variant: str | None = None, params: dict | None = None,
+               max_px: int | None = None) -> dict:
     """A local GeoTIFF of the library raster covering the window. -> {path, record, findings, entry}.
     `params` (5.3.0) is the layer's own source block: imagery reads its dates, cloud limit, product and pick from it."""
     if entry_id not in ENTRIES and stac_block(entry_id) is not None:
@@ -553,7 +574,7 @@ def raster_for(entry_id: str, bounds_wgs84, *, cache_dir=None, http=None, varian
         if name:
             rec["variant"] = name
     elif block is not None:
-        path, rec, findings, cached = cog_window(entry_id, block, bounds_wgs84, root, h, variant)
+        path, rec, findings, cached = cog_window(entry_id, {**block, "max_px": max_px} if max_px else block, bounds_wgs84, root, h, variant)
         fetched_from_cache.append(cached)
     elif entry_id == HRSL:
         path, r, cached = hrsl_window(bounds_wgs84, root)
@@ -690,7 +711,7 @@ def cog_window(entry_id: str, block: dict, bounds_wgs84, root: Path, http, varia
     if factor > 1:
         findings.append({"id": "MAP-TER-005", "severity": "INFO", "detail": {"factor": factor, "max_px": max_px},
                          "message": f"the window is wider than {max_px} cells of {entry_id}, so one cell in every {factor} was read (from the file's overviews); "
-                                    "a smaller window reads it at full grain"})
+                                    "a smaller window, or --res METRES / --max-px N for an analysis step, reads it finer"})
     return out, rec, findings, False
 
 
@@ -754,13 +775,23 @@ def main(argv=None) -> int:
     ap.add_argument("entry", help="a library raster id: " + ", ".join(ENTRIES) + ", or any entry with a delivery.cog block")
     ap.add_argument("--bounds", required=True, help="lon0,lat0,lon1,lat1")
     ap.add_argument("--variant", help="the product of an entry that has several (delivery.cog.variants), or WorldPop's unadj")
+    ap.add_argument("--max-px", type=int, help="5.5.0: cells a side for an analysis step (the entry's cap is for a map), within the byte budget")
+    ap.add_argument("--res", type=float, help="5.5.0: the cell size wanted, in metres (sets --max-px from the window)")
+    ap.add_argument("--plan", action="store_true", help="5.5.0: say the read's cells and bytes, and read nothing")
     a = ap.parse_args(argv)
+    bounds = tuple(float(v) for v in a.bounds.split(","))
+    px, cost = analysis_max_px(bounds, max_px=a.max_px, res_m=a.res)
+    if a.plan:
+        print(json.dumps({"entry": a.entry, "bounds": bounds, "cost": cost or {"max_px": COG_MAX_PX, "note": "the entry's own cap (a map's read)"}}, indent=2))
+        return gc.EXIT_OK
+    if cost.get("capped"):
+        print(f"the read is capped at {px} cells a side ({cost['cell_m']} m) by the byte budget; a smaller window reads finer", file=sys.stderr)
     try:
-        r = raster_for(a.entry, tuple(float(v) for v in a.bounds.split(",")), variant=a.variant)
+        r = raster_for(a.entry, bounds, variant=a.variant, max_px=px)
     except rio.RasterError as e:
         print(str(e), file=sys.stderr)
         return gc.EXIT_RUNTIME
-    print(json.dumps({"path": r["path"], "record": r["record"], "findings": r["findings"]}, indent=2, default=str))
+    print(json.dumps({"path": r["path"], "record": r["record"], "findings": r["findings"], **({"cost": cost} if cost else {})}, indent=2, default=str))
     return gc.EXIT_OK
 
 

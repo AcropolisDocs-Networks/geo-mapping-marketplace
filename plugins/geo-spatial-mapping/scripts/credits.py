@@ -147,6 +147,7 @@ def items(plan) -> list[Item]:
     layers = [l for l in pv.all_layers(plan) if pv.credited(l)]      # 2.1.0: provenance.credit: false is the map maker's own annotation
     out = [layer_item(l, "data") for l in layers if l.role != "context"]
     out += [basemap_item(b) for b in plan.basemap if b.get("kind") != "hillshade"]
+    out += [basemap_item(b) for b in getattr(plan, "detail_basemap", None) or []]       # 5.5.0 (D26-11): the detail inset's own ground
     out += [basemap_item(b) for b in plan.basemap if b.get("kind") == "hillshade"]
     # 2.5.0 (T-03, T-05): a relief mosaicked from several DEMs credits every source the window used
     out += [basemap_item({"entry": e, "kind": "hillshade"}) for b in plan.basemap if b.get("kind") == "hillshade" for e in b.get("extra_entries") or []]
@@ -171,8 +172,15 @@ def _display(org: str, pub: dict | None, products: list, required: list, vias: l
     # 3.4.0 (Day 21 #18): "derived by © OpenStreetMap contributors" under © OpenStreetMap contributors says the source twice: a via whose maker
     # is the credited organization itself is dropped
     vias = [v for v in vias if not any(_same_party(v.split(" by ", 1)[-1], x) for x in [org, *required])]
-    inner = list(dict.fromkeys(products + vias))
     head = "; ".join(required) if required else org
+    inner, seen = [], set()
+    for x in products + vias:
+        k = _norm_credit(x)
+        # 5.5.0 (D26-21): a product said once per organization, and not again when the head already names it ("GEBCO 2026 Grid (GEBCO 2026 Grid)")
+        said = re.search(r"(?<![a-z0-9])" + re.escape(k) + r"(?![a-z0-9])", _norm_credit(head)) is not None
+        if k and k not in seen and not (said and (required or k == _norm_credit(org))):
+            seen.add(k)
+            inner.append(x)
     if not inner:
         return head
     if head.endswith(")"):           # 4.1.0: required wording stays word for word (MAP-LIC-017); "Census (ACS) (Boundary Files)" is not read twice

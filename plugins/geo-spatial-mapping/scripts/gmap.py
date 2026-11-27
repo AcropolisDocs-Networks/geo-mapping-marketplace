@@ -293,9 +293,15 @@ def cmd_brief(a) -> int:
     if a.region:
         import recipe
         brief["region"] = recipe.region_block(a.region)
-    supplied = [k for k in ("title", "subtitle", "tagline") if getattr(a, k)]
-    for k in supplied:
-        brief[k] = getattr(a, k)
+    # 5.5.0 (D26-14): --title is text the model wrote (checked by map-text); --title-supplied is the person's own words (left as given)
+    supplied = []
+    for k in ("title", "subtitle", "tagline"):
+        mine, theirs = getattr(a, k), getattr(a, f"{k}_supplied", None)
+        if theirs:
+            brief[k] = theirs
+            supplied.append(k)
+        elif mine:
+            brief[k] = mine
     brief["supplied"] = supplied
     if a.style_pack:
         brief["style_pack"] = a.style_pack
@@ -622,10 +628,38 @@ def cmd_need(a) -> int:
         e = {"theme": name, "answer": None}
         job["enrich"].append(e)
     e.update(answer="declined", why=a.why.strip())
+    # 5.5.0 (D26-16): a need the brief or the intent added is declined too; compose used to stop on it ("no source is taken for")
+    for n in job["needs"]:
+        if n["theme"] == name and n.get("status") != "chosen":
+            n.update(status="declined", why=a.why.strip())
+    _one_choice_serves(job)
     log(job, "sources", f"declined: {name}", why=a.why.strip())
     save(job)
     out([f"declined: {name} ({a.why.strip()})"])
     return gc.EXIT_OK
+
+
+SERVES_BOTH = {"elevation": "bathymetry", "bathymetry": "elevation"}
+
+
+def _one_choice_serves(job: dict) -> list[str]:
+    """5.5.0 (D26-16): an entry on both sheets (GEBCO holds land and sea floor) chosen for one need serves the other, which is then not open."""
+    said = []
+    try:
+        import themes
+        tdoc = themes.load()
+    except Exception:  # noqa: BLE001
+        return said
+    for n in job["needs"]:
+        other = SERVES_BOTH.get(n["theme"])
+        if n.get("status") != "chosen" or not other:
+            continue
+        o = next((x for x in job["needs"] if x["theme"] == other and x.get("status") not in ("chosen", "declined")), None)
+        ents = [str(x) for x in ((tdoc.get("themes") or {}).get(other) or {}).get("entries") or []]
+        if o and str(n.get("chosen") or "").removeprefix("ref.") in ents:
+            o.update(status="served", served_by=n["chosen"])
+            said.append(f"{other}: served by {n['chosen']} (chosen for {n['theme']})")
+    return said
 
 
 # ---------------------------------------------------------------------------------------------------------------- data
@@ -720,6 +754,12 @@ def data_plan(job: dict) -> list[dict]:
     """How each chosen source comes in: by the build itself (a `ref` layer), by a data tool on the person's computer, or as a file to bring."""
     plan = []
     for n in job["needs"]:
+        if n.get("status") == "declined":
+            plan.append({"need": n["theme"], "how": "declined", "says": f"declined ({n.get('why') or 'no reason given'})"})
+            continue
+        if n.get("status") == "served":
+            plan.append({"need": n["theme"], "how": "served", "says": f"served by {n.get('served_by')}"})
+            continue
         if n.get("status") != "chosen":
             plan.append({"need": n["theme"], "how": "open", "says": "no source taken yet (gmap.py choose)"})
             continue
@@ -746,6 +786,13 @@ def data_plan(job: dict) -> list[dict]:
             plan.append({"need": n["theme"], "how": "imagery", "says": f"a picture read for the map's window by the draft (source: {{type: ref, id: {n['chosen']}"
                          + (", dates: START/END" if st.get("cloud_property") else "") + "}); before it, the scenes and what the read would cost: "
                          f'python3 "$GMAP_ROOT/scripts/imagery.py" plan {n["chosen"]} --bounds={box}' + (" --dates 2024-06-01/2024-09-30" if st.get("cloud_property") else "")})
+        elif isinstance((e.get("delivery") or {}).get("cog"), dict) and not isinstance((e.get("delivery") or {}).get("window"), dict):
+            # 5.5.0 (D26-40, D26-12): a cloud-optimized raster is read by raster_fetch.py, not window_read.py (which said "no delivery.window block")
+            b = job["brief"].get("bbox")
+            box = ",".join(f"{float(v):g}" for v in b) if b else "W,S,E,N"
+            plan.append({"need": n["theme"], "how": "raster", "says": f"a raster read for the map's window by byte range: "
+                         f'python3 "$GMAP_ROOT/scripts/raster_fetch.py" {n["chosen"]} --bounds={box} --plan  (the cost first; for an analysis step '
+                         "--res METRES or --max-px N reads finer than the map needs, within the byte budget)"})
         elif isinstance((e.get("delivery") or {}).get("window"), dict):   # 5.4.0: a bulk source read for the map's window; the plan is the cost line
             w = e["delivery"]["window"]
             b = job["brief"].get("bbox")
@@ -822,32 +869,61 @@ def cmd_data(a) -> int:
         if not sp.is_file():
             raise JobError(f"{a.script} is not a file here")
         ins = [Path(x) for x in a.src_many or []]
-        outs = [Path(x) for x in a.out_many or []]
-        if not outs:
-            raise JobError("a registered step names what it writes: --out FILE [FILE ...]")
+        outs, out_roles = [], []
+        for x in a.out_many or []:                          # 5.5.0 (D26-02): --out FILE[:role]; a Windows drive letter is never a role
+            head, sep, role = str(x).rpartition(":")
+            if sep and role in STEP_ROLES and head:
+                outs.append(Path(head))
+                out_roles.append(role)
+            else:
+                outs.append(Path(x))
+                out_roles.append(None)
+        sidecars = [Path(x) for x in a.sidecar or []]
+        if not outs and not sidecars:
+            raise JobError("a registered step names what it writes: --out FILE[:role] [FILE ...] (drawn) and --sidecar FILE (not drawn)")
         body = sp.read_text(encoding="utf-8", errors="replace")
         libs = sorted({m for m in re.findall(r"^\s*(?:import|from)\s+([A-Za-z_][A-Za-z0-9_]*)", body, re.M) if m in GEO_LIBS})
         before = {str(p): sha256(p) for p in ins}
-        rc = subprocess.run([sys.executable, str(sp), *(a.rest or [])], capture_output=True, text=True)
+        # 5.5.0 (D26-39): the contract. The script gets its inputs and outputs as JSON lists in GMAP_STEP_IN, GMAP_STEP_OUT and
+        # GMAP_STEP_SIDECAR (absolute paths, in the order given), so it needs no hard-coded path; anything after -- is passed on as is.
+        env = {**os.environ, "GMAP_STEP_IN": json.dumps([str(p.resolve()) for p in ins]), "GMAP_STEP_OUT": json.dumps([str(p.resolve()) for p in outs]),
+               "GMAP_STEP_SIDECAR": json.dumps([str(p.resolve()) for p in sidecars]), "GMAP_JOB": job["id"]}
+        rc = subprocess.run([sys.executable, str(sp), *(a.rest or [])], capture_output=True, text=True, env=env)
         tail = (rc.stdout or "")[-1200:] + (("\n" + rc.stderr[-1200:]) if rc.returncode else "")
         if rc.returncode != 0:
             print(tail)
             raise JobError(f"the step's script ended with exit {rc.returncode}; nothing was registered", gc.EXIT_RUNTIME)
-        missing = [str(p) for p in outs if not p.is_file()]
+        missing = [str(p) for p in outs + sidecars if not p.is_file()]
         if missing:
             raise JobError(f"the step did not write {', '.join(missing)}; nothing was registered")
         parents = [d for d in job["data"] if d.get("path") and Path(d["path"]).resolve() in [p.resolve() for p in ins]]
         lic = "; ".join(sorted({d["provenance"]["license"] for d in parents})) or (a.license or "as its sources")
         src = a.source or ("Derived (" + name + ") from " + (" and ".join(d["provenance"]["source"] for d in parents) or ", ".join(p.name for p in ins) or "the session's own script"))
-        items = []
+        items, said = [], []
+        o_src, o_lic = list(a.out_source or []), list(a.out_license or [])
+        common = {"door": "registered step", "script": sp.name, "script_sha256": sha256(sp), "libraries": libs,
+                  "inputs": [{"path": str(q.resolve()), "sha256": before[str(q)]} for q in ins], "candidate_op": True}
         for k, p in enumerate(outs):
-            items.append({"name": name if len(outs) == 1 else f"{name}-{k + 1}", "door": "registered step", "script": sp.name, "script_sha256": sha256(sp), "libraries": libs,
-                          "inputs": [{"path": str(q.resolve()), "sha256": before[str(q)]} for q in ins], "path": str(p.resolve()), "sha256": sha256(p), "bytes": p.stat().st_size,
-                          "kind": _kind_of_file(p), "provenance": {"source": src, "license": lic, "retrieved_at": dt.date.today().isoformat()}, "candidate_op": True, "at": now()})
+            kind = _kind_of_file(p)
+            nm = name if len(outs) == 1 else f"{name}-{k + 1}"
+            prov = {"source": (o_src[k] if k < len(o_src) and o_src[k] else src), "license": (o_lic[k] if k < len(o_lic) and o_lic[k] else lic),
+                    "retrieved_at": dt.date.today().isoformat()}
+            item = {"name": nm, **common, "path": str(p.resolve()), "sha256": sha256(p), "bytes": p.stat().st_size, "kind": kind, "provenance": prov, "at": now()}
+            if out_roles[k]:
+                item["role"] = out_roles[k]
+            if kind is None:                                # not geodata (a stats JSON, a CSV with no geometry): kept beside the map, never a layer
+                item.update(sidecar=True, draw=False)
+                said.append(f"  {p.name}: no geometry, kept as a sidecar (not drawn)")
+            items.append(item)
+        for p in sidecars:
+            items.append({"name": f"{name}-{slug(p.stem, 20)}", **common, "path": str(p.resolve()), "sha256": sha256(p), "bytes": p.stat().st_size, "kind": None,
+                          "sidecar": True, "draw": False, "provenance": {"source": src, "license": lic, "retrieved_at": dt.date.today().isoformat()}, "at": now()})
         job["data"] = [d for d in job["data"] if d["name"] not in {i["name"] for i in items}] + items
-        log(job, "data", f"registered step {name}", libraries=libs, outputs=len(outs))
+        log(job, "data", f"registered step {name}", libraries=libs, outputs=len(outs), sidecars=sum(1 for i in items if i.get("sidecar")))
         save(job)
-        out([f"registered step '{name}': {sp.name} ({', '.join(libs) or 'no geodata library'}) wrote {len(outs)} file(s); listed as a candidate op",
+        drawn = [i for i in items if not i.get("sidecar")]
+        out([f"registered step '{name}': {sp.name} ({', '.join(libs) or 'no geodata library'}) wrote {len(drawn)} layer file(s) and "
+             f"{len(items) - len(drawn)} sidecar(s); listed as a candidate op", *said,
              "  " + (tail.strip().splitlines()[-1][:200] if tail.strip() else "")] + next_lines("compose"))
         return gc.EXIT_OK
     else:
@@ -861,6 +937,7 @@ def cmd_data(a) -> int:
 
 # ---------------------------------------------------------------------------------------------------------------- compose and set
 ROLE_OF = {"point": "points", "line": "lines", "polygon": "polygons", "raster": "raster"}
+STEP_ROLES = {"points", "lines", "polygons", "raster", "choropleth", "proportional", "context", "hillshade", "heat"}
 
 
 def compose_spec(job: dict, spec_dir: Path) -> dict:
@@ -909,6 +986,10 @@ def compose_spec(job: dict, spec_dir: Path) -> dict:
             policy._set(spec, "terrain.source", d["path"] if d else rs_name)
             if d:
                 used.add(d["name"])
+                if d.get("ref"):                         # 5.5.0 (D26-09): the file is the library entry's, and is credited to it
+                    policy._set(spec, "terrain.entry", d["ref"])
+                if d.get("provenance") and d.get("door") != "library fetch":
+                    policy._set(spec, "terrain.provenance", d["provenance"])
             continue
         if d is None and n.get("needs_computer"):
             continue
@@ -930,7 +1011,13 @@ def compose_spec(job: dict, spec_dir: Path) -> dict:
         if any(d["path"] in (x.get("inputs") or []) or any(isinstance(i, dict) and i.get("path") == d["path"] for i in x.get("inputs") or []) for x in job["data"] if x is not d):
             continue                                        # an input of a later step: the result is drawn, not the input
         kind = d.get("kind")
-        layers.append({"id": d["name"].replace("-", "_"), "source": _source_of(d, spec_dir), "role": roles.get(kind) or ROLE_OF.get(kind) or "polygons", "provenance": d["provenance"]})
+        if d.get("sidecar") or kind is None:                # 5.5.0 (D26-02): a file with no geometry is never a layer
+            continue
+        if d.get("door") == "registered step":              # its role is what it is (raster, not the intent's hillshade), unless the step said
+            role = d.get("role") or ROLE_OF.get(kind) or "polygons"
+        else:
+            role = roles.get(kind) or ROLE_OF.get(kind) or "polygons"
+        layers.append({"id": d["name"].replace("-", "_"), "source": _source_of(d, spec_dir), "role": role, "provenance": d["provenance"]})
     spec["layers"] = layers
     return spec
 
@@ -954,7 +1041,8 @@ def write_spec(path: Path, spec: dict) -> None:
 
 def cmd_compose(a) -> int:
     job = load(a.job)
-    open_ = [n["theme"] for n in job["needs"] if n.get("status") != "chosen"]
+    _one_choice_serves(job)
+    open_ = [n["theme"] for n in job["needs"] if n.get("status") not in ("chosen", "declined", "served")]
     if open_:
         raise JobError(f"no source is taken for: {', '.join(open_)} (gmap.py sources, then gmap.py choose)", EXIT_PERSON)
     waiting = [e["theme"] for e in job.get("enrich") or [] if not e.get("answer")]
@@ -994,6 +1082,30 @@ def cmd_compose(a) -> int:
         if st and st.get("cloud_property") and not src.get("dates"):
             L.append(f"  layer {ly['id']} is satellite imagery and has no dates yet. Ask the person which season or year, then: "
                      f"gmap.py set source.dates=2024-06-01/2024-09-30 --layer {ly['id']}   (source.product: true-color | false-color | ndvi)")
+    out(L + rules_lines("compose") + next_lines("draft"))
+    return gc.EXIT_OK
+
+
+def cmd_adopt(a) -> int:
+    """5.5.0 (D26-38): a MapSpec written by hand is registered with the job as it is (compose would write over it); its deviations from the
+    standing rules are computed and said, like compose's."""
+    job = load(a.job)
+    path = Path(a.spec).expanduser()
+    if not path.is_file():
+        raise JobError(f"{a.spec} is not a file here")
+    try:
+        spec = gc.load_mapspec(path)
+    except Exception as ex:  # noqa: BLE001
+        raise JobError(f"{path.name} could not be read as a MapSpec: {str(ex)[:200]}") from None
+    if not isinstance(spec, dict) or not spec.get("layers"):
+        raise JobError(f"{path.name} has no layers: it is not a MapSpec")
+    job["spec"] = str(path.resolve())
+    job.setdefault("adopted", []).append({"at": now(), "spec": job["spec"]})
+    log(job, "compose", f"a MapSpec written by hand was adopted: {path.name}", layers=len(spec["layers"]))
+    save(job)
+    dev = policy.deviations(policy._norm_keys(spec))
+    L = [f"MapSpec adopted: {path}  ({len(spec['layers'])} layer(s): " + ", ".join(f"{ly.get('id')} as {ly.get('role')}" for ly in spec["layers"] if isinstance(ly, dict)) + ")",
+         f"  {dev['line']}"] + lint_lines(path)
     out(L + rules_lines("compose") + next_lines("draft"))
     return gc.EXIT_OK
 
@@ -1106,9 +1218,28 @@ def _run_build(job: dict, extra: list[str]) -> tuple[int, dict | None, str]:
             res = json.loads(Path(m.group(1) if Path(m.group(1)).is_absolute() else spec.parent / m.group(1)).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             res = None
-    if res is None and rc.returncode not in (gc.EXIT_OK, gc.EXIT_LINT):
-        digest = (digest + "\n" + (rc.stderr or "").strip()[-1500:]).strip()
+    if res is None and rc.returncode != gc.EXIT_OK:
+        # 5.5.0 (D26-17): a build that stopped before its result file always says why. On a lint stop the MapSpec's findings are printed,
+        # BLOCK first (a draft used to exit 3 and print nothing), then the tail of what the build itself said.
+        extra_lines = lint_lines(spec) if rc.returncode == gc.EXIT_LINT else []
+        tail = (rc.stderr or "").strip()[-1500:]
+        digest = "\n".join(x for x in [digest, *extra_lines, tail] if x).strip() or f"the build stopped (exit {rc.returncode}) and said nothing"
     return rc.returncode, res, digest
+
+
+def lint_lines(spec: Path) -> list[str]:
+    """The MapSpec's own findings as lines, BLOCK first (5.5.0, D26-17)."""
+    try:
+        sys.path.insert(0, str(HERE.parent / "lints"))
+        import mapspec_lint
+        fs = mapspec_lint.lint_spec(gc.load_mapspec(spec))
+    except Exception as ex:  # noqa: BLE001 - the lint that cannot run is said
+        return [f"the MapSpec could not be checked ({type(ex).__name__}: {str(ex)[:160]})"]
+    order = {"BLOCK": 0, "WARN": 1, "INFO": 2}
+    fs = sorted(fs, key=lambda f: order.get(f.get("severity"), 3))
+    if not fs:
+        return []
+    return ["The MapSpec's findings (BLOCK first):"] + [f"  {f['severity']} {f['id']}: {f['message']}" for f in fs[:25]]
 
 
 READING_NAMES = {"first_look": "where the eye lands first", "data_share": "the data's share of the picture", "smallest_text": "the smallest text", "contrast": "the weakest text contrast",
@@ -1174,9 +1305,39 @@ def cold_packet(job: dict, pictures: list[Path]) -> dict | None:
             frames.append({"file": dst.name, "label": "the map" if k == 1 else "the same map with its words taken off"})
         prompt = od / "cold-prompt.md"
         prompt.write_text(me.cold_prompt(od, frames), encoding="utf-8")
-        return {"prompt": str(prompt), "answer": str(od / "reads" / "cold.json")}
+        return {"prompt": str(prompt), "answer": str(od / "reads" / "cold.json"), "draft": n, "picture_sha": picture_sha(pictures[0]) if pictures else None}
     except Exception:  # noqa: BLE001 - no cold read is made, and the draft says so
         return None
+
+
+def picture_sha(p: Path | None) -> str | None:
+    """The draft picture's hash: a cold read belongs to the picture it read (5.5.0, D26-07)."""
+    try:
+        return hashlib.sha256(Path(p).read_bytes()).hexdigest()[:16] if p else None
+    except OSError:
+        return None
+
+
+def last_cold_packet(job: dict) -> dict | None:
+    return next((d["cold"] for d in reversed(job.get("drafts") or []) if isinstance(d.get("cold"), dict)), None)
+
+
+def cold_is_stale(job: dict) -> bool:
+    """True when the cold read came back for a picture other than the latest draft's (5.5.0, D26-07)."""
+    cr = job.get("cold_read") or {}
+    if not cr.get("made"):
+        return False
+    last_pic = next((d.get("picture_sha") for d in reversed(job.get("drafts") or []) if d.get("picture_sha")), None)
+    return bool(last_pic and cr.get("picture_sha") and cr["picture_sha"] != last_pic)
+
+
+def spec_message(job: dict) -> str:
+    """The message the map now carries: the MapSpec's, else the brief's (5.5.0, D26-07: the cold read is compared with the current one)."""
+    try:
+        m = str((gc.load_mapspec(Path(job["spec"])) or {}).get("message") or "").strip() if job.get("spec") else ""
+    except Exception:  # noqa: BLE001
+        m = ""
+    return m or job["brief"]["message"]
 
 
 def cmd_draft(a) -> int:
@@ -1214,13 +1375,21 @@ def cmd_draft(a) -> int:
             rl = [f"  the readings could not be made ({type(ex).__name__})"]
         L += ["", "Readings (measurements of this draft, not grades)"] + (rl or ["  none could be made from this picture"])
         rec["picture"] = str(pic)
+        rec["picture_sha"] = sha = picture_sha(pic)
         L += ["", f"Look at: {pic}" + (f"  and  {mute}" if mute else "")]
-        if not a.no_cold and not any(d.get("cold_asked") for d in job["drafts"]) or a.cold:
+        # 5.5.0 (D26-07, E-01): the cold read is made on the draft about to be built. A new picture gets a new packet; a cold read of an
+        # earlier picture is marked stale (it used to be made once, on draft 1, and never again).
+        prev = last_cold_packet(job)
+        changed = bool(prev and prev.get("picture_sha") != sha)
+        if changed and (job.get("cold_read") or {}).get("made"):
+            job["cold_read"]["stale"] = True
+            L += ["", "The cold read came back for an earlier draft; this picture has changed since, so that read is stale."]
+        if (not a.no_cold and (prev is None or changed)) or a.cold:
             pk = cold_packet(job, [p for p in (pic, mute) if p is not None and p.is_file()][:1])
             if pk:
                 rec["cold_asked"] = True
                 rec["cold"] = pk
-                L += ["", "Cold read (once a map): start a NEW agent with exactly this, and nothing else:",
+                L += ["", "Cold read (on the draft you mean to build): start a NEW agent with exactly this, and nothing else:",
                       f'  "Read the file {pk["prompt"]} and follow its instructions exactly. Do nothing else."',
                       "  Never answer it yourself and never tell that agent what the map is about. Then:",
                       f'  gmap.py cold --answer "{pk["answer"]}"',
@@ -1234,7 +1403,7 @@ def cmd_draft(a) -> int:
 
 def cmd_cold(a) -> int:
     job = load(a.job)
-    msg = job["brief"]["message"]
+    msg = spec_message(job)
     if a.none:
         job["cold_read"] = {"made": False, "why": "no fresh agent could be started in this session", "at": now()}
         log(job, "draft", "no cold read was made")
@@ -1257,7 +1426,9 @@ def cmd_cold(a) -> int:
     a_w = {w for w in re.findall(r"[a-z0-9]{4,}", msg.lower())}
     b_w = {w for w in re.findall(r"[a-z0-9]{4,}", said.lower())}
     share = len(a_w & b_w) / max(1, len(a_w))
-    job["cold_read"] = {"made": True, "said": said[:600], "outcome_seen": outcome, "shared_words": round(share, 2), "at": now()}
+    pk = last_cold_packet(job) or {}
+    job["cold_read"] = {"made": True, "said": said[:600], "outcome_seen": outcome, "shared_words": round(share, 2), "at": now(),
+                        "draft": pk.get("draft"), "picture_sha": pk.get("picture_sha"), "message": msg[:400]}
     log(job, "draft", "the cold read came back")
     save(job)
     L = ["A stranger says the map tells:", f"  {said[:400]}", "The message is:", f"  {msg}",
@@ -1279,6 +1450,8 @@ def cmd_build(a) -> int:
         return gc.EXIT_SERVICE
     code, res, digest = _run_build(job, ["--formats", a.formats] + (["--strict"] if a.strict else []))
     L = pl + [digest]
+    if cold_is_stale(job):           # 5.5.0 (D26-07): said, not refused; the evaluation stays observe only
+        L += ["", "WARN the cold read is stale: it read an earlier draft. gmap.py draft --cold makes a packet for the latest picture."]
     rec = {"at": now(), "exit": code, "formats": a.formats}
     if res is not None:
         dev = res.get("deviations") or {}
@@ -1418,9 +1591,12 @@ def parser() -> argparse.ArgumentParser:
     b.add_argument("--no-usual", action="store_true", help="leave out the themes the intent usually needs")
     b.add_argument("--file", action="append")
     b.add_argument("--ask", action="append")
-    b.add_argument("--title")
+    b.add_argument("--title", help="a title Claude wrote (the map-text check reads it)")
     b.add_argument("--subtitle")
     b.add_argument("--tagline")
+    b.add_argument("--title-supplied", help="the person's own title, in their words (left as given)")
+    b.add_argument("--subtitle-supplied")
+    b.add_argument("--tagline-supplied")
     b.add_argument("--style-pack")
     b.add_argument("--computer", choices=["linked", "none"])
     b.add_argument("--keys", help="5.1.0: the person's keys that are ready, comma-separated, as the credentials_status tool lists them (earthdata,opencellid); "
@@ -1457,10 +1633,15 @@ def parser() -> argparse.ArgumentParser:
     d.add_argument("--in", dest="src_many", nargs="+")
     d.add_argument("--other")
     d.add_argument("--other-layer")
-    d.add_argument("--out", dest="out_many", nargs="+")
+    d.add_argument("--out", dest="out_many", nargs="+", help="FILE[:role] ... (a step's drawn outputs; role: points, lines, polygons, raster, ...)")
+    d.add_argument("--sidecar", nargs="+", help="a step's outputs that are not drawn (stats JSON, CSV)")
+    d.add_argument("--out-source", nargs="+", help="each --out file's own source, in order (else the step's --source)")
+    d.add_argument("--out-license", nargs="+", help="each --out file's own licence, in order")
     d.add_argument("--param", action="append")
     d.add_argument("--script")
     d.add_argument("--no-strict", action="store_true")
+    ad = job_arg(sub.add_parser("adopt", help="register a MapSpec written by hand with the job (instead of compose)"))
+    ad.add_argument("spec")
     cm = job_arg(sub.add_parser("compose"))
     cm.add_argument("--out")
     cm.add_argument("--replace", action="store_true")
@@ -1520,7 +1701,7 @@ def main(argv=None) -> int:
                 raise JobError("data add NEED --file FILE")
             if a.op == "file" and not a.path:
                 raise JobError("data file NAME --path FILE --source ... --license ...")
-        return {"brief": cmd_brief, "sources": cmd_sources, "choose": cmd_choose, "take": cmd_take, "need": cmd_need, "data": cmd_data, "compose": cmd_compose, "set": cmd_set, "draft": cmd_draft,
+        return {"brief": cmd_brief, "sources": cmd_sources, "choose": cmd_choose, "take": cmd_take, "need": cmd_need, "data": cmd_data, "compose": cmd_compose, "adopt": cmd_adopt, "set": cmd_set, "draft": cmd_draft,
                 "cold": cmd_cold, "build": cmd_build, "review": cmd_review, "status": cmd_status, "usage": cmd_usage}[a.cmd](a)
     except JobError as ex:
         print(f"gmap: {ex}", file=sys.stderr)

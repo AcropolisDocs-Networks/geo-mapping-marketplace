@@ -192,25 +192,65 @@ def period_at(periods: list[dict], t: float, fade_s: float) -> tuple[int, int, f
 
 
 # ---------------------------------------------------------------------------------------------------------------- the chart panel
+CHART_KINDS = ("bars", "profile")
+MIN_TEXT_1080 = 20           # 5.5.0 (D26-31): the smallest chart text on a 1080-line frame, in pixels (scaled to the frame's height)
+
+
 def load_chart(c) -> dict | None:
-    """A timeline's `chart:` block, checked: {rows: [{label, bar, line?, start?}], bar_label, line_label, title, position, line_format,
-    bar_format}. `start` (seconds) is when a row becomes the current one; a period video fills it in from its periods."""
+    """A timeline's `chart:` block, checked. Two kinds:
+
+    bars (the default): {rows: [{label, bar, line?, start?}], bar_label, line_label, title, position, line_format, bar_format}. `start`
+      (seconds) is when a row becomes the current one; a period video fills it in from its periods.
+    profile (5.5.0, D26-23): a value along the timeline's flow, the marker at the flow's front on every frame (no row times):
+      {kind: profile, along: flow, raster: FILE | column: NAME, invert: true, y_label: "Depth (m)", x_label: "Day at sea",
+       x_map: {from: 0, to: 64}, samples: 240}
+
+    Both take (5.5.0, D26-31) w and h (shares of the frame, or pixels on a 1080 frame when above 1), value_label (the words beside the
+    current value), y_axis (2 or 3 ticks; on by default for a profile), invert (bars hang from the top; a profile's values grow downward),
+    min_text_px (the smallest text on a 1080 frame, 20 by default) and position (auto keeps inside the map frame, clear of the credits band,
+    legend, locator, logo and counters)."""
     if not c:
         return None
-    if not isinstance(c, dict) or not isinstance(c.get("rows"), list) or not c["rows"]:
-        raise HeatError("chart needs rows: [{label, bar, line, start}, ...]")
+    if not isinstance(c, dict):
+        raise HeatError("chart is a mapping: {rows: [...]} or {kind: profile, along: flow, raster: FILE}")
+    kind = str(c.get("kind") or "bars")
+    if kind not in CHART_KINDS:
+        raise HeatError(f"chart kind is {' or '.join(CHART_KINDS)}, not '{kind}'")
     rows = []
-    for i, r in enumerate(c["rows"]):
-        if not isinstance(r, dict) or "label" not in r or "bar" not in r:
-            raise HeatError(f"chart row {i + 1} needs label and bar")
-        rows.append({"label": str(r["label"]), "bar": float(r["bar"]), "line": None if r.get("line") is None else float(r["line"]),
-                     "start": None if r.get("start") is None else float(r["start"])})
+    if kind == "bars":
+        if not isinstance(c.get("rows"), list) or not c["rows"]:
+            raise HeatError("chart needs rows: [{label, bar, line, start}, ...]")
+        for i, r in enumerate(c["rows"]):
+            if not isinstance(r, dict) or "label" not in r or "bar" not in r:
+                raise HeatError(f"chart row {i + 1} needs label and bar")
+            rows.append({"label": str(r["label"]), "bar": float(r["bar"]), "line": None if r.get("line") is None else float(r["line"]),
+                         "start": None if r.get("start") is None else float(r["start"])})
+    else:
+        if str(c.get("along") or "flow") != "flow":
+            raise HeatError("a profile chart runs along: flow (the timeline's flow layer)")
+        if not c.get("raster") and not c.get("column"):
+            raise HeatError("a profile chart needs raster: FILE or column: NAME (the value along the flow)")
     pos = str(c.get("position", "auto"))
     if pos not in ("auto", "top-left", "top-right", "bottom-left", "bottom-right", "left", "right"):
         raise HeatError(f"chart position is auto, top-left, top-right, bottom-left, bottom-right, left or right, not '{pos}'")
-    return {"rows": rows, "title": str(c.get("title") or ""), "bar_label": str(c.get("bar_label") or ""), "line_label": str(c.get("line_label") or ""),
-            "position": pos, "bar_format": str(c.get("bar_format") or "{:,.0f}"), "line_format": str(c.get("line_format") or "{:,.0f}"),
-            "key": c.get("key", True) is not False}
+    xm = c.get("x_map")
+    if xm is not None and not (isinstance(xm, dict) and "from" in xm and "to" in xm):
+        raise HeatError("chart.x_map is {from: <value at the start>, to: <value at the end>}")
+
+    def _size(v, d):
+        if v is None:
+            return d
+        v = float(v)
+        if v <= 0:
+            raise HeatError("chart w and h are above 0")
+        return v
+    return {"kind": kind, "rows": rows, "title": str(c.get("title") or ""), "bar_label": str(c.get("bar_label") or ""),
+            "line_label": str(c.get("line_label") or ""), "position": pos, "bar_format": str(c.get("bar_format") or "{:,.0f}"),
+            "line_format": str(c.get("line_format") or "{:,.0f}"), "key": c.get("key", True) is not False,
+            "w": _size(c.get("w"), CHART_W), "h": _size(c.get("h"), CHART_H), "value_label": str(c.get("value_label") or c.get("y_label") or ""),
+            "y_axis": bool(c.get("y_axis", kind == "profile")), "invert": bool(c.get("invert")), "min_text_px": float(c.get("min_text_px") or MIN_TEXT_1080),
+            "raster": c.get("raster"), "column": c.get("column"), "y_label": str(c.get("y_label") or ""), "x_label": str(c.get("x_label") or ""),
+            "x_map": xm, "samples": int(c.get("samples") or 240), "value_format": str(c.get("value_format") or "{:,.0f}")}
 
 
 def chart_current(ch: dict, t: float) -> int:
@@ -221,12 +261,24 @@ def chart_current(ch: dict, t: float) -> int:
     return cur
 
 
-def place_panel(size, w: int, h: int, avoid, want: str = "auto", pad: int = 16) -> tuple[int, int]:
+def panel_size(ch: dict, W: int, H: int) -> tuple[int, int]:
+    """The panel's pixels: w and h as shares of the frame, or (above 1) pixels on a 1080-line frame, scaled."""
+    f = H / 1080.0
+    w = ch.get("w", CHART_W)
+    h = ch.get("h", CHART_H)
+    return (int(W * w) if w <= 1 else int(w * f)), (int(H * h) if h <= 1 else int(h * f))
+
+
+def place_panel(size, w: int, h: int, avoid, want: str = "auto", pad: int = 16, frame=None) -> tuple[int, int]:
     """Where a w x h panel goes: the asked corner, else the free place (corners, then the middle of each side) with the least overlap with
-    the overlays in `avoid` (pixel rectangles)."""
+    the overlays in `avoid` (pixel rectangles). 5.5.0 (D26-26): `frame` ([x0, y0, x1, y1] pixels, the map frame) keeps the panel inside the
+    map, so the credits band under it is never covered, whatever corner is asked."""
     W, H = size
-    spots = {"top-left": (pad, pad), "top-right": (W - w - pad, pad), "bottom-left": (pad, H - h - pad), "bottom-right": (W - w - pad, H - h - pad),
-             "left": (pad, (H - h) // 2), "right": (W - w - pad, (H - h) // 2)}
+    fx0, fy0, fx1, fy1 = (frame if frame else (0, 0, W, H))
+    fx0, fy0, fx1, fy1 = int(fx0), int(fy0), int(fx1), int(fy1)
+    w, h = min(w, max(8, fx1 - fx0 - 2 * pad)), min(h, max(8, fy1 - fy0 - 2 * pad))
+    spots = {"top-left": (fx0 + pad, fy0 + pad), "top-right": (fx1 - w - pad, fy0 + pad), "bottom-left": (fx0 + pad, fy1 - h - pad),
+             "bottom-right": (fx1 - w - pad, fy1 - h - pad), "left": (fx0 + pad, (fy0 + fy1 - h) // 2), "right": (fx1 - w - pad, (fy0 + fy1 - h) // 2)}
     if want in spots:
         return spots[want]
 
@@ -237,14 +289,53 @@ def place_panel(size, w: int, h: int, avoid, want: str = "auto", pad: int = 16) 
     return spots[best]
 
 
-def paint_chart(img, t: float, ch: dict, tokens: dict, *, font_path: str, avoid=None, ramp=None):
-    """The chart panel on a frame: bars (the current row in the emphasis colour, the others lighter), the line on its own axis with a dot on
-    the current row, the row labels, the two series' names, and the heat key (Fewer, More) when `ramp` is given. -> (image, panel rect)."""
-    from PIL import Image, ImageDraw, ImageFont
-    W, H = img.size
+def _fonts(font_path: str, H: int, ch: dict):
+    from PIL import ImageFont
     k = H / 720.0
-    pw, ph = int(W * CHART_W), int(H * CHART_H)
-    x0, y0 = place_panel((W, H), pw, ph, avoid, ch["position"], pad=int(16 * k))
+    floor_px = max(9, int(round(float(ch.get("min_text_px") or MIN_TEXT_1080) * H / 1080.0)))
+    return k, ImageFont.truetype(font_path, max(floor_px, int(11 * k))), ImageFont.truetype(font_path, max(floor_px + 2, int(13 * k)))
+
+
+def _ticks(lo: float, hi: float, n: int = 3) -> list[float]:
+    """Two or three round values from lo to hi (the y axis)."""
+    span = hi - lo
+    if not math.isfinite(span) or span <= 0:
+        return [lo]
+    raw = span / max(1, n - 1)
+    mag = 10 ** math.floor(math.log10(raw))
+    step = min((m * mag for m in (1, 2, 2.5, 5, 10) if m * mag >= raw), default=raw)
+    first = math.ceil(lo / step) * step
+    out = []
+    v = first
+    while v <= hi + 1e-9 and len(out) < 4:
+        out.append(round(v, 6))
+        v += step
+    return out[:3] if len(out) > 3 else out
+
+
+def tick_labels_kept(boxes: list[tuple[float, float]], cur: int, gap: float) -> list[int]:
+    """5.5.0 (D26-31): which of the tick labels (x0, x1 each) are drawn: the current one always, then the others from left to right when they
+    keep `gap` pixels from every one already kept. -> indices."""
+    keep = [cur] if 0 <= cur < len(boxes) else []
+    for i, (a0, a1) in enumerate(boxes):
+        if i == cur:
+            continue
+        if all(a1 + gap <= boxes[j][0] or a0 >= boxes[j][1] + gap for j in keep):
+            keep.append(i)
+    return sorted(keep)
+
+
+def paint_chart(img, t: float, ch: dict, tokens: dict, *, font_path: str, avoid=None, ramp=None, frame=None):
+    """The chart panel on a frame: bars (the current row in the emphasis colour, the others lighter), the line on its own axis with a dot on
+    the current row, the row labels, the two series' names, and the heat key (Fewer, More) when `ramp` is given; or (5.5.0) a profile along
+    the flow with its marker at the flow's front. -> (image, panel rect)."""
+    from PIL import Image, ImageDraw
+    W, H = img.size
+    k, f_s, f_t = _fonts(font_path, H, ch)
+    pw, ph = panel_size(ch, W, H)
+    x0, y0 = place_panel((W, H), pw, ph, avoid, ch["position"], pad=int(16 * k), frame=frame)
+    if frame:
+        pw, ph = min(pw, int(frame[2] - frame[0] - 32 * k)), min(ph, int(frame[3] - frame[1] - 32 * k))
     over = Image.new("RGBA", img.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(over)
     bg = _hex(tokens.get("legend_bg") or tokens["background"])
@@ -253,42 +344,64 @@ def paint_chart(img, t: float, ch: dict, tokens: dict, *, font_path: str, avoid=
     danger = _hex(((tokens.get("status") or {}).get("danger")) or tokens["emphasis"])
     soft = tuple(int(bg[i] + (emph[i] - bg[i]) * 0.38) for i in range(3))
     d.rounded_rectangle([x0, y0, x0 + pw, y0 + ph], radius=int(6 * k), fill=(*bg, 225))
-    f_s = ImageFont.truetype(font_path, max(9, int(11 * k)))
-    f_t = ImageFont.truetype(font_path, max(10, int(13 * k)))
     pad = int(10 * k)
     top = y0 + pad
     if ch["title"]:
         d.text((x0 + pad, top), ch["title"], font=f_t, fill=(*ink, 255))
         top += int(f_t.size * 1.35)
+    if ch.get("kind") == "profile":
+        return _paint_profile(img, over, d, t, ch, x0, y0, pw, ph, top, pad, k, f_s, ink, emph, danger, bg)
     names = " · ".join(x for x in (ch["bar_label"], ch["line_label"]) if x)
     if names:
         d.text((x0 + pad, top), names, font=f_s, fill=(*ink, 200))
         top += int(f_s.size * 1.35)
     key_h = int(f_s.size * 1.6) if ramp is not None and ch.get("key") else 0
-    base_y = y0 + ph - pad - int(f_s.size * 1.4) - key_h
     rows = ch["rows"]
     n = len(rows)
     cur = chart_current(ch, t)
-    bw_all = pw - 2 * pad
-    slot = bw_all / n
     bmax = max(r["bar"] for r in rows) or 1.0
+    axis_w = 0
+    if ch.get("y_axis"):
+        ticks = _ticks(0.0, bmax)
+        axis_w = int(max(d.textlength(ch["bar_format"].format(v), font=f_s) for v in ticks) + 6 * k)
+    left = x0 + pad + axis_w
+    bw_all = pw - 2 * pad - axis_w
+    slot = bw_all / n
+    inv = bool(ch.get("invert"))
+    lab_h = int(f_s.size * 1.4)
+    if inv:                                            # 5.5.0: bars hang from a baseline at the top (depth reads downward); labels above it
+        base_y = top + lab_h
+        bottom = y0 + ph - pad - key_h
+    else:
+        base_y = y0 + ph - pad - lab_h - key_h
+        bottom = base_y
+    hh = max(4, (bottom - base_y) if inv else (base_y - top))
     lv = [r["line"] for r in rows if r["line"] is not None]
     lmin, lmax = (min(lv), max(lv)) if lv else (0.0, 1.0)
     span = (lmax - lmin) or 1.0
-    hh = max(4, base_y - top)
     pts = []
+    centers = []
     for i, r in enumerate(rows):
-        bx0 = x0 + pad + i * slot + slot * 0.15
-        bx1 = x0 + pad + (i + 1) * slot - slot * 0.15
+        bx0 = left + i * slot + slot * 0.15
+        bx1 = left + (i + 1) * slot - slot * 0.15
         bh = hh * r["bar"] / bmax
-        d.rectangle([bx0, base_y - bh, bx1, base_y], fill=(*(emph if i == cur else soft), 255))
+        box = [bx0, base_y, bx1, base_y + bh] if inv else [bx0, base_y - bh, bx1, base_y]
+        d.rectangle(box, fill=(*(emph if i == cur else soft), 255))
         if r["line"] is not None:
             pts.append(((bx0 + bx1) / 2, base_y - hh * 0.08 - (hh * 0.84) * (r["line"] - lmin) / span))
-        step = max(1, math.ceil(n / 12))
-        if i % step == 0 or i == cur:
-            lab = r["label"][:3] if n > 6 else r["label"]
-            tw = d.textlength(lab, font=f_s)
-            d.text(((bx0 + bx1) / 2 - tw / 2, base_y + int(2 * k)), lab, font=f_s, fill=(*ink, 255 if i == cur else 170))
+        centers.append((bx0 + bx1) / 2)
+    if ch.get("y_axis"):
+        for v in _ticks(0.0, bmax):
+            yv = base_y + hh * v / bmax if inv else base_y - hh * v / bmax
+            lab = ch["bar_format"].format(v)
+            d.text((left - 4 * k - d.textlength(lab, font=f_s), yv - f_s.size * 0.6), lab, font=f_s, fill=(*ink, 170))
+            d.line([(left - 2 * k, yv), (x0 + pw - pad, yv)], fill=(*ink, 40), width=1)
+    labs = [r["label"][:3] if n > 6 else r["label"] for r in rows]
+    wid = [d.textlength(lb, font=f_s) for lb in labs]
+    boxes = [(c - w_ / 2, c + w_ / 2) for c, w_ in zip(centers, wid)]
+    ly = (top if inv else base_y + int(2 * k))
+    for i in tick_labels_kept(boxes, cur, gap=4 * k):            # 5.5.0 (D26-31): the current label never overprints its neighbours
+        d.text((boxes[i][0], ly), labs[i], font=f_s, fill=(*ink, 255 if i == cur else 170))
     if len(pts) >= 2:
         d.line(pts, fill=(*danger, 255), width=max(2, int(2 * k)))
     if pts and rows[cur]["line"] is not None:
@@ -296,6 +409,8 @@ def paint_chart(img, t: float, ch: dict, tokens: dict, *, font_path: str, avoid=
         rr = max(3, int(3.5 * k))
         d.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=(*danger, 255), outline=(*bg, 255))
     vals = ch["bar_format"].format(rows[cur]["bar"]) + (("  ·  " + ch["line_format"].format(rows[cur]["line"])) if rows[cur]["line"] is not None else "")
+    if ch.get("value_label"):
+        vals = f"{ch['value_label']}: {vals}"
     tw = d.textlength(vals, font=f_s)
     d.text((x0 + pw - pad - tw, y0 + pad), vals, font=f_s, fill=(*ink, 255))
     if key_h:
@@ -308,6 +423,79 @@ def paint_chart(img, t: float, ch: dict, tokens: dict, *, font_path: str, avoid=
             c = ramp[int(i / max(1, kx1 - kx0 - 1) * (len(ramp) - 1))]
             a = int(255 * (0.25 + 0.75 * i / max(1, kx1 - kx0 - 1)))
             d.line([(kx0 + i, ky), (kx0 + i, ky + int(f_s.size * 0.7))], fill=(int(c[0]), int(c[1]), int(c[2]), a))
+    im = img.convert("RGBA")
+    im.alpha_composite(over)
+    return im.convert("RGB"), [x0, y0, x0 + pw, y0 + ph]
+
+
+def profile_value_at(ch: dict, u: float) -> float:
+    """The profile's value at progress u (0 to 1)."""
+    xs, ys = ch["_profile"]
+    if not len(xs):
+        return float("nan")
+    x = xs[0] + (xs[-1] - xs[0]) * float(u)
+    ok = np.isfinite(ys)
+    return float(np.interp(x, xs[ok], ys[ok])) if ok.any() else float("nan")
+
+
+def x_text(ch: dict, u: float) -> str:
+    xm = ch.get("x_map")
+    if not xm:
+        return ""
+    v = float(xm["from"]) + (float(xm["to"]) - float(xm["from"])) * float(u)
+    return f"{ch['x_label'] + ' ' if ch.get('x_label') else ''}{int(math.floor(v + 1e-9))}"
+
+
+def _paint_profile(img, over, d, t, ch, x0, y0, pw, ph, top, pad, k, f_s, ink, emph, danger, bg):
+    """5.5.0 (D26-23): the profile: the area under the line (or hanging from the top when inverted), the marker at the flow's front."""
+    xs, ys = ch["_profile"]
+    u = float(ch["_progress"](t)) if ch.get("_progress") else 0.0
+    ok = np.isfinite(ys)
+    lo_, hi_ = (float(np.nanmin(ys)), float(np.nanmax(ys))) if ok.any() else (0.0, 1.0)
+    inv = bool(ch.get("invert"))
+    vals = np.abs(ys) if inv and hi_ <= 0 else ys                   # depths stored as negative elevations read as metres down
+    vlo, vhi = (float(np.nanmin(vals)), float(np.nanmax(vals))) if ok.any() else (0.0, 1.0)
+    if inv:
+        vlo = min(0.0, vlo)
+    ticks = _ticks(vlo, vhi) if ch.get("y_axis") else []
+    axis_w = int(max([d.textlength(ch["value_format"].format(v), font=f_s) for v in ticks] or [0]) + (6 * k if ticks else 0))
+    bottom_lab = int(f_s.size * 1.5) if ch.get("x_map") or ch.get("x_label") else 0
+    cx0, cx1 = x0 + pad + axis_w, x0 + pw - pad
+    cy0, cy1 = top + int(f_s.size * 0.2), y0 + ph - pad - bottom_lab
+    span = (vhi - vlo) or 1.0
+    sx = lambda x: cx0 + (x - xs[0]) / max(xs[-1] - xs[0], 1e-9) * (cx1 - cx0)       # noqa: E731
+    sy = (lambda v: cy0 + (v - vlo) / span * (cy1 - cy0)) if inv else (lambda v: cy1 - (v - vlo) / span * (cy1 - cy0))   # noqa: E731
+    pts = [(sx(x), sy(v)) for x, v in zip(xs, vals) if np.isfinite(v)]
+    if len(pts) >= 2:
+        edge = cy0 if inv else cy1
+        d.polygon([(pts[0][0], edge)] + pts + [(pts[-1][0], edge)], fill=(*emph, 70))
+        d.line(pts, fill=(*emph, 255), width=max(2, int(2 * k)))
+    for v in ticks:
+        yv = sy(v)
+        lab = ch["value_format"].format(v)
+        d.text((cx0 - 4 * k - d.textlength(lab, font=f_s), yv - f_s.size * 0.6), lab, font=f_s, fill=(*ink, 170))
+        d.line([(cx0, yv), (cx1, yv)], fill=(*ink, 40), width=1)
+    mx = cx0 + u * (cx1 - cx0)
+    v_now = profile_value_at({"_profile": (xs, vals)}, u)
+    d.line([(mx, cy0), (mx, cy1)], fill=(*ink, 150), width=max(1, int(k)))
+    if np.isfinite(v_now):
+        my = sy(v_now)
+        rr = max(4, int(4.5 * k))
+        d.ellipse([mx - rr, my - rr, mx + rr, my + rr], fill=(*danger, 255), outline=(*bg, 255), width=max(1, int(1.5 * k)))
+        txt = (f"{ch['y_label']}: " if ch.get("y_label") else (f"{ch['value_label']}: " if ch.get("value_label") else "")) + ch["value_format"].format(v_now)
+        tw = d.textlength(txt, font=f_s)
+        d.text((x0 + pw - pad - tw, y0 + pad), txt, font=f_s, fill=(*ink, 255))
+    if bottom_lab:
+        a = x_text(ch, 0.0) if ch.get("x_map") else ""
+        b = x_text(ch, 1.0) if ch.get("x_map") else ""
+        now = x_text(ch, u) if ch.get("x_map") else ch.get("x_label", "")
+        yb = cy1 + int(2 * k)
+        boxes = [(cx0, cx0 + d.textlength(a, font=f_s)), (mx - d.textlength(now, font=f_s) / 2, mx + d.textlength(now, font=f_s) / 2),
+                 (cx1 - d.textlength(b, font=f_s), cx1)]
+        texts = [a, now, b]
+        for i in tick_labels_kept(boxes, 1, gap=4 * k):
+            if texts[i]:
+                d.text((boxes[i][0], yb), texts[i], font=f_s, fill=(*ink, 255 if i == 1 else 170))
     im = img.convert("RGBA")
     im.alpha_composite(over)
     return im.convert("RGB"), [x0, y0, x0 + pw, y0 + ph]

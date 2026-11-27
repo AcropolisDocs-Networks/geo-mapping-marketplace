@@ -117,12 +117,13 @@ def record_for(l, plan) -> dict:
 def all_layers(plan) -> list:
     """The drawn layers, then the helpers (`draw: false`): a helper is a source of the map's numbers, so it has a record, a line in the source
     note and an entry on the methods page, in that order after the layers the reader sees."""
-    return list(plan.layers) + list(getattr(plan, "helpers", None) or [])
+    # 5.5.0 (D26-11): layers drawn only in the detail inset are sources of the picture too
+    return list(plan.layers) + list(getattr(plan, "helpers", None) or []) + list(getattr(plan, "detail_layers", None) or [])
 
 
 def basemap_records(plan) -> list[dict]:
     out = []
-    for b in plan.basemap:
+    for b in list(plan.basemap) + list(getattr(plan, "detail_basemap", None) or []):
         if b.get("record"):                                  # relief (M12): the record map_raster wrote, with terrain_fetch.public_record inside
             out.append(dict(b["record"]))
             continue
@@ -307,6 +308,24 @@ def as_of_notes(plan) -> list[str]:
     return out
 
 
+CERTAINTIES = ("observed", "modelled", "reconstructed")
+
+
+def certainty_note(l) -> str | None:
+    """5.5.0 (Q-04): a layer's `certainty:` said in the source note: `reconstructed` (a track rebuilt from ports and dates: its true path is not
+    known) and `modelled` (worked out from other data: where rain would pool, not where it was seen). `certainty_note:` gives the words."""
+    spec = getattr(l, "spec", None) or {}
+    c = str(spec.get("certainty") or "").lower()
+    if c not in ("modelled", "reconstructed"):
+        return None
+    if spec.get("certainty_note"):
+        return str(spec["certainty_note"]).rstrip(".") + "."
+    title = str((spec.get("legend") or {}).get("title") or getattr(l, "title", "") or l.id).strip()
+    if c == "reconstructed":
+        return f"{title} is reconstructed from what is known; its true path is not."
+    return f"{title} is modelled, not observed."
+
+
 def method_notes(plan) -> list[str]:
     """3.4.0 (eval HON-4): a modelled measure says how it was made, once, in the source note: the walk times of a network_nearest op (speed,
     snap, a hypothetical when it compares two sets of sites), and an OpenStreetMap source that counts are what its contributors mapped."""
@@ -319,6 +338,9 @@ def method_notes(plan) -> list[str]:
                 n = str(o["method_note"]).rstrip(".") + "."
                 if n not in out:
                     out.append(n)
+        cer = certainty_note(l)                     # 5.5.0 (Q-04): how a modelled or reconstructed layer was made, on the map
+        if cer and cer not in out:
+            out.append(cer)
         src = (getattr(l, "spec", None) or {}).get("source") or {}
         if isinstance(src, dict) and src.get("type") == "osm":
             n = "Counts are what OpenStreetMap contributors have mapped."

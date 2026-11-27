@@ -83,6 +83,25 @@ description: >
   measure): the channel is pale until the water reaches it, dashes move downstream and each head glows. A counter `{source: flow, format:
   hm}` shows the real hours at `speed_kmh` ("+23 h 30 min"). `top: {layers: [sites]}` draws the furniture, labels and the named layers over
   the moving ones; `overflow: {px: 30}` lets them fade past the map frame (0: cut at it). `also:` takes polygon, line and point layers.
+- **"A ship's crossing", "the depth under the route", "day by day at sea"** (5.5.0): a flow along one line (a route) carries a solid marker
+  at its front, the strongest mark on the frame (`front: {marker: point | none | auto, size_mm: 3, colour: "@brand.status.danger", halo: true}`;
+  auto: a marker on a single line, the glow on a network). `chart: {kind: profile, along: flow, raster: gebco.tif | column: depth_m, invert: true,
+  y_label: "Depth (m)", x_label: "Day", x_map: {from: 0, to: 64}}` draws the value along the flow with its marker at the front on every frame (no
+  row times); a counter `{source: flow, total: 64, format: day, text: "Day {v} at sea"}` runs with the same front, and the chart's x reads the same
+  mapping. Both chart kinds take `w`, `h` (shares of the frame, or pixels on a 1080 frame), `value_label`, `y_axis` (two or three ticks; on for a
+  profile), `invert` (bars hang from the top), `min_text_px` (20 on 1080p by default); tick labels never overprint the current one. The panel
+  is kept inside the map frame, clear of the credits band, legend, locator, logo and the counters' corners, whatever `position` says.
+  A story line with no `end` stays its reading time (60 ms a character, at least 2.5 s; `for_s` sets it), never until the next line; a line
+  may start `at_km: 1200` or `at_fraction: 0.4` along the flow instead of at a second; MAP-STORY-028 says when a line states a measure the chart
+  no longer shows. Counters sit on a panel in the page colour, so a base-map name under them leaves no ghost glyphs. `poster: preview` (the
+  default for a flow video) opens on the whole route drawn faint with the title, not on the end; `poster: 12` opens on that second.
+  A `values:` layer outlines only the features that have a value at that moment (`outline: false` for none); a legend-only layer never
+  becomes the base map's study area, so the other layers keep their strength, and a region given as a bare `bbox` is a frame, not a study area.
+- **"Make the counter the first thing read"** (5.6.0): a video's tiers are counter, chart, captions, then the key: in a video of 15 s or
+  more the legend is read whole for its first 6 s, then steps back to 70% of its size in its own corner (`legend: {reduce_after_s: 8, scale:
+  0.6}` in the timeline; `legend: {reduce: false}` keeps it whole; the map is drawn a second time without its key for this). Every story line
+  sits in one slot, the row the highest-placed line needs, so captions do not jump between heights from beat to beat. On a slide (and the
+  1920 x 1080 video drawn on one) body labels are 12 pt or more under every look but classic.
 - **"Check my own render", "QA this video I made"** (1.16.0): `map_export.py --external FILE.mp4 --spec map.yaml [--credits-shown "TEXT"]`
   gives a still or a video made outside the pipeline the build's paper trail: read back (MAP-OUT-013), every credit its sources need found in
   the credits it shows (MAP-OUT-028), colours outside the brand palette (MAP-OUT-029), a provenance sidecar and the hidden accreditation in

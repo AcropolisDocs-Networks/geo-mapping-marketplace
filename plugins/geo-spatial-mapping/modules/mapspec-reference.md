@@ -296,6 +296,50 @@ GHSL tiles and WorldPop country files are fetched for the window and credited, C
 sentence naming k, the heights, the DEM's cell size and the bare-earth caveat), and `viewshed {h_m, radius_m}` on a point layer drawn with
 `role: polygons` (the visible ground). Both take `dem: dem.tif`, or use `terrain.source`, or fetch a DEM for the sites' window.
 
+5.5.0 (Day 26): `palette: brand_neutral` is the short form of `palette: {name: brand_neutral}`, and an unclassed line or point layer honours
+it. `@brand.accent` is the same colour as `@brand.categorical.0` in the acropolisdocs brand: two classes of one layer that resolve to one colour,
+or closer than 10 apart, raise MAP-CART-044 (and the two largest categories closer than 20 under colour-vision simulation). A layer's
+`legend: {on: false}` leaves it out of the key (as `include: false`). `classification: {measure: true}` says the value is a measure with a unit,
+not a count (a field ending `_m`, `_km`, `_c`, `_pct`, or a legend title naming a unit, is read as one); `classification.groups: [{label:
+"To the Gulf of California", classes: [...]}, {label: "Nowhere", classes: [...]}]` sets headings over the classes in the key.
+`elements.marks.items[].legend: "Largest closed basins"` keys a mark (one row per distinct label). A layer's `certainty: observed | modelled |
+reconstructed` says how it was made: a reconstructed line is drawn dashed, and both others put a line in the source note (`certainty_note:`
+gives its words); a title that states a modelled layer as fact is MAP-STORY-029. A filter value YAML reads as a boolean (`in: [false]`)
+is compared as the word too. `extent: {mode: bbox, bbox: [w, s, e, n]}` frames exactly that box; otherwise a sea the map's words name
+(the legend's "Gulf of California") is brought into the frame when it grows it by less than 30% (`extent: {reach_named: false}` keeps the
+data's frame). `crs: {display: route}` draws a long line subject in a two-point equidistant projection on its ends. `names: {near_subject:
+true, near_subject_mm, marine: auto}`: with a line or point subject the place names far from it are left out unless the message names them, and
+seas, gulfs, islands and peninsulas are named when the subject is at sea (a sea the words name is named at any scale). `style.subject_boost:
+auto` makes a line or point subject the strongest mark (wider, cased, a raster stepped back, reference names a weight lighter; off keeps the
+look's strengths). `elements.scale_bar: {units: nmi}` reads in nautical miles; `true_at: 41.5` (or `centre`) draws the bar true at one latitude
+and labels it so, which keeps a Web Mercator sea chart's bar. An element block with keys and no `on` keeps that element's default.
+`elements.section.line` is two or more points, or `{layer: route}` (the whole line, its parts joined; `straight: true` for the two ends only):
+the profile follows the line leg by leg and the cut on the map lies on it; `exaggeration: 3` and `rect_mm: [x, y, w, h]` set the box. A
+`terrain.source` file fetched from the library is credited to its entry (`terrain.entry`, which compose writes). A US town given as
+`region: {place: "Gilbert, Arizona"}` is its Census place outline, not a circle.
+
+A `data step` script reads its files from the environment, never from paths typed into it: `GMAP_STEP_IN`, `GMAP_STEP_OUT` and
+`GMAP_STEP_SIDECAR` are JSON lists of absolute paths in the order given (`json.loads(os.environ["GMAP_STEP_OUT"])`). `--out FILE[:role]`
+names a drawn output (points, lines, polygons, raster, ...) and `--sidecar FILE` one that is not drawn (a stats JSON or CSV); each drawn file
+takes its own `--out-source` and `--out-license` (in order), else the step's. A file without geometry is never a layer. The water ops need no
+step: `depressions {dem, min_depth_m, min_area_m2}` (the hollows rain fills: depth, area, volume, marked modelled), `trace_downstream
+{id_field, to_field: tohuc}` (where each watershed's water ends: ocean, closed basin or out of the window, and the steps to it),
+`sample_along {raster, spacing}` (a raster read every so many metres along a line) and `sea_route {order_field, cell_deg, margin_deg}` (the
+shortest way at sea between ports in order, marked reconstructed). The cold read is made on the draft you mean to build: a draft whose
+picture changed asks for a new one and marks the old read stale (`build` says so), and the answer is compared with the MapSpec's message as
+it is now. `brief --title` is a title Claude wrote (the map-text check reads it); `--title-supplied` is the person's own words, kept as
+written.
+
+5.6.0: point labels that crowd (three or more left out within 10 mm of each other, two with `leaders: true` or `stack: true`) are set as a
+column off the cluster with a leader from each point to its name, and the leaders never cross (`labels: [{layer, field, stack: false}]` keeps
+them dropped); two names at one dot are one label, joined with a middle dot ("Provincetown · Cape Cod"; `merge: false` keeps them apart).
+With a line or point subject, a capital the message does not name is a reference name: its own case, a weight lighter, the muted reference
+ink. The build measures the subject's share of the picture's attention (`report.subject_attention`); under 15% it draws the subject again
+stronger (wider, the ground at 60%, context and supporting layers at 75%) and says both numbers; `style.subject_boost: strong` asks for that at
+once. The title and subtitle never sit over the data: the map is set below them when that costs it under a fifth of its size, else MAP-CART-045
+says so (`extent.fit: overlay` or `fixed` keeps the frame). A metro locator (a town with the counties round it) names its state in a corner and the one or
+two largest cities outside the box (`inset_map: {names: false}` leaves them off).
+
 Elements (each `{on: true|false, position: upper-left|upper-right|lower-left|lower-right|auto}`): title, legend, north_arrow, scale_bar, graticule,
 inset_map, logo, source_note, date_stamp, confidentiality_banner, methods_page (off by default), terrain (the same switch as `terrain.on`). The brand is written into the spec the first time a map is built, so a later
 default change never restyles it.

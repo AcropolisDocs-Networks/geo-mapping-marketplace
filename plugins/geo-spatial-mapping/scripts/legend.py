@@ -154,12 +154,18 @@ def proportional_block(layer: dict, tokens: dict, values: list[float], radius_fo
     return out
 
 
+LINE_ENTRY_WRAP_CHARS = 28     # 5.5.0 (Q-05): a line layer's key entry longer than this wraps beside its swatch
+
+
 def lines_block(layer: dict, tokens: dict) -> dict:
     sym = layer.get("symbol") or {}
+    label = (layer.get("legend") or {}).get("label") or _layer_title(layer)
+    # 5.5.0 (Q-05): a faint symbol (a thin or dashed line) is keyed at least as strong as it reads on the map: never under 0.45 mm
+    w = float(sym["_width_mm"]) if sym.get("_width_mm") and tokens.get("_look", "classic") != "classic" else float(sym.get("width", 0.8)) * 0.35
     return {"layer": layer["id"], "title": _single_title(layer), "kind": "lines",
-            "items": [{"label": (layer.get("legend") or {}).get("label") or _layer_title(layer), "stroke": sym.get("_color") or tokens["emphasis"],
-                       "width_mm": float(sym["_width_mm"]) if sym.get("_width_mm") and tokens.get("_look", "classic") != "classic"
-                       else float(sym.get("width", 0.8)) * 0.35, "dash": _dash(sym.get("dash"))}], "note": _note(layer)}
+            "items": [{"label": label, "stroke": sym.get("_color") or tokens["emphasis"],
+                       "width_mm": max(w, 0.45) if tokens.get("_look", "classic") != "classic" else w, "dash": _dash(sym.get("dash")),
+                       **({"wrap": True} if len(str(label)) > LINE_ENTRY_WRAP_CHARS else {})}], "note": _note(layer)}
 
 
 def polygons_block(layer: dict, tokens: dict) -> dict:
@@ -350,7 +356,7 @@ def item_lines(label: str, label_pt: float = LABEL_PT, wrap: bool = False) -> li
 
 def item_height(it: dict, label_pt: float = LABEL_PT, wrap: bool = False) -> float:
     """One entry's row height: the swatch or symbol, or its label's lines when they need more."""
-    n = len(item_lines(it["label"], label_pt, wrap))
+    n = len(item_lines(it["label"], label_pt, wrap or bool(it.get("wrap"))))
     return max(SWATCH_H_MM, tm.line_height_mm(label_pt) * n, it.get("size_mm", 0) + 0.8)
 
 
@@ -380,7 +386,7 @@ def label_column_width(block: dict, label_pt: float = LABEL_PT, wrap: bool = Fal
     """The width of a block's swatches and labels: where its counts column starts."""
     w = 0.0
     for it in block.get("items") or []:
-        lw = max(tm.width_mm(x, label_pt, 400, tnum=True) for x in item_lines(it["label"], label_pt, wrap))
+        lw = max(tm.width_mm(x, label_pt, 400, tnum=True) for x in item_lines(it["label"], label_pt, wrap or bool(it.get("wrap"))))
         w = max(w, max(SWATCH_W_MM, it.get("size_mm", 0) + 1.5) + 2.0 + lw)
     return w
 
@@ -415,8 +421,12 @@ def _content_size(block: dict, label_pt: float = LABEL_PT, wrap: bool = False) -
             h += float(it["h_mm"]) + ROW_GAP_MM
         nw, nh = note_size(block, label_pt)
         return max(w, nw), h + nh
-    for it in block["items"]:
-        lw = max(tm.width_mm(x, label_pt, 400, tnum=True) for x in item_lines(it["label"], label_pt, wrap))
+    heads = group_heading_at(block)
+    for i_, it in enumerate(block["items"]):
+        if i_ in heads:                                     # 5.5.0 (D26-42): a group's heading above its classes
+            w = max(w, tm.width_mm(heads[i_], label_pt, 600))
+            h += tm.line_height_mm(label_pt) + ROW_GAP_MM
+        lw = max(tm.width_mm(x, label_pt, 400, tnum=True) for x in item_lines(it["label"], label_pt, wrap or bool(it.get("wrap"))))
         icon = max(SWATCH_W_MM, it.get("size_mm", 0) + 1.5) if block["kind"] != "proportional" else max(SWATCH_W_MM, it.get("size_mm", 0))
         w = max(w, icon + 2.0 + lw)
         h += item_height(it, label_pt, wrap) + ROW_GAP_MM
@@ -424,6 +434,39 @@ def _content_size(block: dict, label_pt: float = LABEL_PT, wrap: bool = False) -
     nw, nh = note_size(block, label_pt)
     w, h = max(w, nw), h + nh
     return w, h - ROW_GAP_MM if block["items"] else h
+
+
+def group_heading_at(block: dict) -> dict:
+    """5.5.0 (D26-42): {item index: heading text} for a block whose classes are grouped (classification.groups)."""
+    return {int(g["at"]): str(g["label"]) for g in block.get("groups") or [] if isinstance(g, dict) and "at" in g}
+
+
+def apply_groups(block: dict, groups: list) -> list[str]:
+    """5.5.0 (D26-42): order a class block's items into the groups asked for (each group's classes together, in the order given) and mark
+    where each heading goes; a class no group names stays after them. -> notes (classes a group names that the layer does not have)."""
+    notes: list[str] = []
+    if not groups or not isinstance(block, dict) or not block.get("items"):
+        return notes
+    items = list(block["items"])
+    by_label = {str(it["label"]): it for it in items}
+    new, heads, used = [], [], set()
+    for g in groups:
+        if not isinstance(g, dict):
+            continue
+        members = []
+        for c in g.get("classes") or []:
+            it = by_label.get(str(c))
+            if it is None:
+                notes.append(f"legend group '{g.get('label')}': no class '{c}'")
+            elif str(c) not in used:
+                members.append(it)
+                used.add(str(c))
+        if members:
+            heads.append({"label": str(g.get("label") or ""), "at": len(new)})
+            new += members
+    new += [it for it in items if str(it["label"]) not in used]
+    block["items"], block["groups"] = new, heads
+    return notes
 
 
 def gap_after(blocks: list[dict], i: int) -> float:

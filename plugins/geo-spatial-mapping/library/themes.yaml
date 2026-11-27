@@ -60,8 +60,8 @@ themes:
     says: "Elevation models (bare earth)"
     words: [elevation, dem, terrain, relief, hillshade, contours, slope, viewshed, line of sight, topography]
     entries: [terrain.us.dem.3dep, terrain.us.dem.3dep-1m, terrain.ca.dem.mrdem, terrain.fr.dem.rge-alti, terrain.jp.dem.gsi, terrain.se.dem.lantmateriet-mhm, terrain.be-vlg.dem.dhmv, terrain.au.dem.ga-lidar-5m,
-              terrain.world.dem.copernicus-glo30, terrain.world.dem.nasadem, terrain.world.dem.opentopography, terrain.world.dem.terrarium, terrain.arctic.dem.arcticdem, terrain.antarctica.dem.rema, terrain.world.relief.ne50-shaded, terrain.world.relief.ne50-hypsometric]
-    note: "Bare earth: buildings and trees are not in these, so a line of sight over them sees more than is there."
+              terrain.world.dem.copernicus-glo30, terrain.world.bathymetry.gebco, terrain.world.dem.nasadem, terrain.world.dem.opentopography, terrain.world.dem.terrarium, terrain.arctic.dem.arcticdem, terrain.antarctica.dem.rema, terrain.world.relief.ne50-shaded, terrain.world.relief.ne50-hypsometric]
+    note: "Bare earth: buildings and trees are not in these, so a line of sight over them sees more than is there. GEBCO holds land and sea floor in one grid (5.5.0): one choice serves elevation and bathymetry."
   lidar:
     says: "Lidar point clouds and surface models"
     words: [lidar, point cloud, las, laz, dsm, surface model, canopy]

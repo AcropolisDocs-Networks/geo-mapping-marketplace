@@ -147,6 +147,91 @@ def assign(plan) -> dict:
     return plan.emphasis
 
 
+# ---------------------------------------------------------------------------------------------------------------- the subject's contrast budget (5.5.0)
+BOOST_WIDTH_K = 1.6           # 5.5.0 (Q-01): a subject line drawn this much wider than the look's line, within the bounds below
+BOOST_MIN_MM = 0.9
+BOOST_MAX_MM = 2.0
+BOOST_CASING_MM = 0.5         # a casing in the page colour round it, so it lifts off a busy ground
+RASTER_STEP_BACK = 0.8        # a raster that is not the subject, when the subject is a line or points
+REFERENCE_WEIGHT = 600        # city and capital names one weight lighter than the 700 they take when they are the map's own
+ATTENTION_MIN = 0.15          # 5.6.0 (Q-01): the share of the picture's attention the subject should hold; under it the build boosts again
+BOOST2_WIDTH_K = 1.5          # ...the subject's line this much wider again (to BOOST2_MAX_MM)
+BOOST2_MAX_MM = 2.8
+BOOST2_POINT_K = 1.4
+BOOST2_RASTER = 0.6           # ...a raster that is not the subject at this opacity
+BOOST2_REST_K = 0.75          # ...context and supporting layers at this share of their strength
+
+
+def subject_attention(svg_text: str, ids) -> float | None:
+    """5.6.0 (Q-01): the share of the picture's attention (spectral-residual saliency, as the draft readings measure it) on the subject's
+    own marks (attention.layer_share). None when it cannot be measured here."""
+    import attention
+    return attention.layer_share(svg_text, ids)
+
+
+def subject_boost(plan) -> list[str]:
+    """5.5.0 (Q-01, HIER-1): when the message names a line or point layer (a route, a ship's track, a set of sites), that layer is made the
+    strongest mark: a line is widened (BOOST_WIDTH_K, BOOST_MIN_MM to BOOST_MAX_MM) and cased in the page colour, a raster that is not the
+    subject steps back to RASTER_STEP_BACK, and the reference names (cities, capitals) are set a weight lighter. The Mayflower's route held
+    about 3% of the attention under a full-strength sea floor. Off with `style.subject_boost: off`, under the classic look, or when a layer
+    sets its own width. -> notes (what was done, so the draft says it)."""
+    st = plan.spec.get("style") if isinstance(plan.spec.get("style"), dict) else {}
+    if getattr(plan, "look", "classic") == "classic" or st.get("subject_boost") in (False, "off"):
+        return []
+    subj = [l for l in subject_layers(plan.spec, plan.layers) if l.kind in ("line", "point")]
+    if not subj:
+        return []
+    t = plan.tokens
+    done: list[str] = []
+    for l in subj:
+        sym = l.spec.get("symbol") if isinstance(l.spec.get("symbol"), dict) else {}
+        if l.kind == "line" and "width" not in sym:
+            w0 = float(l.stroke_w_mm or 0.5)
+            w = round(min(BOOST_MAX_MM, max(w0 * BOOST_WIDTH_K, BOOST_MIN_MM)), 2)
+            if w > w0:
+                l.stroke_w_mm = w
+                sym["_width_mm"] = w
+                l.casing = {"color": t["background"], "extra_mm": BOOST_CASING_MM, "opacity": 1.0}
+                if isinstance(l.legend_block, dict) and l.legend_block.get("kind") == "lines":
+                    l.legend_block = {**l.legend_block, "items": [{**it, "width_mm": max(float(it.get("width_mm") or 0), w)} for it in l.legend_block["items"]]}
+                done.append(f"{l.id} widened to {w:g} mm and cased in the page colour")
+    for l in plan.layers:
+        if l.role == "raster" and l not in subj:
+            r = l.spec.setdefault("raster", {}) if isinstance(l.spec, dict) else {}
+            if "opacity" not in r:
+                r["opacity"] = RASTER_STEP_BACK
+                done.append(f"{l.id} stepped back to {RASTER_STEP_BACK:.0%}")
+    plan._quiet_reference = True
+    plan._subject_ids = [l.id for l in subj]
+    if st.get("subject_boost") == "strong":
+        # 5.6.0 (Q-01): the measured pass found the subject under ATTENTION_MIN of the attention: stronger again, and the rest steps back
+        for l in subj:
+            if l.kind == "line" and "width" not in (l.spec.get("symbol") if isinstance(l.spec.get("symbol"), dict) else {}):
+                w = round(min(BOOST2_MAX_MM, float(l.stroke_w_mm or 0.5) * BOOST2_WIDTH_K), 2)
+                l.stroke_w_mm = w
+                l.casing = {"color": t["background"], "extra_mm": BOOST_CASING_MM * 1.4, "opacity": 1.0}
+                done.append(f"{l.id} widened again to {w:g} mm")
+            elif l.kind == "point" and getattr(l, "symbol", None) is not None and "size" not in l.symbol:
+                l.symbol["_size_mm"] = round(float(l.symbol.get("_size_mm") or 2.0) * BOOST2_POINT_K, 2)
+                done.append(f"{l.id} points drawn {BOOST2_POINT_K:g} times larger")
+        for l in plan.layers:
+            if l in subj or l.kind == "raster":
+                continue
+            if l.role in ("context", "contour") or getattr(l, "emphasis", "primary") != "primary":
+                l.group_opacity = float(getattr(l, "group_opacity", 1.0) or 1.0) * BOOST2_REST_K
+        for l in plan.layers:
+            if l.role == "raster" and l not in subj:
+                r = l.spec.setdefault("raster", {}) if isinstance(l.spec, dict) else {}
+                if float(r.get("opacity", 1.0)) > BOOST2_RASTER:
+                    r["opacity"] = BOOST2_RASTER
+        done.append(f"the ground, the context and other layers stepped back to {BOOST2_RASTER:.0%} and {BOOST2_REST_K:.0%}")
+    done.append("city and capital names set a weight lighter")
+    note = ("emphasis: the subject (" + ", ".join(l.id for l in subj) + ") is the strongest mark: " + "; ".join(done)
+            + ". style.subject_boost: off keeps the look's own strengths.")
+    plan.notes.append(note)
+    return [note]
+
+
 # ---------------------------------------------------------------------------------------------------------------- emphasis inside a layer (1.22.0)
 # The message often singles out part of a layer, not a layer: one end of the values ("the cheapest power"), a few of them ("the top 5 dams")
 # or named ones ("the n41 sites", "Quincy"). 1.13.0 could draw that (`highlight:`), but only when the spec spelled it out. `suggest_highlight`

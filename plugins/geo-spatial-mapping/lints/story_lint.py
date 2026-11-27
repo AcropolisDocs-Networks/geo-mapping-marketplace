@@ -348,6 +348,11 @@ def lint(plan, report: dict) -> tuple[list[dict], dict]:
             fs.append(finding("MAP-STORY-007", "WARN", f"layer '{lid}' was named on the map in place of its key, but {', '.join(v['missing'][:4])} found no "
                               f"room, so the map shows it without saying what it is; legend: {{direct: false}} on the layer puts its key back",
                               {"layer": lid, "missing": v["missing"], "suggest": "legend: {direct: false}"}))
+    hedge = modelled_stated_as_fact(plan)
+    if hedge:                                           # 5.5.0 (Q-04): a title that states a modelled layer as fact
+        fs.append(finding("MAP-STORY-029", "INFO", f"layer(s) {', '.join(repr(x) for x in hedge[:3])} are modelled (certainty: modelled), but the title "
+                          "states what they show as fact; say it as a model ('where rain would pool') or name the method in the subtitle",
+                          {"layers": hedge, "suggest": "a title that says it is modelled"}))
     off = off_message_layers(plan)
     measures["off_message"] = off
     if off:
@@ -358,6 +363,19 @@ def lint(plan, report: dict) -> tuple[list[dict], dict]:
 
 
 OFF_MESSAGE_ROLES = ("points", "lines", "polygons", "proportional", "choropleth", "hexbin", "grid")
+
+
+HEDGES = ("would", "could", "may", "might", "likely", "model", "modelled", "modeled", "estimate", "estimated", "simulated", "predicted", "expected",
+          "probable", "possible", "reconstructed")
+
+
+def modelled_stated_as_fact(plan) -> list[str]:
+    """5.5.0 (Q-04): the modelled layers (certainty: modelled) when the title and subtitle hold no word that says it is a model."""
+    el = (plan.spec.get("elements") or {}).get("title") or {}
+    text = " ".join(str(x or "") for x in (el.get("text"), el.get("subtitle"))).lower()
+    if not text.strip() or any(w in text for w in HEDGES):
+        return []
+    return [l.id for l in plan.layers if str((l.spec or {}).get("certainty") or "").lower() == "modelled"]
 
 
 def off_message_layers(plan) -> list[str]:
@@ -381,9 +399,26 @@ def off_message_layers(plan) -> list[str]:
         title = str((l.spec.get("legend") or {}).get("title") or getattr(l, "title", "") or "")
         terms = {w for w in _re.findall(r"[a-z]{4,}", (l.id.replace("_", " ") + " " + title).lower())}
         stems = {w[:-1] if w.endswith("s") else w for w in terms}
-        if stems and not any(st in words for st in stems):
+        if stems and not any(st in words for st in stems) and not names_a_feature(l, words):
             out.append(l.id)
     return out
+
+
+def names_a_feature(l, text: str) -> bool:
+    """5.5.0 (D26-06): the message names one of the layer's features by value (a rivers layer filtered to the Colorado and the Gila, named
+    by the message): the same word test MAP-STORY-006 uses, so the two checks never contradict each other."""
+    try:
+        import map_emphasis as me
+        g = l.gdf
+        for c in [c for c in g.columns if c != g.geometry.name][:me.NAMED_MAX_COLUMNS]:
+            if str(g[c].dtype) not in ("object", "string", "str"):
+                continue
+            vals = g[c].dropna().astype(str).unique()
+            if 0 < len(vals) <= me.NAMED_MAX_UNIQUE and me.named_in(text, vals):
+                return True
+    except Exception:  # noqa: BLE001 - the id and title test stands alone
+        return False
+    return False
 
 
 def summary_lines(findings: list[dict]) -> list[str]:

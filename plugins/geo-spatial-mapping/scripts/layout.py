@@ -354,6 +354,9 @@ def _stacked(area: Rect, corner: str, w: float, h: float, blockers: list[Rect], 
     return out
 
 
+BESIDE_GAP_MM = 2.0           # an element set beside another keeps this far from it; an item's gap_mm says otherwise (5.5.0)
+
+
 def place_overlays(frame: Frame, occ: np.ndarray | None, items: list[dict], banner_h: float = 0.0) -> dict:
     """items: [{name, w, h, prefer, locked, beside?, side?}] in priority order. Returns {name: {rect, corner, moved_from, reason, cover}}.
 
@@ -377,10 +380,11 @@ def place_overlays(frame: Frame, occ: np.ndarray | None, items: list[dict], bann
             a = anchor["rect"]
             low = anchor["corner"].startswith("lower")
             y0 = a.y1 - it["h"] if low else a.y0
+            gap = float(it.get("gap_mm", BESIDE_GAP_MM))      # 5.5.0 (Q-11): the north arrow keeps 3 mm from the legend box
             if it.get("side", "left") == "left":
-                cands.append((anchor["corner"], Rect(a.x0 - 2.0 - it["w"], y0, a.x0 - 2.0, y0 + it["h"]), True))
+                cands.append((anchor["corner"], Rect(a.x0 - gap - it["w"], y0, a.x0 - gap, y0 + it["h"]), True))
             else:
-                cands.append((anchor["corner"], Rect(a.x1 + 2.0, y0, a.x1 + 2.0 + it["w"], y0 + it["h"]), True))
+                cands.append((anchor["corner"], Rect(a.x1 + gap, y0, a.x1 + gap + it["w"], y0 + it["h"]), True))
         for k, corner in enumerate(order):
             cands.append((corner, corner_rect(area, corner, it["w"], it["h"]), k == 0))
             if k == 0:

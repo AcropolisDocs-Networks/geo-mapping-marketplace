@@ -34,6 +34,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import numpy as np
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "lints"))
@@ -319,7 +321,7 @@ def base_dpi(dpi: float, scale: float) -> int:
 
 
 def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand: str | None, scale: float = 1.0, also: tuple = (),
-               reveal: dict | None = None):
+               reveal: dict | None = None, legend_off: bool = False):
     """The map without the event layer (keyed in the legend only), at the size's template and dpi. `also`: more layers keyed in the legend
     only (1.16.0: a timeline's feature layer, drawn by the overlay). -> (RGB image, report, plan, events frame or None, colour, dpi, {id: plan})."""
     gc.ledger_start_lazy("events_anim.build_base")      # 3.4.0 (F-3): a session's own script that imports this leaves a ledger line
@@ -361,6 +363,8 @@ def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand:
             extra[lid] = lp
         lay.setdefault("legend", {})["only"] = True
     spec["template"] = cfg["template"]
+    if legend_off:                                       # 5.6.0 (Q-07): the same map without its key, under the key set back
+        spec.setdefault("elements", {})["legend"] = {**((spec.get("elements") or {}).get("legend") or {}), "on": False}
     # 2.1.0 (Day 19 video issue 12): the dpi is a whole number of at least 72. 2.0 passed 108.0 x scale, a decimal the MapSpec refuses, and the
     # draft's 0.5 gave 54 dpi: the draft and every scale but 1.0 stopped. The base is drawn at that dpi and fitted to the frame's pixels.
     dpi = base_dpi(cfg["dpi"], scale)
@@ -369,7 +373,7 @@ def build_base(spec_path: Path, layer: str | None, size: str, work: Path, brand:
     tmp = spec_path.parent / f".{spec_path.stem}.events-base.yaml"          # beside the MapSpec, so its relative data paths still resolve
     tmp.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), encoding="utf-8")
     try:
-        res = bm.build(str(tmp), str(work / "base"), ["png"], brand=brand or spec.get("brand"), keep=True)
+        res = bm.build(str(tmp), str(work / ("base-nolegend" if legend_off else "base")), ["png"], brand=brand or spec.get("brand"), keep=True)
     except mp.PlanError as ex:
         raise EventsError(f"the map cannot be built: {str(ex).splitlines()[0]}") from None
     finally:
@@ -436,6 +440,27 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
     n = int(frames or max(2, round(duration * fps)))
     intro_f = min(n - 2, round(intro * fps))
     win = report["map_window"]
+    small_base, small_key = None, None
+    if (tl.get("legend") or {}).get("reduce") and ((report.get("overlays") or {}).get("legend") or {}).get("rect_mm"):
+        try:
+            bare, rep_b = build_base(spec_path, layer, size, work, brand, scale, also=also, reveal=rv_cfg, legend_off=True)[:2]
+        except EventsError:
+            bare, rep_b = None, None
+        if bare is not None and (rep_b or {}).get("map_window", {}).get("rect_mm") == win.get("rect_mm"):
+            small_base, small_key = reduced_legend_base(base, bare, report, dpi / 25.4, tl["legend"]["scale"])
+        if small_base is None:
+            tl["findings"].append({"id": "MAP-OUT-013", "severity": "INFO", "detail": None,
+                                   "message": "the legend stays whole through the video: the map without it does not line up with the map with it"})
+
+    def base_at(t_):
+        """5.6.0 (Q-07): the map under the frame at time t_: whole key first, then the key set back (a short cross-fade between)."""
+        m_ = tlm.legend_mix(tl, t_) if small_base is not None else 0.0
+        if m_ <= 0.0:
+            return base
+        if m_ >= 1.0:
+            return small_base
+        from PIL import Image
+        return Image.blend(base, small_base, m_)
     ppm = dpi / 25.4
     events, kind = [], "number"
     if layer:
@@ -495,6 +520,16 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
                 c["start"] = min(c["start"], 0.0)
     findings = list(tl["findings"])
     mo = _motion_setup(tl, plan, extra, win, ppm, base.size, duration, findings, fps, n, report)
+    mo_small = None
+    if mo and mo.get("top") is not None and small_base is not None:
+        # 5.6.0 (Q-07): the furniture drawn over the moving layers carries the whole key; once the key steps back, the sheet without it,
+        # the small key on it
+        lg_r = [round(v * ppm) for v in report["overlays"]["legend"]["rect_mm"]]
+        top_s = mo["top"].copy()
+        top_s.paste((0, 0, 0, 0), (max(0, lg_r[0]), max(0, lg_r[1]), min(base.size[0], lg_r[2]), min(base.size[1], lg_r[3])))
+        top_s.paste(small_base.crop(tuple(small_key)).convert("RGBA"), tuple(small_key[:2]))
+        mo_small = {**mo, "top": top_s}
+    findings += [f for f in tl.get("findings") or [] if f not in findings]
     bottom_px = max(0, base.size[1] - round(win["rect_mm"][3] * ppm)) + round(base.size[1] * 0.02)
     font_tl = str(fl._inter_ttf(600))
     avoid = [[v * ppm for v in (o or {}).get("rect_mm")] for o in ((report or {}).get("overlays") or {}).values()
@@ -509,13 +544,22 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
             if r_["start"] is None:
                 r_["start"] = p_["start"]
     chart_rect = None
+    frame_px = [v * ppm for v in win["rect_mm"]]
+    chart_avoid = frame_avoid(report, ppm, base.size, tl)
+    if chart and chart.get("kind") == "profile" and not chart.get("_profile"):
+        raise EventsError("a profile chart needs the timeline's flow: (it is drawn along it)")
+    if (not tl.get("poster_set")) and not poster and fcfg:
+        tl["poster"] = "preview"                     # 5.5.0 (MEDIUM-3): a flow video opens on the route drawn faint, not on its end state
+    if tl.get("poster") == "preview":
+        _preview_poster(base, mo, plan, fdir, tl, font_tl, report, ppm)
     for k in range(n):
         tk = k / fps
-        b = pieces.draw(base, tk) if pieces else base
+        b0 = base_at(tk)
+        b = pieces.draw(b0, tk) if pieces else b0
         if rv is not None:
             b = rv.draw(b, tk)
         if mo:
-            b = _motion_frame(mo, b, tk, plan.tokens, str(fl._inter_ttf(600)))
+            b = _motion_frame(mo_small if (mo_small is not None and tlm.legend_mix(tl, tk) >= 0.5) else mo, b, tk, plan.tokens, str(fl._inter_ttf(600)))
         fields = None
         if heat:
             b, shown, fields = _heat_frame(ha, heat, b, k, fps, events)
@@ -524,7 +568,8 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
         im = draw_frame(b, shown, k, fps, r_px=r_px, colours=colours, counter=counter, font=font, date_text=date_text, at=at,
                         flash_n=heat and heat.get("flash_n"), fields=fields)
         if chart:
-            im, chart_rect = ha.paint_chart(im, tk, chart, t, font_path=font_tl, avoid=avoid, ramp=heat["field"].ramp if heat else None)
+            im, chart_rect = ha.paint_chart(im, tk, chart, t, font_path=font_tl, avoid=chart_avoid, ramp=heat["field"].ramp if heat else None,
+                                            frame=frame_px)
         if tl["story"] or tl["counters"]:
             im, _pl = tlm.paint(im, tk, tl, t, font_path=font_tl, logo=None, bottom_px=bottom_px, top_px=round(win["rect_mm"][1] * ppm),
                                 avoid=avoid + ([chart_rect] if chart_rect else []) + ([mo["panel"]] if mo and mo.get("panel") else []),
@@ -540,7 +585,8 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
            "pieces": len(pieces.ids) if pieces else 0, "trail": trail,
            "reveal": ({"layer": rv_cfg["layer"], "features": rv.n, "drawn": rv.drawn, "end": rv.counts((n - 1) / fps)} if rv is not None else None),
            "heat": {k_: v for k_, v in (heat or {}).items() if k_ in ("scale_peak", "sigma_px", "masked", "bandwidth_m", "periods")} or None,
-           "chart": chart_rect, "motion": ({"notes": mo["notes"], "top": mo["top"] is not None, "overflow": mo.get("overflow")} if mo else None),
+           "chart": chart_rect, "legend_reduced": ({"after_s": tl["legend"]["at"], "scale": tl["legend"]["scale"], "rect_px": small_key}
+                                                    if small_base is not None else None), "motion": ({"notes": mo["notes"], "top": mo["top"] is not None, "overflow": mo.get("overflow")} if mo else None),
            "notes": [f"{len(events):,} events over {n / fps:.1f} s; the map built once at {size} ({base.size[0]} x {base.size[1]} px)"]}
     mp4 = out / f"{stem}.mp4"
     seq_dir, n_out = tlm.assemble(fdir, n, fps, tl)
@@ -555,6 +601,92 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
         rep["findings"].append({"id": "MAP-OUT-013", "severity": "WARN", "message": str(ex)})
     rep["ok"] = not any(f["severity"] == "BLOCK" for f in rep["findings"])
     return rep
+
+
+def _preview_poster(base, mo, plan, fdir: Path, tl: dict, font_path: str, report, ppm: float) -> None:
+    """5.5.0 (MEDIUM-3): the poster `preview`: the map with the whole route drawn faint and the title, no end state; saved as
+    frame_poster.png (timeline.assemble holds it, then dissolves into the first frame)."""
+    try:
+        im = base.convert("RGBA")
+        fl_ = (mo or {}).get("flow")
+        if fl_ is not None:
+            full = fl_.overlay(fl_.cfg["start"] + fl_.arrive * 1.01)
+            a = np.asarray(full.getchannel("A")).astype(float) * 0.42
+            from PIL import Image
+            full.putalpha(Image.fromarray(a.astype("uint8"), "L"))
+            im.alpha_composite(full)
+        if (mo or {}).get("top") is not None:
+            im.alpha_composite(mo["top"])
+        im.convert("RGB").save(fdir / "frame_poster.png")
+    except Exception:  # noqa: BLE001 - no preview: assemble falls back to the first frame
+        pass
+
+
+def beat_contradictions(tl: dict, ch: dict) -> list[dict]:
+    """5.5.0 (D26-32): MAP-STORY-028 (WARN) when a story line states a measure ("nearly 5 km of water") that the chart's live value no longer
+    shows before the line ends (3.9 km on screen): the line should end sooner, or be tied to the distance (at_km)."""
+    import re as _re
+    out = []
+    if not ch.get("_profile") or not ch.get("_progress"):
+        return out
+    import heat_anim as ha
+    xs, ys = ch["_profile"]
+    vals = np.abs(ys) if ch.get("invert") and np.nanmax(ys) <= 0 else ys
+    unit_m = {"km": 1000.0, "m": 1.0, "metres": 1.0, "meters": 1.0, "ft": 0.3048, "feet": 0.3048, "mi": 1609.344, "miles": 1609.344}
+    for r in tl.get("story") or []:
+        if r.get("pending") or not math.isfinite(r.get("end", math.inf)):
+            continue
+        for num, unit in _re.findall(r"(\d+(?:[.,]\d+)?)\s*(km|m|metres|meters|ft|feet|mi|miles)\b", r["line"]):
+            said_m = float(num.replace(",", "")) * unit_m[unit]
+            for t_ in (r["start"], r["end"] - 0.05):
+                now = ha.profile_value_at({"_profile": (xs, vals)}, ch["_progress"](t_))
+                if math.isfinite(now) and said_m > 0 and abs(now - said_m) / said_m > 0.25:
+                    out.append({"id": "MAP-STORY-028", "severity": "WARN", "detail": {"line": r["line"][:80], "at_s": round(t_, 2), "chart": round(now, 1)},
+                                "message": f"the story line '{r['line'][:60]}' says {num} {unit} while the chart shows {now:,.0f} at {t_:.1f} s; "
+                                           "end it sooner or tie it to the distance (at_km)"})
+                    break
+            else:
+                continue
+            break
+    return out
+
+
+def reduced_legend_base(base, bare, report: dict, ppm: float, scale: float):
+    """5.6.0 (Q-07): the map with its key set back: the map drawn without a legend (`bare`), and the legend cut from the full map, made
+    `scale` of its size and set in its own corner. -> (image, the small key's rect in pixels) or (None, None) when there is no key in the map."""
+    from PIL import Image
+    lg = ((report or {}).get("overlays") or {}).get("legend")
+    if not lg or not lg.get("rect_mm") or bare.size != base.size:
+        return None, None
+    x0, y0, x1, y1 = [round(v * ppm) for v in lg["rect_mm"]]
+    x0, y0, x1, y1 = max(0, x0), max(0, y0), min(base.size[0], x1), min(base.size[1], y1)
+    if x1 - x0 < 4 or y1 - y0 < 4:
+        return None, None
+    key = base.crop((x0, y0, x1, y1))
+    w, h = max(1, round(key.width * scale)), max(1, round(key.height * scale))
+    small = key.resize((w, h), Image.LANCZOS)
+    corner = str(lg.get("corner") or "upper-right")
+    px = x1 - w if "right" in corner else x0
+    py = y1 - h if ("lower" in corner or "bottom" in corner) else y0
+    out = bare.copy()
+    out.paste(small, (px, py))
+    return out, [px, py, px + w, py + h]
+
+
+def frame_avoid(report: dict | None, ppm: float, size, tl: dict) -> list:
+    """5.5.0 (D26-26): what a chart panel keeps off: the map's legend, locator, title, logo and scale bar, and the corners the counters use."""
+    W, H = size
+    out = [[v * ppm for v in (o or {}).get("rect_mm")] for o in ((report or {}).get("overlays") or {}).values()
+           if isinstance(o, dict) and (o or {}).get("rect_mm")]
+    win = (report or {}).get("map_window") or {}
+    fr = [v * ppm for v in win.get("rect_mm") or [0, 0, W / ppm, H / ppm]]
+    cw, chh = (fr[2] - fr[0]) * 0.3, (fr[3] - fr[1]) * 0.14
+    for c in tl.get("counters") or []:
+        pos = str(c.get("position") or "top-right")
+        x0 = fr[0] if pos.endswith("left") else fr[2] - cw
+        y0 = fr[1] if pos.startswith("top") else fr[3] - chh
+        out.append([x0, y0, x0 + cw, y0 + chh])
+    return out
 
 
 def _motion_setup(tl, plan, extra, win, ppm, size, duration, findings, fps, n, report=None) -> dict | None:
@@ -583,8 +715,26 @@ def _motion_setup(tl, plan, extra, win, ppm, size, duration, findings, fps, n, r
             for c in tl.get("counters") or []:          # `source: flow` counters run the real hours since the start (format: hm)
                 if c.get("source") == "flow":
                     ts = [i_ / fps for i_ in range(0, n, max(1, round(fps / 5)))] + [(n - 1) / fps]
-                    c["keys"] = [(t_, mo["flow"].real_hours(t_)) for t_ in ts]
+                    if c.get("total") is not None:      # 5.5.0 (D26-33): from..total with the front (a day counter), the chart's x reads the same
+                        c["keys"] = [(t_, c["from"] + (c["total"] - c["from"]) * mo["flow"].progress(t_)) for t_ in ts]
+                    else:
+                        c["keys"] = [(t_, mo["flow"].real_hours(t_)) for t_ in ts]
                     c["start"] = min(c["start"], 0.0)
+            mo["notes"] += tlm.resolve_beats(tl, mo["flow"])
+            ch = tl.get("chart")
+            if ch and ch.get("kind") == "profile":      # 5.5.0 (D26-23): the profile along the flow, its marker at the front on every frame
+                rp = ch.get("raster")
+                if rp and not Path(str(rp)).is_absolute():
+                    rp = str(Path(getattr(plan, "spec_path", Path(".")).parent) / str(rp))
+                ch["_profile"] = mo["flow"].profile(raster=rp, column=ch.get("column"), layer=lp, samples=ch.get("samples", 240))
+                fl_ = mo["flow"]
+                ch["_progress"] = fl_.progress
+                cx = next((c for c in tl.get("counters") or [] if c.get("source") == "flow" and c.get("total") is not None), None)
+                if cx is not None and not ch.get("x_map"):
+                    ch["x_map"] = {"from": cx["from"], "to": cx["total"]}     # one mapping for the counter and the chart's x
+                mo["notes"].append(f"chart: a profile along '{fcfg['layer']}' from {Path(str(rp)).name if rp else ch.get('column')}, "
+                                   f"{len(ch['_profile'][0])} samples, its marker at the flow's front")
+                tl.setdefault("findings", []).extend(beat_contradictions(tl, ch))
     except motion.MotionError as ex:
         raise EventsError(str(ex)) from None
     rect = [v * ppm for v in win["rect_mm"]]
@@ -690,7 +840,7 @@ def main(argv=None) -> int:
     ap.add_argument("--quality", choices=("draft", "final"), default="draft")
     ap.add_argument("--brand")
     ap.add_argument("--timeline", help="1.16.0: story line, counters, feature events, poster and end hold (timeline.py)")
-    ap.add_argument("--poster", choices=("first", "last", "none"), help="1.16.0: open the video on a held first or last frame")
+    ap.add_argument("--poster", help="1.16.0: open the video on a held first or last frame; 5.5.0: preview (the route faint, no end state) or a time in seconds")
     ap.add_argument("--trail", choices=("stay", "settle"), default="stay",
                     help="2.1.0: stay (events stay as dots) or settle (each flashes, fades and adds to a heat surface on one fixed scale)")
     ap.add_argument("--periods", metavar="COLUMN", help="2.1.0: one heat surface per value of COLUMN (a month, a year) on one shared scale, cross-faded")

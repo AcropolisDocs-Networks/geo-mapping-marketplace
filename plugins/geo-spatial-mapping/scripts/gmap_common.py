@@ -348,7 +348,22 @@ def normalize_roles(spec):
     if not isinstance(spec, dict):
         return spec
     for ly in spec.get("layers") or []:
-        if isinstance(ly, dict) and ly.get("draw") is False and not ly.get("role"):
+        if not isinstance(ly, dict):
+            continue
+        if isinstance(ly.get("palette"), str) and ly["palette"].strip():
+            # 5.5.0 (D26-03): `palette: brand_neutral` is the short form of {name: brand_neutral}; the lint used to crash on it
+            ly["palette"] = {"name": ly["palette"].strip()}
+        lg = ly.get("legend")
+        if isinstance(lg, dict) and lg.get("on") is False and "include" not in lg:
+            # 5.5.0 (D26-05): `legend: {on: false}` on a layer reads as the element toggle it looks like: the layer is left out of the key
+            lg["include"] = False
+        cer = str(ly.get("certainty") or "").lower()
+        if cer == "reconstructed" and ly.get("role") == "lines":
+            # 5.5.0 (Q-04): a reconstructed line is drawn dashed, so it reads as different from an observed one without the legend
+            sym = ly.get("symbol") if isinstance(ly.get("symbol"), dict) else {}
+            if not sym.get("dash"):
+                ly["symbol"] = {**sym, "dash": "dashed"}
+        if ly.get("draw") is False and not ly.get("role"):
             ly["role"] = "polygons"             # 2.1.0 (Day 19 issue 9): a helper is not drawn; its role only names its kind of data
         src = ly.get("source") if isinstance(ly, dict) else None
         if isinstance(src, dict) and src.get("type") == "ref" and ly.get("where") and not src.get("where"):
@@ -530,7 +545,7 @@ def ledger_start_lazy(entry: str) -> None:
     real_hook = sys.excepthook
 
     def _hook(tp, val, tb):
-        _LEDGER.update(exit=1, exception=tp.__name__)
+        _LEDGER.update(exit=1, exception=tp.__name__, **crash_info(val, tb))
         real_hook(tp, val, tb)
     sys.excepthook = _hook
     atexit.register(_ledger_write)
@@ -552,6 +567,8 @@ def ledger_note(*, outputs=None, findings=None, degraded=None, **extra) -> None:
         for f in findings:
             if isinstance(f, dict) and f.get("id"):
                 _LEDGER["findings"][f["id"]] = f.get("severity") or _LEDGER["findings"].get(f["id"])
+                if f.get("severity") == "BLOCK" and not _LEDGER.get("first_finding"):
+                    _LEDGER["first_finding"] = f"{f['id']}: {str(f.get('message') or '')[:160]}"
     if degraded:
         _LEDGER.setdefault("degraded", [])
         _LEDGER["degraded"] += [str(d) for d in degraded if str(d) not in _LEDGER["degraded"]]
@@ -568,7 +585,11 @@ def _ledger_write() -> None:
     row = {"script": _LEDGER["script"], "start": _LEDGER["start"], "end": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="milliseconds"),
            "seconds": round(_time.monotonic() - _LEDGER["t0"], 2), "exit": _LEDGER.get("exit", 0), "options": _LEDGER["options"],
            "cwd": _LEDGER["cwd"], "pid": os.getpid()}
-    for k in ("outputs", "findings", "degraded", "exception", "spec", "out", "lazy", "entry", "host"):
+    tail = _LEDGER.get("_stderr")
+    if tail is not None and tail.last and row["exit"] not in (0, None):
+        _LEDGER["last_line"] = tail.last[-240:]              # 5.5.0 (T-05): what the script said last, for the trace's one line of cause
+    for k in ("outputs", "findings", "degraded", "exception", "spec", "out", "lazy", "entry", "host", "crash_site", "exception_msg", "last_line",
+              "first_finding"):
         if _LEDGER.get(k):
             row[k] = _LEDGER[k]
     line = json.dumps(row, default=str) + "\n"
@@ -631,10 +652,58 @@ def ledger_start() -> None:
     real_hook = sys.excepthook
 
     def _hook(tp, val, tb):
-        _LEDGER.update(exit=1, exception=tp.__name__)
+        _LEDGER.update(exit=1, exception=tp.__name__, **crash_info(val, tb))
         real_hook(tp, val, tb)
     sys.excepthook = _hook
+    try:                                                     # 5.5.0 (T-05): the last line written to stderr, kept for the ledger
+        if not isinstance(sys.stderr, _TailStream):
+            _LEDGER["_stderr"] = sys.stderr = _TailStream(sys.stderr)
+    except Exception:  # noqa: BLE001 - a ledger never stops a script
+        pass
     atexit.register(_ledger_write)
+
+
+class _TailStream:
+    """A stream that passes everything on and remembers its last non-empty line (5.5.0, T-05)."""
+
+    def __init__(self, inner):
+        self._inner = inner
+        self.last = ""
+
+    def write(self, s):
+        try:
+            for ln in str(s).splitlines():
+                if ln.strip():
+                    self.last = ln.strip()
+        except Exception:  # noqa: BLE001
+            pass
+        return self._inner.write(s)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def crash_info(val, tb) -> dict:
+    """5.5.0 (T-04): where an exception was raised inside this plugin (the last frame under the plugin's scripts, lints or mcp folder, as
+    'lints/mapspec_lint.py:116') and its message, for the run ledger; the trace reads them when the console hid the traceback."""
+    import traceback
+    site = None
+    try:
+        root = Path(__file__).resolve().parent.parent
+        for fr in traceback.extract_tb(tb):
+            p = Path(fr.filename).resolve()
+            try:
+                rel = p.relative_to(root)
+            except ValueError:
+                continue
+            if rel.parts and rel.parts[0] in ("scripts", "lints", "mcp", "hooks"):
+                site = f"{rel.as_posix()}:{fr.lineno}"
+    except Exception:  # noqa: BLE001
+        site = None
+    out = {"exception_msg": str(val)[:200]}
+    if site:
+        out["crash_site"] = site
+    return out
 
 
 ROOT_POINTER = "plugin-root.txt"

@@ -56,6 +56,10 @@ PARAM_FLAGS = [
     ("--per", "per", "float"), ("--seed", "seed", "int"), ("--bandwidth", "bandwidth", "num_or_text"), ("--classes", "classes", "int"),
     ("--weight", "weight", "text"), ("--to-x", "to_x", "text"), ("--to-y", "to_y", "text"), ("--to-id", "to_id", "text"), ("--bend", "bend", "float"), ("--top", "top", "int"),
     ("--min-value", "min_value", "float"),
+    # 5.5.0 (D26-13): depressions, trace_downstream, sample_along, sea_route
+    ("--dem", "dem", "text"), ("--raster", "raster", "text"), ("--spacing", "spacing", "num_or_text"), ("--min-depth-m", "min_depth_m", "float"),
+    ("--min-area-m2", "min_area_m2", "float"), ("--to-field", "to_field", "text"), ("--order-field", "order_field", "text"), ("--cell-deg", "cell_deg", "float"),
+    ("--margin-deg", "margin_deg", "float"),
 ]
 
 

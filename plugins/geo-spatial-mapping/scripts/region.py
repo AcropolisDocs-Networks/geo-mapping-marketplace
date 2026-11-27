@@ -430,6 +430,51 @@ def town_place(text: str, *, fetch: bool = True) -> dict | None:
     return None
 
 
+US_PLACE_ENTRY = "ref.boundary.us.place.cb500k"
+
+
+def us_place_outline(name: str, state: str, *, fetch: bool = True):
+    """5.5.0 (D26-08): a US town's own outline (an incorporated place or CDP, Census 1:500,000) by name and state postal code, or None. Read
+    from the library cache (fetched once when it is not there and the network allows). A town is framed and masked by its outline, not by
+    a 10 km circle round its GeoNames point."""
+    try:
+        import map_plan as mp
+        import ref_fetch
+        e = ref_fetch.find_entry(US_PLACE_ENTRY)
+        if ref_fetch.cached_path(e) is None:
+            if not fetch:
+                return None
+            ref_fetch.fetch_entry(US_PLACE_ENTRY)
+        g, _e = mp.load_ref_layer(US_PLACE_ENTRY)
+    except Exception:  # noqa: BLE001 - no outline here: the GeoNames point and its frame stand in, as before
+        return None
+    return place_row_outline(g, name, state)
+
+
+def place_row_outline(g, name: str, state: str):
+    """The outline of the place `name` in `state` from a Census place table (NAME, and STUSPS or STATEFP), or None."""
+    if g is None or not len(g) or "NAME" not in g.columns:
+        return None
+    pool = g
+    st = str(state or "").upper()
+    if st and "STUSPS" in g.columns:
+        pool = g[g["STUSPS"].astype(str).str.upper() == st]
+    elif st and "STATEFP" in g.columns and st in US_STATE_FIPS:
+        pool = g[g["STATEFP"].astype(str).str.zfill(2) == US_STATE_FIPS[st]]
+    hit = pool[pool["NAME"].astype(str).map(_norm) == _norm(name)]
+    if len(hit) != 1:
+        return None
+    geom = (hit.to_crs("EPSG:4326") if hit.crs is not None and not hit.crs.equals("EPSG:4326") else hit).geometry.iloc[0]
+    return None if geom is None or geom.is_empty else geom
+
+
+US_STATE_FIPS = {"AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "DC": "11", "FL": "12", "GA": "13",
+                 "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22", "ME": "23", "MD": "24", "MA": "25",
+                 "MI": "26", "MN": "27", "MS": "28", "MO": "29", "MT": "30", "NE": "31", "NV": "32", "NH": "33", "NJ": "34", "NM": "35", "NY": "36",
+                 "NC": "37", "ND": "38", "OH": "39", "OK": "40", "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48",
+                 "UT": "49", "VT": "50", "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56", "PR": "72"}
+
+
 # ---------------------------------------------------------------------------------------------------------------- 4.0.3: a US county by name
 FIPS = re.compile(r"^\d{5}$")
 COUNTRY_WORDS = {"us", "usa", "u s", "u s a", "united states", "united states of america"}
@@ -575,7 +620,18 @@ def resolve(block, base: Path | None = None, *, fetch_admin2=None) -> Region:
                               + (f" (did you mean {', '.join(near)}?)" if near else "")
                               + "; add it to .geo-mapping/regions.yaml, give admin: codes, name the town with its state or country "
                                 "(\"Bellevue, US-WA\"), or name a US county with its state (\"Maricopa County, AZ\")")
-    if "place" in block and town is not None:
+    outline = None
+    if "place" in block and town is not None and str(town.get("where") or "").startswith("US-"):
+        outline = us_place_outline(town["name"], str(town["where"])[3:])
+    if "place" in block and town is not None and outline is not None:
+        # 5.5.0 (D26-08): a US town is its Census place outline (incorporated place or CDP): framed and masked by it, no circle
+        geoms.append(outline)
+        sources.append("US Census Bureau, cartographic boundary places (1:500,000)")
+        name = town["name"]
+        definition = f"the town of {town['name']} ({town['where']}, US Census place outline)"
+        members.append(town["name"])
+        notes.append(f"region '{name}': {definition}")
+    elif "place" in block and town is not None:
         from shapely.geometry import Point
         geoms.append(Point(town["lon"], town["lat"]))
         sources.append(town["source"])

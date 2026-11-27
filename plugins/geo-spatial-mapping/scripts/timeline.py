@@ -69,6 +69,9 @@ import re
 from pathlib import Path
 
 FADE_S = 0.45
+READ_S_PER_CHAR = 0.06       # 5.5.0 (D26-32): a story line with no end stays its reading time (60 ms a character, at least READ_MIN_S)
+READ_MIN_S = 2.5
+POSTERS = ("first", "last", "none", "preview")
 MIN_EYE_M = 6.0
 MAX_PITCH = 115.0
 EASES = ("smooth", "linear", "in", "out", "hold")
@@ -82,6 +85,38 @@ class TimelineError(ValueError):
 
 
 # ------------------------------------------------------------------------------------------------------------------- loading
+LEGEND_FULL_S = 6.0          # 5.6.0 (Q-07): the legend is read at full size this long, then steps back
+LEGEND_REDUCE_MIN_S = 15.0   # ...in a video at least this long (a short one keeps it whole)
+LEGEND_SCALE = 0.7           # ...to this share of its size, in its own corner
+LEGEND_FADE_S = 0.6
+
+
+def _legend(v, dur: float | None) -> dict:
+    """5.6.0 (Q-07): the video's tiers are counter, chart, captions, then the legend: after its first seconds the key steps back to
+    LEGEND_SCALE of its size in its own corner. `legend: {reduce_after_s: 8, scale: 0.6}`; `legend: {reduce: false}` keeps it whole."""
+    if v is not None and not isinstance(v, dict):
+        raise TimelineError("legend is a mapping: {reduce_after_s: SECONDS, scale: 0.5 to 1, reduce: false}")
+    v = v or {}
+    extra = sorted(set(v) - {"reduce_after_s", "scale", "reduce"})
+    if extra:
+        raise TimelineError(f"unknown legend key(s): {', '.join(extra)}; the keys are reduce, reduce_after_s, scale")
+    sc = float(v.get("scale", LEGEND_SCALE))
+    if not 0.4 <= sc <= 1.0:
+        raise TimelineError(f"legend.scale is between 0.4 and 1, not {sc:g}")
+    asked = v.get("reduce")
+    at = float(v.get("reduce_after_s", LEGEND_FULL_S))
+    on = asked is True or (asked is not False and ("reduce_after_s" in v or (dur or 0) >= LEGEND_REDUCE_MIN_S))
+    return {"reduce": bool(on and sc < 1.0), "at": max(0.0, at), "scale": sc, "fade": LEGEND_FADE_S}
+
+
+def legend_mix(tl: dict, t: float) -> float:
+    """How far the legend has stepped back at time t: 0 (whole) to 1 (reduced)."""
+    lg = tl.get("legend") or {}
+    if not lg.get("reduce"):
+        return 0.0
+    return min(1.0, max(0.0, (t - lg["at"]) / max(lg["fade"], 1e-6)))
+
+
 def load(src, *, duration: float | None = None) -> dict:
     """A timeline from a path, a YAML/JSON string or a dict, checked and filled in. -> {duration, story, counters, keyframes, features,
     end_hold, poster, poster_hold, poster_dissolve, logo, findings}. Raises TimelineError naming the first problem."""
@@ -102,18 +137,20 @@ def load(src, *, duration: float | None = None) -> dict:
     if not isinstance(d, dict):
         raise TimelineError("a timeline is a mapping (story, counters, keyframes, features, end_hold, poster)")
     known = {"duration", "story", "counters", "keyframes", "features", "end_hold", "poster", "poster_hold", "poster_dissolve", "logo", "fade_s",
-             "min_eye_m", "date", "grow", "chart", "clock", "reveal", "values", "flow", "top", "overflow"}
+             "min_eye_m", "date", "grow", "chart", "clock", "reveal", "values", "flow", "top", "overflow", "legend"}
     extra = sorted(set(d) - known)
     if extra:
         raise TimelineError(f"unknown timeline key(s): {', '.join(extra)}; the keys are {', '.join(sorted(known))}")
     dur = float(d.get("duration") or duration or 0) or None
     out = {"duration": dur, "fade_s": float(d.get("fade_s", FADE_S)), "end_hold": max(0.0, float(d.get("end_hold") or 0)),
-           "poster": str(d.get("poster") or "none"), "poster_hold": max(0.0, float(d.get("poster_hold", 1.2))),
+           "poster": str(d.get("poster") or "none"), "poster_set": d.get("poster") is not None, "poster_hold": max(0.0, float(d.get("poster_hold", 1.2))),
            "poster_dissolve": max(0.0, float(d.get("poster_dissolve", 0.6))), "logo": d.get("logo", True) is not False,
            "min_eye_m": float(d.get("min_eye_m", MIN_EYE_M)), "findings": [],
            "date": d.get("date", "auto")}               # 1.19.0 (Day 16 issue 14): the date in the credits band: auto, off or a text
-    if out["poster"] not in ("first", "last", "none"):
-        raise TimelineError(f"poster is first, last or none, not '{out['poster']}'")
+    if out["poster"] not in POSTERS and poster_seconds(out["poster"]) is None:
+        # 5.5.0 (MEDIUM-3): preview (the route drawn faint with the title, no end state) or a second of the video, besides first, last, none
+        raise TimelineError(f"poster is first, last, preview, none or a time in seconds, not '{out['poster']}'")
+    out["legend"] = _legend(d.get("legend"), dur)
     out["clock"] = _clock(d.get("clock")) if d.get("clock") else None
     out["story"] = _story(d.get("story") or [], dur, out["clock"])
     out["counters"] = [_counter(c, i, out["clock"]) for i, c in enumerate(d.get("counters") or [])]
@@ -171,7 +208,7 @@ def caption_repeats(tl: dict) -> list[dict]:
     """3.4.0 (eval INFO-3): MAP-STORY-026 (WARN) when a story line states the number or date a counter shows on screen at that moment:
     two text blocks then say one thing; the caption should say what the counter cannot (where, who, why)."""
     out = []
-    for r in tl.get("story") or []:
+    for r in [q for q in tl.get("story") or [] if not q.get("pending")]:
         t = r["start"] + min(0.5, max(0.0, (r["end"] - r["start"]) / 2)) if math.isfinite(r["end"]) else r["start"] + 0.5
         for text, _pos in counters_at(tl, t):
             for tok in re.findall(r"\d[\d,.]*\d|\d{3,}", text) + ([text] if re.search(r"[A-Za-z]{3,}", text) and re.search(r"\d", text) else []):
@@ -269,23 +306,72 @@ def _reveal(r) -> dict:
             "before": r.get("before")}
 
 
+def poster_seconds(p) -> float | None:
+    """A poster given as a time ('12', '12.5', '12s'), or None."""
+    try:
+        return max(0.0, float(str(p).strip().rstrip("s")))
+    except (TypeError, ValueError):
+        return None
+
+
+def reading_s(line: str) -> float:
+    return max(READ_MIN_S, READ_S_PER_CHAR * len(str(line or "")))
+
+
 def _story(items, dur, clock=None) -> list[dict]:
     rows = []
     for i, s in enumerate(items):
+        if isinstance(s, dict) and "start" not in s and "at" not in s and (s.get("at_km") is not None or s.get("at_fraction") is not None):
+            # 5.5.0 (D26-32): a beat tied to a distance along the flow; its time is set once the flow is measured (resolve_beats)
+            rows.append({"start": 0.0, "end": None if s.get("end") is None else float(s["end"]), "line": str(s.get("line") or ""),
+                         "at_km": None if s.get("at_km") is None else float(s["at_km"]),
+                         "at_fraction": None if s.get("at_fraction") is None else float(s["at_fraction"]),
+                         "for_s": None if s.get("for_s") is None else float(s["for_s"]), "pending": True, "end_given": s.get("end") is not None})
+            if not rows[-1]["line"]:
+                raise TimelineError(f"story line {i + 1} needs line (text)")
+            continue
         if isinstance(s, dict) and "at" in s and "start" not in s:
             s = {**s, "start": _vt(s["at"], clock)}           # 3.4.0: a line placed at a real time, by the clock
             if s.get("until") is not None:
                 s["end"] = _vt(s["until"], clock)
         if not isinstance(s, dict) or "line" not in s or "start" not in s:
             raise TimelineError(f"story line {i + 1} needs start (seconds) or at (a real time, with a clock) and line (text)")
-        rows.append({"start": _vt(s["start"], clock), "end": None if s.get("end") is None else _vt(s["end"], clock), "line": str(s["line"])})
+        rows.append({"start": _vt(s["start"], clock), "end": None if s.get("end") is None else _vt(s["end"], clock), "line": str(s["line"]),
+                     "for_s": None if s.get("for_s") is None else float(s["for_s"]), "end_given": s.get("end") is not None or s.get("until") is not None})
+    return _story_ends(rows, dur)
+
+
+def _story_ends(rows: list[dict], dur) -> list[dict]:
+    """Ends filled in: a line with no end stays its reading time (or for_s), never past the next line's start nor the video's end
+    (5.5.0, D26-32: a line used to stay until the next one, over pictures that no longer showed what it said)."""
     rows.sort(key=lambda r: r["start"])
     for i, r in enumerate(rows):
-        if r["end"] is None:
-            r["end"] = rows[i + 1]["start"] if i + 1 < len(rows) else (dur if dur else math.inf)
+        if r.get("pending"):
+            continue
+        if not r.get("end_given"):
+            nxt = next((q["start"] for q in rows[i + 1:] if not q.get("pending")), None)
+            cap = min(x for x in (nxt, dur if dur else None, math.inf) if x is not None)
+            r["end"] = min(cap, r["start"] + (r.get("for_s") or reading_s(r["line"])))
         if r["end"] <= r["start"]:
             raise TimelineError(f"story line '{r['line'][:40]}' ends ({r['end']:g} s) before it starts ({r['start']:g} s)")
     return rows
+
+
+def resolve_beats(tl: dict, flow) -> list[str]:
+    """5.5.0 (D26-32): story lines given at_km or at_fraction start when the flow's front reaches that distance; their ends are filled in
+    again. `flow` has time_at_m(m) and max_m. -> notes."""
+    rows = tl.get("story") or []
+    pend = [r for r in rows if r.get("pending")]
+    if not pend:
+        return []
+    if flow is None:
+        raise TimelineError("a story line at_km or at_fraction needs a flow: in the timeline (the distance is along it)")
+    for r in pend:
+        m = r["at_km"] * 1000.0 if r.get("at_km") is not None else float(r["at_fraction"]) * float(flow.max_m)
+        r["start"] = round(float(flow.time_at_m(m)), 3)
+        r.pop("pending", None)
+    _story_ends(rows, tl.get("duration"))
+    return [f"{len(pend)} story line(s) placed by distance along the flow"]
 
 
 def _counter(c, i, clock=None) -> dict:
@@ -313,7 +399,9 @@ def _counter(c, i, clock=None) -> dict:
         raise TimelineError("counter " + str(i + 1) + ": its text needs {v} where the value goes")
     return {"text": text, "keys": keys, "format": str(c.get("format") or ",.0f"), "step": bool(c.get("step")), "position": pos,
             "start": _vt(c.get("start", keys[0][0]), clock), "end": _vt(c["end"], clock) if c.get("end") is not None else math.inf,
-            "source": c.get("source"), "class": c.get("class")}
+            "source": c.get("source"), "class": c.get("class"),
+            # 5.5.0 (D26-33): a flow counter with a total runs from `from` to `total` with the flow's front (format: day shows whole days)
+            "total": None if c.get("total") is None else float(c["total"]), "from": float(c.get("from", 0.0))}
 
 
 def _keyframes(items, out) -> list[dict]:
@@ -401,6 +489,8 @@ def story_at(tl: dict, t: float) -> tuple[str, float] | None:
     """The story line on screen at t and its opacity (faded in and out over fade_s), or None."""
     f = max(1e-6, tl.get("fade_s", FADE_S))
     for r in tl.get("story") or []:
+        if r.get("pending"):
+            continue
         if r["start"] <= t < r["end"]:
             a = min(1.0, (t - r["start"]) / f, (r["end"] - t) / f if math.isfinite(r["end"]) else 1.0)
             return r["line"], max(0.0, a)
@@ -440,6 +530,8 @@ def counters_at(tl: dict, t: float) -> list[tuple[str, str]]:
                 v = strftime_portable(to_real(c["clock"], t), c["pattern"])
             elif c["format"] in ("clock", "hm"):
                 v = clock_text(counter_value(c, t), c["format"])
+            elif c["format"] in ("day", "int"):                       # 5.5.0 (D26-33): a whole count (the day reached), never rounded up early
+                v = f"{int(math.floor(counter_value(c, t) + 1e-9)):,}"
             else:
                 v = format(counter_value(c, t), c["format"])
             out.append((c["text"].replace("{v}", v), c["position"]))
@@ -584,9 +676,11 @@ def sequence(n: int, fps: float, tl: dict) -> list[tuple[int, int | None, float]
     seq: list[tuple[int, int | None, float]] = []
     p = tl.get("poster") or "none"
     if p != "none" and n > 1:
-        src = n - 1 if p == "last" else 0
+        # 5.5.0: preview is a picture of its own (frame -1: frame_poster.png); a time is that moment's frame
+        sec = poster_seconds(p) if p not in POSTERS else None
+        src = n - 1 if p == "last" else (-1 if p == "preview" else (min(n - 1, round(sec * fps)) if sec is not None else 0))
         seq += [(src, None, 0.0)] * max(1, round(tl.get("poster_hold", 1.2) * fps))
-        if p == "last":
+        if src != 0:
             k = max(0, round(tl.get("poster_dissolve", 0.6) * fps))
             seq += [(src, 0, (j + 1) / (k + 1)) for j in range(k)]
     seq += [(i, None, 0.0) for i in range(n)]
@@ -599,7 +693,7 @@ def lead_in_s(tl: dict, fps: float) -> float:
     p = tl.get("poster") or "none"
     if p == "none":
         return 0.0
-    k = max(1, round(tl.get("poster_hold", 1.2) * fps)) + (max(0, round(tl.get("poster_dissolve", 0.6) * fps)) if p == "last" else 0)
+    k = max(1, round(tl.get("poster_hold", 1.2) * fps)) + (max(0, round(tl.get("poster_dissolve", 0.6) * fps)) if p != "first" else 0)
     return k / fps
 
 
@@ -635,7 +729,9 @@ def assemble(frames_dir: Path, n: int, fps: float, tl: dict) -> tuple[Path, int]
         old.unlink()
     for j, (i, b, a) in enumerate(seq):
         dst = out / f"frame_{j:05d}.png"
-        src = frames_dir / f"frame_{i:05d}.png"
+        src = frames_dir / ("frame_poster.png" if i < 0 else f"frame_{i:05d}.png")
+        if i < 0 and not src.is_file():
+            src = frames_dir / "frame_00000.png"           # no preview picture was made: the first frame stands in
         if b is None:
             shutil.copyfile(src, dst)
         else:
@@ -786,6 +882,19 @@ def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, b
             f = ImageFont.truetype(font_path, size)
         tw = d.textlength(text, font=f)
         x, y = (W - tw) / 2, H - bottom_px - pad - size * 1.6
+        # 5.6.0 (Q-10): every line of the story in one slot: the row the highest-placed line needs, worked out once over all the lines, so a
+        # caption does not jump between heights from beat to beat
+        key_ = (W, H, bottom_px, logo_w, tuple(tuple(round(v) for v in a) for a in (avoid or [])))
+        if tl.get("_slot_key") != key_:
+            ys_ = []
+            for r_ in tl.get("story") or []:
+                tx_ = str(r_.get("line") or "")
+                if tx_:
+                    ys_.append(story_room(d, tx_, font_path, max(11, int(22 * k)), max(9, int(14 * k)), y, avoid, pad, W, H, pad + logo_w,
+                                          W - pad - right, k)[1])
+            tl["_slot_key"], tl["_slot_y"] = key_, (min(ys_) if ys_ else None)
+        if tl.get("_slot_y") is not None:
+            y = min(y, tl["_slot_y"])
         # 2.1.0 (Day 19 video issue 16): the line keeps clear of the map's overlays (the locator inset bottom right, the legend) as the
         # counters do: it is centred in the room left between them on its row, made smaller to fit, or moved up past them
         x, y, size, f, tw, lines = story_room(d, text, font_path, size, max(9, int(14 * k)), y, avoid, pad, W, H, pad + logo_w, W - pad - right, k)
@@ -818,6 +927,10 @@ def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, b
         else:
             y0 = H - bottom_px - pad - bh - (int(44 * k) + pad if pos == "bottom-left" and placed["logo"] else 0)
         x0, y0, _x1, _y1 = _clear((x0, y0, x0 + bw, y0 + bh), avoid, pos.startswith("top"))
+        if tl.get("counter_panel", True) is not False:
+            # 5.5.0 (D26-30): a panel in the page colour under the counter column, so a place name of the base map under it leaves no
+            # ghost glyphs between the words ("Day 7 'at sea")
+            d.rounded_rectangle([x0 - 8 * k, y0 - 4 * k, x0 + bw + 8 * k, y0 + bh + 2 * k], radius=int(5 * k), fill=_rgb(bgc, 228))
         y = y0
         for tx, fo, w_, h_ in zip(texts, fonts_, widths, heights):
             x = x0 if pos.endswith("left") else x0 + bw - w_

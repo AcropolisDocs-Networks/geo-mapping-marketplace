@@ -42,12 +42,15 @@ python3 "$GMAP_ROOT/scripts/gmap.py" review                # how the map was mad
   data catalogs hold for the place, the person's own portals first; `gmap.py take <need> c<N> --confirm-host <host>` brings a find in.
 - **Bring data through the door.** A library layer is fetched by the build or by the data tool the plan names. Shape data with an op
   (`data derive`); when no op does it, write the script and run it with `data step`, so its inputs, outputs and provenance are recorded.
+  5.5.0: its script reads paths from `GMAP_STEP_IN`/`_OUT`/`_SIDECAR` (`--out FILE[:role]`, `--sidecar FILE`); water ops need no
+  step (`mapspec-reference`).
   Never fetch with curl or draw with a script of your own. Run `geo-inspect` on a file the person brought.
 - **Compose, then choose what is yours**: the map type from the data, the classes, each layer's palette colour, the labels, the padding.
   What the MapSpec does not say, the builder decides: do not write a position, a theme, a look or an on/off switch nobody asked for.
   A default changed with no ask is drawn at its default and said in one line.
 - **Look before you say.** Open the draft and the mute picture and say what the map shows; act on a reading that contradicts the message
-  (`message-check`). The cold read is made by a fresh agent that sees only the picture: never answer it yourself.
+  (`message-check`). The cold read is made by a fresh agent that sees only the picture: never answer it yourself. A changed picture needs a new read.
+- `brief --title` is yours (checked), `--title-supplied` theirs; `gmap.py adopt map.yaml` brings in a hand-written MapSpec.
 - **Fix, do not argue.** A BLOCK is a rule the map breaks: change the MapSpec and draft again. Overrides exist only for MAP-CART-001 and
   MAP-CART-010 and only with the person's own written reason.
 

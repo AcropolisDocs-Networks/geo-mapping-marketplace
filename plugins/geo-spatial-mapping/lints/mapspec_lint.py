@@ -45,7 +45,8 @@ ROLES_NEEDING_VALUE = {"choropleth"}
 
 # 1.13.0: layer keys the code reads that the schema does not list (the schema leaves layers open); anything else is MAP-SPEC-011
 LAYER_KEYS_OUTSIDE_SCHEMA = {"qa", "symbol", "value_field", "title", "provenance", "palette", "popup", "popup_fields", "queryable", "visible", "layout",
-                             "home_addresses_reviewed", "texture"}   # 3.4.0: texture: true (a layer drawn as texture on purpose)
+                             "home_addresses_reviewed", "texture",   # 3.4.0: texture: true (a layer drawn as texture on purpose)
+                             "certainty", "certainty_note"}          # 5.5.0 (Q-04): observed | modelled | reconstructed
 LAYER_KEY_HINTS = {"note": "legend.note", "label": "legend.label",
                    "where": "filter: {column, in: [...]} (a file layer; source.where is for a library service layer)", "color": "symbol.color", "colour": "symbol.color", "size": "symbol.size", "width": "symbol.width",
                    "opacity": "symbol.opacity", "max_size": "symbol.max_size", "scale_with": "symbol.scale_with", "shape": "symbol.shape",
@@ -113,7 +114,14 @@ def lint_spec(spec: dict) -> list[dict]:
             if ly.get("role") != "proportional" or roles.get(sw) != "proportional" or sw == ly.get("id"):
                 out.append(finding("MAP-SPEC-003", "BLOCK", f"layer '{ly.get('id')}': symbol.scale_with names '{sw}'; it must name another proportional "
                                    "layer, and this layer must be proportional too", sw))
-        pal = (ly.get("palette") or {}).get("name")
+        if ly.get("certainty") is not None and str(ly["certainty"]).lower() not in ("observed", "modelled", "modeled", "reconstructed"):
+            out.append(finding("MAP-SPEC-001", "BLOCK", f"layer '{ly.get('id')}': certainty is observed, modelled or reconstructed, not '{ly['certainty']}'", ly.get("id")))
+        pal = ly.get("palette")
+        if pal is not None and not isinstance(pal, dict):   # 5.5.0 (D26-03): never a traceback; the loader reads a string as {name: ...}
+            out.append(finding("MAP-SPEC-001", "BLOCK", f"layer '{ly.get('id')}': palette is an object: palette: {{name: brand_neutral}} or "
+                               "{anchor: '@brand.categorical.1'}", ly.get("id")))
+            pal = None
+        pal = (pal or {}).get("name")
         if pal and pal not in PALETTES:
             out.append(finding("MAP-SPEC-003", "BLOCK", f"layer '{ly.get('id')}': palette '{pal}' is not one of {', '.join(sorted(PALETTES))}", pal))
         if ly.get("role") in ROLES_NEEDING_VALUE and not ly.get("value_field") and not ly.get("bivariate"):

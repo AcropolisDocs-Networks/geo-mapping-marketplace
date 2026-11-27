@@ -61,9 +61,7 @@ OUTPUT_EXT = STILL_EXT | VIDEO_EXT | {".svg", ".pdf", ".html", ".htm"}
 SKIP_NAME = re.compile(r"(_mute|_draft|_preview|\.provenance|\.terms|_thumb)(\.|_|$)|^preview\.|^mute\.", re.I)
 SKIP_PARTS = {".geo-mapping", "runs", "qa-build", "frames", "__MACOSX", EVAL_DIRNAME, "node_modules"}
 SEQ_STEM = re.compile(r"^(.*?)[_-](\d{1,3})$")
-FURNITURE = ("gm-title", "gm-legend", "gm-inset", "gm-logo", "gm-north", "gm-footer", "gm-scalebar", "gm-callout", "gm-data-table",
-             "gm-provider-logo", "gm-chart", "gm-story")
-CONTEXT = ("gm-base", "gm-names", "gm-graticule", "gm-focus-mask", "gm-focus-lift", "gm-relief")
+from attention import CONTEXT, FURNITURE  # noqa: E402  5.6.0: one list of the map's groups for the evaluator and the build's attention measure
 DATA_TEXT = ("gm-labels",)
 AREA_ROLES = {"choropleth", "hexbin", "grid"}
 POINT_ROLES = {"points", "proportional"}
@@ -162,8 +160,13 @@ def rubric_major(v: str) -> str:
 
 
 # ---------------------------------------------------------------------------------------------------------------- finding the outputs
+VIDEO_BASE = re.compile(r"^(?:gm-events-|gm-story-|gm-fly-|gm-anim-|gm-heat-|gm-video-)", re.I)
+
+
 def _skip(p: Path) -> bool:
-    return bool(SKIP_NAME.search(p.name)) or bool(SKIP_PARTS & set(p.parts[:-1])) or p.suffix.lower() not in OUTPUT_EXT
+    # 5.5.0 (E-02, T-01): a video's base maps (a temporary work folder) are steps of the video, never outputs to grade
+    return (bool(SKIP_NAME.search(p.name)) or bool(SKIP_PARTS & set(p.parts[:-1])) or p.suffix.lower() not in OUTPUT_EXT
+            or any(VIDEO_BASE.match(part) for part in p.parts[:-1]))
 
 
 def discover(paths: list[str | Path], specs: dict | None = None) -> tuple[list[dict], list[dict]]:
@@ -669,12 +672,8 @@ def _rgb(im):
 
 
 def _lab(rgb):
-    np = _np()
-    lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
-    M = np.array([[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750], [0.0193339, 0.1191920, 0.9503041]])
-    xyz = lin @ M.T / np.array([0.95047, 1.0, 1.08883])
-    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
-    return np.stack([116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])], axis=-1)
+    import attention
+    return attention.lab(rgb)
 
 
 def _lum(rgb):
@@ -684,8 +683,8 @@ def _lum(rgb):
 
 
 def _de(a, b):
-    np = _np()
-    return np.sqrt(((a - b) ** 2).sum(axis=-1))
+    import attention
+    return attention.de(a, b)
 
 
 def _shrink(im, long_side: int):
@@ -704,14 +703,8 @@ def _background(lab):
 
 
 def _blur(arr, radius: float):
-    np = _np()
-    from PIL import Image, ImageFilter
-    a = arr.astype(np.float64)
-    lo, hi = float(a.min()), float(a.max())
-    if hi - lo < 1e-12:
-        return a
-    im = Image.fromarray(np.uint8(255 * (a - lo) / (hi - lo)))
-    return np.asarray(im.filter(ImageFilter.GaussianBlur(radius)), dtype=np.float64) / 255 * (hi - lo) + lo
+    import attention
+    return attention.blur(arr, radius)
 
 
 def components(mask, max_components: int = 4000) -> list[tuple[int, int, int, int, int]]:
@@ -758,25 +751,9 @@ def components(mask, max_components: int = 4000) -> list[tuple[int, int, int, in
 
 
 def saliency(rgb):
-    """M-01: spectral-residual saliency (Hou and Zhang 2007) on a 64-px-wide grey copy, blurred, scaled back to the picture, 0..1."""
-    np = _np()
-    from PIL import Image
-    g = (rgb @ np.array([0.299, 0.587, 0.114]))
-    h, w = g.shape
-    small_w = 64
-    small_h = max(8, round(h * small_w / w))
-    s = np.asarray(Image.fromarray(np.uint8(g * 255)).resize((small_w, small_h), Image.BILINEAR), dtype=np.float64) / 255
-    F = np.fft.fft2(s)
-    logamp = np.log(np.abs(F) + 1e-9)
-    phase = np.angle(F)
-    k = np.ones((3, 3)) / 9
-    pad = np.pad(logamp, 1, mode="edge")
-    avg = sum(pad[i:i + logamp.shape[0], j:j + logamp.shape[1]] * k[i, j] for i in range(3) for j in range(3))
-    sal = np.abs(np.fft.ifft2(np.exp(logamp - avg + 1j * phase))) ** 2
-    sal = _blur(sal, 2.5)
-    sal = (sal - sal.min()) / (sal.max() - sal.min() + 1e-12)
-    big = np.asarray(Image.fromarray(np.uint8(sal * 255)).resize((w, h), Image.BILINEAR), dtype=np.float64) / 255
-    return big
+    """M-01: spectral-residual saliency (Hou and Zhang 2007), from attention.saliency (the build measures with the same one)."""
+    import attention
+    return attention.saliency(rgb)
 
 
 def _pct_box(b, w, h) -> list[float]:

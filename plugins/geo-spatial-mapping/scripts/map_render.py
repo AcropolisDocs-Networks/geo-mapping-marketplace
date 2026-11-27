@@ -42,6 +42,8 @@ PROP_SIZE_STEP_MM = 0.05          # 0.24.0: a very large proportional layer is d
 MIN_SYMBOL_MM = 0.8               # the smallest proportional symbol still has to be seen; above this size area stays proportional
 OVERLAY_COVER_OK = 0.015          # overlays may sit over up to this share of the data cells; beyond it the map is reduced to make room (fit: shrink)
 SHRINK_STEPS = (0.2, 0.4, 0.6, 0.8, 1.0)   # 1.13.0: the shares of an element's strip the fit's shrink step tries, smallest first
+TITLE_COVER_MAX = 0.01          # 5.6.0 (Q-11): the title block may lie over at most this share of the data
+TITLE_SHRINK_MIN = 0.8          # ...and the map gives up at most a fifth of its size to clear it
 FIT_COVER_PCT = 5.0              # 1.3.0 (R1-FIT, owner's decision D2): fit auto and overlay let the elements together cover this much of the focus area
 UNIFORM_HALO_WIDEN = 1.8         # 2.6.0 (V-06): names.ink uniform: the halo this much wider over a class the dark ink does not read on
 AREA_FILL_COVER_PCT = 2.0        # 2.6.0 (V-05): with a region and an area-filling layer (choropleth, cells, raster): 2 percent of the region
@@ -521,7 +523,13 @@ def draw_layers(plan: mp.Plan, frame: lo.Frame, rep: dict) -> tuple[list[str], l
             if lift:
                 import colorlib
                 shadow = min((t["label"], t["background"]), key=colorlib.luminance)      # a shadow is dark on a dark page too
-                parts.append(map_focus.lift_markup(fsheet, frame.rect, shadow))
+                op_, why_ = map_focus.lift_opacity_for(plan, t["land"], shadow, area=farea)
+                if op_ > 0:
+                    parts.append(map_focus.lift_markup(fsheet, frame.rect, shadow, opacity=op_))
+                else:
+                    lift = False
+                if why_:
+                    rep.setdefault("notes", []).append(why_)
             rep["focus"] = {"mask": True, "lift": bool(lift), "area": fcfg["area"] or "auto",
                             "subject": "region" if farea.geom_type in ("Polygon", "MultiPolygon") else "points or lines"}
             focus_done = True
@@ -884,6 +892,8 @@ STACK_CHUNKS = 8
 SMALL_FEATURE_MM = 0.8       # 3.7.0 (C6, Day 22 issue 6): a data polygon smaller than this across on the sheet is also drawn as a point
 SMALL_POINT_MM = 1.6
 SMALL_ROLES = ("choropleth", "polygons")
+SMALL_POINTS_MAX_SHARE = 0.2     # 5.5.0 (D26-34): more tiny areas than this share of the drawn ones are the data's grain, not islands
+SMALL_POINTS_MIN_GRAIN = 50      # ... and more than this many
 SMALL_POINTS_MAX_FEATURES = 500     # 4.2.0 (Day 25 #8): a plain polygon layer larger than this is not a set of named places (3,126 line-of-sight patches were)
 
 
@@ -895,7 +905,7 @@ def small_points_on(l) -> bool:
     if isinstance(v, bool):
         return v
     if l.role == "choropleth":
-        return True
+        return True                                  # island states at world scale; the share of tiny areas is checked when drawn (D26-34)
     spec = l.spec if isinstance(getattr(l, "spec", None), dict) else {}
     return not spec.get("ops") and len(l.gdf) <= SMALL_POINTS_MAX_FEATURES
 
@@ -905,13 +915,22 @@ def small_feature_points(plan, l, geoms, keep, rep: dict) -> str:
     dot in its class colour, at a point inside it, so it is seen (the 1:110m world misses Cabo Verde and Curacao; the 50m adds them, and they
     are specks). Reported with the names (MAP-CART-042, INFO). `symbol.small_points: false` turns it off."""
     import shapely
-    if l.role not in SMALL_ROLES or not small_points_on(l) or not keep.any():
+    if l.role not in SMALL_ROLES or not keep.any():
         return ""
     idx = np.flatnonzero(keep)
     b = shapely.bounds(geoms[idx])
     span = np.maximum(b[:, 2] - b[:, 0], b[:, 3] - b[:, 1])
     tiny = idx[np.isfinite(span) & (span < SMALL_FEATURE_MM)]
-    if not len(tiny):
+    asked = (l.symbol or {}).get("small_points") is True
+    grain = len(tiny) > SMALL_POINTS_MAX_SHARE * len(idx) and len(tiny) > SMALL_POINTS_MIN_GRAIN
+    if len(tiny) and not asked and (grain or not small_points_on(l)) and len(idx) > SMALL_POINTS_MAX_FEATURES:
+        # 5.5.0 (D26-34, Q-09): when most areas are specks they are the data's grain, not a few islands: a dot each would inflate them
+        # (Gilbert's pools, 12% of the land, read as far more). Said, never enlarged quietly.
+        rep.setdefault("notes", []).append(
+            f"layer '{l.id}': {len(tiny):,} of its areas are under {SMALL_FEATURE_MM:g} mm across and are drawn at their true size (not enlarged); "
+            "for how much of the place they cover, a hexbin of their share (role: hexbin) as the main picture and the true shapes in a detail inset read truer")
+        return ""
+    if not small_points_on(l) or not len(tiny):
         return ""
     t = plan.tokens
     assigned = np.asarray(l.cls.assigned) if l.cls is not None and len(l.cls.assigned) == len(l.gdf) else None
@@ -1256,7 +1275,7 @@ def draw_contour_labels(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], fonts
     t = plan.tokens
     out: list[str] = []
     stats = {"lines": 0, "placed": 0}
-    floor = lg.MIN_LABEL_PT["print" if tpl["kind"] == "print" else "slide"]
+    floor = body_label_floor(plan, tpl)
     size = max(floor, float(fonts["label"]) - 1.5)
     hmm = size * PT
     ground = t["land"] if plan.basemap else t["background"]
@@ -1545,7 +1564,11 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                 c_x0 = cx + lg.label_column_width(b, lpt, wrap) + lg.COUNT_GAP_MM
                 c_x1 = cx + lg.label_column_width(b, lpt, wrap) + lg.counts_width(b, lpt)
                 c_max = max((int(i_.get("count") or 0) for i_ in b["items"]), default=0) or 1
-            for it in b["items"]:
+            heads = lg.group_heading_at(b)
+            for i_it, it in enumerate(b["items"]):
+                if i_it in heads:                             # 5.5.0 (D26-42): the group's heading, then its classes
+                    out.append(sd.text(cx, cy + lpt * PT * 0.85, heads[i_it], lpt, t["label"], weight=600))
+                    cy += tm.line_height_mm(lpt) + lg.ROW_GAP_MM
                 ih = lg.item_height(it, lpt, wrap)            # 1.21.0 (Day 18 issue 10): a wrapped label's lines set the row
                 mid = cy + ih / 2
                 icon_w = max(lg.SWATCH_W_MM, it.get("size_mm", 0) + 1.5)
@@ -1604,7 +1627,7 @@ def draw_legend(blocks: list[dict], fit: dict, x: float, y: float, t: dict, head
                 if kop < 1 and len(out) > k0:                # 1.13.0: a supporting or background layer's key at the layer's own strength
                     out.insert(k0, f'<g opacity="{sd.num(kop)}" data-emphasis="key">')
                     out.append("</g>")
-                il = lg.item_lines(it["label"], lpt, wrap)
+                il = lg.item_lines(it["label"], lpt, wrap or bool(it.get("wrap")))
                 lh = tm.line_height_mm(lpt)
                 for li, line in enumerate(il):
                     out.append(sd.text(cx + icon_w + 2.0, mid - (len(il) - 1) * lh / 2 + li * lh + lpt * PT * 0.35, line, lpt, t["label"], num_cls=True))
@@ -1683,6 +1706,9 @@ def scale_bar_visible_h(pt: float, show_ratio: bool) -> float:
 
 
 SCALE_STYLES = ("alternating", "line", "ticks", "ladder")      # 0.15.0: elements.scale_bar.style (1.4.0: ladder)
+
+
+LOGO_CLEAR_K = 0.5            # 5.5.0 (Q-11): graders read a mark set close to the scale bar's "0" as a stray glyph
 
 
 def scale_lead_mm(pt: float) -> float:
@@ -1817,6 +1843,23 @@ def _render_overlays(els, findings, fonts, map_rect, on, plan, rep, t, tpl):
                 if map_emphasis.OPACITY.get(getattr(l, "emphasis", "primary"), 1.0) < 1:
                     l.legend_block["key_opacity"] = map_emphasis.OPACITY[l.emphasis]
                 blocks.append(l.legend_block)
+    mk_ = els.get("marks") or {}                       # 5.5.0 (D26-36): marks.items[].legend keys a mark (one row per distinct label)
+    mk_rows = []
+    for it in (mk_.get("items") or []) if mk_.get("on", bool(mk_.get("items"))) else []:
+        if isinstance(it, dict) and it.get("legend") and str(it["legend"]) not in [r_["label"] for r_ in mk_rows]:
+            kind_ = str(it.get("type") or "ring")
+            if kind_ == "ring":
+                mk_rows.append({"label": str(it["legend"]), "shape": "circle", "size_mm": 3.2, "fill": t["label"], "stroke": t["label"], "hollow": True,
+                                "ring_mm": 0.45})
+            else:
+                mk_rows.append({"label": str(it["legend"]), "stroke": t["label"], "width_mm": 0.45, "_line": True})
+    if mk_rows:
+        pts_ = [r_ for r_ in mk_rows if not r_.get("_line")]
+        lns_ = [{k: v for k, v in r_.items() if k != "_line"} for r_ in mk_rows if r_.get("_line")]
+        if pts_:
+            blocks.append({"layer": "_marks", "title": None, "kind": "points", "items": pts_})
+        if lns_:
+            blocks.append({"layer": "_marks_lines", "title": None, "kind": "lines", "items": lns_})
     counts_default = (els.get("legend") or {}).get("counts")       # 1.22.0: elements.legend.counts for every classed key; a layer's own legend.counts wins
     for b in blocks:
         own = ((next((l.spec for l in plan.layers if l.id == b.get("layer")), None) or {}).get("legend") or {}).get("counts")
@@ -1968,7 +2011,7 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
         sb_cfg = els.get("scale_bar") or {}
         inf = sb.scale_info(plan.crs, fr.visible, map_rect.w, units=sb_cfg.get("units", "auto"),
                             rotation=float((els.get("north_arrow") or {}).get("rotation", 0)),
-                            segments=int(sb_cfg["segments"]) if sb_cfg.get("segments") else None)
+                            segments=int(sb_cfg["segments"]) if sb_cfg.get("segments") else None, true_at=sb_cfg.get("true_at"))
         its = []
 
         def pos(cfg: dict, default: str) -> tuple[str, bool]:
@@ -1996,14 +2039,18 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
             na_cfg = els.get("north_arrow") or {}
             corner, locked = pos(na_cfg, "upper-right")
             its.append({"name": "north", "w": na_size, "h": na_size + 1.0, "prefer": corner,
-                        "locked": locked, **({"beside": "legend", "side": "left"} if inmap and "position" not in na_cfg else {})})
+                        "locked": locked, **({"beside": "legend", "side": "left", "gap_mm": 3.0} if inmap and "position" not in na_cfg else {})})
         sb_svg_, sw_, sh_ = "", 0.0, 0.0
         if sb_wanted and inf["bar"] is not None:
             lead = scale_lead_mm(float(fonts["scale"])) if (logo_box and logo_beside_scale and plan.look != "classic") else 0.0
+            if lead and logo_box:                         # 5.5.0 (Q-11): the brand mark keeps clear space of at least half its own height
+                lead = max(lead, LOGO_CLEAR_K * float(logo_box["h"]))
             rep["scale_lead_mm"] = round(lead, 3)
             sb_svg_, sw_, sh_ = draw_scale_bar(inf, 0, 0, t, fonts["scale"], bool((els.get("scale_bar") or {}).get("ratio", False)), lead_mm=lead)
             if logo_box and logo_beside_scale:
-                sh_ = logo_box["h"]                         # same height as the logo, so the two line up top and bottom
+                # same height as the logo, so the two line up top and bottom; 5.5.0 (D26-18): two bars (miles and kilometres) keep their own
+                # height, so the second is inside the frame and not over the source line
+                sh_ = max(logo_box["h"], sh_) if inf.get("bar2") else logo_box["h"]
             corner, locked = pos(els.get("scale_bar"), "lower-left" if inmap else "lower-right")
             its.append({"name": "scale", "w": sw_, "h": sh_, "prefer": corner, "locked": locked,
                         **({"beside": "logo", "side": "right"} if logo_box and logo_beside_scale else {})})
@@ -2149,6 +2196,27 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
                 f"the map was reduced to {pick['frame'].scale / best['frame'].scale:.0%} of full size to keep the legend and other elements off the data "
                 f"(they would have covered {best['cover']:.0%} of it)")
         best = pick
+    if inmap and fit_mode == "auto" and "title" in best["placed"] and best["occ"] is not None and not best["err"] and forced_pan is None:
+        # 5.6.0 (Q-11): the title and subtitle never sit over the data. When they would (more than TITLE_COVER_MAX of the data's cells), the
+        # map is moved down past them or reduced by the title's height, whichever keeps it larger; otherwise said
+        t_rect = best["placed"]["title"]["rect"]
+        t_cov = lo.covered_fraction(best["frame"], best["occ"], [t_rect])
+        if t_cov > TITLE_COVER_MAX:
+            strip = t_rect.y1 - map_rect.y0 + lo.CORNER_INSET_MM
+            alts = [fit_search((0.0, strip, 0.0, 0.0)) if fit_mode not in ("shrink", "fixed") else evaluate((0.0, strip, 0.0, 0.0))]
+            # ...and only when the other elements do not take the data the title gave back (the map moved into the legend's corner)
+            ok_t = [c for c in alts if not c["err"] and "title" in c["placed"] and c["frame"].scale >= TITLE_SHRINK_MIN * best["frame"].scale
+                    and lo.covered_fraction(c["frame"], c["occ"], [c["placed"]["title"]["rect"]]) <= TITLE_COVER_MAX
+                    and c["cover"] <= best["cover"] + 1e-9]
+            if ok_t:
+                pick_t = max(ok_t, key=lambda c: c["frame"].scale)
+                rep.setdefault("notes", []).append(f"the map was set below the title so the title and subtitle are off the data (they covered {t_cov:.0%} of it); "
+                                                   f"it is drawn at {pick_t['frame'].scale / best['frame'].scale:.0%} of the size it had")
+                best = pick_t
+            else:
+                findings.append(f("MAP-CART-045", "WARN", f"the title block sits over {t_cov:.0%} of the data and the map cannot be moved below it without "
+                                                          f"losing more than {1 - TITLE_SHRINK_MIN:.0%} of its size; shorten the title or subtitle, or move the "
+                                                          "title (elements.title.position)"))
     if (inset is not None and inset_on == "auto" and inset_cfg.get("position") == "auto" and "inset" in best["placed"] and best["occ"] is not None
             and not best["err"] and lo.covered_fraction(best["frame"], best["occ"], [best["placed"]["inset"]["rect"]]) > 0):
         # 1.14.0: `elements.inset_map.position: auto` asks for 0.24.0's rule: a locator that would sit on data moves to a free corner, or is
@@ -2314,13 +2382,17 @@ def _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rec
     fg_cfg = dict(els.get("figures") or {})                 # 1.19.0: figures take their room before the labels do, and are drawn over the data
     if not fg_cfg.get("on", bool(fg_cfg.get("items"))):
         fg_cfg["items"] = []
+    dv_drawn = None
+    plan.detail_layers, plan.detail_basemap = [], []
     dv_cfg = els.get("detail") or {}                       # 2.0.0: a closer look at one part of the map, drawn again in a corner (detail_inset)
     if dv_cfg.get("on"):
         import detail_inset as dvi
         try:
             dv = dvi.for_map(plan, dv_cfg, legend_w=(rep.get("legend_size_mm") or [None])[0])
             fg_cfg["items"] = list(fg_cfg.get("items") or []) + [dv["figure"]]
-            body.append(dvi.window_outline(frame, dv["window"], t))
+            dv_drawn = dv                                    # 5.5.0 (D26-20): its window is outlined once the inset has a place
+            plan.detail_layers = list(dv.get("credit_layers") or [])
+            plan.detail_basemap = list(dv.get("credit_basemap") or [])
             findings += dv["findings"]
             rep.setdefault("notes", []).extend(dv["notes"])
             rep["detail"] = {"window": [round(v, 2) for v in dv["window"]], "size_mm": [dv["figure"]["w_mm"], dv["figure"]["h_mm"]]}
@@ -2332,7 +2404,7 @@ def _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rec
         try:
             sc = sec.for_map(plan, sc_cfg)
             fg_cfg["items"] = list(fg_cfg.get("items") or []) + [sc["figure"]]
-            body.append(sec.map_line(plan, frame, *sc["line"], sc["ends"], t, float(fonts["label"]), to_sheet))
+            body.append(sec.map_line(plan, frame, sc["line"], sc["ends"], t, float(fonts["label"]), to_sheet))
             rep.setdefault("notes", []).extend(sc["notes"])
             rep["section"] = {"length_m": round(sc["profile"]["length_m"], 1), "shadow_share": sc["profile"].get("shadow_share"),
                               "sun_off_deg": sc["profile"].get("sun_off_deg")}
@@ -2355,6 +2427,13 @@ def _render_body(H, W, banner_h, banner_on, els, findings, fonts, frame, map_rec
         findings += fg_fs
         rep.setdefault("notes", []).extend(fg_notes)
         rep["figures"] = [[round(r.x0, 2), round(r.y0, 2), round(r.w, 2), round(r.h, 2)] for r in fg_rects]
+    if dv_drawn is not None:
+        if dv_drawn["figure"].get("_placed"):
+            body.append(dvi.window_outline(frame, dv_drawn["window"], t))
+        else:                                                # 5.5.0 (D26-20): an inset left out takes its window box and its credits with it
+            plan.detail_layers, plan.detail_basemap = [], []
+            rep.pop("detail", None)
+            rep.setdefault("notes", []).append("detail inset: it did not fit, so neither it nor its window box was drawn")
     return body, co_svg, findings, i_map, obstacles, point_obstacles, trm, trt
 
 
@@ -2632,7 +2711,7 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
     out = []
     stats = {"layers": {}}
     pt = fonts["label"]
-    floor = lg.MIN_LABEL_PT["print" if tpl["kind"] == "print" else "slide"]
+    floor = body_label_floor(plan, tpl)
     taken = list(obstacles)
     said: list = []
     sparse_ids = {id(r) for r in getattr(plan, "_sparse_point_obstacles", obstacles)}
@@ -2753,6 +2832,10 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
             for j, i in enumerate(idx.tolist()):
                 r_ = float(sizes[i]) / 2 if sizes is not None and sizes[i] > 0 else d
                 cands.append(le.Candidate(str(vals[j]), "point", float(mx[i]), float(my[i]), float(prio[j]), radius=r_, weight=int(wts[j]) or None))
+            if lb.get("merge", True) is not False:         # 5.6.0 (Q-06): two names at one dot are one label ("Provincetown · Cape Cod")
+                cands, merged_ = mex.merge_same_dot(cands)
+                if merged_:
+                    stats.setdefault("merged", {})[l.id] = merged_
         else:                                              # 0.15.0: labels that follow their line
             if size < floor:
                 stats["layers"][l.id] = {"placed": 0, "dropped_size": len(gdf)}
@@ -2761,6 +2844,8 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
             svg_l, rects_l, st_l = mex.line_label_markup(plan, l, lb, frame, taken, size, geoms)
             out.append(svg_l)
             taken += rects_l
+            # 5.5.0 (D26-37): a river named by its own data label is not named again by the names block (the Gila, twice)
+            said += [(name_key(tx), float("nan"), float("nan")) for tx in (st_l.get("texts") or [])]
             stats["layers"][l.id] = {"placed": st_l["placed"], "dropped_collision": st_l["collision"], "dropped_size": st_l["too_short"] + st_l["too_bent"],
                                      "dropped_outside": 0, "along_line": st_l}
             if direct:
@@ -2771,20 +2856,43 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
         # labels on the map); it keeps off its own layer's symbols, sparse layers' symbols and every other label and element
         own = {id(r) for r in (getattr(plan, "_obstacles_by_layer", {}) or {}).get(l.id, [])}
         skip = dense_ids - own
+        if l.kind == "point":                              # 5.5.0 (D26-19): each candidate carries its own id, so the placed ones are known exactly
+            for k_, c_ in enumerate(cands):
+                c_.style = {**(c_.style or {}), "_cid": k_}
         res = le.place(cands, lo.rect_of(tpl["map"]), [r for r in taken if id(r) not in skip] if skip else taken, size, 400, floor)
         stats["layers"][l.id] = res.as_dict()
         if direct:
             asked = sorted({str(v) for v in l.direct_texts if v is not None})
             stats.setdefault("direct", {})[l.id] = {"asked": asked, "missing": sorted(set(asked) - {p.text for p in res.placed})}
-        if lb.get("leaders") and l.kind == "point" and res.dropped_collision:      # 0.15.0: a leader line for a label with no room beside its symbol
-            got = [(p.text, p.rect) for p in res.placed]
-            left = [c for c in cands if not any(tx == c.text and abs((r.x0 + r.x1) / 2 - c.x) < 30 and abs((r.y0 + r.y1) / 2 - c.y) < 15 for tx, r in got)]
+        stack = lb.get("stack", "auto")
+        if l.kind == "point" and res.dropped_collision and (lb.get("leaders") or (stack is not False and lb.get("leaders") is not False)):
+            # 5.5.0 (D26-19): a label placed beside its symbol is never drawn again with a leader; it was matched by its text near the
+            # symbol, and a long label anchored at its start sat more than 30 mm from it ("Speedwell leaks: both turn back", twice)
+            got_ids = {(p.style or {}).get("_cid") for p in res.placed}
+            left = [c for c in cands if (c.style or {}).get("_cid") not in got_ids]
             taken_now = taken + [p.rect.grown(le.PAD_MM) for p in res.placed]
-            svg_ld, rects_ld, n_ld = mex.leader_labels(plan, left, frame, taken_now, size)
-            out.append(svg_ld)
-            taken += rects_ld
-            stats["layers"][l.id]["with_leader"] = n_ld
-            stats["layers"][l.id]["dropped_collision"] -= n_ld
+            n_st = 0
+            if stack is not False:
+                # 5.6.0 (Q-06): where the left-out labels crowd, they are set as a column off the cluster with leaders that never cross;
+                # asked for (leaders or stack: true) from two labels, by default from three
+                need = mex.STACK_MIN if (lb.get("leaders") or stack is True) else mex.STACK_MIN + 1
+                svg_st, rects_st, done_st = mex.stack_labels(plan, left, frame, taken_now, size, min_size=need)
+                if done_st:
+                    out.append(svg_st)
+                    taken += rects_st
+                    taken_now = taken_now + rects_st
+                    gone = {id(c) for c in done_st}
+                    left = [c for c in left if id(c) not in gone]
+                    n_st = len(done_st)
+                    stats["layers"][l.id]["stacked"] = n_st
+                    stats["layers"][l.id]["dropped_collision"] -= n_st
+                    said.extend((name_key(c.text), float("nan"), float("nan")) for c in done_st)
+            if lb.get("leaders"):                          # 0.15.0: a leader line for a label with no room beside its symbol
+                svg_ld, rects_ld, n_ld = mex.leader_labels(plan, left, frame, taken_now, size)
+                out.append(svg_ld)
+                taken += rects_ld
+                stats["layers"][l.id]["with_leader"] = n_ld
+                stats["layers"][l.id]["dropped_collision"] -= n_ld
         for p in res.placed:
             fg, halo = t["label"], t["label_halo"]
             if p.fill:                                    # text and halo swap when the fill is dark, so contrast holds on every class
@@ -2800,6 +2908,18 @@ def draw_labels(plan: mp.Plan, frame: lo.Frame, obstacles: list[Rect], fonts: di
     stats["total_candidates"] = sum(v["placed"] + v["dropped_collision"] + v["dropped_size"] + v["dropped_outside"] for v in stats["layers"].values())
     stats["placed"] = sum(v["placed"] for v in stats["layers"].values())
     return '<g class="gm-labels">' + "".join(out) + "</g>", stats, taken
+
+
+MEDIUM_LABEL_PT = 12.0        # 5.6.0 (Q-10): body labels on a slide (and a 1080p video drawn on it) read across a room at this size or more
+
+
+def body_label_floor(plan, tpl: dict) -> float:
+    """The smallest a map's body label (a data label, a place or water name, a line's name) is set: the sheet's minimum, and on a slide under
+    every look but classic MEDIUM_LABEL_PT (a town a size down and a name outside the study area a size smaller stop there)."""
+    base = lg.MIN_LABEL_PT["print" if tpl["kind"] == "print" else "slide"]
+    if tpl.get("kind") == "slide" and getattr(plan, "look", "classic") != "classic":
+        return max(base, MEDIUM_LABEL_PT)
+    return base
 
 
 # ---------------------------------------------------------------------------------------------------------------- names (toponymy, M10)
@@ -2926,15 +3046,51 @@ def admin_names_layer(load):
 GEONAMES_TOWNS = ("ref.gazetteer.world.place.geonames-cities1000", "ref.gazetteer.world.place.geonames")
 
 
-def message_towns(message, have: set, window, crs, *, fetch: bool = True):
+# 5.5.0 (D26-10): words of a feature name that are not towns: "Mid-Atlantic Ridge" put a town called Ridge on the map, "Grand Banks" Banks
+GENERIC_GEO = {"ridge", "ridges", "bank", "banks", "basin", "basins", "bay", "gulf", "sea", "seas", "ocean", "river", "rivers", "lake", "lakes",
+               "mountain", "mountains", "mount", "range", "valley", "valleys", "island", "islands", "isle", "point", "cape", "plain", "plains",
+               "plateau", "desert", "strait", "sound", "channel", "canyon", "creek", "falls", "harbor", "harbour", "peninsula", "coast", "shelf",
+               "trench", "rise", "seamount", "playa", "wash", "delta", "north", "south", "east", "west", "northern", "southern", "eastern",
+               "western", "central", "upper", "lower", "great", "grand", "new", "old", "atlantic", "pacific", "arctic", "indian", "mid",
+               "national", "state", "county", "city", "town", "day", "days", "where", "how", "why", "what", "when", "the"}
+
+
+def subject_words(spec: dict | None, message: str = "") -> set:
+    """5.5.0 (D26-10): words that name the map's subject, not a place to look up: a possessive in the title or the message ("The Mayflower's
+    Crossing", "Gilbert's rain"), and the words of layer ids and legend titles. They are never looked up as towns."""
+    import re as _re
+    sp = spec or {}
+    el = (sp.get("elements") or {}).get("title") or {}
+    texts = [str(el.get("text") or ""), str(el.get("subtitle") or ""), str(message or sp.get("message") or "")]
+    out = {m.lower() for t in texts for m in _re.findall(r"\b([A-Z][\w-]+)['’]s\b", t)}
+    for ly in sp.get("layers") or []:
+        if isinstance(ly, dict):
+            out |= {w.lower() for w in _re.split(r"[^A-Za-z]+", str(ly.get("id") or "")) if len(w) > 2}
+            lg = ly.get("legend") if isinstance(ly.get("legend"), dict) else {}
+            out |= {w.lower() for w in _re.findall(r"[A-Za-z]{3,}", str(lg.get("title") or ""))}
+    return out
+
+
+def message_towns(message, have: set, window, crs, *, fetch: bool = True, skip: set | None = None, exclude=None):
     """3.1.0 (G-07, G-08): towns the message names that the bundled gazetteer lacks (Sandpoint, Moscow), from GeoNames (cities1000, else
     cities15000) inside the map window, as rows shaped like the gazetteer's (name, pop_max, scalerank, featurecla) so select_places takes
     them. Capitalised whole words of three letters or more only. -> (GeoDataFrame or None, the entry id used or None)."""
     import re as _re
     import geopandas as _gpd
     msg = str(message or "")
-    words = {w for w in _re.findall(r"\b[A-Z][\w'’.-]{2,}(?:\s+[A-Z][\w'’.-]+)*", msg)}
-    words |= {p for w in list(words) for p in w.split()}
+    phrases = {w.rstrip("'’s").rstrip("'’") if w.endswith(("'s", "’s")) else w for w in _re.findall(r"\b[A-Z][\w'’.-]{2,}(?:\s+[A-Z][\w'’.-]+)*", msg)}
+    skip = {x.lower() for x in (skip or set())}
+    words = set()
+    for ph in phrases:
+        parts = [p for p in _re.split(r"[\s-]+", ph) if p]
+        if parts and parts[-1].lower() in GENERIC_GEO:      # 5.5.0 (D26-10): "Mid-Atlantic Ridge" is a feature name; neither it nor its parts are towns
+            continue
+        words.add(ph)
+        if len(parts) > 1:
+            words |= set(parts)
+    words = {w for w in words if w.lower() not in GENERIC_GEO and w.lower() not in skip and not any(p.lower() in skip for p in w.split())}
+    if exclude:                                              # 5.5.0 (D26-10): names.exclude is honoured before the lookup, not after it
+        words = {w for w in words if not mp.name_excluded(w, exclude)}
     words -= set(have)
     if not words:
         return None, None
@@ -2961,6 +3117,115 @@ def message_towns(message, have: set, window, crs, *, fetch: bool = True):
         hit = hit.sort_values("pop_max", ascending=False).drop_duplicates("name")
         return _gpd.GeoDataFrame(hit[["name", "nameascii", "pop_max", "scalerank", "featurecla", "adm0cap", hit.geometry.name]], geometry=hit.geometry.name, crs=hit.crs), eid
     return None, None
+
+
+GEOGRAPHY_LABELS = "ne_10m_geography_labels.parquet"     # 5.5.0 (Q-02): Natural Earth's seas, bays, straits, islands and peninsulas (public domain)
+
+
+def subject_lines_points(plan) -> list:
+    """The line and point layers the message names (map_emphasis.subject_layers): the subject a corridor of names is drawn round."""
+    try:
+        import map_emphasis
+        return [l for l in map_emphasis.subject_layers(plan.spec, plan.layers) if l.kind in ("line", "point") and len(l.gdf)]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def subject_corridor(plan, frame, cfg: dict) -> dict | None:
+    """5.5.0 (Q-02): when the message names a line or point layer, the subject on the sheet and the reach of the names kept round it
+    (names.near_subject_mm, default 22% of the frame's diagonal). A place name further than twice the reach is left out unless the message
+    names it. `names: {near_subject: false}` turns it off. None when there is no such subject."""
+    import shapely
+    if cfg.get("near_subject", True) is False:
+        return None
+    subj = subject_lines_points(plan)
+    if not subj:
+        return None
+    parts = []
+    for l in subj:
+        geoms, keep = to_sheet(l.gdf, frame, False)
+        parts += [g for g, k in zip(geoms, keep) if k and g is not None and not g.is_empty]
+    if not parts:
+        return None
+    diag = math.hypot(frame.rect.w, frame.rect.h)
+    reach = float(cfg.get("near_subject_mm") or 0.22 * diag)
+    return {"geom": shapely.union_all(np.asarray(parts, dtype=object)), "reach": reach}
+
+
+def subject_at_sea(plan) -> bool:
+    """5.5.0 (Q-02): True when most of the subject's line or points lie off the map's land (a crossing, a sea route, a fleet)."""
+    import shapely
+    subj = subject_lines_points(plan)
+    land = [g for b in plan.basemap or [] if b.get("kind") in ("land", "country", "state") and b.get("gdf") is not None
+            for g in b["gdf"].geometry.values if g is not None and not g.is_empty]
+    if not subj or not land:
+        return False
+    try:
+        lu = shapely.union_all(np.asarray(land, dtype=object))
+        pts = []
+        for l in subj:
+            for g in l.gdf.geometry.values:
+                if g is None or g.is_empty:
+                    continue
+                if g.geom_type in ("Point", "MultiPoint"):
+                    pts += list(getattr(g, "geoms", [g]))
+                else:
+                    pts += [g.interpolate(f, normalized=True) for f in np.linspace(0, 1, 40)]
+        if not pts:
+            return False
+        on_land = shapely.contains(lu, np.asarray(pts, dtype=object))
+        return float(np.mean(on_land)) < 0.5
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def geography_label_candidates(plan, frame, window, tier, only_named: str | None = None) -> list:
+    """5.5.0 (Q-02): name candidates for the seas and the land shapes in the window, ranked below lakes and rivers and by Natural Earth's
+    scalerank; only those whose point lies in the frame, at the tier's water rank and one finer."""
+    import geopandas as gpd
+    import shapely
+    try:
+        g = gpd.read_parquet(gc.plugin_root() / "assets" / "basemaps" / GEOGRAPHY_LABELS)
+    except Exception:  # noqa: BLE001 - the bundled file is missing: no such names, as before
+        return []
+    lim = tier.get("water")
+    if only_named is not None:
+        import re as _re
+        try:                                             # the named water's own shape, cut to the window: its name goes on the part the map shows
+            a = gpd.read_parquet(gc.plugin_root() / "assets" / "basemaps" / "ne_10m_marine_areas.parquet")
+        except Exception:  # noqa: BLE001
+            return []
+        a = a[[bool(_re.search(r"(?<![A-Za-z])" + _re.escape(str(n)) + r"(?![A-Za-z])", only_named)) for n in a["name"].astype(str)]]
+        a = mp.window_reproject(a, window, plan.crs) if len(a) else a
+        if not len(a):
+            return []
+        geoms, keep = to_sheet(a, frame, True)
+        out = []
+        for i in np.where(keep)[0]:
+            gi = geoms[i]
+            if gi is None or gi.is_empty:
+                continue
+            gi = shapely.clip_by_rect(gi, frame.rect.x0, frame.rect.y0, frame.rect.x1, frame.rect.y1)
+            if gi.is_empty or gi.area < 6.0:
+                continue
+            pt = shapely.point_on_surface(gi)
+            b = gi.bounds
+            out.append(le.Candidate(str(a["name"].iloc[i]), "area", float(pt.x), float(pt.y), 8e5, avail_w=b[2] - b[0],
+                                    style={"tier": "water", "kind": "marine"}))
+        return out
+    if lim is not None:
+        g = g[g["scalerank"].astype(float) <= float(lim) + 1]
+    g = mp.window_reproject(g, window, plan.crs)
+    if g is None or not len(g):
+        return []
+    mx, my, vis = sheet_points(g, frame)
+    out = []
+    for i in np.where(vis)[0]:
+        kind = str(g["kind"].iloc[i])
+        pr = (3e5 if kind == "marine" else 2e5) - float(g["scalerank"].iloc[i]) * 1e4
+        out.append(le.Candidate(str(g["name"].iloc[i]), "area", float(mx[i]), float(my[i]), pr, avail_w=None,
+                                style={"tier": "water", "kind": "marine" if kind == "marine" else "region"}))
+    return out
 
 
 def map_raster_offline() -> bool:
@@ -3048,7 +3313,7 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
     tier = mp.scale_tier(den)
     stats.update({"tier": tier["tier"], "denominator": round(den)})
     pt = float(fonts["label"])
-    floor = lg.MIN_LABEL_PT["print" if tpl["kind"] == "print" else "slide"]
+    floor = body_label_floor(plan, tpl)
     on_line = data_line_hit(plan, frame)                    # 1.0.0 (TODO M10): place and state names keep off the map's own lines
     map_rect = lo.rect_of(tpl["map"])
     ground = t["land"] if plan.basemap else t["background"]
@@ -3097,6 +3362,7 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
         return g
 
     # ---- places
+    msg_town_names, msg_town_entry = set(), None
     pstats = {"candidates": 0, "placed": 0, "dropped_collision": 0, "dropped_size": 0, "dropped_outside": 0, "under_symbol": 0, "tier1": 0, "tier1_dropped": 0}
     places = load("places") if cfg["places"] != "none" else None
     vgr = getattr(plan, "vector_ground", None) or {}
@@ -3116,19 +3382,17 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
     if cfg["places"] != "none" and cfg.get("message_places", True) and cfg.get("_message"):
         # 3.1.0 (G-08): a town the message names that Natural Earth lacks comes from GeoNames, so "Sandpoint" is labelled on a Panhandle map
         have = set(places["name"].astype(str)) if places is not None and len(places) else set()
-        towns, src_eid = message_towns(cfg["_message"], have, window, plan.crs)
+        towns, src_eid = message_towns(cfg["_message"], have, window, plan.crs, skip=subject_words(getattr(plan, "spec", None), cfg["_message"]),
+                                       exclude=cfg.get("exclude"))
         if towns is not None and len(towns):
             import pandas as _pd
             import geopandas as _gpd
             places = towns if places is None or not len(places) else _gpd.GeoDataFrame(_pd.concat([places, towns.to_crs(places.crs)], ignore_index=True),
                                                                                       geometry=places.geometry.name, crs=places.crs)
             stats["message_towns"] = {"entry": src_eid, "names": sorted(towns["name"].astype(str))}
-            plan.notes.append(f"names: {', '.join(sorted(towns['name'].astype(str)))} from GeoNames ({src_eid}), named by the message")
-            try:
-                ent = mp.library_entry(src_eid)
-                plan._name_entries = list(getattr(plan, "_name_entries", None) or []) + [ent]      # credited on the source line (CC BY 4.0)
-            except Exception:  # noqa: BLE001
-                pass
+            # 5.5.0 (D26-10): credited only when one of them is drawn (below); a town looked up and then dropped brought a two-line credit
+            msg_town_names = {str(x) for x in towns["name"].astype(str)}
+            msg_town_entry = src_eid
     if places is not None and len(places):
         sel = select_places(places, cfg, tier)
         sel_names, sel_alt, sel_left = mp.choose_place_names(sel, cfg) if len(sel) else ([], [], set())
@@ -3143,8 +3407,20 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
         sparse_ids = {id(r) for r in getattr(plan, "_sparse_point_obstacles", point_obstacles)}
         dense_ids = {id(r) for r in point_obstacles if id(r) not in sparse_ids}
         said = getattr(plan, "_data_label_texts", None) or []
+        corridor = subject_corridor(plan, frame, cfg)        # 5.5.0 (Q-02): names near the story first; far inland capitals left out
+        import map_emphasis as _me
+        quiet_ref = bool(getattr(plan, "_quiet_reference", False))
+        ref_w = _me.REFERENCE_WEIGHT if quiet_ref else 700     # 5.5.0 (Q-07): reference names a tier below the story
+        ref_ink = admin_label_color(t)[0] if quiet_ref else None
+        msg_l = str(cfg.get("_message") or "").lower()
         for i in np.where(vis)[0]:
             x, y = float(mx[i]), float(my[i])
+            if corridor is not None:
+                d_ = corridor["geom"].distance(shapely.Point(x, y))
+                if d_ > corridor["reach"] and str(sel_names[i]).lower() not in msg_l:
+                    if d_ > 2 * corridor["reach"]:
+                        pstats["far_from_subject"] = pstats.get("far_from_subject", 0) + 1
+                        continue
             near = Rect(x - POINT_CLEARANCE_MM, y - POINT_CLEARANCE_MM, x + POINT_CLEARANCE_MM, y + POINT_CLEARANCE_MM)
             big = str(sel["_tier"].iloc[i]) in ("capital", "city")
             if (sparse_index if big else symbols_index).hits(near):
@@ -3161,11 +3437,15 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
             if any(says_place(k, pk) and abs(lx - x) < SAME_NAME_MM and abs(ly - y) < SAME_NAME_MM for k, lx, ly in said):
                 pstats["same_as_label"] = pstats.get("same_as_label", 0) + 1      # 1.14.0 (Day 11 issue 12): Bremerton was named twice
                 continue
-            if tr == "capital":
+            # 5.6.0 (Q-07): with a story subject (a line or point the map is about), a capital the words do not name is a reference name:
+            # set in its own case, a weight lighter and in the muted reference ink, one tier below the story's labels; a capital the
+            # message names keeps its small capitals
+            quiet_ = quiet_ref and text.lower() not in msg_l
+            if tr == "capital" and not quiet_:
                 text = caps(text)
             groups[tr].append(le.Candidate(text, "point", x, y, float(sel["_prio"].iloc[i]), radius=(trm.GLYPH_MM.get(tr, 2.0) / 2 if glyphs else CITY_DOT_MM / 2 + (0.25 if tr == "capital" else 0.0)),
-                                           weight=700 if tr in ("capital", "city") else 400, tracking=(pt * PT * 0.06 if tr == "capital" else 0.0),
-                                           style={"tier": tr, "cx": x, "cy": y, "alt": sel_alt[i]}))
+                                           weight=(ref_w if tr in ("capital", "city") else 400), tracking=(pt * PT * 0.06 if tr == "capital" and not quiet_ else 0.0),
+                                           style={"tier": tr, "cx": x, "cy": y, "alt": sel_alt[i], "quiet": quiet_}))
         for cands in groups.values():                           # every place's dot is kept clear of other names, named or not
             for c in cands:
                 taken.append(Rect(c.x - c.radius, c.y - c.radius, c.x + c.radius, c.y + c.radius))
@@ -3184,6 +3464,7 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
             else:
                 passes.append((tr, cands, size))
         passes.sort(key=lambda ps_: ps_[2] < max(floor, pt + TIER_SIZE[ps_[0]]))       # every inside pass first, in tier order
+        placed_place_texts: set = set()
         for tr, cands, size in passes:
             if not cands:
                 continue
@@ -3210,9 +3491,11 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                     out.append(f'<circle cx="{sd.num(cx)}" cy="{sd.num(cy)}" r="{sd.num(CITY_DOT_MM / 2 - 0.1)}" fill="{t["label"]}"/>')
                 else:
                     out.append(f'<circle cx="{sd.num(cx)}" cy="{sd.num(cy)}" r="{sd.num(CITY_DOT_MM / 2)}" fill="{paint(t["label"], cx, cy)[0]}"/>')
-                tc_, hc_ = paint(t["label"], p.x, p.y)
+                quiet_p = bool((p.style or {}).get("quiet"))
+                tc_, hc_ = paint(ref_ink if (quiet_p and ref_ink) else t["label"], p.x, p.y)
                 out.append(sd.text(p.x, p.y, p.text, size, tc_, weight=p.weight or 400, anchor=p.anchor, halo=hc_, halo_w=max(0.3, size * PT * 0.2) * _halo_k[0],
-                                   tracking=(pt * PT * 0.06 if tr == "capital" else 0.0), extra=f' data-name="place" data-tier="{tr}"'))
+                                   tracking=(pt * PT * 0.06 if tr == "capital" and not quiet_p else 0.0),
+                                   extra=f' data-name="place" data-tier="{tr}"' + (' data-quiet="1"' if quiet_p else "")))
                 taken.append(p.rect.grown(le.PAD_MM))
                 alt_ = (p.style or {}).get("alt")
                 if alt_:                                       # 1.5.0: names.second_line, a smaller line under the name
@@ -3226,7 +3509,18 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                                            extra=' data-name="place-second" data-tier="second"'))
                         taken.append(r2.grown(le.PAD_MM))
                 counts["places"] += 1
+                placed_place_texts.add(str(p.text).lower())
         pstats["placed"] = counts["places"]
+        drawn_towns = sorted(n for n in msg_town_names if n.lower() in placed_place_texts)
+        if drawn_towns and msg_town_entry:
+            plan.notes.append(f"names: {', '.join(drawn_towns)} from GeoNames ({msg_town_entry}), named by the message")
+            try:
+                ent = mp.library_entry(msg_town_entry)
+                plan._name_entries = list(getattr(plan, "_name_entries", None) or []) + [ent]      # credited on the source line (CC BY 4.0)
+            except Exception:  # noqa: BLE001
+                pass
+        elif msg_town_names:
+            plan.notes.append(f"names: {', '.join(sorted(msg_town_names))} looked up for the message but not drawn; GeoNames is not credited")
         dl_ = pstats.get("dropped_for_lines") or []
         if dl_:                                           # 1.2.0 (Day 9 issue 6): say which names the map's own lines kept out, never silently
             shown = ", ".join(dl_[:6]) + (f" and {len(dl_) - 6} more" if len(dl_) > 6 else "")
@@ -3288,6 +3582,13 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
                     p = ln.interpolate(0.5, normalized=True)
                     cands.append(le.Candidate(str(rivers["name"].iloc[i]), "area", float(p.x), float(p.y), 5e5 - float(rivers["scalerank"].iloc[i]) * 1e4 + ln.length,
                                               avail_w=ln.length * 0.9, style={"tier": "water", "kind": "river"}))
+        mar = cfg.get("marine", "auto")
+        if mar is True or (mar == "auto" and subject_at_sea(plan)):
+            # 5.5.0 (Q-02): seas, gulfs, bays and straits, and the islands, peninsulas and coasts beside them (Natural Earth's geography
+            # labels, bundled): a map of a crossing names the Gulf of Maine and Nova Scotia, not only the inland towns
+            cands += geography_label_candidates(plan, frame, window, tier)
+        elif mar is not False:                           # the sea a legend or the message names is named on the map at any scale
+            cands += geography_label_candidates(plan, frame, window, {"water": None}, only_named=mp.spec_texts(plan.spec))
         if cands and vgr and not vgr.get("partial"):
             # 1.12.0: on a vector-tile ground a bundled water name is kept only where the file itself draws that water (the bundled lake or
             # river may be generalised away from it at this scale, and its name would sit on land)
@@ -3306,6 +3607,12 @@ def draw_names(plan: mp.Plan, frame: lo.Frame, taken: list[Rect], point_obstacle
             res = le.place(cands, map_rect, taken, wsize, 400, floor)
             wstats.update(res.as_dict() | {"candidates": len(cands)})
             for p in res.placed:
+                if (p.style or {}).get("kind") == "region":   # 5.5.0: an island or a peninsula: upright, in the reference ink
+                    tc_, hc_ = paint(t["label"], p.x, p.y)
+                    out.append(sd.text(p.x, p.y, p.text, wsize, tc_, anchor=p.anchor, halo=hc_, halo_w=0.3 * _halo_k[0],
+                                       extra=' data-name="region" data-tier="region"'))
+                    taken.append(p.rect.grown(le.PAD_MM))
+                    continue
                 tc_, hc_ = paint(wcol, p.x, p.y)
                 out.append(sd.text(p.x, p.y, p.text, wsize, tc_, anchor=p.anchor, halo=hc_, halo_w=0.3 * _halo_k[0], slant=WATER_SLANT_DEG,
                                    extra=' data-name="water" data-tier="water"'))
@@ -3908,6 +4215,40 @@ def build_inset(plan: mp.Plan, cfg: dict, tpl: dict, force: bool = False):
     if zoomed_out:
         plan.notes.append(f"locator: a regional map, so the inset is zoomed out {zoomed_out:g} times onto North America to keep the box small enough to read")
     out["metro"] = bool(metro)
+    if metro and state and cfg.get("names", True) is not False:
+        out.update(metro_names(gdfs[0], name_col, crs, cx, cy, win, fr, mbox, w, h))
+    return out
+
+
+LOCATOR_CITIES = 2            # 5.6.0 (Q-11): a metro locator names its state and this many of the largest cities in it (outside the box)
+
+
+def metro_names(states, name_col: str, crs, cx: float, cy: float, win: tuple, fr, mbox: tuple, w: float, h: float) -> dict:
+    """5.6.0 (Q-11): what a metro locator (a town in its county and the counties round it) needs to read as a place: the state it is in, and
+    the one or two largest cities in the window that the box does not cover (Phoenix beside Gilbert). -> {state_name, cities: [{name, x, y}]}."""
+    import shapely
+    out: dict = {"state_name": None, "cities": []}
+    try:
+        cpt = shapely.Point(*[float(v) for v in ((mbox[0] + mbox[2]) / 2, (mbox[1] + mbox[3]) / 2)])
+        hit = states[states.geometry.contains(cpt)]
+        if len(hit):
+            out["state_name"] = str(hit.iloc[0].get(name_col) or "") or None
+        pl = mp.load_ref_layer(mp.NAMES_REFS["places"])[0]
+        pl = _locator_layer(pl, crs, cx, cy)
+        near = pl.cx[win[0]:win[2], win[1]:win[3]]
+        near = near[~near.geometry.within(shapely.box(*mbox))]
+        if "pop_max" in near.columns and len(near):
+            near = near.sort_values("pop_max", ascending=False).head(LOCATOR_CITIES)
+            geoms, keep = to_sheet(near, fr, True)
+            for i in np.where(keep)[0]:
+                g = geoms[i]
+                if g is None or g.is_empty:
+                    continue
+                x_, y_ = float(g.x), float(g.y)
+                if 1.0 < x_ < w - 1.0 and 1.0 < y_ < h - 1.0:
+                    out["cities"].append({"name": str(near.iloc[i]["name"]), "x": round(x_, 2), "y": round(y_, 2)})
+    except Exception:  # noqa: BLE001 - the locator is drawn as before without its names
+        pass
     return out
 
 
@@ -4065,6 +4406,7 @@ def draw_inset(inset: dict, x: float, y: float, t: dict, visible: tuple | None =
         if len(nums) >= 4:
             box_rect = Rect(min(nums[0::2]), min(nums[1::2]), max(nums[0::2]), max(nums[1::2]))
     lab = inset.get("label")
+    lab_rect = None
     if lab:                                                             # the state name in small capitals, when it fits and misses the box
         pt = max(5.5, label_pt - 1.0)
         track = pt * PT * 0.12
@@ -4083,6 +4425,36 @@ def draw_inset(inset: dict, x: float, y: float, t: dict, visible: tuple | None =
         if pick:
             out.append(sd.text(lab["x"], pick[0], lab["text"], pt, t["label"], weight=500, anchor="middle", halo=t["land"], halo_w=0.45, tracking=track,
                                extra=' data-role="inset-state"'))
+            lab_rect = pick[1]
+    taken_i = ([box_rect.grown(0.6)] if box_rect else []) + ([lab_rect.grown(0.6)] if lab_rect else [])
+    if inset.get("cities") or inset.get("state_name"):
+        # 5.6.0 (Q-11): a metro locator names its state (in the corner, small capitals) and one or two cities, each a dot and its name
+        cpt = max(5.0, label_pt - 1.5)
+        ch = cpt * PT
+        for c in inset.get("cities") or []:
+            cw = tm.width_mm(c["name"], cpt, 400)
+            for dx_, anchor in ((0.9, "start"), (-0.9, "end")):
+                x0 = c["x"] + dx_ if anchor == "start" else c["x"] + dx_ - cw
+                r = Rect(x0, c["y"] - ch * 0.5, x0 + cw, c["y"] + ch * 0.5)
+                if r.x0 < 0.8 or r.x1 > w - 0.8 or r.y0 < 0.8 or r.y1 > h - 0.8 or any(r.hits(q) for q in taken_i):
+                    continue
+                out.append(f'<circle cx="{sd.num(c["x"])}" cy="{sd.num(c["y"])}" r="0.35" fill="{t["label"]}" data-role="inset-city"/>')
+                out.append(sd.text(c["x"] + dx_, c["y"] + ch * 0.35, c["name"], cpt, t["label"], anchor=anchor, halo=t["land"], halo_w=0.35,
+                                   extra=' data-role="inset-city-name"'))
+                taken_i.append(r.grown(0.4))
+                break
+        sn = inset.get("state_name")
+        if sn:
+            sp = max(5.0, label_pt - 1.5)
+            tr_ = sp * PT * 0.12
+            txt = mp.upper_name(sn)
+            sw = tm.width_mm(txt, sp, 500) + tr_ * max(len(txt) - 1, 0)
+            for x0, ybase in ((1.2, 1.2 + sp * PT * 0.8), (w - 1.2 - sw, 1.2 + sp * PT * 0.8), (1.2, h - 1.4), (w - 1.2 - sw, h - 1.4)):
+                r = Rect(x0, ybase - sp * PT * 0.8, x0 + sw, ybase + sp * PT * 0.2)
+                if any(r.hits(q) for q in taken_i):
+                    continue
+                out.append(sd.text(x0, ybase, txt, sp, t["label"], weight=500, halo=t["land"], halo_w=0.4, tracking=tr_, extra=' data-role="inset-state-name"'))
+                break
     out.append("</g>")
     out.append(sd.rect(0, 0, w, h, "none", t["legend_frame"], 0.25))      # the frame is drawn last, over any edge of the context layer
     out.append("</g>")

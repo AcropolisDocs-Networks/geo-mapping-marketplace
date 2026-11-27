@@ -62,13 +62,21 @@ def _subject_layers(plan, cfg: dict) -> list:
         return [l for l in plan.layers if l.id == cfg["area"] and l.kind in ("polygon", "point", "line")]
     if cfg["mask"] not in ("auto", True):
         return []
-    ls = [l for l in plan.layers if l.role in FOCUS_ROLES and l.kind == "polygon"]
+    # 5.5.0 (D26-25): a layer keyed in the legend only (a video's moving values) is not drawn on the base, so it is not the study area; it
+    # used to cut the base's mask round six small cells and wash the rest of the map
+    ls = [l for l in plan.layers if l.role in FOCUS_ROLES and l.kind == "polygon" and not getattr(l, "legend_only", False)]
     if ls or cfg["mask"] is not True:
         return ls
     # 2.3.0: asked for (mask: true) on a map without a region: the primary point and line layers are the subject
     data = [l for l in plan.layers if l.kind in ("point", "line") and l.role not in ("context", "contour") and not getattr(l, "legend_only", False)]
     prim = [l for l in data if getattr(l, "emphasis", "primary") == "primary"]
     return prim or data
+
+
+def is_bare_box(plan) -> bool:
+    """True when the map's region block is only a bbox (no place, admin, file or h3): a frame, not a study area (5.5.0, D26-28)."""
+    blk = ((getattr(plan, "spec", None) or {}).get("region"))
+    return isinstance(blk, dict) and "bbox" in blk and not any(k in blk for k in ("place", "admin", "admin2", "file", "h3"))
 
 
 def study_area(plan, cfg: dict):
@@ -78,6 +86,8 @@ def study_area(plan, cfg: dict):
     if cfg["mask"] is False:
         return None
     reg = getattr(plan, "region", None)
+    if reg is not None and is_bare_box(plan) and cfg["mask"] == "auto":
+        reg = None                                    # 5.5.0 (D26-28): a region given as a bare bbox is a frame, not a study area: no lift, no box
     if reg is not None and not cfg["area"] and cfg["mask"] in ("auto", True) and _subject_layers(plan, cfg):
         # 3.4.0 (Day 20 #19, #21): a map of a region is about the region: the mask is cut from it, not from the union of the data layer, so
         # the relief inside the region stays clear where the cells do not reach, and the region's own towns keep the inside ink
@@ -154,6 +164,44 @@ def mask_markup(sheet_area, rect, color: str, opacity: float = MASK_OPACITY) -> 
     holes = "".join(_d(r) for r in _rings(sheet_area))
     return (f'<path class="gm-focus-mask" d="{frame_d}{holes}" fill="{color}" fill-opacity="{opacity:g}" fill-rule="evenodd" '
             f'stroke="none" data-focus="mask"/>')
+
+
+LIFT_CHECK_PARTS = 20         # 5.5.0 (D26-35): a study area in more pieces than this has its shadow between the classes
+LIFT_CLASS_DE = 10.0          # 5.5.0 (D26-35): the shadow under the study area keeps this far from every class drawn inside it
+
+
+def _mix(a: str, b: str, f: float) -> str:
+    a_, b_ = a.lstrip("#"), b.lstrip("#")
+    ca = [int(a_[i:i + 2], 16) for i in (0, 2, 4)]
+    cb = [int(b_[i:i + 2], 16) for i in (0, 2, 4)]
+    return "#" + "".join(f"{int(round(x + (y - x) * f)):02X}" for x, y in zip(ca, cb))
+
+
+def lift_opacity_for(plan, land: str, shadow: str, area=None) -> tuple[float, str | None]:
+    """5.5.0 (D26-35): the shadow's strength, checked against every class colour drawn inside the study area: the land under the shadow must
+    stay at least LIFT_CLASS_DE (CIEDE2000) from each class, or the lightest class vanishes into it (Gilbert's 25 to 50 cm). The shadow is
+    made lighter until it does; when even a faint one does not, it is left out. -> (opacity, a note or None).
+
+    The shadow shows only round the study area's edge, so it is checked when that edge runs between the classes: a study area of more than
+    LIFT_CHECK_PARTS pieces (Gilbert's 3,426 dips, each with its shadow beside it). One region, or a few (a state and its islands), keeps it."""
+    import colorlib
+    if area is not None:
+        parts = len(getattr(area, "geoms", [area]))
+        if parts <= LIFT_CHECK_PARTS:
+            return LIFT_OPACITY, None
+    cols = []
+    for l in getattr(plan, "layers", []) or []:
+        if l.role in FOCUS_ROLES or (getattr(l, "cls", None) is not None and l.kind == "polygon"):
+            cols += [c for c in (getattr(l, "colors", None) or []) if isinstance(c, str) and c.startswith("#")]
+    if not cols or not str(land).startswith("#") or not str(shadow).startswith("#"):
+        return LIFT_OPACITY, None
+    for op in (LIFT_OPACITY, 0.12, 0.08, 0.05):
+        under = _mix(land, shadow, op)
+        worst = min(colorlib.delta_e(under, c) for c in cols)
+        if worst >= LIFT_CLASS_DE:
+            return op, (None if op == LIFT_OPACITY else
+                        f"focus: the study area's shadow lightened to {op:.0%} so the lightest class stays {worst:.0f} apart from it")
+    return 0.0, "focus: the study area's shadow left out: at any strength it came too close to the lightest class drawn inside it"
 
 
 def lift_markup(sheet_area, rect, color: str, opacity: float = LIFT_OPACITY) -> str:

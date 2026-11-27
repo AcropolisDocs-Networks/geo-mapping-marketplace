@@ -74,6 +74,7 @@
       "description": "0.17.0: the map's look. auto (the default): class colours generated from the brand colour over the full range of tints and shades, context drawn lighter and thinner than the data, casings under data lines and points, point sizes by feature count; 0.22.0: auto resolves to a named look (focus: mask and lift on areas; clean: points and sites; network: roads fainter and a dot at each line end; terrain: heavier contours; surface: the context see-through over a surface); bold: everything a quarter larger with a wider ramp; dark: a dark ground with the ramp running up from it. classic: exactly the 0.16 look.",
       "properties": {
         "look": {"enum": ["auto", "classic", "focus", "clean", "network", "terrain", "surface", "bold", "dark"], "description": "auto (the default) picks focus, clean, network, terrain or surface from the map's main data (0.22.0); bold and dark only when asked for; classic is the 0.16 look"},
+        "subject_boost": {"enum": ["auto", "strong", "off", false], "description": "5.5.0 (Q-01): auto (default; off under the classic look): when the message names a line or point layer it is made the strongest mark (a line widened and cased, a raster that is not the subject stepped back, reference names a weight lighter); 5.6.0: the build measures the subject's share of the attention and, under 15%, draws it strong (wider again, the ground at 60% and the context at 75%); strong asks for that at once; off keeps the look's strengths"},
         "hierarchy": {"enum": ["auto", "off", false], "description": "1.13.0: auto (the default; off under the classic look): the data layers the message names are drawn at full strength and the others quieter (each layer's emphasis); off: every layer at full strength"},
         "pack": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,30}$", "description": "1.4.0 (R2-PACK): the style pack (palette, type, ornaments, treatments) the whole map is built in; default (a normal map: the brand's palette and Inter) unless named. Fixed when the build starts: changing it builds the map again from its kept data"},
         "treatments": {"type": "object", "additionalProperties": false, "description": "1.4.0 (R2-TREAT): treatments for this map whatever its pack; they override the pack's own key by key",
@@ -604,7 +605,11 @@
                     "flow_lines",
                     "network_nearest",
                     "network_distance",
-                    "light_budget"
+                    "light_budget",
+                    "depressions",
+                    "trace_downstream",
+                    "sample_along",
+                    "sea_route"
                   ]
                 },
                 "layer": {
@@ -906,6 +911,15 @@
               "method": {
                 "type": "string"
               },
+              "measure": {
+                "type": "boolean",
+                "description": "5.5.0 (D26-27): the value field is a measure with a unit (depth in metres, a temperature), not a count; MAP-CART-001 is not raised. A field ending in a unit (_m, _km, _c, _pct) or a legend title naming one (Depth (m)) is read as one without it"
+              },
+              "groups": {
+                "type": "array",
+                "description": "5.5.0 (D26-42): legend headings over the classes: [{label: 'To the Gulf of California', classes: [...]}, {label: 'Nowhere', classes: [...]}]",
+                "items": {"type": "object", "required": ["label", "classes"], "properties": {"label": {"type": "string"}, "classes": {"type": "array"}}}
+              },
               "keep_absent": {
                 "type": "boolean",
                 "description": "categorical with order: every category of the order keeps its place, colour and legend line even where no feature has it (an atlas shares its categories this way, 0.24.0)"
@@ -1172,6 +1186,9 @@
       "properties": {
         "ink": {"enum": ["uniform", "adaptive"], "description": "2.6.0 (V-06): uniform (default): one dark ink with a page-colour halo over every class, the halo wider over dark ones; adaptive: the ink follows the colour under each name (2.5 and before)"},
         "message_places": {"type": "boolean", "description": "3.0.0 (G-08): places the message names are labelled at any scale tier (default true)"},
+        "near_subject": {"type": "boolean", "description": "5.5.0 (Q-02): when the message names a line or point layer, place names far from it are left out unless the message names them (default true)"},
+        "near_subject_mm": {"type": "number", "exclusiveMinimum": 0, "description": "5.5.0: how far from the subject names are kept, on the sheet (default 22% of the frame's diagonal; twice that is the cut-off)"},
+        "marine": {"oneOf": [{"type": "boolean"}, {"const": "auto"}], "description": "5.5.0 (Q-02): seas, gulfs, straits, islands and peninsulas (Natural Earth): auto (default) when the subject is at sea"},
         "on": {
           "type": "boolean",
           "default": true
@@ -1270,6 +1287,7 @@
         "on": {
           "type": "boolean"
         },
+        "entry": {"type": "string", "description": "5.5.0 (D26-09): the library entry a terrain.source file was fetched from; the relief is credited to it, not to the person"},
         "source": {
           "type": "string",
           "description": "auto (by coverage: USGS 3DEP in the United States, the national bare-earth model in Canada (canada-mrdem), France (ign-rge-alti), Flanders (flanders-dhmv), Sweden (lantmateriet, with your free Geotorget login), Australia (ga-lidar-5m) and Japan (gsi-japan), ArcticDEM and REMA at the poles, the Copernicus DEM GLO-30 elsewhere, Terrarium last), any of those names, flanders-lidar (the DHMV II point cloud gridded at 1 m, named only), or the path of a DEM GeoTIFF or a LAS or LAZ point cloud (gridded to bare earth; nothing is fetched)"
@@ -1354,9 +1372,7 @@
             ]
           }
         },
-        "required": [
-          "on"
-        ]
+        "description": "An element block. A block given without on (units, position only) keeps the element's own default (5.5.0, D26-17)."
       }
     },
     "export": {

@@ -20,6 +20,8 @@ sys.path.insert(0, str(HERE))
 import gmap_common as gc  # noqa: E402
 
 M_PER_MI = 1609.344
+M_PER_NMI = 1852.0                       # 5.5.0 (D26-18): nautical miles, for a sea chart
+PER_UNIT = {"mi": M_PER_MI, "nmi": M_PER_NMI, "km": 1000.0, "m": 1.0}
 NICE = (1, 2, 2.5, 5)
 HIDE_BELOW_SCALE = 50_000_000            # smaller scales than 1:50M: no scale bar (spec 10)
 WARN_VARIATION = 0.01                    # local scale varies more than 1% across the frame
@@ -63,8 +65,21 @@ def to_meters_factor(crs) -> float:
         return 1.0
 
 
-def scale_info(crs, bbox, frame_mm: float, *, units: str = "auto", rotation: float = 0.0, segments: int | None = None) -> dict:
-    """Everything the layout needs to draw a true scale bar and a correct north arrow."""
+def true_at_latitude(value, bbox, crs) -> float | None:
+    """5.5.0 (D26-41): `elements.scale_bar.true_at: <latitude> | centre`: the latitude where the bar is true. None when not asked."""
+    if value in (None, False, ""):
+        return None
+    if str(value).lower() in ("centre", "center", "auto", "true"):
+        xmin, ymin, xmax, ymax = (float(v) for v in bbox)
+        _lon, lat = _lonlat_of(crs, [(xmin + xmax) / 2], [(ymin + ymax) / 2])
+        return round(float(lat[0]), 1)
+    return max(-85.0, min(85.0, float(value)))
+
+
+def scale_info(crs, bbox, frame_mm: float, *, units: str = "auto", rotation: float = 0.0, segments: int | None = None, true_at=None) -> dict:
+    """Everything the layout needs to draw a true scale bar and a correct north arrow. `true_at` (5.5.0): a latitude (or "centre") where the
+    bar is true; the bar is then drawn for that latitude and labelled so, and a projection whose scale varies across the frame (Web
+    Mercator on a sea chart) keeps its bar as a WARN instead of a BLOCK."""
     xmin, ymin, xmax, ymax = (float(v) for v in bbox)
     cx, cy = (xmin + xmax) / 2, (ymin + ymax) / 2
     m_per_unit = to_meters_factor(crs)
@@ -78,6 +93,15 @@ def scale_info(crs, bbox, frame_mm: float, *, units: str = "auto", rotation: flo
     if fac[0]["geographic"]:                                   # degrees: ground m per degree of longitude at the center latitude
         width_m = (xmax - xmin) * 111_320.0 * math.cos(math.radians(cy))
         kc, variation = 1.0, (max(ks) - min(ks)) / max(min(ks), 1e-9)
+    lat_true = true_at_latitude(true_at, bbox, crs)
+    if lat_true is not None and not fac[0]["geographic"]:
+        from pyproj import Transformer
+        lon_c = _lonlat_of(crs, [cx], [cy])[0][0]
+        xt, yt = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform(lon_c, lat_true)
+        kc = local_factors(crs, xt, yt)["k"] or kc
+        out_lat = lat_true
+    else:
+        out_lat = None
     ground_m_per_mm = width_m / (frame_mm * kc) if frame_mm > 0 else 0.0     # true ground distance under 1 mm of paper at the center
     denom = ground_m_per_mm * 1000.0
     out: dict = {"scale_denominator": round(denom), "ratio": f"1:{round(denom, -int(max(0, math.floor(math.log10(max(denom, 1))) - 2))):,.0f}",
@@ -101,6 +125,12 @@ def scale_info(crs, bbox, frame_mm: float, *, units: str = "auto", rotation: flo
     else:
         out["bar"] = bar_model(ground_m_per_mm, frame_mm, unit, segments)
         out["bar2"] = bar_model(ground_m_per_mm, frame_mm, second, segments) if second else None
+        if out_lat is not None:
+            hemi = "N" if out_lat >= 0 else "S"
+            for b in (out["bar"], out["bar2"]):
+                if b and b.get("ticks"):
+                    b["ticks"][-1]["label"] += f" at {abs(out_lat):g}°{hemi}"
+            out["true_at_lat"] = out_lat
         if out["bar2"] is not None and not out["bar2"].get("ticks"):
             out["bar2"] = None
         out["bar_hidden"] = None
@@ -111,9 +141,13 @@ def scale_info(crs, bbox, frame_mm: float, *, units: str = "auto", rotation: flo
         sev = "block"
     elif variation > WARN_VARIATION:
         sev = "warn"
-    out["distortion"] = {"severity": sev,
-                         "message": (f"scale varies by {variation:.0%} across the extent; the bar is true only near the center"
-                                     if sev != "ok" else "scale is uniform to within 1%")}
+    msg = (f"scale varies by {variation:.0%} across the extent; the bar is true only near the center" if sev != "ok" else "scale is uniform to within 1%")
+    if sev == "block" and out_lat is not None:      # 5.5.0 (D26-41): the bar says where it is true, so it no longer misleads
+        sev = "warn"
+        msg = f"scale varies by {variation:.0%} across the extent; the bar is drawn true at {abs(out_lat):g}°{'N' if out_lat >= 0 else 'S'} and says so"
+    elif sev == "block":
+        msg += "; elements.scale_bar.true_at: <latitude> (or centre) draws a bar true at one latitude and labelled so"
+    out["distortion"] = {"severity": sev, "message": msg}
     out["north"] = north_arrow(crs, cx, cy, bbox, rotation)
     return out
 
@@ -171,7 +205,7 @@ def nice_length(max_ground: float) -> float:
 
 
 def bar_model(ground_m_per_mm: float, frame_mm: float, unit: str, segments: int | None = None, max_frac: float = 0.28) -> dict:
-    per_unit = M_PER_MI if unit == "mi" else (1000.0 if unit == "km" else 1.0)
+    per_unit = PER_UNIT.get(unit, 1.0)
     max_ground = ground_m_per_mm * frame_mm * max_frac / per_unit
     total = nice_length(max_ground)
     if total <= 0:
@@ -265,7 +299,7 @@ def main(argv=None) -> int:
     i.add_argument("--crs", required=True)
     i.add_argument("--bbox", nargs=4, type=float, required=True)
     i.add_argument("--frame-mm", type=float, required=True)
-    i.add_argument("--units", default="auto", choices=["auto", "mi", "km", "m", "both"])
+    i.add_argument("--units", default="auto", choices=["auto", "mi", "km", "m", "nmi", "both"])
     i.add_argument("--rotation", type=float, default=0.0)
     a = ap.parse_args(argv)
     print(json.dumps(scale_info(a.crs, a.bbox, a.frame_mm, units=a.units, rotation=a.rotation), indent=2))

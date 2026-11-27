@@ -272,6 +272,14 @@ def _other_prefixed(other, prefix: str, fields: list | None, geom_name: str):
 
 # --------------------------------------------------------------------------- the ops
 
+def _gs_buffer(gs, distance, segs, cap, join):
+    """5.5.0: a GeoSeries buffered through shapely itself. geopandas 1.0 and 1.1 take the segments as `resolution` and pass it to shapely as
+    quad_segs, so `quad_segs=` there is given twice and fails; 1.2 takes `quad_segs`. Shapely's own call is the same on every version."""
+    import geopandas as gpd
+    import shapely
+    return gpd.GeoSeries(shapely.buffer(np.asarray(gs.values), distance, quad_segs=segs, cap_style=cap, join_style=join), index=gs.index, crs=gs.crs)
+
+
 def op_buffer(gdf, p: dict, ctx: Ctx) -> OpResult:
     """buffer {distance, units, dissolve, cap, join, rings: [d1, d2, ...], segments}"""
     import geopandas as gpd
@@ -302,7 +310,7 @@ def op_buffer(gdf, p: dict, ctx: Ctx) -> OpResult:
         rows = []
         prev = None
         for i, (dm, dv, du) in enumerate(dists, start=1):
-            b = m.geometry.buffer(dm, quad_segs=segs, cap_style=cap, join_style=join)
+            b = _gs_buffer(m.geometry, dm, segs, cap, join)
             if dissolve:
                 b = gpd.GeoSeries([shapely.union_all(b.values)], crs=crs)
             ring = b if prev is None else b.difference(prev)
@@ -322,7 +330,7 @@ def op_buffer(gdf, p: dict, ctx: Ctx) -> OpResult:
                 + (", merged where they overlap" if dissolve else "") + f"; the `{RING_FIELD}` field numbers them from the inside. ")
     else:
         dm, dv, du = dists[0]
-        b = m.geometry.buffer(dm, quad_segs=segs, cap_style=cap, join_style=join)
+        b = _gs_buffer(m.geometry, dm, segs, cap, join)
         if dissolve:
             out = gpd.GeoDataFrame({"features": [len(m)]}, geometry=[shapely.union_all(b.values)], crs=crs)
         else:
@@ -2252,7 +2260,87 @@ def _band_names(k: int) -> list[str]:
 
 
 
+# --------------------------------------------------------------------------- 5.5.0 (D26-13): water ops (water_ops.py)
+
+def op_depressions(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """depressions {dem, min_depth_m, min_area_m2}: the closed hollows of a DEM inside the layer's areas (sink fill), with depth, area, volume"""
+    import geopandas as gpd
+    import shapely
+    import water_ops as wo
+    _require_crs(gdf, "depressions")
+    a = gdf.to_crs(WGS84) if not gdf.crs.equals(WGS84) else gdf
+    area = shapely.union_all(a.geometry.values) if _families(gdf) == {"Polygon"} else shapely.box(*a.total_bounds)
+    dem, rec = _dem_for_op(a, p, ctx, 0.0, "depressions")
+    try:
+        out, cell_m2, notes = wo.depressions(dem, area, float(p.get("min_depth_m", 0.05)), float(p.get("min_area_m2", 25.0)))
+    except wo.WaterOpError as ex:
+        raise OpsError(str(ex)) from None
+    out = out.to_crs(gdf.crs) if len(out) else gpd.GeoDataFrame(out, geometry=out.geometry, crs=gdf.crs)
+    note = (f"Closed hollows in {_dem_name(rec, dem)} (about {cell_m2 ** 0.5:.1f} m cells): the DEM filled to each hollow's spill height (priority flood), "
+            f"depth the filled surface less the ground; {notes[0]}. Modelled from the ground's shape: where rain would pool, not where it has been seen.")
+    return OpResult(out, [note], [], _prov("depressions", p, len(gdf), len(out), None, dem=Path(dem).name, cell_m2=round(cell_m2, 3), certainty="modelled"))
+
+
+def op_trace_downstream(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """trace_downstream {id_field, to_field}: each hydrologic unit followed downstream (WBD tohuc) to where its water ends"""
+    import water_ops as wo
+    try:
+        out = wo.trace_downstream(gdf, p.get("id_field"), str(p.get("to_field") or "tohuc"))
+    except wo.WaterOpError as ex:
+        raise OpsError(str(ex)) from None
+    kinds = out["terminal"].value_counts().to_dict()
+    note = ("Each unit followed downstream unit by unit (its tohuc) to where its water ends: " + ", ".join(f"{v} {k}" for k, v in kinds.items())
+            + ". A unit whose next unit lies outside the window is marked so; widen the window to follow it further.")
+    return OpResult(out, [note], [], _prov("trace_downstream", p, len(gdf), len(out), None, terminals=kinds))
+
+
+def op_sample_along(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """sample_along {raster, spacing, units}: points along each line at a spacing, with dist_m and the raster's value"""
+    import water_ops as wo
+    _require_crs(gdf, "sample_along")
+    if not p.get("raster"):
+        raise OpsError("sample_along needs raster: <file.tif> (the values to read along the line)")
+    path = _local_path(p["raster"], ctx)
+    if not path.is_file():
+        raise OpsError(f"sample_along: raster not found: {p['raster']}")
+    sp_m, sp_v, sp_u = to_metres(p.get("spacing", 500), p.get("units"), "spacing")
+    crs, why = measure_crs(gdf, "distance", ctx=ctx)
+    try:
+        out = wo.sample_along(gdf, str(path), sp_m, crs).to_crs(gdf.crs)
+    except wo.WaterOpError as ex:
+        raise OpsError(str(ex)) from None
+    note = f"Values of {path.name} read every {_fmt(sp_v)} {sp_u} along {len(gdf)} line(s) ({len(out):,} points), measured in {crs} ({why})."
+    return OpResult(out, [note], [], _prov("sample_along", p, len(gdf), len(out), crs, raster=path.name, spacing_m=sp_m))
+
+
+def op_sea_route(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """sea_route {order_field, cell_deg, margin_deg, densify_km}: a route through the layer's points in order that stays at sea"""
+    import geopandas as gpd
+    import shapely
+    import water_ops as wo
+    _require_crs(gdf, "sea_route")
+    if _families(gdf) - {"Point"}:
+        raise OpsError("sea_route goes through points (ports, waypoints); this layer holds " + ", ".join(sorted(_families(gdf))).lower())
+    a = gdf.to_crs(WGS84) if not gdf.crs.equals(WGS84) else gdf
+    if p.get("order_field"):
+        if p["order_field"] not in a.columns:
+            raise OpsError(f"sea_route: no field '{p['order_field']}' to order the points by")
+        a = a.sort_values(p["order_field"])
+    pts = [(g.x, g.y) for g in a.geometry]
+    try:
+        verts, notes = wo.sea_route(pts, p.get("cell_deg"), float(p.get("margin_deg", 3.0)))
+    except wo.WaterOpError as ex:
+        raise OpsError(str(ex)) from None
+    line = shapely.LineString(wo.densify_geodesic(verts, float(p.get("densify_km", 50.0))))
+    out = gpd.GeoDataFrame([{"points": len(pts), "certainty": "reconstructed"}], geometry=[line], crs=WGS84).to_crs(gdf.crs)
+    return OpResult(out, notes, [], _prov("sea_route", p, len(gdf), 1, None, certainty="reconstructed"))
+
+
 OPS = {
+    "depressions": op_depressions,
+    "trace_downstream": op_trace_downstream,
+    "sample_along": op_sample_along,
+    "sea_route": op_sea_route,
     "geocode": op_geocode,
     "dot_density": op_dot_density,
     "density_surface": op_density_surface,
@@ -2468,6 +2556,17 @@ def equivalent(op: str, p: dict, prov: dict | None = None) -> dict:
                             "then ST_LineLocatePoint per line"),
         "reconcile": (f"gpd.sjoin(gdf, {other}.to_crs(gdf.crs).buffer(tolerance), predicate='intersects') then share of length within tolerance >= threshold",
                       f"SELECT a.id, ST_Length(ST_Intersection(a.geom, ST_Buffer(b.geom, tol))) / ST_Length(a.geom) FROM a JOIN {other} b ON ST_DWithin(a.geom, b.geom, tol)"),
+        "depressions": (f"filled = skimage.morphology.reconstruction(seed, dem, method='erosion'); depth = filled - dem; rasterio.features.shapes(depth >= "
+                        f"{p.get('min_depth_m', 0.1)}) kept where area >= {p.get('min_area_m2', 25)} m2",
+                        "ST_MapAlgebra(filled, dem, '[rast1] - [rast2]') then ST_DumpAsPolygons where the depth passes the threshold"),
+        "trace_downstream": (f"follow {p.get('to_field', 'tohuc')} from each unit through a dict of unit -> next unit until it reaches the ocean, a closed "
+                             "basin or leaves the table; terminal and steps per unit",
+                             f"WITH RECURSIVE down AS (SELECT id, {p.get('to_field', 'tohuc')} AS nxt, 1 AS steps FROM units UNION ALL SELECT d.id, u.{p.get('to_field', 'tohuc')}, "
+                             "d.steps + 1 FROM down d JOIN units u ON u.id = d.nxt) SELECT id, max(steps) FROM down GROUP BY id"),
+        "sample_along": (f"points every {p.get('spacing', 'spacing')} m along the line (line.interpolate), then rasterio sample of {p.get('raster', 'raster')} at each",
+                         "ST_LineInterpolatePoints(geom, spacing / ST_Length(geom)) then ST_Value(rast, pt)"),
+        "sea_route": ("A* over a grid of the ocean (Natural Earth 10m) between the stops in order, then the cells' path simplified and densified on the "
+                      "great circle", "pgr_aStar over a sea-cell graph built from the ocean polygon, the stops snapped to the nearest cell"),
     }
     g, s = table.get(op, ("(no one-line equivalent)", "(no one-line equivalent)"))
     return {"geopandas": g, "postgis": s}
