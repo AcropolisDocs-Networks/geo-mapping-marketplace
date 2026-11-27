@@ -340,6 +340,11 @@ once. The title and subtitle never sit over the data: the map is set below them 
 says so (`extent.fit: overlay` or `fixed` keeps the frame). A metro locator (a town with the counties round it) names its state in a corner and the one or
 two largest cities outside the box (`inset_map: {names: false}` leaves them off).
 
+5.7.0, what a map is: everything within its border. The title and subtitle, the logo, the legend, the locator, the north arrow, the
+scale bar, callouts, figures and the confidentiality banner are drawn inside the map frame; outside it there is only the credits' small print
+(the sources, the date of production, the projection, a disclaimer or trademark line, "Data as of", and a logo a data licence requires beside
+its credit). An element outside the border is MAP-CART-046 (BLOCK); `elements.title.placement: outside` is the one opt-out (said as INFO).
+
 Elements (each `{on: true|false, position: upper-left|upper-right|lower-left|lower-right|auto}`): title, legend, north_arrow, scale_bar, graticule,
 inset_map, logo, source_note, date_stamp, confidentiality_banner, methods_page (off by default), terrain (the same switch as `terrain.on`). The brand is written into the spec the first time a map is built, so a later
 default change never restyles it.

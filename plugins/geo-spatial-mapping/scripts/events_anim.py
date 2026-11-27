@@ -552,6 +552,7 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
         tl["poster"] = "preview"                     # 5.5.0 (MEDIUM-3): a flow video opens on the route drawn faint, not on its end state
     if tl.get("poster") == "preview":
         _preview_poster(base, mo, plan, fdir, tl, font_tl, report, ppm)
+    outside_seen: dict = {}
     for k in range(n):
         tk = k / fps
         b0 = base_at(tk)
@@ -574,7 +575,17 @@ def run(spec_path, out_dir, *, layer: str | None = None, time_field: str | None 
             im, _pl = tlm.paint(im, tk, tl, t, font_path=font_tl, logo=None, bottom_px=bottom_px, top_px=round(win["rect_mm"][1] * ppm),
                                 avoid=avoid + ([chart_rect] if chart_rect else []) + ([mo["panel"]] if mo and mo.get("panel") else []),
                                 frame_px=[v * ppm for v in win["rect_mm"]])
+            for name_, box_ in [("the story line", _pl.get("story_box"))] + [(f"the {p_} counter", b_) for p_, b_ in (_pl.get("counter_boxes") or {}).items()]:
+                if box_ and not inside_frame(box_, frame_px):
+                    outside_seen.setdefault(name_, round(tk, 2))
+        if chart_rect and not inside_frame(chart_rect, frame_px):
+            outside_seen.setdefault("the chart", round(tk, 2))
         im.save(fdir / f"frame_{k:05d}.png")
+    if outside_seen:
+        # 5.7.0 (a map is everything within its border): in a video too, everything but the credits and the date sits inside the map frame
+        findings.append({"id": "MAP-CART-046", "severity": "WARN", "detail": {"outside": outside_seen, "frame_px": [round(v, 1) for v in frame_px]},
+                         "message": ", ".join(f"{k_} (first at {v_:g} s)" for k_, v_ in outside_seen.items())
+                                    + " left the map frame; only the credits and the date may sit outside the map's border"})
     if pieces:
         findings += pieces.end_findings((n - 1) / fps)
     manifest = gc.build_manifest()
@@ -649,6 +660,14 @@ def beat_contradictions(tl: dict, ch: dict) -> list[dict]:
                 continue
             break
     return out
+
+
+FRAME_TOL_PX = 2.0     # 5.7.0: a box may touch the map frame by this much
+
+
+def inside_frame(box, frame_px, tol: float = FRAME_TOL_PX) -> bool:
+    """Whether a box (x0, y0, x1, y1 in pixels) lies inside the map frame of the video."""
+    return (box[0] >= frame_px[0] - tol and box[1] >= frame_px[1] - tol and box[2] <= frame_px[2] + tol and box[3] <= frame_px[3] + tol)
 
 
 def reduced_legend_base(base, bare, report: dict, ppm: float, scale: float):

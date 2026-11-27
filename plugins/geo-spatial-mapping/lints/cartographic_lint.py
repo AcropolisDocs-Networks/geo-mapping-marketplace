@@ -555,6 +555,52 @@ def check_016(plan) -> list[dict]:
     return out
 
 
+BORDER_TOL_MM = 0.3           # 5.7.0: an element's box may touch the map's border by this much (a frame line's width)
+CREDITS_GROUP = "gm-footer"   # the one group allowed outside the border: the source credits, the date and their small print
+
+
+def _inside(r, fr, tol: float = BORDER_TOL_MM) -> bool:
+    return r[0] >= fr[0] - tol and r[1] >= fr[1] - tol and r[2] <= fr[2] + tol and r[3] <= fr[3] + tol
+
+
+def check_046(plan, report: dict | None, svg: str | None) -> list[dict]:
+    """MAP-CART-046 (5.7.0), what a map is: everything within its border. The title, subtitle, logo, legend, locator, north arrow, scale
+    bar, callouts, figures (a detail inset, a section, a strip, a data table) and any banner sit inside the map frame; outside it there is
+    only the small print of the credits (sources, the date, the projection, a disclaimer or trademark line, 'Data as of', and the logo a
+    data licence requires beside its credit). BLOCK when an element's box leaves the frame or the brand logo is drawn in the credits band;
+    a title set above the map with `elements.title.placement: outside` is the one opt-out, and is said (INFO)."""
+    out: list[dict] = []
+    rep = report or {}
+    fr = ((rep.get("map_window") or {}).get("rect_mm"))
+    if not fr:
+        return out
+    boxes = [(f"the {k.replace('_', ' ')}", v.get("rect_mm")) for k, v in (rep.get("overlays") or {}).items() if isinstance(v, dict)]
+    boxes += [(f"callout {c.get('n')}", c.get("box_mm")) for c in (rep.get("callouts") or []) if isinstance(c, dict)]
+    boxes += [(f"figure {i + 1}", [r[0], r[1], r[0] + r[2], r[1] + r[3]]) for i, r in enumerate(rep.get("figures") or []) if len(r) == 4]
+    bad = [name for name, r in boxes if r and len(r) == 4 and not _inside(r, fr)]
+    if svg and f'class="{CREDITS_GROUP}"' in svg and 'class="gm-logo"' in svg:
+        try:
+            from lxml import etree
+            root = etree.fromstring(svg.encode("utf-8"), etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=True))
+            ns = "{http://www.w3.org/2000/svg}"
+            for g in root.iter(f"{ns}g"):
+                if (g.get("class") or "") == CREDITS_GROUP and any("gm-logo" in (e.get("class") or "") for e in g.iter()):
+                    bad.append("the brand logo (in the credits band)")
+                    break
+        except Exception:  # noqa: BLE001 - an SVG that cannot be read here is checked by the output lint
+            pass
+    if bad:
+        out.append({"id": "MAP-CART-046", "severity": "BLOCK", "detail": {"outside": bad, "frame_mm": fr},
+                    "message": f"{', '.join(bad)} sit(s) outside the map's border. A map is everything within its border: only the source "
+                               "credits and the date of production may be outside it; move the element into the map (its position) or leave it off"})
+    t_el = ((plan.spec.get("elements") or {}).get("title") or {}) if getattr(plan, "spec", None) else {}
+    if t_el.get("placement") == "outside" and t_el.get("on", True) is not False:
+        out.append({"id": "MAP-CART-046", "severity": "INFO", "detail": {"opt_out": "elements.title.placement: outside"},
+                    "message": "the title sits above the map's border, as elements.title.placement: outside asks; by the plugin's definition a "
+                               "map is everything within its border, so leave placement out to set the title inside the map"})
+    return out
+
+
 def lint_plan(plan, report: dict | None = None, svg: str | None = None) -> list[dict]:
     """`svg` is the rendered map, for the rules that read the output back (MAP-CART-019)."""
     out: list[dict] = []
@@ -562,7 +608,7 @@ def lint_plan(plan, report: dict | None = None, svg: str | None = None) -> list[
         out += fn(plan)
     for fn in (check_009, check_011, check_012, check_024, check_025):
         out += fn(plan, report)
-    out += check_007(report) + check_017(report) + check_019(plan, svg) + check_042(report)
+    out += check_007(report) + check_017(report) + check_019(plan, svg) + check_042(report) + check_046(plan, report, svg)
     import look_lint                                      # 0.22.0: the visual hierarchy checks (MAP-CART-026 to 032), not under classic
     out += look_lint.lint(plan, report, svg)
     return out

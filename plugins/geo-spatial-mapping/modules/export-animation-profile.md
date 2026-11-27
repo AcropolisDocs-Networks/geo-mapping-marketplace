@@ -97,6 +97,9 @@ description: >
   default for a flow video) opens on the whole route drawn faint with the title, not on the end; `poster: 12` opens on that second.
   A `values:` layer outlines only the features that have a value at that moment (`outline: false` for none); a legend-only layer never
   becomes the base map's study area, so the other layers keep their strength, and a region given as a bare `bbox` is a frame, not a study area.
+- **"Keep it all on the map"** (5.7.0): a video's map is everything within its frame. The title, counters, chart, story line, sparkline,
+  legend and an atlas animation's progress bar sit inside the map frame (the bar along the inside of its bottom edge); only the credits band
+  and the date are below it. Anything that leaves the frame is MAP-CART-046 in the video's findings.
 - **"Make the counter the first thing read"** (5.6.0): a video's tiers are counter, chart, captions, then the key: in a video of 15 s or
   more the legend is read whole for its first 6 s, then steps back to 70% of its size in its own corner (`legend: {reduce_after_s: 8, scale:
   0.6}` in the timeline; `legend: {reduce: false}` keeps it whole; the map is drawn a second time without its key for this). Every story line

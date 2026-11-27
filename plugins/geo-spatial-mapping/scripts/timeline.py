@@ -747,7 +747,7 @@ def _rgb(hx, a: int = 255) -> tuple:
     return tuple(int(hx[i:i + 2], 16) for i in (0, 2, 4)) + (a,)
 
 
-def story_room(d, text, font_path, size, min_size, y, avoid, pad, W, H, lo, hi, k):
+def story_room(d, text, font_path, size, min_size, y, avoid, pad, W, H, lo, hi, k, centre=None):
     """Where the story line goes (2.1.0): on its row between `lo` and `hi` less every overlay rectangle of `avoid` the row meets, the widest
     such gap, the type made smaller (to `min_size`) to fit it; when no gap holds it, the row moves up past the overlays. -> (x, y, size, font, w)."""
     from PIL import ImageFont
@@ -792,7 +792,7 @@ def story_room(d, text, font_path, size, min_size, y, avoid, pad, W, H, lo, hi, 
         if tw + 28 * k <= room[1] - room[0] or not avoid:
             mid = (room[0] + room[1]) / 2
             if room == (lo, hi):
-                mid = W / 2                                   # nothing in the way: centred on the frame, as before
+                mid = W / 2 if centre is None else centre     # nothing in the way: centred on the frame, as before (5.7.0: the map frame's)
             return max(room[0] + 14 * k, mid - tw / 2), yy, s, f, tw, [text]
         above = [a[1] for a in avoid if a[1] < y1 and a[3] > y0]
         yy = min(above) - 6 * k - size * 1.3 - 8 * k if above else yy
@@ -865,7 +865,7 @@ def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, b
         lh = max(16, int(44 * k))
         lg = logo.convert("RGBA")
         lg = lg.resize((max(1, round(lg.width * lh / lg.height)), lh), Image.LANCZOS)
-        over.alpha_composite(lg, (pad, H - bottom_px - pad - lh))
+        over.alpha_composite(lg, ((round(frame_px[0]) if frame_px else 0) + pad, H - bottom_px - pad - lh))     # 5.7.0: inside the map frame
         logo_w = lg.width + pad
         placed["logo"] = True
     s = story_at(tl, t)
@@ -876,28 +876,31 @@ def paint(img, t: float, tl: dict, tokens: dict, *, font_path: str, logo=None, b
         f = ImageFont.truetype(font_path, size)
         # 1.19.0 (Day 16 issue 15): a centred story line keeps clear of the logo on the left and of a bottom-right counter on the right
         right = max((d.textlength(ct, font=cf) + pad for ct, pos in counters_at(tl, t) if pos == "bottom-right"), default=0.0)
-        maxw = W - 2 * (pad + max(logo_w, right))
+        # 5.7.0 (a map is everything inside its border): the story line sits inside the map frame, centred on it, never over the margins
+        fx0, fx1 = (float(frame_px[0]), float(frame_px[2])) if frame_px else (0.0, float(W))
+        maxw = (fx1 - fx0) - 2 * (pad + max(logo_w, right))
         while d.textlength(text, font=f) > maxw and size > max(9, int(14 * k)):
             size -= 1
             f = ImageFont.truetype(font_path, size)
         tw = d.textlength(text, font=f)
-        x, y = (W - tw) / 2, H - bottom_px - pad - size * 1.6
+        x, y = (fx0 + fx1 - tw) / 2, H - bottom_px - pad - size * 1.6
         # 5.6.0 (Q-10): every line of the story in one slot: the row the highest-placed line needs, worked out once over all the lines, so a
         # caption does not jump between heights from beat to beat
-        key_ = (W, H, bottom_px, logo_w, tuple(tuple(round(v) for v in a) for a in (avoid or [])))
+        key_ = (W, H, bottom_px, logo_w, round(fx0), round(fx1), tuple(tuple(round(v) for v in a) for a in (avoid or [])))
         if tl.get("_slot_key") != key_:
             ys_ = []
             for r_ in tl.get("story") or []:
                 tx_ = str(r_.get("line") or "")
                 if tx_:
-                    ys_.append(story_room(d, tx_, font_path, max(11, int(22 * k)), max(9, int(14 * k)), y, avoid, pad, W, H, pad + logo_w,
-                                          W - pad - right, k)[1])
+                    ys_.append(story_room(d, tx_, font_path, max(11, int(22 * k)), max(9, int(14 * k)), y, avoid, pad, W, H, fx0 + pad + logo_w,
+                                          fx1 - pad - right, k, centre=(fx0 + fx1) / 2)[1])
             tl["_slot_key"], tl["_slot_y"] = key_, (min(ys_) if ys_ else None)
         if tl.get("_slot_y") is not None:
             y = min(y, tl["_slot_y"])
         # 2.1.0 (Day 19 video issue 16): the line keeps clear of the map's overlays (the locator inset bottom right, the legend) as the
         # counters do: it is centred in the room left between them on its row, made smaller to fit, or moved up past them
-        x, y, size, f, tw, lines = story_room(d, text, font_path, size, max(9, int(14 * k)), y, avoid, pad, W, H, pad + logo_w, W - pad - right, k)
+        x, y, size, f, tw, lines = story_room(d, text, font_path, size, max(9, int(14 * k)), y, avoid, pad, W, H, fx0 + pad + logo_w, fx1 - pad - right, k,
+                                              centre=(fx0 + fx1) / 2)
         lh = size * 1.3
         bx = [x - 14 * k, y - 8 * k, x + tw + 14 * k, y + lh * len(lines) + 6 * k]
         placed["story_box"] = [round(v, 1) for v in bx]

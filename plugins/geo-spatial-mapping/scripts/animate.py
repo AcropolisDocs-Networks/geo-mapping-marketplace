@@ -11,8 +11,8 @@ in time order). Every period is drawn again at each size as its own map, never s
     portrait the portrait-social template at 135 dpi: 1080 x 1350 px (4:5, for a tall subject; 1.2.0, asked for only)
     slide    the 16x9-slide template at 144 dpi: 1920 x 1080 px (a deck, a screen)
 
-Each frame holds `hold` seconds, the last `last_hold` seconds; a thin progress bar in two brand neutrals runs along the bottom edge (the
-period's share of the run). The GIF is written with Pillow (an adaptive 256-colour palette per frame). The MP4 needs ffmpeg, a SOFT dependency
+Each frame holds `hold` seconds, the last `last_hold` seconds; a thin progress bar in two brand neutrals runs along the inside of the map
+frame's bottom edge (the period's share of the run; 5.7.0: inside the map's border, never under the credits). The GIF is written with Pillow (an adaptive 256-colour palette per frame). The MP4 needs ffmpeg, a SOFT dependency
 found through imageio-ffmpeg (pip install imageio-ffmpeg) or on the PATH: H.264, `-preset veryfast`, yuv420p, even dimensions, 25 fps,
 +faststart. Without ffmpeg the GIF is still written and the report says how to get the MP4. Nothing reaches the network.
 
@@ -93,38 +93,47 @@ def _rgb(hexs: str) -> tuple[int, int, int]:
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 
-def progress_bar(im, i: int, n: int, tokens: dict, px: int, fill: bool = True):
-    """A thin bar along the bottom edge: the track in the neutral ramp's second step, the filled share (period i of n) in its last. `fill=False`
-    draws the track only (the MP4's fill is drawn by ffmpeg and moves smoothly through each hold, 1.0.0)."""
+def progress_bar(im, i: int, n: int, tokens: dict, px: int, fill: bool = True, rect=None):
+    """A thin bar: the track in the neutral ramp's second step, the filled share (period i of n) in its last. `fill=False` draws the track
+    only (the MP4's fill is drawn by ffmpeg and moves smoothly through each hold, 1.0.0). 5.7.0 (a map is everything inside its border): with
+    `rect` (the map frame in pixels, x0 y0 x1 y1) the bar runs along the inside of the frame's bottom edge, never under the credits; without
+    it, along the picture's bottom edge (a bare frame)."""
     from PIL import ImageDraw
     w, h = im.size
+    x0, x1, y1 = (0, w, h) if rect is None else (round(rect[0]), round(rect[2]), round(rect[3]))
     d = ImageDraw.Draw(im)
     ramp = tokens["neutral_ramp"]
-    d.rectangle([0, h - px, w, h], fill=_rgb(ramp[1]))
+    d.rectangle([x0, y1 - px, x1, y1], fill=_rgb(ramp[1]))
     if fill:
-        d.rectangle([0, h - px, round(w * (i + 1) / n), h], fill=_rgb(ramp[-1]))
+        d.rectangle([x0, y1 - px, x0 + round((x1 - x0) * (i + 1) / n), y1], fill=_rgb(ramp[-1]))
     return im
 
 
-def smooth_bar_filter(w: int, h: int, px: int, n: int, hold: float, last_hold: float, ink: str) -> str:
+def smooth_bar_filter(w: int, h: int, px: int, n: int, hold: float, last_hold: float, ink: str, rect=None) -> str:
     """1.0.0 (TODO M15): the ffmpeg filter graph that slides the bar's fill in through each hold: period k of n fills from k/n to (k+1)/n
     over its own hold (the last over last_hold), so the bar reaches the end as the video does."""
     t1 = hold * (n - 1)
     frac = f"if(lt(t\\,{t1:g})\\,t/{hold * n:g}\\,({n - 1}+(t-{t1:g})/{last_hold:g})/{n})"
-    return (f"[0:v]fps={FPS}[base];color=c=0x{ink.lstrip('#')}:s={w}x{px}:r={FPS}[bar];"
-            f"[base][bar]overlay=x='-{w}+{w}*min(1\\,{frac})':y={h - px}:eval=frame:shortest=1,format=yuv420p")
+    x0, x1, y1 = (0, w, h) if rect is None else (round(rect[0]), round(rect[2]), round(rect[3]))
+    bw = x1 - x0                                     # 5.7.0: the bar's own strip inside the map frame; the fill slides in within it
+    ink_ = ink.lstrip("#")
+    return (f"[0:v]fps={FPS},split[pic][cut];[cut]crop={bw}:{px}:{x0}:{y1 - px}[band];color=c=0x{ink_}:s={bw}x{px}:r={FPS}[bar];"
+            f"[band][bar]overlay=x='-{bw}+{bw}*min(1\\,{frac})':y=0:eval=frame:shortest=1[filled];"
+            f"[pic][filled]overlay=x={x0}:y={y1 - px}:shortest=1,format=yuv420p")
 
 
-def render_frames(specs: list[Path], size: str, work: Path, *, brand: str | None = None, collect: dict | None = None) -> tuple[list, dict, list[dict]]:
+def render_frames(specs: list[Path], size: str, work: Path, *, brand: str | None = None, collect: dict | None = None,
+                  frame_out: dict | None = None) -> tuple[list, dict, list[dict]]:
     """Each period's MapSpec drawn at one animation size. -> (frames as RGB images, the plan's tokens, findings). `collect` (1.3.0) gathers each
     frame's provenance records and the text it shows, for the video's terms register. 1.11.0: the frames share one ground and one read of
     every library layer (map_plan.frame_session), since only the data changes from period to period."""
     import map_plan as mp
     with mp.frame_session():
-        return _render_frames(specs, size, work, brand, collect)
+        return _render_frames(specs, size, work, brand, collect, frame_out)
 
 
-def _render_frames(specs: list[Path], size: str, work: Path, brand: str | None, collect: dict | None) -> tuple[list, dict, list[dict]]:
+def _render_frames(specs: list[Path], size: str, work: Path, brand: str | None, collect: dict | None,
+                   frame_out: dict | None = None) -> tuple[list, dict, list[dict]]:
     import build_map as bm
     import map_plan as mp
     cfg = SIZES[size]
@@ -144,6 +153,10 @@ def _render_frames(specs: list[Path], size: str, work: Path, brand: str | None, 
             raise AnimateError(f"frame {k + 1} ({sp.name}) cannot be built: {str(ex).splitlines()[0]}") from None
         obj = res.pop("_objects")
         tokens = obj["plan"].tokens
+        win = (res.get("report") or {}).get("map_window") or {}
+        if frame_out is not None and win.get("rect_mm") and "rect_px" not in frame_out:
+            ppm = float(cfg["dpi"]) / 25.4                 # 5.7.0: the map frame in the frame's pixels, for the progress bar inside it
+            frame_out["rect_px"] = [v * ppm for v in win["rect_mm"]]
         if collect is not None:
             import terms_register as tr
             collect.setdefault("records", []).extend(obj.get("records") or [])
@@ -180,7 +193,7 @@ def write_mp4(frames, path: Path, hold: float, last_hold: float, meta: dict, bar
         total = hold * (len(frames) - 1) + last_hold
         # -t: the closing entry's length differs by ffmpeg version (6.1 gives it none, 9.0 the last hold again: 8 s for 5), so the
         # output is cut at the holds' sum; the closing entry keeps older versions from dropping the last hold
-        vf = (["-filter_complex", smooth_bar_filter(w, h, bar["px"], len(frames), hold, last_hold, bar["ink"])] if bar
+        vf = (["-filter_complex", smooth_bar_filter(w, h, bar["px"], len(frames), hold, last_hold, bar["ink"], rect=bar.get("rect"))] if bar
               else ["-vf", f"fps={FPS},format=yuv420p"])
         cmd = [exe, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(Path(td) / "frames.txt"), *vf,
                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-t", f"{total:.3f}"]
@@ -223,10 +236,12 @@ def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "m
     seen: dict = {}
     with tempfile.TemporaryDirectory() as td:
         for size in sizes:
-            frames, tokens, fs = render_frames(specs, size, Path(td) / size, brand=brand, collect=seen)
+            fr_ = {}
+            frames, tokens, fs = render_frames(specs, size, Path(td) / size, brand=brand, collect=seen, frame_out=fr_)
+            bar_rect = fr_.get("rect_px")
             rep["findings"] += fs
             raw = [f.copy() for f in frames]
-            frames = [progress_bar(f, i, len(frames), tokens, BAR_PX[size]) for i, f in enumerate(frames)]
+            frames = [progress_bar(f, i, len(frames), tokens, BAR_PX[size], rect=bar_rect) for i, f in enumerate(frames)]
             slug_ = brand or gc.load_mapspec(specs[0]).get("brand")
             props = map_brand.props_for(slug_, gc.build_manifest(), "png")["tEXt"] if slug_ else {}
             comment = "; ".join(f"{k}: {v}" for k, v in props.items() if k in ("Author", "Accreditation", "BrandPack", "Software"))
@@ -239,10 +254,10 @@ def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "m
             if "mp4" in formats:
                 p = out_dir / f"{stem}_{size}_{w}x{h}.mp4"
                 try:
-                    tracks = [progress_bar(f.copy(), i, len(raw), tokens, BAR_PX[size], fill=False) for i, f in enumerate(raw)]
+                    tracks = [progress_bar(f.copy(), i, len(raw), tokens, BAR_PX[size], fill=False, rect=bar_rect) for i, f in enumerate(raw)]
                     m = write_mp4(tracks, p, hold, last_hold, {"title": str(meta.get("title") or stem), "comment": comment,
                                                                 "copyright": props.get("Author", ""), "artist": props.get("Author", "")},
-                                  bar={"px": BAR_PX[size], "ink": tokens["neutral_ramp"][-1]})
+                                  bar={"px": BAR_PX[size], "ink": tokens["neutral_ramp"][-1], "rect": bar_rect})
                     rep["files"].append(m)
                     rep["findings"] += output_lint.check_mp4(str(p), (w, h), hold * (len(frames) - 1) + last_hold)
                 except AnimateError as ex:
