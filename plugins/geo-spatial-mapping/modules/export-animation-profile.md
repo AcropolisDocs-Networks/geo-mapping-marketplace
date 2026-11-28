@@ -19,6 +19,11 @@ description: >
   run cut off part way picks up where it stopped; `--fresh` draws every frame again. `--jobs N` (default `auto`: one per core but one, at
   most four) draws the frames after the first in worker processes, which take the first frame's decisions, so the frames match one run's.
   The report's `frames` says per size how many were drawn and how many reused.
+  5.10.0: `--fade 0.2` dissolves each period into the next (at most four fifths of the hold; the run keeps its length), in the MP4 with
+  ffmpeg's xfade and in the GIF as blended frames a tenth of a second each. The timeline's `story:` lines and `counters:` are drawn on an
+  atlas animation too, written by period: `{at: "2002", until: "2015", line: "..."}` (a line with no `until` stays its reading time), and
+  a counter's keys `[["1984", 564], ...]` or read from a table: `{text: "{v} km² of water", source: areas.csv, label: year, value:
+  area_km2, format: ",.0f"}`. Both stay inside the map frame and clear of the chart and the map's elements.
 - **"A chart beside the time-lapse", "change since the first year", "bars up and down from 1984"** (5.8.0): `--timeline T.yaml` on
   `--animate` draws the timeline's `chart:` on every period's frame, inside the map frame and clear of the legend, locator, title and logo
   (the panel the events video uses). Its rows follow the periods (by label when `atlas.json` names `periods`, else in order). Read the rows
@@ -129,7 +134,7 @@ description: >
   the least clearance, both antenna heights; the source line credits the DEM and says it is bare earth (MAP-TER-006). SVG, PDF and PNG.
 
 ```bash
-python3 "$GMAP_ROOT/scripts/map_export.py" --animate out/rollout-atlas --out out/animation [--sizes square,slide] [--formats gif,mp4] [--timeline chart.yaml] [--jobs auto] [--fresh]
+python3 "$GMAP_ROOT/scripts/map_export.py" --animate out/rollout-atlas --out out/animation [--sizes square,slide] [--formats gif,mp4] [--timeline chart.yaml] [--jobs auto] [--fresh] [--fade 0.2]
 python3 "$GMAP_ROOT/scripts/map_export.py" --timelapse out/ferries.html --out out/video --size 1080x1350 [--quality final]
 python3 "$GMAP_ROOT/scripts/map_export.py" --events map.yaml --layer quakes --time-field time --highlight "mag>=7" --out out/video
 python3 "$GMAP_ROOT/scripts/map_export.py" --flythrough out/venue.html --timeline flight.yaml --poster last --out out/video

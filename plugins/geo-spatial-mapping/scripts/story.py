@@ -453,7 +453,8 @@ def _clock(s: float, sep: str) -> str:
 
 
 def _two_lines(text: str, width: int = 42) -> str:
-    words, lines, cur = str(text).split(), [], ""
+    import textmeasure as tm
+    words, lines, cur = tm.words(str(text)), [], ""          # 5.10.0: a number keeps its unit on one subtitle line
     for w in words:
         if cur and len(cur) + 1 + len(w) > width:
             lines.append(cur)

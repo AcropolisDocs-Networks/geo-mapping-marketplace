@@ -320,9 +320,18 @@ def check_009(plan, report) -> list[dict]:
             # 3.4.0 (Day 21 #21): a street network meant to run off every edge (fit: overlay, or a line layer that fills the window) is
             # cut by the frame on purpose; said once as a note, not a warning
             out.append(finding("MAP-CART-009", "INFO", f"{clipped:,} feature(s) run past the frame: the map is full-bleed by design", clipped))
+        elif _set_frame(plan):
+            # 5.10.0 (Day 27 issue 12): the MapSpec names its frame (extent: bbox, or a region's box), so what runs past it (a river out of the
+            # lake, a road out of town) is cut where the person drew the edge: said as a note, every frame of a series no longer warns
+            out.append(finding("MAP-CART-009", "INFO", f"{clipped} feature(s) run past the frame the MapSpec sets (extent bbox); widen it to show them whole", clipped))
         else:
             out.append(finding("MAP-CART-009", "WARN", f"{clipped} feature(s) are cut by the frame; widen the extent if that is not intended", clipped))
     return out
+
+
+def _set_frame(plan) -> bool:
+    ext = (getattr(plan, "spec", None) or {}).get("extent")
+    return isinstance(ext, dict) and str(ext.get("mode") or "") == "bbox" and bool(ext.get("bbox"))
 
 
 def full_bleed(plan, report) -> bool:

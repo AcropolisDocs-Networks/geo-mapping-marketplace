@@ -732,9 +732,43 @@ def _kind_of_file(path: Path, layer: str | None = None) -> str | None:
         import pyogrio
         info = pyogrio.read_info(str(path), layer=layer) if layer else pyogrio.read_info(str(path))
         g = str(info.get("geometry_type") or "").lower()
+        if not any(w in g for w in ("point", "line", "polygon")) and info.get("geometry_type") is not None:
+            # 5.10.0 (Day 27 issue 8): a file that mixes Polygon and MultiPolygon (or points and multipoints) reports the type Unknown;
+            # its kind is read from the features themselves
+            kinds = {("line" if "line" in t else t) for t in _sample_types(path, layer)}
+            g = next(iter(kinds)) if len(kinds) == 1 else ""             # points and polygons in one file are two layers, not one
         return "point" if "point" in g else "line" if "line" in g else "polygon" if "polygon" in g else None
     except Exception:  # noqa: BLE001
         return None
+
+
+def _sample_types(path: Path, layer: str | None = None, n: int = 2000) -> set[str]:
+    """The geometry types of a file's first features, lower case, with Multi folded in ('polygon' for Polygon and MultiPolygon)."""
+    import pyogrio
+    try:
+        df = pyogrio.read_dataframe(str(path), layer=layer, max_features=n, columns=[]) if layer else pyogrio.read_dataframe(str(path), max_features=n, columns=[])
+    except Exception:  # noqa: BLE001
+        return set()
+    return {str(t).lower().replace("multi", "") for t in df.geometry.geom_type.dropna().unique()}
+
+
+def _why_no_geometry(path: Path) -> str:
+    """5.10.0: why a step's output is kept as a sidecar, in words: a table, a file of mixed kinds, or one that could not be read."""
+    if path.suffix.lower() in (".json",) and not path.read_text(encoding="utf-8", errors="replace").lstrip().startswith(("{\"type\"", "{ \"type\"")):
+        return "not geodata (a JSON document)"
+    try:
+        import pyogrio
+        info = pyogrio.read_info(str(path))
+    except Exception as ex:  # noqa: BLE001
+        return f"not read as geodata ({type(ex).__name__})"
+    if info.get("geometry_type") is None:
+        return "a table with no geometry column"
+    kinds = _sample_types(path)
+    if len(kinds) > 1:
+        return f"its features mix {', '.join(sorted(kinds))}; write one kind a file"
+    if not kinds:
+        return "its features have no geometry"
+    return f"geometry type {info.get('geometry_type')} is not a point, line or polygon"
 
 
 def relief_source(entry_id: str | None) -> str | None:
@@ -913,7 +947,7 @@ def cmd_data(a) -> int:
                 item["role"] = out_roles[k]
             if kind is None:                                # not geodata (a stats JSON, a CSV with no geometry): kept beside the map, never a layer
                 item.update(sidecar=True, draw=False)
-                said.append(f"  {p.name}: no geometry, kept as a sidecar (not drawn)")
+                said.append(f"  {p.name}: kept as a sidecar, not drawn: {_why_no_geometry(p)}")
             items.append(item)
         for p in sidecars:
             items.append({"name": f"{name}-{slug(p.stem, 20)}", **common, "path": str(p.resolve()), "sha256": sha256(p), "bytes": p.stat().st_size, "kind": None,

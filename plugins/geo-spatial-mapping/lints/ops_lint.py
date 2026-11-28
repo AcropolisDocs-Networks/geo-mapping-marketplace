@@ -39,7 +39,8 @@ OP_NAMES = ("buffer", "centroid", "representative_point", "clip", "intersect", "
             "concave_hull", "voronoi", "area", "length", "count_in", "sum_in", "population_covered", "coverage_share", "overlap", "grid", "hexbin",
             "raster_zonal", "line_of_sight", "viewshed", "geocode", "as_of", "fill_holes", "massing", "split_by", "thin_lines", "reconcile",
             "dot_density", "density_surface", "flow_lines", "network_nearest", "network_distance", "light_budget",
-            "depressions", "trace_downstream", "sample_along", "sea_route")     # 5.5.0 (D26-13): water ops
+            "depressions", "trace_downstream", "sample_along", "sea_route",     # 5.5.0 (D26-13): water ops
+            "water")                                                            # 5.10.0 (Day 27 issue 7): water from a water index
 ZONAL_STATS = ("sum", "mean", "min", "max", "count", "majority", "median", "std")
 NEEDS_LAYER = ("clip", "intersect", "intersection", "union", "difference", "symmetric_difference", "spatial_join", "nearest", "count_in", "sum_in",
                "population_covered", "coverage_share", "split_by", "reconcile")
@@ -155,6 +156,13 @@ def lint_ops_spec(ops) -> list[dict]:
                 out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (raster_zonal) needs `raster:` (a GeoTIFF path or a library id)", name))
             if str(o.get("stat", "sum")).lower() not in ZONAL_STATS:
                 out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (raster_zonal): stat is one of {', '.join(ZONAL_STATS)}", name))
+        if name == "water":                               # 5.10.0
+            if not o.get("raster"):
+                out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (water) needs `raster:` (a water-index GeoTIFF, or an imagery entry with dates)", name))
+            elif str(o["raster"]).startswith("ref.") and not o.get("dates"):
+                out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (water) reads imagery: give `dates:` (START/END, or a year)", name))
+            if str(o.get("index") or "ndwi").lower() not in ("ndwi", "mndwi"):
+                out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (water): index is ndwi or mndwi", name))
         if name == "viewshed" and o.get("radius_m") is not None and float(o["radius_m"]) > 100_000:
             out.append(finding("MAP-OPS-008", "BLOCK", f"ops[{i}] (viewshed): a radius of {float(o['radius_m']) / 1000:g} km is beyond what a one-degree ray march can show; at most 100 km", name))
         if name == "geocode" and (not o.get("address") or str(o.get("purpose") or "") not in ("sites", "venues", "businesses")):

@@ -35,7 +35,8 @@ A library entry with a `delivery.stac` block is all a new imagery source needs:
 What it does (decision D4): the scenes over the window between two dates, the least cloudy first; the window alone is read from each scene's
 Cloud-Optimized GeoTIFFs by HTTP byte range through SafeHTTP (public hosts, GET, capped), straight onto one grid in the window's UTM zone, from
 the overview that fits; then one picture: `least-cloudy` (the clearest scene, the next clearest filling what it leaves) or `median` (the middle
-value of every clear look at each cell), as `true-color` (red, green, blue), `false-color` (near infrared, red, green) or `ndvi`. No atmospheric
+value of every clear look at each cell), as `true-color` (red, green, blue), `false-color` (near infrared, red, green), `ndvi`, or (5.10.0) the water indexes `ndwi`
+(green and near infrared) and `mndwi` (green and short-wave infrared). No atmospheric
 correction beyond the publisher's Level-2 product. Anything beyond these is analysis for a registered step.
 
 A catalog whose files are in a requester-pays bucket is refused and the free route named (D5): no cloud keys are held. Planetary Computer's
@@ -61,7 +62,9 @@ import ogc_http as oh  # noqa: E402
 import raster_fetch as rf  # noqa: E402
 import raster_io as rio  # noqa: E402
 
-PRODUCTS = {"true-color": ("red", "green", "blue"), "false-color": ("nir", "red", "green"), "ndvi": ("nir", "red")}
+PRODUCTS = {"true-color": ("red", "green", "blue"), "false-color": ("nir", "red", "green"), "ndvi": ("nir", "red"),
+            "ndwi": ("green", "nir"), "mndwi": ("green", "swir16")}
+INDEX = {"ndvi": "NDVI", "ndwi": "NDWI", "mndwi": "MNDWI"}      # 5.10.0: (a - b) / (a + b) of the product's two bands; above 0 is water for the two water indexes
 PICKS = ("least-cloudy", "median")
 MAX_SCENES, MAX_PX, MAX_SPAN_DEG = 6, 2400, 6.0
 SIGNERS = {"planetary-computer": "https://planetarycomputer.microsoft.com/api/sas/v1/token/{collection}"}
@@ -601,16 +604,20 @@ def fetch(entry_id: str, bounds, src: dict | None = None, cache_dir=None, http=N
     out.parent.mkdir(parents=True, exist_ok=True)
     prof = {"driver": "GTiff", "height": height, "width": width, "crs": crs, "transform": transform, "compress": "deflate", "tiled": True, "blockxsize": 256, "blockysize": 256}
     stats: dict = {}
-    if p["product"] == "ndvi":
-        nir, red = comp[0], comp[1]
+    if p["product"] in INDEX:
+        a_, b_ = comp[0], comp[1]
         with np.errstate(all="ignore"):
-            nd = (nir - red) / (nir + red)
+            nd = (a_ - b_) / (a_ + b_)
         nd = np.where(okc & np.isfinite(nd), np.clip(nd, -1, 1), -9999.0).astype("float32")
         with rasterio.open(out, "w", count=1, dtype="float32", nodata=-9999.0, **prof) as dst:
             dst.write(nd, 1)
-            dst.set_band_description(1, "NDVI")
+            dst.set_band_description(1, INDEX[p["product"]])
         good = nd[nd > -9000]
-        stats = {"ndvi_median": round(float(np.median(good)), 3) if good.size else None}
+        stats = {f"{p['product']}_median": round(float(np.median(good)), 3) if good.size else None}
+        if p["product"] in ("ndwi", "mndwi") and good.size:
+            cell_km2 = (cell / 1000.0) ** 2
+            stats["water_km2"] = round(float((good > 0).sum()) * cell_km2, 2)      # cells above 0, in the grid's UTM metres
+            stats["water_note"] = f"{INDEX[p['product']]} above 0 counted at {cell:.0f} m cells; the water op draws and measures it per area"
     else:
         lo, hi = (0.0, 1.0) if multi else [float(v) for v in (p.get("stretch") or block.get("stretch") or [0.0, 0.3])]
         g = float(block.get("gamma") or (1.0 if multi else 1.6))

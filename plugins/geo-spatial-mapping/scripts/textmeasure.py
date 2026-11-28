@@ -172,11 +172,36 @@ def line_height_mm(size_pt: float) -> float:
     return size_pt * PT_MM * LINE_HEIGHT
 
 
+_BREAK = None
+UNITS = {"km²", "km2", "km", "m", "m²", "mi", "mi²", "sq", "ft", "%", "ha", "acres", "ac", "°C", "°F", "°", "kg", "t", "MW", "GW", "kW", "MB", "GB",
+         "TB", "Mbps", "Gbps", "ms", "s", "min", "h", "hrs", "people", "sites", "km/h", "mph", "dB", "dBm", "GHz", "MHz"}
+
+
+def words(text: str) -> list[str]:
+    """5.10.0 (Day 27 issue 9): the words a line may break between. Only ordinary spaces break: a non-breaking space (U+00A0, U+202F) keeps
+    its words together (Python's split() broke there too), and a number keeps the unit after it ('266 km²', '-298 km²', '54 %')."""
+    global _BREAK
+    import re
+    if _BREAK is None:
+        _BREAK = (re.compile(r"[ \t\n\r\f\v]+"), re.compile(r"^[+\-−–]?[$€£]?\d[\d,.]*[kKMB]?$"))
+    sp, num = _BREAK
+    toks = [t for t in sp.split(text) if t]
+    out: list[str] = []
+    for t in toks:
+        bare = t.rstrip(".,;:)")
+        if out and bare in UNITS and num.match(out[-1].split("\u00a0")[-1]):
+            out[-1] = out[-1] + " " + t
+        else:
+            out.append(t)
+    return out
+
+
 def wrap(text: str, max_mm: float, size_pt: float, weight: int = 400) -> list[str]:
-    """Greedy word wrap to a width. A single word wider than the line is left whole (layout flags the overflow)."""
+    """Greedy word wrap to a width. A single word wider than the line is left whole (layout flags the overflow). 5.10.0: breaks only at
+    ordinary spaces, never inside a number and its unit (textmeasure.words)."""
     lines: list[str] = []
     cur = ""
-    for word in text.split():
+    for word in words(text):
         trial = word if not cur else cur + " " + word
         if cur and width_mm(trial, size_pt, weight) > max_mm:
             lines.append(cur)

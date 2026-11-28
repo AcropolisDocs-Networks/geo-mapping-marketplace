@@ -295,6 +295,11 @@ GHSL tiles and WorldPop country files are fetched for the window and credited, C
 {a_field | a_m, b_field | b_m}, freq_ghz, k}` on a point layer drawn with `role: lines` (clear and obstructed in two brand colours, with a methods
 sentence naming k, the heights, the DEM's cell size and the bare-earth caveat), and `viewshed {h_m, radius_m}` on a point layer drawn with
 `role: polygons` (the visible ground). Both take `dem: dem.tif`, or use `terrain.source`, or fetch a DEM for the sites' window.
+5.10.0: `water {raster: ref.context.world.imagery.landsat-c2-l2, dates: 2022-07-03/2022-07-11, index: ndwi}` on a polygon layer (a lake's
+region, a basin) keeps the water inside each polygon: the index read for the window (NDWI, or MNDWI with short-wave infrared, which keeps
+built-up ground out), cells above `threshold` (0) as polygons, patches under `min_area` (0.05 km2) left out, with `water_km2`, its cells and
+`water_km2_seen` (the share the picture covers: a cloud is not dry ground). `raster:` may be a one-band index GeoTIFF (imagery.py fetch
+--product ndwi). Dry ground since a baseline is a `difference` of two water layers.
 
 5.5.0 (Day 26): `palette: brand_neutral` is the short form of `palette: {name: brand_neutral}`, and an unclassed line or point layer honours
 it. `@brand.accent` is the same colour as `@brand.categorical.0` in the acropolisdocs brand: two classes of one layer that resolve to one colour,

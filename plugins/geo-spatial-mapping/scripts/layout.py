@@ -381,7 +381,12 @@ def place_overlays(frame: Frame, occ: np.ndarray | None, items: list[dict], bann
             low = anchor["corner"].startswith("lower")
             y0 = a.y1 - it["h"] if low else a.y0
             gap = float(it.get("gap_mm", BESIDE_GAP_MM))      # 5.5.0 (Q-11): the north arrow keeps 3 mm from the legend box
-            if it.get("side", "left") == "left":
+            if it.get("side") == "stack":                  # 5.10.0: under the anchor in an upper corner, above it in a lower one, on its outer edge
+                right = anchor["corner"].endswith("right")
+                x0 = a.x1 - it["w"] if right else a.x0
+                y0s = a.y0 - gap - it["h"] if low else a.y1 + gap
+                cands.append((anchor["corner"], Rect(x0, y0s, x0 + it["w"], y0s + it["h"]), True))
+            elif it.get("side", "left") == "left":
                 cands.append((anchor["corner"], Rect(a.x0 - gap - it["w"], y0, a.x0 - gap, y0 + it["h"]), True))
             else:
                 cands.append((anchor["corner"], Rect(a.x1 + gap, y0, a.x1 + gap + it["w"], y0 + it["h"]), True))

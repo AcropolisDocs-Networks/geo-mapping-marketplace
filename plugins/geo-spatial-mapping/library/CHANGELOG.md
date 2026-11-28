@@ -5,6 +5,8 @@ GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 ## 2026-11-27
 
 - `ref.context.world.imagery.landsat-c2-l2` rev 2: Scenes in tiers (5.9.0, from Day 27): Landsat 7 after 31 May 2003 is read last, a pass of the next path within 16 days fills the edges, and the plan lists the candidates by satellite, path and row. The guidance on Landsat 7 now names summer 2012 as the one stretch it is the only choice (Landsat 5 to November 2011, Landsat 8 from April 2013). Checked from the build workspace on 2026-11-27: Planetary Computer lists platform landsat-7 and landsat:wrs_path 038 and 039 over Lake Mead for June 2012.
+- `ref.context.world.imagery.landsat-c2-l2` rev 3: Water indexes (5.10.0, Day 27 issue 7): product ndwi (green and near infrared) and mndwi (green and short-wave infrared, asset swir16), drawn on the brand's diverging ramp about 0; the water op measures them per area. Checked from the build workspace on 2026-11-27: NDWI over Lake Mead for 3 to 11 July 2022 (Landsat 8 and 9, Planetary Computer) gave 273 km2 of water in the lake's region, against 266 km2 from Day 27's own step.
+- `ref.context.world.imagery.sentinel-2-l2a` rev 2: Water indexes (5.10.0): product ndwi and mndwi (B11, swir16, at 20 m read onto the 10 m grid), drawn on the brand's diverging ramp about 0.
 
 ## 2026-11-25
 

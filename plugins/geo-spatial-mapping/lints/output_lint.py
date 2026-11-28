@@ -463,7 +463,7 @@ def check_png(path: str, size_mm: tuple[float, float], dpi: float) -> list[dict]
 ANIM_TIME_TOLERANCE_S = 0.25
 
 
-def check_gif(path: str, size_px: tuple[int, int], frames: int, hold_s: float, last_hold_s: float) -> list[dict]:
+def check_gif(path: str, size_px: tuple[int, int], frames: int, hold_s: float, last_hold_s: float, durations_ms: list | None = None) -> list[dict]:
     """MAP-OUT-013 (GIF): read back, the file has the frames, the size and the timing asked for (every frame `hold_s`, the last longer), loops,
     and carries the hidden accreditation in its comment rather than in a frame."""
     from PIL import Image
@@ -488,7 +488,10 @@ def check_gif(path: str, size_px: tuple[int, int], frames: int, hold_s: float, l
         out.append(finding("MAP-OUT-013", "BLOCK", f"{p.name} has {n} frame(s); {frames} were drawn", n))
     if tuple(size) != tuple(size_px):
         out.append(finding("MAP-OUT-013", "BLOCK", f"{p.name} is {size[0]} x {size[1]} px, not {size_px[0]} x {size_px[1]}", list(size)))
-    if durs and (abs(durs[-1] / 1000 - last_hold_s) > ANIM_TIME_TOLERANCE_S or any(abs(d / 1000 - hold_s) > ANIM_TIME_TOLERANCE_S for d in durs[:-1])):
+    if durations_ms is not None:                    # 5.10.0: a cross-faded GIF: its blend frames are a tenth of a second, the run keeps its length
+        if len(durs) == len(durations_ms) and any(abs(a - b) / 1000 > ANIM_TIME_TOLERANCE_S for a, b in zip(durs, durations_ms)):
+            out.append(finding("MAP-OUT-013", "WARN", f"{p.name}: frame times differ from the ones written", durs))
+    elif durs and (abs(durs[-1] / 1000 - last_hold_s) > ANIM_TIME_TOLERANCE_S or any(abs(d / 1000 - hold_s) > ANIM_TIME_TOLERANCE_S for d in durs[:-1])):
         out.append(finding("MAP-OUT-013", "WARN", f"{p.name}: frame times {sorted(set(durs))} ms differ from the hold asked for ({hold_s:g} s, last {last_hold_s:g} s)", durs))
     if loop != 0:
         out.append(finding("MAP-OUT-013", "WARN", f"{p.name} does not loop", loop))

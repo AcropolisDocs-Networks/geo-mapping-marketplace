@@ -22,6 +22,9 @@ MONTHS = "january|february|march|april|may|june|july|august|september|october|no
 MONTHS_SHORT = "jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec"
 YEAR = r"(19|20)\d\d"                     # no counted braces: the edition build reads doubled braces as template fields
 DATE_RX = re.compile(r"\b" + YEAR + r"\b|\bQ[1-4]\b|\b(" + MONTHS + "|" + MONTHS_SHORT + r")\.?\s+" + YEAR + r"\b|\b\d\d?/\d\d(\d\d)?\b", re.I)
+# 5.10.0 (Day 27 issue 12): a change's span in a title ("Since 1984", "1984 to 2025", "1984-2025") and a subtitle that is only a series line
+CHANGE_RX = re.compile(r"\b(since|from|after|before)\s+" + YEAR + r"\b(\s*(to|until|-|–|—)\s*" + YEAR + r"\b)?|\b" + YEAR + r"\s*(to|until|-|–|—)\s*" + YEAR + r"\b", re.I)
+SERIES_LINE_RX = re.compile(r"\s*#\w+(\s*[-–—·:|]\s*(day\s*)?\d+)?(\s*[-–—·:|]\s*[^#]+)?\s*", re.I)
 MINOR = {"a", "an", "the", "and", "but", "or", "nor", "for", "so", "yet", "at", "by", "in", "of", "on", "to", "up", "as", "off", "per", "via"}
 LOOSE = {"from", "with", "into", "over", "onto", "near", "upon"}   # four-letter prepositions: lower case when written (the spec's own "from Link"),
                                                                    # capitalized is accepted too (AP capitalizes words of four letters or more)
@@ -230,7 +233,12 @@ def lint(title: str, subtitle: str | None = None, *, tagline: str | None = None,
         low = t.lower()
         found = [m.group(0) for m in DATE_RX.finditer(t)] + [w for w in METHOD_WORDS if re.search(rf"\b{re.escape(w)}\b", low)] \
             + [w for w in SOURCE_WORDS if re.search(rf"(?<![a-z]){re.escape(w)}(?![a-z])", low)]
-        if found:
+        span = CHANGE_RX.search(t)
+        if found and span and not [w for w in found if not DATE_RX.fullmatch(w)] and all(w.lower() in span.group(0).lower() for w in found):
+            # 5.10.0 (Day 27 issue 12): "Since 1984", "1984 to 2025": the years are the change the map shows, the title's subject, not its date
+            out.append(_f("MAP-TEXT-004", "INFO", f"the title's {span.group(0)!r} is the span of the change it shows (kept)", t,
+                          "fine for a change or time-lapse map; a single date still goes to the subtitle", "title"))
+        elif found:
             out.append(_f("MAP-TEXT-004", "WARN", f"the title holds {', '.join(repr(x) for x in found[:3])} (a date, source or method word)", t,
                           "dates go to the subtitle's scope or the footer, sources to the source line, method words to the source line's method phrase",
                           "title"))
@@ -260,7 +268,12 @@ def lint(title: str, subtitle: str | None = None, *, tagline: str | None = None,
                           f"\"{sentence_case(s.lower() if all_caps(s) else s)}\" (keep proper names capitalized)", "subtitle"))
     for el, txt in (("title", t), ("subtitle", s)):
         hit = [m.group(0) for rx in SERIES for m in re.finditer(rx, txt or "", re.I)]
-        if hit:
+        if hit and el == "subtitle" and SERIES_LINE_RX.fullmatch(txt or ""):
+            # 5.10.0 (Day 27 issue 12): a subtitle that is the series line and nothing else ("#30DayMapChallenge - 27 - New Tool") is a house
+            # convention, not a series name mixed into the scope: said once as a note
+            out.append(_f("MAP-TEXT-011", "INFO", "the subtitle is the series line (kept by choice; the tagline is its usual place)", txt,
+                          "keep it, or move it to the tagline to free the subtitle for the scope", el))
+        elif hit:
             out.append(_f("MAP-TEXT-011", "WARN", f"the {el} carries {hit[0]!r} (a series name, hashtag or production date)", txt,
                           "series names go in the tagline (\"#30DayMapChallenge · Day 07 · 10 Minute Map\"), the production date in the footer", el))
     # MAP-TEXT-009: one fact, two elements

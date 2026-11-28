@@ -669,16 +669,16 @@ entries:
   file: entries/data/ref.context.world.imagery.landsat-c2-l2.yaml
   type: context
   status: active
-  rev: 2
+  rev: 3
   tags_digest: bae3e7d1833e
-  entry_digest: 733e1d48dfaf
+  entry_digest: 6b5632a390b0
 - id: ref.context.world.imagery.sentinel-2-l2a
   file: entries/data/ref.context.world.imagery.sentinel-2-l2a.yaml
   type: context
   status: active
-  rev: 1
+  rev: 2
   tags_digest: ce9aa3c9d2c4
-  entry_digest: 8afed69ded81
+  entry_digest: 8b256e43fc10
 - id: ref.context.world.lakes.ne10
   file: entries/data/ref.context.world.lakes.ne10.yaml
   type: context

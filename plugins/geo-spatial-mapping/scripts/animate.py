@@ -375,21 +375,57 @@ def kept_frames(specs: list[Path], size: str, fdir: Path, *, brand: str | None =
     return frames, infos, counts
 
 
-def write_gif(frames, path: Path, hold: float, last_hold: float, comment: str = "") -> dict:
+GIF_FADE_STEP_S = 0.1          # 5.10.0: a cross-fade in a GIF is a few blended frames, a tenth of a second each
+
+
+def gif_sequence(frames, hold: float, last_hold: float, fade: float = 0.0) -> tuple[list, list[int]]:
+    """The GIF's pictures and their times (ms). 5.10.0: with `fade`, each period holds hold - fade and then dissolves into the next over fade
+    seconds in steps of GIF_FADE_STEP_S, so every period still takes `hold` and the run its length."""
     from PIL import Image
+    if fade <= 0 or len(frames) < 2:
+        return list(frames), [round(hold * 1000)] * (len(frames) - 1) + [round(last_hold * 1000)]
+    steps = max(1, round(fade / GIF_FADE_STEP_S))
+    pics, durs = [], []
+    for k, f in enumerate(frames[:-1]):
+        pics.append(f)
+        durs.append(round((hold - fade) * 1000))
+        for j in range(1, steps + 1):
+            pics.append(Image.blend(f, frames[k + 1], j / (steps + 1)))
+            durs.append(round(fade * 1000 / steps))
+    pics.append(frames[-1])
+    durs.append(round(last_hold * 1000))
+    return pics, durs
+
+
+def write_gif(frames, path: Path, hold: float, last_hold: float, comment: str = "", fade: float = 0.0) -> dict:
+    from PIL import Image
+    frames, dur = gif_sequence(frames, hold, last_hold, fade)
     pal = [f.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE) for f in frames]
-    dur = [round(hold * 1000)] * (len(pal) - 1) + [round(last_hold * 1000)]
     pal[0].save(path, save_all=True, append_images=pal[1:], duration=dur, loop=0, optimize=False, disposal=1, comment=comment.encode("utf-8"))
     return {"path": str(path), "frames": len(pal), "durations_ms": dur, "bytes": path.stat().st_size}
 
 
-def write_mp4(frames, path: Path, hold: float, last_hold: float, meta: dict, bar: dict | None = None) -> dict:
+def xfade_graph(n: int, hold: float, fade: float, tail: str) -> str:
+    """5.10.0: the ffmpeg graph that dissolves period k into k + 1 over `fade` seconds, ending where period k + 1 begins its hold; input k
+    is looped for hold + fade (the last for its own hold), so the run keeps its length. `tail` follows the chain (the progress bar, the format)."""
+    parts = [f"[{k}:v]fps={FPS},format=yuv420p,setsar=1[i{k}]" for k in range(n)]
+    cur = "i0"
+    for k in range(1, n):
+        nxt = f"x{k}"
+        parts.append(f"[{cur}][i{k}]xfade=transition=fade:duration={fade:g}:offset={k * hold:g}[{nxt}]")
+        cur = nxt
+    return ";".join(parts) + f";[{cur}]{tail}"
+
+
+def write_mp4(frames, path: Path, hold: float, last_hold: float, meta: dict, bar: dict | None = None, fade: float = 0.0) -> dict:
     exe = ffmpeg_exe()
     if not exe:
         raise AnimateError(FFMPEG_MISSING)
     w, h = frames[0].size
     if w % 2 or h % 2:
         raise AnimateError(f"H.264 with yuv420p needs even dimensions; the frames are {w} x {h}")
+    if fade > 0 and len(frames) > 1:
+        return _write_mp4_fade(exe, frames, path, hold, last_hold, meta, bar, fade)
     with tempfile.TemporaryDirectory() as td:
         lst = ["ffconcat version 1.0"]
         for k, f in enumerate(frames):
@@ -414,6 +450,34 @@ def write_mp4(frames, path: Path, hold: float, last_hold: float, meta: dict, bar
     return {"path": str(path), "frames_in": len(frames), "fps": FPS, "seconds": hold * (len(frames) - 1) + last_hold, "bytes": path.stat().st_size}
 
 
+def _write_mp4_fade(exe, frames, path: Path, hold: float, last_hold: float, meta: dict, bar: dict | None, fade: float) -> dict:
+    w, h = frames[0].size
+    total = hold * (len(frames) - 1) + last_hold
+    with tempfile.TemporaryDirectory() as td:
+        ins = []
+        for k, f in enumerate(frames):
+            p = Path(td) / f"f{k:04d}.png"
+            f.save(p, compress_level=1)
+            ins += ["-loop", "1", "-t", f"{(hold + fade) if k < len(frames) - 1 else last_hold:.3f}", "-i", str(p)]
+        if bar:
+            sb = smooth_bar_filter(w, h, bar["px"], len(frames), hold, last_hold, bar["ink"], rect=bar.get("rect"))
+            tail = "null[faded];" + sb.replace("[0:v]", "[faded]", 1)
+        else:
+            tail = f"fps={FPS},format=yuv420p"
+        graph = xfade_graph(len(frames), hold, fade, tail)
+        gp = Path(td) / "graph.txt"
+        gp.write_text(graph, encoding="utf-8")
+        cmd = [exe, "-y", "-loglevel", "error", *ins, "-filter_complex_script", str(gp), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+               "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-t", f"{total:.3f}"]
+        for k, v in meta.items():
+            cmd += ["-metadata", f"{k}={v}"]
+        cmd.append(str(path))
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+        if r.returncode != 0 or not path.is_file():
+            raise AnimateError(f"ffmpeg failed: {r.stderr.strip()[:300]}")
+    return {"path": str(path), "frames_in": len(frames), "fps": FPS, "seconds": total, "bytes": path.stat().st_size, "fade_s": fade}
+
+
 def specs_of(atlas_dir: Path) -> tuple[list[Path], dict]:
     meta_p = atlas_dir / "atlas.json"
     if not meta_p.is_file():
@@ -427,36 +491,171 @@ def specs_of(atlas_dir: Path) -> tuple[list[Path], dict]:
     return specs, meta
 
 
-def load_timeline_chart(timeline, specs: list[Path], meta: dict) -> tuple[dict | None, list[int], list[str]]:
-    """5.8.0 (Day 27): the timeline's chart for an atlas animation and, for each period, the row that is current. -> (chart, rows, notes)."""
-    if not timeline:
-        return None, [], []
-    import timeline as tlm
+def _raw_timeline(timeline) -> tuple[dict, Path | None]:
+    """The timeline as a plain mapping and the folder its tables are read from (the file's own)."""
+    if isinstance(timeline, dict):
+        return dict(timeline.get("timeline") if isinstance(timeline.get("timeline"), dict) else timeline), None
+    p = Path(str(timeline))
+    if len(str(timeline)) < 1024 and p.is_file():
+        import yaml
+        try:
+            d = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except Exception as ex:  # noqa: BLE001
+            raise AnimateError(f"the timeline is not YAML or JSON: {str(ex).splitlines()[0]}") from None
+        return (dict(d.get("timeline")) if isinstance(d.get("timeline"), dict) else dict(d)), p.resolve().parent
+    import yaml
     try:
-        tl = tlm.load(timeline)
+        d = yaml.safe_load(str(timeline)) or {}
+    except Exception as ex:  # noqa: BLE001
+        raise AnimateError(f"the timeline is not YAML or JSON: {str(ex).splitlines()[0]}") from None
+    if not isinstance(d, dict):
+        raise AnimateError("a timeline is a mapping (chart, story, counters)")
+    return dict(d), None
+
+
+def _table_keys(c: dict, base: Path | None, labels: list[str], at: dict) -> list:
+    """A counter's keys read from a table (source: areas.csv, label: year, value: area_km2): one key per period that has a row."""
+    import csv
+    src = Path(str(c["source"]))
+    src = src if src.is_absolute() or base is None else base / src
+    try:
+        with src.open(encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.DictReader(f))
+    except OSError as ex:
+        raise AnimateError(f"counter source: {ex}") from None
+    lab, val = str(c.get("label") or "period"), str(c.get("value") or "")
+    if rows and (lab not in rows[0] or val not in rows[0]):
+        raise AnimateError(f"counter source {src.name} needs the columns '{lab}' (label) and '{val}' (value); it has {', '.join(rows[0])}")
+    keys = []
+    for r in rows:
+        k = str(r[lab]).strip()
+        if k in at:
+            try:
+                keys.append([at[k], float(str(r[val]).replace(",", ""))])
+            except ValueError:
+                raise AnimateError(f"counter source {src.name}: '{r[val]}' ({lab} {k}) is not a number") from None
+    if not keys:
+        raise AnimateError(f"counter source {src.name}: no row's '{lab}' names a period ({', '.join(labels[:4])}, ...)")
+    return keys
+
+
+def load_timeline(timeline, specs: list[Path], meta: dict, hold: float = 1.0, last_hold: float = 3.0) -> tuple[dict | None, list[int], dict | None, list[str]]:
+    """5.8.0 (Day 27): the timeline's chart for an atlas animation and, for each period, the row that is current. 5.10.0 (Day 27 issue 11): its
+    story lines and counters too, written by period: a line `at: "2002"` (until: the period it leaves), a counter's keys `[["1984", 564], ...]`
+    or read from a table (source: areas.csv, label: year, value: area_km2). Period k is the video's time k x hold, so a line with no end
+    stays its reading time. -> (chart, current rows, overlays timeline, notes)."""
+    if not timeline:
+        return None, [], None, []
+    import timeline as tlm
+    raw, base = _raw_timeline(timeline)
+    periods = [str(p.get("label") if isinstance(p, dict) else p) for p in (meta.get("periods") or [])]
+    labels = periods if len(periods) == len(specs) else [str(k + 1) for k in range(len(specs))]
+    at = {lab: round(k * hold, 4) for k, lab in enumerate(labels)}
+    total = hold * (len(specs) - 1) + last_hold
+    notes = []
+    left_out = [k for k in ("keyframes", "features", "values", "flow", "reveal", "grow") if raw.get(k)]
+    if left_out:
+        notes.append(f"the timeline's {', '.join(left_out)} are not drawn on an atlas animation (its chart, story lines and counters are)")
+    over = {"duration": total, "fade_s": 0.0}
+
+    def when(v, what):
+        if v is None:
+            return None
+        if str(v) in at:
+            return at[str(v)]
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return float(v)
+        raise AnimateError(f"{what} '{v}' is not one of the periods ({', '.join(labels[:6])}{', ...' if len(labels) > 6 else ''}) nor seconds")
+    story = []
+    for i, r in enumerate(raw.get("story") or []):
+        if not isinstance(r, dict) or not r.get("line"):
+            raise AnimateError(f"story line {i + 1} needs line (text) and at (a period)")
+        st = when(r.get("at", r.get("start")), f"story line {i + 1}'s at")
+        if st is None:
+            raise AnimateError(f"story line {i + 1} needs at: the period it starts on")
+        en = when(r.get("until", r.get("end")), f"story line {i + 1}'s until")
+        story.append({"start": st, "line": str(r["line"]), **({"end": en} if en is not None else {}), **({"for_s": r["for_s"]} if r.get("for_s") else {})})
+    counters = []
+    for i, c in enumerate(raw.get("counters") or []):
+        if not isinstance(c, dict):
+            raise AnimateError(f"counter {i + 1} is a mapping")
+        c = dict(c)
+        if c.get("source"):
+            c["keys"] = _table_keys(c, base, labels, at)
+            for k in ("source", "label", "value"):
+                c.pop(k, None)
+        elif c.get("keys"):
+            c["keys"] = [[when(k[0], f"counter {i + 1}'s key"), k[1]] for k in c["keys"]]
+        c.setdefault("step", True)                     # a period's value holds through its frame
+        for k in ("start", "end"):
+            if c.get(k) is not None:
+                c[k] = when(c[k], f"counter {i + 1}'s {k}")
+        counters.append(c)
+    over.update(story=story, counters=counters)
+    try:
+        tl_over = tlm.load(over) if (story or counters) else None
     except tlm.TimelineError as ex:
         raise AnimateError(f"the timeline: {ex}") from None
-    ch = tl.get("chart")
-    if not ch:
+    ch, cur = None, []
+    if raw.get("chart"):
+        chart_raw = dict(raw["chart"])
+        if chart_raw.get("source") and base is not None and not Path(str(chart_raw["source"])).is_absolute():
+            chart_raw["source"] = str(base / str(chart_raw["source"]))
+        try:
+            ch = tlm.load({"chart": chart_raw}).get("chart")
+        except tlm.TimelineError as ex:
+            raise AnimateError(f"the timeline: {ex}") from None
+        if ch.get("kind") == "profile":
+            raise AnimateError("a profile chart runs along a flow; an atlas animation takes a bars chart")
+        rl = [r["label"] for r in ch["rows"]]
+        if periods and len(periods) == len(specs) and all(p_ in rl for p_ in periods):
+            cur = [rl.index(p_) for p_ in periods]
+        elif len(rl) == len(specs):
+            cur = list(range(len(specs)))
+        else:
+            raise AnimateError(f"the chart has {len(rl)} rows and the atlas {len(specs)} periods; name the periods in atlas.json (periods: [...]) "
+                               "with the rows' labels, or give one row per period")
+        for i, r in enumerate(ch["rows"]):
+            r["start"] = float(i)                    # the row current at chart time i; each period's frame is painted at its row's time
+    if ch is None and tl_over is None:
+        raise AnimateError("an atlas animation draws a timeline's chart, story lines and counters: give it at least one of them")
+    return ch, cur, tl_over, notes
+
+
+def load_timeline_chart(timeline, specs: list[Path], meta: dict) -> tuple[dict | None, list[int], list[str]]:
+    """5.8.0's loader, kept for its callers: the chart and the current rows (story lines and counters: load_timeline)."""
+    raw, _base = _raw_timeline(timeline) if timeline else ({}, None)
+    if not raw.get("chart"):
         raise AnimateError("an atlas animation draws a timeline's chart: give the timeline a chart: block")
-    if ch.get("kind") == "profile":
-        raise AnimateError("a profile chart runs along a flow; an atlas animation takes a bars chart")
-    notes = []
-    left_out = [k for k in ("story", "counters", "keyframes", "features") if tl.get(k)]
-    if left_out:
-        notes.append(f"the timeline's {', '.join(left_out)} are not drawn on an atlas animation (its chart is)")
-    labels = [r["label"] for r in ch["rows"]]
-    periods = [str(p) for p in (meta.get("periods") or [])]
-    if periods and len(periods) == len(specs) and all(p in labels for p in periods):
-        cur = [labels.index(p) for p in periods]
-    elif len(labels) == len(specs):
-        cur = list(range(len(specs)))
-    else:
-        raise AnimateError(f"the chart has {len(labels)} rows and the atlas {len(specs)} periods; name the periods in atlas.json (periods: [...]) "
-                           "with the rows' labels, or give one row per period")
-    for i, r in enumerate(ch["rows"]):
-        r["start"] = float(i)                        # the row current at chart time i; each period's frame is painted at its row's time
+    ch, cur, _tl, notes = load_timeline(timeline, specs, meta)
+    own = [k for k in ("story", "counters") if raw.get(k)]
+    if own:                                           # this loader returns the chart only; animate() draws these (load_timeline)
+        notes = [f"the timeline's {', '.join(own)} are not returned by this loader (load_timeline draws them)"] + notes
     return ch, cur, notes
+
+
+def paint_overlay_frames(frames, tl: dict, hold: float, tokens: dict, fr: dict, extra_avoid=None) -> tuple[list, list[dict]]:
+    """5.10.0: the timeline's story line and counters on each period's frame (period k at k x hold), inside the map frame and clear of its
+    elements and the chart."""
+    import events_anim as ev
+    import flythrough as fl
+    import timeline as tlm
+    font = str(fl._inter_ttf(600))
+    rect = fr.get("rect_px")
+    ppm = fr.get("ppm") or 1.0
+    avoid = ev.frame_avoid(fr.get("report"), ppm, frames[0].size, {}) + list(extra_avoid or [])
+    win = (fr.get("report") or {}).get("map_window") or {}
+    top_px = round((win.get("rect_mm") or [0, 0])[1] * ppm)
+    bottom_px = max(0, frames[0].size[1] - round(rect[3])) if rect else 0
+    out, outside = [], {}
+    for i, f in enumerate(frames):
+        im, pl = tlm.paint(f, i * hold + 1e-3, tl, tokens, font_path=font, logo=None, bottom_px=bottom_px, top_px=top_px, avoid=avoid, frame_px=rect)
+        for name_, box_ in [("the story line", pl.get("story_box"))] + [(f"the {p_} counter", b_) for p_, b_ in (pl.get("counter_boxes") or {}).items()]:
+            if rect and box_ and not ev.inside_frame(box_, rect):
+                outside.setdefault(name_, i + 1)
+        out.append(im.convert("RGB"))
+    fs = [{"id": "MAP-CART-046", "severity": "WARN", "message": f"{n} leaves the map frame (frame {k})", "detail": None} for n, k in outside.items()]
+    return out, fs
 
 
 def paint_chart_frames(frames, chart: dict, cur: list[int], tokens: dict, fr: dict) -> tuple[list, list[dict]]:
@@ -468,18 +667,21 @@ def paint_chart_frames(frames, chart: dict, cur: list[int], tokens: dict, fr: di
     rect = fr.get("rect_px")
     avoid = ev.frame_avoid(fr.get("report"), fr.get("ppm") or 1.0, frames[0].size, {})
     out, findings, outside = [], [], None
+    boxes = []
     for i, f in enumerate(frames):
         im, box = ha.paint_chart(f, float(cur[i]), chart, tokens, font_path=font, avoid=avoid, frame=rect)
         if rect and not ev.inside_frame(box, rect) and outside is None:
             outside = i + 1
         out.append(im)
+        boxes.append(box)
     if outside:
         findings.append({"id": "MAP-CART-046", "severity": "WARN", "message": f"the chart leaves the map frame (frame {outside})", "detail": None})
+    paint_chart_frames.last_boxes = boxes                # 5.10.0: the story line and counters keep clear of the chart
     return out, findings
 
 
 def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "mp4"), hold: float = 1.0, last_hold: float = 3.0, brand: str | None = None,
-            stem: str | None = None, timeline=None, jobs=1, fresh: bool = False, frames_dir=None, progress=None) -> dict:
+            stem: str | None = None, timeline=None, jobs=1, fresh: bool = False, frames_dir=None, progress=None, fade: float = 0.0) -> dict:
     """Frames for every period at every size, then the GIF and the MP4 per size, each read back by the output lint. 5.8.0: `timeline` (a
     path, a YAML string or a dict) with a chart: the chart drawn on every frame. 5.9.0: the frames are kept in `frames_dir` (default
     OUT/.frames/<size>) and read back on the next run when nothing they are drawn from changed; `jobs` draws them in parallel, `fresh`
@@ -495,10 +697,14 @@ def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "m
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = stem or str(meta.get("base_id") or atlas_dir.name.replace("-atlas", ""))
     rep = {"periods": len(specs), "sizes": sizes, "files": [], "findings": [], "notes": []}
-    chart, chart_cur, cnotes = load_timeline_chart(timeline, specs, meta)
+    chart, chart_cur, tl_over, cnotes = load_timeline(timeline, specs, meta, hold, last_hold)
     rep["notes"] += cnotes
     if chart:
         rep["chart"] = {"rows": len(chart["rows"]), "baseline": chart.get("baseline"), "reveal": chart.get("reveal")}
+    if tl_over:
+        rep["overlays"] = {"story_lines": len(tl_over.get("story") or []), "counters": len(tl_over.get("counters") or [])}
+    if not 0 <= fade <= hold * 0.8:
+        raise AnimateError(f"fade is 0 to {hold * 0.8:g} seconds (at most four fifths of the hold, so each period is seen whole)")
     seen: dict = {}
     fbase = Path(frames_dir) if frames_dir else out_dir / FRAMES_DIR
     rep["frames"] = {}
@@ -514,9 +720,14 @@ def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "m
             seen.setdefault("records", []).extend(i.get("records") or [])
             seen.setdefault("shown", []).append(i.get("shown") or "")
             rep["findings"] += i.get("findings") or []
+        cboxes = []
         if chart:
             frames, cfs = paint_chart_frames(frames, chart, chart_cur, tokens, fr_)
+            cboxes = list(getattr(paint_chart_frames, "last_boxes", []) or [])
             rep["findings"] += [{**f_, "message": f"[{size}] {f_['message']}"} for f_ in cfs]
+        if tl_over:
+            frames, ofs = paint_overlay_frames(frames, tl_over, hold, tokens, fr_, extra_avoid=[b_ for b_ in cboxes[:1] if b_])
+            rep["findings"] += [{**f_, "message": f"[{size}] {f_['message']}"} for f_ in ofs]
         raw = [f.copy() for f in frames]
         frames = [progress_bar(f, i, len(frames), tokens, BAR_PX[size], rect=bar_rect) for i, f in enumerate(frames)]
         slug_ = brand or gc.load_mapspec(specs[0]).get("brand")
@@ -525,16 +736,16 @@ def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "m
         w, h = SIZES[size]["px"]
         if "gif" in formats:
             p = out_dir / f"{stem}_{size}_{w}x{h}.gif"
-            g = write_gif(frames, p, hold, last_hold, comment)
+            g = write_gif(frames, p, hold, last_hold, comment, fade=fade)
             rep["files"].append(g)
-            rep["findings"] += output_lint.check_gif(str(p), (w, h), len(frames), hold, last_hold)
+            rep["findings"] += output_lint.check_gif(str(p), (w, h), g["frames"], hold, last_hold, durations_ms=g["durations_ms"])
         if "mp4" in formats:
             p = out_dir / f"{stem}_{size}_{w}x{h}.mp4"
             try:
                 tracks = [progress_bar(f.copy(), i, len(raw), tokens, BAR_PX[size], fill=False, rect=bar_rect) for i, f in enumerate(raw)]
                 m = write_mp4(tracks, p, hold, last_hold, {"title": str(meta.get("title") or stem), "comment": comment,
                                                             "copyright": props.get("Author", ""), "artist": props.get("Author", "")},
-                              bar={"px": BAR_PX[size], "ink": tokens["neutral_ramp"][-1], "rect": bar_rect})
+                              bar={"px": BAR_PX[size], "ink": tokens["neutral_ramp"][-1], "rect": bar_rect}, fade=fade)
                 rep["files"].append(m)
                 rep["findings"] += output_lint.check_mp4(str(p), (w, h), hold * (len(frames) - 1) + last_hold)
             except AnimateError as ex:
@@ -565,10 +776,11 @@ def main(argv=None) -> int:
     ap.add_argument("--timeline", help="5.8.0: a timeline with a chart: block, drawn on every period's frame")
     ap.add_argument("--jobs", default="auto", help="5.9.0: frames drawn at once (worker processes), or auto (one per core but one, at most 4)")
     ap.add_argument("--fresh", action="store_true", help="5.9.0: draw every frame again, not the kept ones")
+    ap.add_argument("--fade", type=float, default=0.0, help="5.10.0: seconds each period dissolves into the next (0: a cut)")
     a = ap.parse_args(argv)
     try:
         r = animate(a.atlas, a.out, sizes=[s.strip() for s in a.sizes.split(",") if s.strip()], formats=[s.strip() for s in a.formats.split(",") if s.strip()],
-                    hold=a.hold, last_hold=a.last_hold, brand=a.brand, timeline=a.timeline, jobs=a.jobs, fresh=a.fresh,
+                    hold=a.hold, last_hold=a.last_hold, brand=a.brand, timeline=a.timeline, jobs=a.jobs, fresh=a.fresh, fade=a.fade,
                     progress=lambda m: print(m, file=sys.stderr, flush=True))
     except AnimateError as ex:
         print(f"animate: {ex}", file=sys.stderr)

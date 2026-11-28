@@ -1,6 +1,6 @@
 id: ref.context.world.imagery.landsat-c2-l2
 type: context
-rev: 2
+rev: 3
 status: active
 title: 'Landsat imagery (Collection 2 Level-2 surface reflectance), 30 m, the whole world since 1982'
 summary: 'Forty years of satellite pictures of any place on land at 30 m, from Landsat 4, 5, 7, 8 and 9 (USGS and NASA). The map''s window is read from the least
@@ -41,12 +41,12 @@ delivery:
     - name: earth-search
       root: https://earth-search.aws.element84.com/v1
       collection: landsat-c2-l2
-      assets: {red: red, green: green, blue: blue, nir: nir08, mask: qa_pixel}
+      assets: {red: red, green: green, blue: blue, nir: nir08, swir16: swir16, mask: qa_pixel}
     - name: planetary-computer
       root: https://planetarycomputer.microsoft.com/api/stac/v1
       collection: landsat-c2-l2
       sign: planetary-computer
-      assets: {red: red, green: green, blue: blue, nir: nir08, mask: qa_pixel}
+      assets: {red: red, green: green, blue: blue, nir: nir08, swir16: swir16, mask: qa_pixel}
     cloud_property: eo:cloud_cover
     reflectance: {scale: 0.0000275, offset: -0.2}
     mask: {kind: bits, bad: [0, 1, 3, 4]}
@@ -65,10 +65,12 @@ delivery:
     the next path a few days away fills an edge the dates leave (fill_days: 16, one revisit); platforms: [landsat-5] or exclude_platforms:
     [landsat-7] say which satellites; imagery.py plan lists the candidates by satellite, path and row.'
 style:
-  titles: {true-color: Satellite picture, false-color: False colour picture, ndvi: Vegetation index (NDVI)}
+  titles: {true-color: Satellite picture, false-color: False colour picture, ndvi: Vegetation index (NDVI), ndwi: Water index (NDWI), mndwi: Water index (MNDWI)}
   raster:
     variants:
       ndvi: {ramp: sequential, vmin: 0, vmax: 0.9, nodata: -9999, from_land: false}
+      ndwi: {ramp: diverging, vmin: -0.6, vmax: 0.6, midpoint: 0, nodata: -9999, from_land: false}
+      mndwi: {ramp: diverging, vmin: -0.6, vmax: 0.6, midpoint: 0, nodata: -9999, from_land: false}
 source:
   publisher: US Geological Survey and NASA, through Microsoft Planetary Computer
   product: Landsat Collection 2 Level-2 (surface reflectance)
@@ -104,3 +106,6 @@ maintenance:
       plan lists the candidates by satellite, path and row. The guidance on Landsat 7 now names summer 2012 as the one stretch it is the only choice
       (Landsat 5 to November 2011, Landsat 8 from April 2013). Checked from the build workspace on 2026-11-27: Planetary Computer lists platform
       landsat-7 and landsat:wrs_path 038 and 039 over Lake Mead for June 2012.'
+  - rev: 3
+    date: '2026-11-27'
+    note: 'Water indexes (5.10.0, Day 27 issue 7): product ndwi (green and near infrared) and mndwi (green and short-wave infrared, asset swir16), drawn on the brand''s diverging ramp about 0; the water op measures them per area. Checked from the build workspace on 2026-11-27: NDWI over Lake Mead for 3 to 11 July 2022 (Landsat 8 and 9, Planetary Computer) gave 273 km2 of water in the lake''s region, against 266 km2 from Day 27''s own step.'

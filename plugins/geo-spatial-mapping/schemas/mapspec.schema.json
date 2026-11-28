@@ -552,7 +552,7 @@
           },
           "ops": {
             "type": "array",
-            "description": "geoprocessing steps run on the layer after its join and repair, in order (geo_ops): a buffer, a clip by another layer, an overlay, a spatial join, nearest feature, population covered, a hex or grid aggregation. `layer:` and `clip_layer:` name another layer of this spec, which is loaded first. raster_zonal sums (or averages) a raster under each polygon; line_of_sight draws clear and obstructed links between sites over a bare-earth DEM; viewshed draws the ground visible from each site (M12).",
+            "description": "geoprocessing steps run on the layer after its join and repair, in order (geo_ops): a buffer, a clip by another layer, an overlay, a spatial join, nearest feature, population covered, a hex or grid aggregation. `layer:` and `clip_layer:` name another layer of this spec, which is loaded first. raster_zonal sums (or averages) a raster under each polygon; line_of_sight draws clear and obstructed links between sites over a bare-earth DEM; viewshed draws the ground visible from each site (M12). water (5.10.0) keeps the water inside each polygon from a water index (NDWI or MNDWI).",
             "items": {
               "type": "object",
               "anyOf": [{"required": ["op"]}, {"required": ["as_of"]}],
@@ -609,7 +609,8 @@
                     "depressions",
                     "trace_downstream",
                     "sample_along",
-                    "sea_route"
+                    "sea_route",
+                    "water"
                   ]
                 },
                 "layer": {
@@ -634,7 +635,7 @@
                 },
                 "raster": {
                   "type": "string",
-                  "description": "raster_zonal: a GeoTIFF path or a library raster id"
+                  "description": "raster_zonal: a GeoTIFF path or a library raster id; water (5.10.0): a one-band water-index GeoTIFF or an imagery library id (with dates)"
                 }
               },
               "additionalProperties": true

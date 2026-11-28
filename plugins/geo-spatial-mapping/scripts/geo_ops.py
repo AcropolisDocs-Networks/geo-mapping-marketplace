@@ -1250,6 +1250,109 @@ def op_raster_zonal(gdf, p: dict, ctx: Ctx) -> OpResult:
     return OpResult(out, [note], findings, pv)              # counted on the raster's own grid (raster_crs); nothing is measured in a display CRS
 
 
+WATER_INDEXES = ("ndwi", "mndwi")
+
+
+def op_water(gdf, p: dict, ctx: Ctx) -> OpResult:
+    """water {raster: path | imagery id, dates, index: ndwi|mndwi, threshold: 0, min_area: 0.05 km2, field: water_km2}: the water inside each polygon.
+
+    5.10.0 (Day 27 issue 7). Each polygon (an area to measure: a lake's region, a basin) becomes the water inside it, read from a water index:
+    a GeoTIFF of one band (NDWI or MNDWI from imagery.py, or any index where water is above `threshold`), or a library imagery entry read for
+    the polygons' window with `dates` (product ndwi, or mndwi). Cells above the threshold are drawn as polygons on the raster's own grid,
+    patches under `min_area` dropped (a field pond, a shadow), and what is left kept inside the polygon, with `field` its geodesic area,
+    `<field>_cells` and `<field>_seen` (the share of the polygon the picture covers: a cloud or a gap is not dry ground)."""
+    import geopandas as gpd
+    import pandas as pd
+    import raster_io as rio
+    from shapely.geometry import shape
+    from shapely.ops import unary_union
+    _require_crs(gdf, "water")
+    if _families(gdf) - {"Polygon"}:
+        raise OpsError("water measures the water inside polygons (a lake's region, a basin); buffer points or lines first")
+    src = p.get("raster")
+    if not src:
+        raise OpsError("water needs `raster:` (a water-index GeoTIFF, or an imagery entry such as ref.context.world.imagery.landsat-c2-l2 with dates)")
+    idx = str(p.get("index") or "ndwi").lower()
+    if idx not in WATER_INDEXES:
+        raise OpsError(f"water: index is {' or '.join(WATER_INDEXES)}, not '{idx}'")
+    thr = float(p.get("threshold", 0.0))
+    if not -1 < thr < 1:
+        raise OpsError("water: threshold is between -1 and 1 (0, the default: water is where the index is above it)")
+    units = _area_unit(p.get("units") or "km2")
+    min_a = float(p.get("min_area", 0.05)) * AREA_UNITS_M2[units]
+    fld = p.get("field") or f"water_{units}"
+    fetch_rec, entry, findings = None, None, []
+    if str(src).startswith("ref."):
+        import raster_fetch as rf
+        if not p.get("dates"):
+            raise OpsError("water: an imagery entry needs `dates:` (START/END, or a year) for its picture")
+        params = {k: v for k, v in {"dates": p.get("dates"), "product": idx, "cloud_max": p.get("cloud_max"), "platforms": p.get("platforms"),
+                                    "exclude_platforms": p.get("exclude_platforms"), "pick": p.get("pick"), "route": p.get("route")}.items() if v is not None}
+        try:
+            r = (ctx.raster_fetch(str(src), _wgs84_bounds(gdf, 0.02), params) if ctx.raster_fetch else rf.raster_for(str(src), _wgs84_bounds(gdf, 0.02), params=params))
+        except rio.RasterError as ex:
+            raise OpsError(f"water: {ex}") from None
+        path, fetch_rec, entry = Path(r["path"]), r.get("record"), r.get("entry")
+        findings += list(r.get("findings") or [])
+    else:
+        path = _local_path(src, ctx)
+        if not path.is_file():
+            raise OpsError(f"water: raster not found: {src}")
+    rasterio = rio._rasterio()
+    from rasterio import features
+    from rasterio.windows import from_bounds
+    with rasterio.open(path) as ds:
+        if ds.count != 1:
+            raise OpsError(f"water: {path.name} has {ds.count} bands; give a one-band water index (imagery product ndwi or mndwi)")
+        zones = gdf.to_crs(ds.crs)
+        b = zones.total_bounds
+        win = from_bounds(*b, transform=ds.transform).round_offsets().round_lengths()
+        win = win.intersection(rasterio.windows.Window(0, 0, ds.width, ds.height))
+        a = ds.read(1, window=win, masked=True).astype("float32")
+        tr = ds.window_transform(win)
+        nod = np.ma.getmaskarray(a) | ~np.isfinite(a.filled(np.nan))
+        wet = (~nod) & (a.filled(-9999.0) > thr)
+        cell_m2 = abs(tr.a * tr.e)
+        crs_r = ds.crs
+    parts = [shape(g) for g, v in features.shapes(wet.astype("uint8"), mask=wet, transform=tr) if v == 1]
+    parts = [g for g in parts if g.area >= min_a] if crs_r.is_projected else parts
+    water = unary_union(parts) if parts else None
+    seen_g = unary_union([shape(g) for g, v in features.shapes((~nod).astype("uint8"), mask=~nod, transform=tr) if v == 1]) if (~nod).any() else None
+    geod = _geod()
+    geoms, areas, cells, seen = [], [], [], []
+    for z in zones.geometry.values:
+        w = water.intersection(z) if water is not None and z is not None else None
+        geoms.append(w if w is not None and not w.is_empty else None)
+        if w is not None and not w.is_empty:
+            wg = gpd.GeoSeries([w], crs=crs_r).to_crs(WGS84).iloc[0]
+            areas.append(abs(geod.geometry_area_perimeter(wg)[0]) / AREA_UNITS_M2[units])
+            cells.append(int(round(w.area / cell_m2)) if crs_r.is_projected else None)
+        else:
+            areas.append(0.0)
+            cells.append(0)
+        sv = (seen_g.intersection(z).area / z.area) if seen_g is not None and z is not None and z.area else 0.0
+        seen.append(round(float(sv), 4))
+    out = gpd.GeoDataFrame(pd.DataFrame(gdf.drop(columns=gdf.geometry.name)).reset_index(drop=True),
+                           geometry=gpd.GeoSeries(geoms, crs=crs_r).to_crs(gdf.crs).values, crs=gdf.crs)
+    out[fld], out[f"{fld}_cells"], out[f"{fld}_seen"] = areas, cells, seen
+    low = [i for i, v in enumerate(seen) if v < 0.98]
+    if low:
+        findings.append({"id": "MAP-TER-005", "severity": "WARN", "detail": {"rows": low[:20]},
+                         "message": f"water: the picture covers under 98% of {len(low)} area(s) (cloud, a gap or the picture's edge): their water is a lower bound"})
+    cell_txt = f"{abs(tr.a):.0f} m cells" if crs_r.is_projected else "the raster's cells"
+    note = (f"`{fld}`: water inside each area, where the {idx.upper()} is above {thr:g} on {cell_txt} of {path.name}"
+            + (f" (patches under {float(p.get('min_area', 0.05)):g} {units} left out)" if min_a else "") + f"; geodesic area in {units}. "
+            f"`{fld}_seen` is the share of each area the picture covers.")
+    if entry:
+        att = (entry.get("license") or {}).get("attribution_text")
+        note += f" Source: {(entry.get('source') or {}).get('publisher', entry.get('title'))}, {entry.get('title')}" + (f" ({att})" if att else "") + "."
+    extra = {"raster": str(src), "index": idx, "threshold": thr, "raster_crs": str(crs_r), "cell_m": abs(tr.a) if crs_r.is_projected else None}
+    if fetch_rec:
+        extra["fetch"] = {k: v for k, v in fetch_rec.items() if k != "files"}
+        extra["library_ref"] = (entry or {}).get("id")
+    return OpResult(out, [note], findings, _prov("water", p, len(gdf), len(out), str(crs_r), **extra))
+
+
 def _dem_for_op(gdf, p: dict, ctx: Ctx, pad_m: float, what: str):
     """The DEM a terrain op reads: `dem:` (a path), else ctx.dem for the layer's window (a MapSpec's terrain source, or a fetch)."""
     if p.get("dem") and str(p["dem"]) not in ("auto",):
@@ -2377,6 +2480,7 @@ OPS = {
     "grid": op_grid,
     "hexbin": op_hexbin,
     "raster_zonal": op_raster_zonal,
+    "water": op_water,
     "line_of_sight": op_line_of_sight,
     "viewshed": op_viewshed,
     "fill_holes": op_fill_holes,
@@ -2528,6 +2632,10 @@ def equivalent(op: str, p: dict, prov: dict | None = None) -> dict:
         "raster_zonal": (f"rasterstats.zonal_stats(gdf.to_crs(raster.crs), '{Path(str(p.get('raster', 'raster.tif'))).name}', stats=['{p.get('stat', 'sum')}'], "
                          f"all_touched={_bool(p.get('all_touched'))})",
                          f"SELECT a.id, (ST_SummaryStatsAgg(ST_Clip(r.rast, a.geom), 1, true)).{p.get('stat', 'sum')} FROM a JOIN raster r ON ST_Intersects(r.rast, a.geom) GROUP BY a.id"),
+        "water": (f"shapes = rasterio.features.shapes((index > {float(p.get('threshold', 0)):g}).astype('uint8'), mask=index > {float(p.get('threshold', 0)):g}, "
+                  f"transform=t); gpd.overlay(gpd.GeoDataFrame(geometry=[shape(g) for g, v in shapes]), gdf.to_crs(raster_crs), how='intersection')",
+                  f"SELECT a.id, ST_Intersection(a.geom, ST_Union(p.geom)) FROM a, ST_DumpAsPolygons(ST_Reclass(r.rast, '-1-{float(p.get('threshold', 0)):g}:0, "
+                  f"{float(p.get('threshold', 0)):g}-1:1', '8BUI')) p JOIN raster r ON true WHERE p.val = 1 GROUP BY a.id"),
         "line_of_sight": ("terrain.line_of_sight(dem, a_lonlat, b_lonlat, h_a, h_b, k_factor, freq_ghz) for each link (bilinear DEM samples on the WGS84 geodesic; "
                           "curvature d1 d2 / (2 k R))", "(no PostGIS equivalent: sample ST_Value along ST_Segmentize(ST_MakeLine(a, b)) and compare with the chord)"),
         "viewshed": (f"gdal_viewshed -oz {p.get('h_m', 30)} -md {p.get('radius_m', 5000)} -cc {1 - 1 / float(p.get('k', 4 / 3)):.4f} dem.tif out.tif, then polygonize",

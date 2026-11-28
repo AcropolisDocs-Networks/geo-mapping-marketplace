@@ -814,7 +814,8 @@ def story_room(d, text, font_path, size, min_size, y, avoid, pad, W, H, lo, hi, 
 def wrap_two(d, text, font_path, size, min_size, width):
     """The line split at the space nearest its middle, at the largest size (down to min_size) where both halves fit `width`, or None."""
     from PIL import ImageFont
-    words = text.split()
+    import textmeasure as tm
+    words = tm.words(text)                          # 5.10.0: never between a number and its unit, nor at a non-breaking space
     if len(words) < 3 or width <= 0:
         return None
     cuts = sorted(range(1, len(words)), key=lambda i: abs(len(" ".join(words[:i])) - len(" ".join(words[i:]))))

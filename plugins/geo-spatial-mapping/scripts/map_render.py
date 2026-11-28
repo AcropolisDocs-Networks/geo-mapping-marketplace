@@ -1801,6 +1801,28 @@ def logo_markup(plan: mp.Plan, ground_hex: str, x: float, y: float, h: float) ->
     return inner, w
 
 
+def units_mismatch(spec: dict, bar_units, asked=None) -> str | None:
+    """5.10.0 (Day 27 cold read): the map's own text measures in one system and its scale bar in the other ('266 km²' over a bar in miles).
+    The bar's units follow the place (a standing default); this says so, it does not change them."""
+    if asked not in (None, "", "auto") or bar_units not in ("mi", "km"):
+        return None
+    import re
+    els = spec.get("elements") or {}
+    texts = [str((els.get("title") or {}).get(k) or "") for k in ("text", "subtitle")]
+    texts += [str(it.get("text") or "") for it in ((els.get("callouts") or {}).get("items") or []) if isinstance(it, dict)]
+    texts += [str((ly.get("legend") or {}).get("label") or "") for ly in spec.get("layers") or [] if isinstance(ly.get("legend"), dict)]
+    blob = " ".join(texts)
+    metric = re.search(r"\d[\d,.]*\s*(km²|km2|sq\.? ?km|km|ha|hectares?)\b", blob, re.I)
+    imperial = re.search(r"\d[\d,.]*\s*(mi²|sq\.? ?mi|square miles?|miles?|mi|acres?)\b", blob, re.I)
+    if bar_units == "mi" and metric and not imperial:
+        return (f"the map's text measures in {metric.group(1)} and the scale bar in miles (the place's default); "
+                "elements.scale_bar.units: km, or both (km and mi), keeps them in one system")
+    if bar_units == "km" and imperial and not metric:
+        return (f"the map's text measures in {imperial.group(1)} and the scale bar in kilometres (the place's default); "
+                "elements.scale_bar.units: mi keeps them in one system")
+    return None
+
+
 def wrap_lines(text: str, w: float, pt: float, weight: int = 400, max_lines: int = 2) -> tuple[list[str], bool]:
     lines = tm.wrap(text, w, pt, weight)
     if len(lines) <= max_lines:
@@ -2031,7 +2053,8 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
             its.append({"name": "legend", "w": legend_fit["size"]["width"], "h": legend_fit["size"]["height"], "prefer": corner, "locked": locked})
         if inset and not inset_try.get("drop"):
             corner, locked = pos(inset_cfg, inset_try["corner"])
-            its.append({"name": "inset", "w": inset["w"], "h": inset["h"], "prefer": corner, "locked": locked})
+            its.append({"name": "inset", "w": inset["w"], "h": inset["h"], "prefer": corner, "locked": locked,
+                        **({"beside": inset_try["beside"], "side": "stack", "gap_mm": 2.0} if inset_try.get("beside") else {})})
         if dt_size:
             corner, locked = pos(dt_cfg, "upper-left")
             its.append({"name": "data_table", "w": dt_size["w"], "h": dt_size["h"], "prefer": corner, "locked": locked})
@@ -2243,12 +2266,28 @@ def _render_fit(H, W, banner_h, data_geoms, data_tree, dt_cfg, dt_size, els, fin
         # MapSpec moves it. It stays when it covers no more of the data than the elements may (fit_cover_pct, after the map has been moved);
         # past that it is left off and the notes say so. 1.13 moved it to another free corner (0.24.0), which put it upper right on Day 13.
         inset_cover = lo.covered_fraction(best["frame"], best["occ"], [best["placed"]["inset"]["rect"]])
-        if inset_cover > fit_limit:
+        stacked = None
+        if inset_cover > fit_limit and "legend" in best["placed"]:
+            # 5.10.0 (Day 27 issue 10): before the locator is left off, it is tried under the legend (above it in a lower corner), where the
+            # elements already are; it stays only where it covers no data and the map keeps its size
+            inset_try.update(beside="legend")
+            c = evaluate(best["reserve"], best.get("pan", (0.0, 0.0)))
+            if (not c["err"] and "inset" in c["placed"] and c["frame"].scale >= best["frame"].scale - 1e-9 and c["cover"] <= best["cover"] + 1e-9
+                    and lo.covered_fraction(c["frame"], c["occ"], [c["placed"]["inset"]["rect"]]) == 0):
+                stacked = c
+            else:
+                inset_try.pop("beside", None)
+        if stacked is not None:
+            best = stacked
+            side = "under" if not best["placed"]["legend"]["corner"].startswith("lower") else "above"
+            rep.setdefault("notes", []).append(f"locator: moved {side} the legend, because in its corner (lower right) it would have covered "
+                                               f"{inset_cover:.0%} of the data; there it covers none")
+        elif inset_cover > fit_limit:
             inset_try.update(corner="lower-right", drop=True)
             best = evaluate(best["reserve"], best.get("pan", (0.0, 0.0)))
             inset = None
             rep.setdefault("notes", []).append(f"locator: left off, because in its corner (lower right) it would have covered {inset_cover:.0%} of the data, "
-                                               "more than the elements may; give elements.inset_map.position to place it elsewhere")
+                                               "and under the legend it did not fit clear of the data; give elements.inset_map.position to place it elsewhere")
         elif inset_cover > 0:
             rep.setdefault("notes", []).append(f"locator: kept in its corner (lower right), over {inset_cover:.1%} of the data")
     frame, occ, info, _items, placed = best["frame"], best["occ"], best["info"], best["items"], best["placed"]
@@ -2635,6 +2674,9 @@ def render(plan: mp.Plan, frame: "lo.Frame | None" = None, elements_off=()) -> R
     except Exception as e:  # noqa: BLE001 - the map does not depend on it
         findings.append(f("MAP-LOC-001", "INFO", f"the country under the centre could not be read ({type(e).__name__}); kilometres and en-GB dates"))
     rep["north"] = info["north"]
+    mixed = units_mismatch(spec, info.get("units"), (els.get("scale_bar") or {}).get("units"))
+    if mixed and on("scale_bar"):
+        findings.append(f("MAP-LOC-002", "INFO", mixed))
     if info["distortion"]["severity"] == "warn":
         findings.append(f("MAP-CRS-003", "WARN", info["distortion"]["message"]))
     elif info["distortion"]["severity"] == "block" and on("scale_bar"):

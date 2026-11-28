@@ -634,8 +634,16 @@ def record_coverage(plan, win) -> None:
     for b in plan.basemap:
         if b.get("kind") == "hillshade" and (b.get("image") or {}).get("limits") is not None:
             lims = merge_limits(lims, b["image"]["limits"])
+    ext = (plan.spec.get("extent") or {}) if isinstance(plan.spec.get("extent"), dict) else {}
+    own_box = str(ext.get("mode") or "") == "bbox" and bool(ext.get("bbox"))
     for l in plan.layers:
         im = (l.raster or {}).get("image") if l.kind == "raster" else None
+        if im and im.get("limits") is not None and own_box and (l.raster or {}).get("src") == "file":
+            # 5.10.0 (Day 27 issue 6): a picture from a file under a MapSpec that names its box does not move the frame: the box is the
+            # person's, and a series of files with edges a little apart kept moving the frame from year to year. Where the picture stops
+            # short of the frame it shows, and MAP-CART-040 says so.
+            plan.notes.append(f"raster '{l.id}': the frame stays on the extent's box (a picture from a file does not move it)")
+            continue
         if im and im.get("limits") is not None:
             if fills_extent(plan, im["limits"]):
                 lims = merge_limits(lims, im["limits"])
@@ -742,6 +750,8 @@ def raster_layer(plan, l, win, shape) -> None:
     t = plan.tokens
     est = ((getattr(l, "entry", None) or {}).get("style") or {})
     variant = str((l.spec.get("source") or {}).get("variant") or "")
+    if not variant and ((getattr(l, "entry", None) or {}).get("delivery") or {}).get("stac"):
+        variant = str((l.spec.get("source") or {}).get("product") or "")       # 5.10.0: imagery's product picks its drawing (ndvi, ndwi, mndwi)
     cogb = ((getattr(l, "entry", None) or {}).get("delivery") or {}).get("cog") or {}
     if not variant and cogb.get("variants"):
         variant = str(cogb.get("default_variant") or cogb["variants"][0])
