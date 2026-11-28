@@ -2,6 +2,10 @@
 
 GENERATED from the `maintenance.changelog` of every entry; do not edit by hand.
 
+## 2026-11-27
+
+- `ref.context.world.imagery.landsat-c2-l2` rev 2: Scenes in tiers (5.9.0, from Day 27): Landsat 7 after 31 May 2003 is read last, a pass of the next path within 16 days fills the edges, and the plan lists the candidates by satellite, path and row. The guidance on Landsat 7 now names summer 2012 as the one stretch it is the only choice (Landsat 5 to November 2011, Landsat 8 from April 2013). Checked from the build workspace on 2026-11-27: Planetary Computer lists platform landsat-7 and landsat:wrs_path 038 and 039 over Lake Mead for June 2012.
+
 ## 2026-11-25
 
 - `ref.boundary.uk.admin.os-boundary-line` rev 1: New (5.2.0, open data portals P2.6).

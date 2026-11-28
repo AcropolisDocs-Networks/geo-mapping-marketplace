@@ -672,6 +672,38 @@ def prepare(plan) -> None:
     record_coverage(plan, win)
 
 
+_PROBE: dict | None = None
+
+
+class WindowProbe(Exception):
+    """5.9.0: raised in place of a library raster's read when probe_window asks only where the read would be."""
+
+
+def probe_window(spec_path, layer: str | None = None, *, template: str | None = None, brand: str | None = None, values: dict | None = None) -> dict:
+    """5.9.0: the window (WGS 84) a build of this MapSpec reads its library raster layer for, found by planning the map up to that read and
+    stopping there: nothing is fetched. A series read for these bounds and a layer's dates fills the very cache entries the build then reads.
+    -> {layer, bounds, entry, source}."""
+    global _PROBE
+    import map_plan as mp
+    _PROBE = {"want": layer}
+
+    def edit(spec):                                       # a MapSpec written for an atlas by time is planned as its first period
+        if values:
+            filled = gc.fill_text(spec, values)
+            spec.clear()
+            spec.update(filled)
+    try:
+        mp.prepare(spec_path, template=template, brand=brand, spec_edit=edit)
+    except WindowProbe:
+        got = {k: _PROBE[k] for k in ("layer", "bounds", "entry", "source")}
+        return got
+    except mp.PlanError as ex:
+        raise RasterLayerError(f"the MapSpec cannot be planned to find its window: {str(ex).splitlines()[0]}", gc.EXIT_USAGE) from None
+    finally:
+        _PROBE = None
+    raise RasterLayerError(f"the MapSpec has no library raster layer{f' {layer!r}' if layer else ''} read for its window", gc.EXIT_USAGE)
+
+
 def _source_path(plan, l, win, shape=(512, 512)) -> tuple[str, dict | None, list]:
     """(local path, fetch record or None, findings) for a raster-role layer: its file, the population raster fetched for the window, or the DEM."""
     info = l.raster or {}
@@ -680,6 +712,9 @@ def _source_path(plan, l, win, shape=(512, 512)) -> tuple[str, dict | None, list
         return info["path"], None, []
     if src == "pop":
         import raster_fetch as rf
+        if _PROBE is not None and _PROBE.get("want") in (None, l.id):
+            _PROBE.update({"layer": l.id, "bounds": window_wgs84(plan, win), "entry": info["entry_id"], "source": dict(l.spec.get("source") or {})})
+            raise WindowProbe(l.id)
         try:
             r = rf.raster_for(info["entry_id"], window_wgs84(plan, win), variant=(l.spec.get("source") or {}).get("variant"), params=l.spec.get("source") or {})
         except Exception as ex:  # noqa: BLE001 - RasterFetchError, or a service failure under it

@@ -737,3 +737,31 @@ def note_root() -> None:
 
 ledger_start()
 note_root()
+
+
+_PLACEHOLDER = None
+
+
+def fill_text(obj, values: dict):
+    """5.9.0: every {name} and {name:format} in a MapSpec's strings that names one of `values`, filled (an atlas period's {period}, a table's
+    {area_km2:,.0f}); any other brace is left as it is. ValueError when a value cannot take its format."""
+    global _PLACEHOLDER
+    import re
+    if _PLACEHOLDER is None:
+        _PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)(?::([^{}]*))?\}")
+    if isinstance(obj, dict):
+        return {k: fill_text(v, values) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [fill_text(v, values) for v in obj]
+    if isinstance(obj, str) and "{" in obj:
+        def rep(m):
+            k, fmt = m.group(1), m.group(2)
+            if k not in values:
+                return m.group(0)
+            v = values[k]
+            try:
+                return format(v, fmt) if fmt else str(v)
+            except (TypeError, ValueError):
+                raise ValueError(f"'{m.group(0)}' cannot format {v!r}") from None
+        return _PLACEHOLDER.sub(rep, obj)
+    return obj

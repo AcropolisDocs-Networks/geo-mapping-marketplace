@@ -138,41 +138,241 @@ def render_frames(specs: list[Path], size: str, work: Path, *, brand: str | None
         return _render_frames(specs, size, work, brand, collect, frame_out)
 
 
-def _render_frames(specs: list[Path], size: str, work: Path, brand: str | None, collect: dict | None,
-                   frame_out: dict | None = None) -> tuple[list, dict, list[dict]]:
+def _frame_spec(sp: Path, size: str, brand: str | None) -> dict:
+    """A period's MapSpec as the frame draws it: the size's template and dpi; the brand the run names, if any, over the spec's own."""
+    cfg = SIZES[size]
+    spec = gc.load_mapspec(sp)
+    spec["template"] = cfg["template"]
+    spec["export"] = {**(spec.get("export") or {}), "dpi": cfg["dpi"]}
+    if brand:
+        spec.pop("brand", None)
+    return spec
+
+
+def _render_one(k: int, sp: Path, size: str, work: Path, brand: str | None) -> tuple[object, dict]:
+    """One frame: build the period's map at the size into `work`. -> (the frame as an RGB image, what the video needs from its build)."""
     import build_map as bm
     import map_plan as mp
+    import yaml
     cfg = SIZES[size]
-    frames, findings, tokens = [], [], None
+    spec = _frame_spec(sp, size, brand)
     work.mkdir(parents=True, exist_ok=True)
+    tmp = work / f"{size}-{k:03d}.yaml"
+    tmp.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    try:
+        res = bm.build(str(tmp), str(work / f"{size}-{k:03d}"), ["png"], brand=brand or spec.get("brand"), keep=True)
+    except mp.PlanError as ex:
+        raise AnimateError(f"frame {k + 1} ({sp.name}) cannot be built: {str(ex).splitlines()[0]}") from None
+    obj = res.pop("_objects")
+    tokens = obj["plan"].tokens
+    info = {"tokens": tokens, "findings": [{**f, "message": f"[frame {k + 1} {size}] {f['message']}"} for f in res["findings"]
+                                           if f["severity"] in ("BLOCK", "WARN")]}
+    win = (res.get("report") or {}).get("map_window") or {}
+    if win.get("rect_mm"):
+        ppm = float(cfg["dpi"]) / 25.4                 # 5.7.0: the map frame in the frame's pixels, for the progress bar inside it
+        info["frame_out"] = {"rect_px": [v * ppm for v in win["rect_mm"]], "report": res.get("report") or {}, "ppm": ppm}
+    import terms_register as tr
+    info["records"] = obj.get("records") or []
+    info["shown"] = tr.svg_shown(obj["rendered"].svg)
+    png = Path(next(f for f in res["files"] if f.endswith(".png"))).read_bytes()
+    return fit_frame(png, *cfg["px"], _rgb(tokens["background"])), info
+
+
+def _render_frames(specs: list[Path], size: str, work: Path, brand: str | None, collect: dict | None,
+                   frame_out: dict | None = None) -> tuple[list, dict, list[dict]]:
+    frames, findings, tokens = [], [], None
     for k, sp in enumerate(specs):
-        spec = gc.load_mapspec(sp)
-        spec["template"] = cfg["template"]
-        spec["export"] = {**(spec.get("export") or {}), "dpi": cfg["dpi"]}
-        spec.pop("brand", None) if brand else None
-        tmp = work / f"{size}-{k:03d}.yaml"
-        import yaml
-        tmp.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), encoding="utf-8")
-        try:
-            res = bm.build(str(tmp), str(work / f"{size}-{k:03d}"), ["png"], brand=brand or spec.get("brand"), keep=True)
-        except mp.PlanError as ex:
-            raise AnimateError(f"frame {k + 1} ({sp.name}) cannot be built: {str(ex).splitlines()[0]}") from None
-        obj = res.pop("_objects")
-        tokens = obj["plan"].tokens
-        win = (res.get("report") or {}).get("map_window") or {}
-        if frame_out is not None and win.get("rect_mm") and "rect_px" not in frame_out:
-            ppm = float(cfg["dpi"]) / 25.4                 # 5.7.0: the map frame in the frame's pixels, for the progress bar inside it
-            frame_out["rect_px"] = [v * ppm for v in win["rect_mm"]]
-            frame_out["report"] = res.get("report") or {}  # 5.8.0: the elements' boxes, which a timeline chart keeps clear of
-            frame_out["ppm"] = ppm
+        im, info = _render_one(k, sp, size, work, brand)
+        tokens = info["tokens"]
+        if frame_out is not None and info.get("frame_out") and "rect_px" not in frame_out:
+            frame_out.update(info["frame_out"])            # 5.8.0: the elements' boxes, which a timeline chart keeps clear of
         if collect is not None:
-            import terms_register as tr
-            collect.setdefault("records", []).extend(obj.get("records") or [])
-            collect.setdefault("shown", []).append(tr.svg_shown(obj["rendered"].svg))
-        findings += [{**f, "message": f"[frame {k + 1} {size}] {f['message']}"} for f in res["findings"] if f["severity"] in ("BLOCK", "WARN")]
-        png = Path(next(f for f in res["files"] if f.endswith(".png"))).read_bytes()
-        frames.append(fit_frame(png, *cfg["px"], _rgb(tokens["background"])))
+            collect.setdefault("records", []).extend(info["records"])
+            collect.setdefault("shown", []).append(info["shown"])
+        findings += info["findings"]
+        frames.append(im)
     return frames, tokens, findings
+
+
+# ---------------------------------------------------------------------------------------------------------------- kept frames (5.9.0)
+FRAMES_DIR = ".frames"
+_CODE_ID: str | None = None
+
+
+def code_id() -> str:
+    """What drew a frame: the plugin's version and a digest of its scripts and lints, so a frame drawn by another plugin is drawn again."""
+    global _CODE_ID
+    if _CODE_ID is None:
+        import hashlib
+        h = hashlib.blake2b(digest_size=12)
+        root = HERE.parent
+        for d in (HERE, root / "lints"):
+            for f in sorted(d.glob("*.py")):
+                h.update(f.name.encode())
+                h.update(f.read_bytes())
+        for f in (root / "VERSION", root / "BUILD-MANIFEST.json", root.parent / "VERSION"):
+            if f.is_file():
+                h.update(f.read_bytes())
+        _CODE_ID = h.hexdigest()
+    return _CODE_ID
+
+
+def _files_named(obj, bases: list[Path], out: dict) -> dict:
+    """Every file a MapSpec names (absolute, or beside the spec or the working folder), with its size and time: a frame whose data file
+    changed is drawn again even when the spec's text did not."""
+    if isinstance(obj, dict):
+        for v in obj.values():
+            _files_named(v, bases, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _files_named(v, bases, out)
+    elif isinstance(obj, str) and 0 < len(obj) < 400 and ("/" in obj or "\\" in obj or "." in obj) and "\n" not in obj:
+        p = Path(obj)
+        for c in ([p] if p.is_absolute() else [b / p for b in bases]):
+            try:
+                if c.is_file():
+                    st = c.stat()
+                    out[str(c.resolve())] = [st.st_size, st.st_mtime_ns]
+                    break
+            except OSError:
+                continue
+    return out
+
+
+def frame_key(sp: Path, size: str, brand: str | None) -> str:
+    """The key a kept frame is filed under: the frame's MapSpec as drawn, the size, the brand, the files it names and the plugin."""
+    import hashlib
+    spec = _frame_spec(sp, size, brand)
+    files = _files_named(spec, [sp.parent, Path.cwd()], {})
+    blob = json.dumps({"spec": spec, "size": size, "brand": brand, "files": files, "code": code_id()}, sort_keys=True, default=str)
+    return hashlib.blake2b(blob.encode("utf-8"), digest_size=16).hexdigest()
+
+
+def _kept(fdir: Path, k: int, key: str):
+    """(image, info) of frame k when it is kept under the same key, else None."""
+    side, png = fdir / f"{k:03d}.json", fdir / f"{k:03d}.png"
+    try:
+        info = json.loads(side.read_text(encoding="utf-8"))
+        if info.get("key") != key or not png.is_file():
+            return None
+        from PIL import Image
+        with Image.open(png) as im:
+            return im.convert("RGB"), info
+    except (OSError, ValueError):
+        return None
+
+
+def _keep(fdir: Path, k: int, key: str, im, info: dict, attention=None) -> dict:
+    """File frame k: the picture first, then its sidecar (written last, so a frame cut off half way is drawn again)."""
+    fdir.mkdir(parents=True, exist_ok=True)
+    tmp = fdir / f"{k:03d}.png.part"
+    im.save(tmp, format="PNG", compress_level=1)
+    tmp.replace(fdir / f"{k:03d}.png")
+    text = json.dumps({**info, "key": key, "frame": k, "attention": attention}, default=str)
+    side = fdir / f"{k:03d}.json"
+    side.with_suffix(".part").write_text(text, encoding="utf-8")
+    side.with_suffix(".part").replace(side)
+    return json.loads(text)                          # what a later run reads back, so a drawn frame and a kept one give the same report
+
+
+def _frames_job(job: dict) -> list[int]:
+    """A worker's share of the frames (5.9.0, --jobs): one frame session for its frames, seeded with the first frame's attention decision so
+    every frame is drawn as a single run would draw it. Each frame is filed as soon as it is drawn."""
+    import map_plan as mp
+    done = []
+    fdir = Path(job["fdir"])
+    with mp.frame_session() as sess:
+        sess["frames"] = True
+        if job.get("attention") is not None:
+            sess["attention"] = job["attention"]
+        with tempfile.TemporaryDirectory() as td:
+            for k in job["frames"]:
+                im, info = _render_one(k, Path(job["specs"][k]), job["size"], Path(td), job["brand"])
+                _keep(fdir, k, job["keys"][k], im, info, job.get("attention"))
+                done.append(k)
+    return done
+
+
+def auto_jobs(n: int) -> int:
+    """Worker processes for n frames to draw: one per core but one, at most four (each holds a map build), one for fewer than four frames."""
+    import os
+    return 1 if n < 4 else max(1, min(4, (os.cpu_count() or 2) - 1, n // 2))
+
+
+def kept_frames(specs: list[Path], size: str, fdir: Path, *, brand: str | None = None, jobs=1, fresh: bool = False,
+                progress=None) -> tuple[list, list[dict], dict]:
+    """5.9.0: every period's frame at one size, kept in `fdir` (NNN.png and its NNN.json). A frame kept under the same key (its MapSpec as
+    drawn, the size, the brand, the files it names, the plugin) is read back, not drawn; an animation cut off part way picks up where it
+    stopped. `jobs` > 1 (or "auto") draws the frames left after the first in worker processes. -> (frames, infos, counts)."""
+    import map_plan as mp
+    fdir.mkdir(parents=True, exist_ok=True)
+    keys = [frame_key(sp, size, brand) for sp in specs]
+    have: dict[int, tuple] = {}
+    if not fresh:
+        for k, key in enumerate(keys):
+            got = _kept(fdir, k, key)
+            if got:
+                have[k] = got
+    todo = [k for k in range(len(specs)) if k not in have]
+    n_jobs = auto_jobs(len(todo)) if jobs in ("auto", None, 0) else max(1, int(jobs))
+    counts = {"folder": str(fdir), "reused": len(have), "drawn": len(todo), "jobs": 1}
+    say = progress or (lambda _m: None)
+    attention = (have[0][1].get("attention") if 0 in have else None)
+    with mp.frame_session() as sess:
+        sess["frames"] = True
+        if attention is not None:
+            sess["attention"] = attention
+        with tempfile.TemporaryDirectory() as td:
+            if todo and (0 not in have or n_jobs == 1):
+                serial = todo if n_jobs == 1 else todo[:1]       # the first frame decides the attention boost for every frame
+                for k in serial:
+                    im, info = _render_one(k, specs[k], size, Path(td), brand)
+                    attention = sess.get("attention") if k == 0 or attention is None else attention
+                    have[k] = (im, _keep(fdir, k, keys[k], im, info, attention))
+                    say(f"{size}: frame {k + 1} of {len(specs)} drawn")
+                todo = [k for k in todo if k not in have]
+    if todo:
+        n_jobs = min(n_jobs, len(todo))
+        counts["jobs"] = n_jobs
+        import multiprocessing as mpr
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        base = {"specs": [str(s) for s in specs], "size": size, "brand": brand, "keys": keys, "fdir": str(fdir), "attention": attention}
+        broke = None
+        try:
+            with ProcessPoolExecutor(max_workers=n_jobs, mp_context=mpr.get_context("spawn")) as ex:
+                futs = [ex.submit(_frames_job, {**base, "frames": todo[i::n_jobs]}) for i in range(n_jobs)]
+                for fu in as_completed(futs):
+                    fu.result()
+                    say(f"{size}: a worker finished")
+        except AnimateError:
+            raise
+        except Exception as e:  # noqa: BLE001 - workers that could not start or went down: what they filed stays, the rest is drawn here
+            broke = f"{type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}"
+        left = []
+        for k in todo:
+            got = _kept(fdir, k, keys[k])
+            if got:
+                have[k] = got
+            else:
+                left.append(k)
+        if left:
+            counts["note"] = (f"the frame workers stopped ({broke or 'a frame was not filed'}); {len(left)} frame(s) were drawn in this process")
+            say(f"{size}: {counts['note']}")
+            with mp.frame_session() as sess:
+                sess["frames"] = True
+                if attention is not None:
+                    sess["attention"] = attention
+                with tempfile.TemporaryDirectory() as td:
+                    for k in left:
+                        im, info = _render_one(k, specs[k], size, Path(td), brand)
+                        have[k] = (im, _keep(fdir, k, keys[k], im, info, attention))
+    frames = [have[k][0] for k in range(len(specs))]
+    infos = [have[k][1] for k in range(len(specs))]
+    for f in fdir.glob("*.png"):                       # frames past the end of a shorter run are not kept
+        if f.stem.isdigit() and int(f.stem) >= len(specs):
+            f.unlink(missing_ok=True)
+            (fdir / f"{f.stem}.json").unlink(missing_ok=True)
+    return frames, infos, counts
 
 
 def write_gif(frames, path: Path, hold: float, last_hold: float, comment: str = "") -> dict:
@@ -279,9 +479,11 @@ def paint_chart_frames(frames, chart: dict, cur: list[int], tokens: dict, fr: di
 
 
 def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "mp4"), hold: float = 1.0, last_hold: float = 3.0, brand: str | None = None,
-            stem: str | None = None, timeline=None) -> dict:
+            stem: str | None = None, timeline=None, jobs=1, fresh: bool = False, frames_dir=None, progress=None) -> dict:
     """Frames for every period at every size, then the GIF and the MP4 per size, each read back by the output lint. 5.8.0: `timeline` (a
-    path, a YAML string or a dict) with a chart: the chart drawn on every frame."""
+    path, a YAML string or a dict) with a chart: the chart drawn on every frame. 5.9.0: the frames are kept in `frames_dir` (default
+    OUT/.frames/<size>) and read back on the next run when nothing they are drawn from changed; `jobs` draws them in parallel, `fresh`
+    draws every frame again."""
     import map_brand
     import output_lint
     atlas_dir, out_dir = Path(atlas_dir), Path(out_dir)
@@ -298,41 +500,49 @@ def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "m
     if chart:
         rep["chart"] = {"rows": len(chart["rows"]), "baseline": chart.get("baseline"), "reveal": chart.get("reveal")}
     seen: dict = {}
-    with tempfile.TemporaryDirectory() as td:
-        for size in sizes:
-            fr_ = {}
-            frames, tokens, fs = render_frames(specs, size, Path(td) / size, brand=brand, collect=seen, frame_out=fr_)
-            bar_rect = fr_.get("rect_px")
-            rep["findings"] += fs
-            if chart:
-                frames, cfs = paint_chart_frames(frames, chart, chart_cur, tokens, fr_)
-                rep["findings"] += [{**f_, "message": f"[{size}] {f_['message']}"} for f_ in cfs]
-            raw = [f.copy() for f in frames]
-            frames = [progress_bar(f, i, len(frames), tokens, BAR_PX[size], rect=bar_rect) for i, f in enumerate(frames)]
-            slug_ = brand or gc.load_mapspec(specs[0]).get("brand")
-            props = map_brand.props_for(slug_, gc.build_manifest(), "png")["tEXt"] if slug_ else {}
-            comment = "; ".join(f"{k}: {v}" for k, v in props.items() if k in ("Author", "Accreditation", "BrandPack", "Software"))
-            w, h = SIZES[size]["px"]
-            if "gif" in formats:
-                p = out_dir / f"{stem}_{size}_{w}x{h}.gif"
-                g = write_gif(frames, p, hold, last_hold, comment)
-                rep["files"].append(g)
-                rep["findings"] += output_lint.check_gif(str(p), (w, h), len(frames), hold, last_hold)
-            if "mp4" in formats:
-                p = out_dir / f"{stem}_{size}_{w}x{h}.mp4"
-                try:
-                    tracks = [progress_bar(f.copy(), i, len(raw), tokens, BAR_PX[size], fill=False, rect=bar_rect) for i, f in enumerate(raw)]
-                    m = write_mp4(tracks, p, hold, last_hold, {"title": str(meta.get("title") or stem), "comment": comment,
-                                                                "copyright": props.get("Author", ""), "artist": props.get("Author", "")},
-                                  bar={"px": BAR_PX[size], "ink": tokens["neutral_ramp"][-1], "rect": bar_rect})
-                    rep["files"].append(m)
-                    rep["findings"] += output_lint.check_mp4(str(p), (w, h), hold * (len(frames) - 1) + last_hold)
-                except AnimateError as ex:
-                    if FFMPEG_MISSING in str(ex):
-                        rep["notes"].append(str(ex))
-                        rep["findings"].append({"id": "MAP-OUT-013", "severity": "WARN", "message": str(ex), "detail": None})
-                    else:
-                        raise
+    fbase = Path(frames_dir) if frames_dir else out_dir / FRAMES_DIR
+    rep["frames"] = {}
+    for size in sizes:
+        frames, infos, counts = kept_frames(specs, size, fbase / size, brand=brand, jobs=jobs, fresh=fresh, progress=progress)
+        rep["frames"][size] = counts
+        if counts.get("note"):
+            rep["notes"].append(f"[{size}] {counts['note']}")
+        tokens = infos[-1]["tokens"]
+        fr_ = next((i["frame_out"] for i in infos if i.get("frame_out")), {})
+        bar_rect = fr_.get("rect_px")
+        for i in infos:
+            seen.setdefault("records", []).extend(i.get("records") or [])
+            seen.setdefault("shown", []).append(i.get("shown") or "")
+            rep["findings"] += i.get("findings") or []
+        if chart:
+            frames, cfs = paint_chart_frames(frames, chart, chart_cur, tokens, fr_)
+            rep["findings"] += [{**f_, "message": f"[{size}] {f_['message']}"} for f_ in cfs]
+        raw = [f.copy() for f in frames]
+        frames = [progress_bar(f, i, len(frames), tokens, BAR_PX[size], rect=bar_rect) for i, f in enumerate(frames)]
+        slug_ = brand or gc.load_mapspec(specs[0]).get("brand")
+        props = map_brand.props_for(slug_, gc.build_manifest(), "png")["tEXt"] if slug_ else {}
+        comment = "; ".join(f"{k}: {v}" for k, v in props.items() if k in ("Author", "Accreditation", "BrandPack", "Software"))
+        w, h = SIZES[size]["px"]
+        if "gif" in formats:
+            p = out_dir / f"{stem}_{size}_{w}x{h}.gif"
+            g = write_gif(frames, p, hold, last_hold, comment)
+            rep["files"].append(g)
+            rep["findings"] += output_lint.check_gif(str(p), (w, h), len(frames), hold, last_hold)
+        if "mp4" in formats:
+            p = out_dir / f"{stem}_{size}_{w}x{h}.mp4"
+            try:
+                tracks = [progress_bar(f.copy(), i, len(raw), tokens, BAR_PX[size], fill=False, rect=bar_rect) for i, f in enumerate(raw)]
+                m = write_mp4(tracks, p, hold, last_hold, {"title": str(meta.get("title") or stem), "comment": comment,
+                                                            "copyright": props.get("Author", ""), "artist": props.get("Author", "")},
+                              bar={"px": BAR_PX[size], "ink": tokens["neutral_ramp"][-1], "rect": bar_rect})
+                rep["files"].append(m)
+                rep["findings"] += output_lint.check_mp4(str(p), (w, h), hold * (len(frames) - 1) + last_hold)
+            except AnimateError as ex:
+                if FFMPEG_MISSING in str(ex):
+                    rep["notes"].append(str(ex))
+                    rep["findings"].append({"id": "MAP-OUT-013", "severity": "WARN", "message": str(ex), "detail": None})
+                else:
+                    raise
     if rep["files"] and seen.get("records"):            # 1.3.0 (R1-TERMS): the video's credits are the frames' own source notes
         import terms_register as tr
         tdoc, tfs, tfiles = tr.for_deliverable(out_dir, seen["records"], deliverable="video", stem=stem, outputs={"video": " ".join(seen["shown"])},
@@ -353,10 +563,13 @@ def main(argv=None) -> int:
     ap.add_argument("--last-hold", type=float, default=3.0)
     ap.add_argument("--brand")
     ap.add_argument("--timeline", help="5.8.0: a timeline with a chart: block, drawn on every period's frame")
+    ap.add_argument("--jobs", default="auto", help="5.9.0: frames drawn at once (worker processes), or auto (one per core but one, at most 4)")
+    ap.add_argument("--fresh", action="store_true", help="5.9.0: draw every frame again, not the kept ones")
     a = ap.parse_args(argv)
     try:
         r = animate(a.atlas, a.out, sizes=[s.strip() for s in a.sizes.split(",") if s.strip()], formats=[s.strip() for s in a.formats.split(",") if s.strip()],
-                    hold=a.hold, last_hold=a.last_hold, brand=a.brand, timeline=a.timeline)
+                    hold=a.hold, last_hold=a.last_hold, brand=a.brand, timeline=a.timeline, jobs=a.jobs, fresh=a.fresh,
+                    progress=lambda m: print(m, file=sys.stderr, flush=True))
     except AnimateError as ex:
         print(f"animate: {ex}", file=sys.stderr)
         return gc.EXIT_USAGE

@@ -777,6 +777,8 @@ def main(argv=None) -> int:
     ap.add_argument("--hold", type=float, default=1.0, help="--animate: seconds each period stays on screen")
     ap.add_argument("--last-hold", type=float, default=3.0, help="--animate: seconds the last period stays")
     ap.add_argument("--brand")
+    ap.add_argument("--jobs", default="auto", help="5.9.0, --animate: frames drawn at once (worker processes), or auto")
+    ap.add_argument("--fresh", action="store_true", help="5.9.0, --animate: draw every frame again, not the ones kept in OUT/.frames")
     ap.add_argument("--timeline", help="5.8.0, --animate: a timeline with a chart: block, drawn on every period's frame (story and counters stay with --story)")
     ap.add_argument("--flythrough", metavar="PAGE.html", help="1.6.0: a video flown over a 3D web page (flythrough.py); run it through map-run")
     ap.add_argument("--timelapse", metavar="PAGE.html", help="1.14.0: a video of a MapLibre page's time slider played from its own view (flythrough --slider)")
@@ -825,7 +827,7 @@ def main(argv=None) -> int:
         try:
             r = an.animate(a.animate, a.out, sizes=[s.strip() for s in a.sizes.split(",") if s.strip()],
                            formats=[s.strip() for s in (a.formats or "gif,mp4").split(",") if s.strip()], hold=a.hold, last_hold=a.last_hold, brand=a.brand,
-                           timeline=a.timeline)
+                           timeline=a.timeline, jobs=a.jobs, fresh=a.fresh, progress=lambda m: print(m, file=sys.stderr, flush=True))
         except an.AnimateError as e:
             print(f"map_export: {e}", file=sys.stderr)
             return gc.EXIT_USAGE

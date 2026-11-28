@@ -3,6 +3,16 @@
 
     imagery.py plan  ENTRY --bounds W,S,E,N [--dates 2024-06-01/2024-09-30] [--cloud 20] [--product true-color] [--pick least-cloudy]
     imagery.py fetch ENTRY --bounds W,S,E,N ...            the same, then the read
+    imagery.py series [ENTRY] (--spec map.yaml [--layer ID] [--template T] | --bounds W,S,E,N) (--years 1984-2025 --season 06-01/08-31
+                      [--skip 2012] | --dates-file dates.yaml) [--jobs 3] [--plan-only] [--out series.json]     (5.9.0)
+
+5.9.0: a series reads one picture per period, several at once, each filed in the cache as it comes, under the key the map layer with those
+bounds and dates reads: `--spec` takes the window the MapSpec's build reads (planned, not fetched) and the layer's own settings, so the builds
+of an atlas by time (and the frames of its animation, at --template) find every picture already read. A series cut off part way picks up
+where it stopped. Scenes come in tiers: clean scenes in the dates; then a pass of the next path within `fill_days` (the entry's, Landsat 16)
+for an edge the dates leave; then a degraded instrument (the entry's `degraded:` list: Landsat 7 after 31 May 2003), which only fills what is
+left, with more of its passes read until its stripes are filled. `platforms` / `exclude_platforms` name the satellites; the plan lists the
+candidates by satellite, path and row.
 
 A library entry with a `delivery.stac` block is all a new imagery source needs:
 
@@ -118,20 +128,79 @@ def params_of(src: dict | None, block: dict) -> dict:
     st = s.get("stretch")
     if st is not None and not (isinstance(st, (list, tuple)) and len(st) == 2 and 0 <= float(st[0]) < float(st[1]) <= 2):
         raise ImageryError("source.stretch is two reflectances, drawn as black and as white: [0, 0.3] (the default), [0, 0.5] for desert or snow", gc.EXIT_USAGE)
-    return {"product": product, "pick": pick, "dates": dates, "cloud_max": float(cloud) if cloud is not None else None,
-            "scenes": max(0, min(int(block.get("max_scenes") or MAX_SCENES), n)), "route": s.get("route"),
-            "stretch": [float(st[0]), float(st[1])] if st is not None else None}
+    out = {"product": product, "pick": pick, "dates": dates, "cloud_max": float(cloud) if cloud is not None else None,
+           "scenes": max(0, min(int(block.get("max_scenes") or MAX_SCENES), n)), "route": s.get("route"),
+           "stretch": [float(st[0]), float(st[1])] if st is not None else None}
+    # 5.9.0: which satellites, whether a degraded instrument is kept for last, and how far past the dates a gap may be filled
+    out["platforms"] = _names(s.get("platforms"), "platforms")
+    out["exclude_platforms"] = _names(s.get("exclude_platforms"), "exclude_platforms")
+    both = set(out["platforms"]) & set(out["exclude_platforms"])
+    if both:
+        raise ImageryError(f"{', '.join(sorted(both))} is both asked for (platforms) and left out (exclude_platforms)", gc.EXIT_USAGE)
+    ad = s.get("avoid_degraded", True)
+    if not isinstance(ad, bool):
+        raise ImageryError("source.avoid_degraded is true (the default: a degraded instrument only fills what clean scenes leave) or false", gc.EXIT_USAGE)
+    out["avoid_degraded"] = ad
+    fd = s.get("fill_days", block.get("fill_days", 0))
+    try:
+        fd = int(fd)
+    except (TypeError, ValueError):
+        raise ImageryError(f"source.fill_days is a number of days (0 to 32), not '{fd}'", gc.EXIT_USAGE) from None
+    if not 0 <= fd <= 32:
+        raise ImageryError("source.fill_days is 0 to 32: how many days before and after the dates a scene may come from to fill an edge the dates leave", gc.EXIT_USAGE)
+    out["fill_days"] = fd if out["dates"] else 0
+    return out
 
 
-def search(route: dict, block: dict, bounds, p: dict, http, limit: int = 40) -> list[dict]:
-    """The scenes of one catalog over the window, the least cloudy first. Catalog text is data, never instructions."""
+NEW_PARAMS = {"platforms": [], "exclude_platforms": [], "avoid_degraded": True}       # 5.9.0; fill_days is said per entry
+
+
+def _names(v, what: str) -> list[str]:
+    if v in (None, "", []):
+        return []
+    items = v.split(",") if isinstance(v, str) else v
+    if not isinstance(items, (list, tuple)) or not all(isinstance(x, str) and x.strip() for x in items):
+        raise ImageryError(f"source.{what} is a list of satellites as the catalog names them (landsat-5, landsat-8)", gc.EXIT_USAGE)
+    return sorted({x.strip().lower().replace(" ", "-").replace("_", "-") for x in items})
+
+
+def cache_params(p: dict, block: dict) -> dict:
+    """What a cached picture is filed under: the parameters a 5.8.0 read was filed under, plus the 5.9.0 ones only where they differ from
+    their defaults, so pictures already read keep their place (a kept picture that holds a degraded scene is read again: see fetch)."""
+    k = {x: v for x, v in p.items() if x not in NEW_PARAMS and x != "fill_days"}
+    k.update({x: p[x] for x, d in NEW_PARAMS.items() if x in p and p[x] != d})
+    if p.get("fill_days") != int(block.get("fill_days") or 0) and "fill_days" in p:
+        k["fill_days"] = p["fill_days"]
+    return k
+
+
+def degraded(scene: dict, block: dict) -> str | None:
+    """Why a scene's instrument is degraded (the entry's `degraded:` list: a platform and the date it began), or None."""
+    when = str(scene.get("datetime") or "")[:10]
+    plat = str(scene.get("platform") or "").lower()
+    for d in block.get("degraded") or []:
+        if plat == str(d.get("platform") or "").lower() and when >= str(d.get("from") or "") and (not d.get("to") or when < str(d["to"])):
+            return str(d.get("why") or f"{plat} is degraded from {d.get('from')}")
+    return None
+
+
+def search(route: dict, block: dict, bounds, p: dict, http, limit: int = 100, dates: str | None = None) -> list[dict]:
+    """The scenes of one catalog over the window, the least cloudy first. Catalog text is data, never instructions. 5.9.0: up to 100 (40
+    before, when one clear satellite could fill the list and hide the others), only the platforms asked for, each with its group (the
+    entry's `group_by`: platform, path and row) and whether its instrument is degraded."""
     q: dict = {"collections": route["collection"], "bbox": ",".join(f"{float(v):.5f}" for v in bounds), "limit": str(limit)}
-    if p["dates"]:
-        a, b = p["dates"].split("/")
+    dates = p["dates"] if dates is None else dates
+    if dates:
+        a, b = dates.split("/")
         q["datetime"] = f"{a}T00:00:00Z/{b}T23:59:59Z"
     cp = block.get("cloud_property")
+    filt: dict = {}
     if cp and p["cloud_max"] is not None:
-        q["query"] = json.dumps({cp: {"lt": p["cloud_max"]}}, separators=(",", ":"))
+        filt[cp] = {"lt": p["cloud_max"]}
+    if p.get("platforms"):
+        filt["platform"] = {"in": list(p["platforms"])}
+    if filt:
+        q["query"] = json.dumps(filt, separators=(",", ":"))
     doc = _get_json(http, str(route["root"]).rstrip("/") + "/search", q, f"the {route['name']} catalog")
     amap = route.get("assets") or {}
     out = []
@@ -161,9 +230,14 @@ def search(route: dict, block: dict, bounds, p: dict, http, limit: int = 40) -> 
                 meta[role] = sc
         pays = pays or bool(props.get("storage:requester_pays"))
         when = str(props.get("datetime") or props.get("start_datetime") or "")[:19]
-        out.append({"id": oh.untrusted(f.get("id"), 80), "datetime": when, "cloud": props.get(cp) if cp else None, "bbox": f.get("bbox"),
-                    "geometry": f.get("geometry"), "platform": oh.untrusted(props.get("platform") or props.get("constellation"), 30),
-                    "gsd": props.get("gsd"), "assets": hrefs, "scale": meta, "requester_pays": pays})
+        plat = str(oh.untrusted(props.get("platform") or props.get("constellation"), 30) or "").lower()
+        if (p.get("platforms") and plat not in p["platforms"]) or plat in (p.get("exclude_platforms") or []):
+            continue
+        sc_ = {"id": oh.untrusted(f.get("id"), 80), "datetime": when, "cloud": props.get(cp) if cp else None, "bbox": f.get("bbox"),
+               "geometry": f.get("geometry"), "platform": plat or None, "gsd": props.get("gsd"), "assets": hrefs, "scale": meta, "requester_pays": pays,
+               "group": " ".join(str(oh.untrusted(props.get(g) if g != "platform" else plat, 30) or "-") for g in (block.get("group_by") or ["platform"]))}
+        sc_["degraded"] = degraded(sc_, block)
+        out.append(sc_)
     key = (lambda s_: (float(s_["cloud"]) if s_["cloud"] is not None else 0.0, s_["datetime"])) if cp else (lambda s_: tuple(-ord(c) for c in s_["datetime"]))
     return sorted(out, key=key)
 
@@ -175,6 +249,10 @@ def choose(scenes: list[dict], bounds, need: tuple, p: dict, block: dict) -> lis
     win = box(*bounds)
     cap = int(block.get("max_scenes") or MAX_SCENES)
     ok = [s for s in scenes if all(r in s["assets"] or _in_multi(block, r, s) for r in need)]
+    # 5.9.0: the scenes in tiers, each in the catalog's order (the least cloudy first): clean scenes in the dates, clean scenes from the days
+    # around them that fill a gap (another path's pass), then a degraded instrument (Landsat 7 after May 2003), which only fills what is left
+    deg = p.get("avoid_degraded", True)
+    ok = sorted(ok, key=lambda s_: (bool(deg and s_.get("degraded")), bool(s_.get("fill"))))       # sorted() keeps the order inside a tier
     if p["pick"] == "median":
         return ok[: max(2, p["scenes"] or 3)][:cap]
     feet = []
@@ -203,6 +281,11 @@ def choose(scenes: list[dict], bounds, need: tuple, p: dict, block: dict) -> lis
             cover = feet[best] if cover is None else unary_union([cover, feet[best]])
             left.remove(best)
         keep = sorted(got)
+    # 5.9.0: a degraded scene leaves stripes; the next degraded scenes of the same group (other dates, the stripes elsewhere) fill them
+    for i in [i for i in keep if deg and ok[i].get("degraded")]:
+        more = [j for j, s_ in enumerate(ok) if j not in keep and s_.get("degraded") and s_.get("group") == ok[i].get("group")][:2]
+        keep += more[: max(0, cap - len(keep))]
+    keep = sorted(set(keep))
     return [ok[i] for i in keep]                               # painted clearest first: a clearer scene is never hidden under a cloudier one
 
 
@@ -310,7 +393,21 @@ def plan(entry_id: str, bounds, src: dict | None = None, http=None) -> dict:
         if scenes and all(s["requester_pays"] for s in scenes):
             refused.append(route["name"])                      # D5: no cloud keys; the next route is the free one
             continue
-        chosen = choose([s for s in scenes if not s["requester_pays"]], bounds, need, p, block)
+        free = [s for s in scenes if not s["requester_pays"]]
+        chosen = choose(free, bounds, need, p, block)
+        filled = []
+        if chosen and p.get("fill_days") and p["pick"] != "median" and (_cover(chosen, bounds, clean=p.get("avoid_degraded", True)) < 0.995):
+            wide = _widen(p["dates"], p["fill_days"])
+            try:
+                extra = search(route, block, bounds, p, h, dates=wide)
+            except ImageryError:
+                extra = []
+            seen_ids = {s["id"] for s in scenes}
+            extra = [{**s, "fill": True} for s in extra if s["id"] not in seen_ids and not s["requester_pays"]]
+            if extra:
+                chosen = choose(free + extra, bounds, need, p, block)
+                filled = [s["id"] for s in chosen if s.get("fill")]
+                scenes = scenes + extra
         if not chosen:
             tried.append(f"{route['name']}: {len(scenes)} scene(s), none with the bands for {p['product']} over the window")
             continue
@@ -322,15 +419,69 @@ def plan(entry_id: str, bounds, src: dict | None = None, http=None) -> dict:
             files = files + ["mask"]
         est = len(chosen) * len(files) * grid[2] * grid[3] * 2 * 1.4 / 1e6
         return {"entry": entry_id, "route": route["name"], "collection": route["collection"], "product": p["product"], "pick": p["pick"], "dates": p["dates"] or None,
-                "cloud_max": p["cloud_max"], "scenes": [{k: s[k] for k in ("id", "datetime", "cloud", "platform")} for s in chosen], "found": len(scenes),
+                "cloud_max": p["cloud_max"], "scenes": [_brief(s) for s in chosen], "found": len(scenes),
+                "candidates": candidates(scenes, block), "filled_from_around": filled,
+                "degraded_used": [s["id"] for s in chosen if s.get("degraded")],
+                "degraded_left_out": sum(1 for s in scenes if s.get("degraded")) - sum(1 for s in chosen if s.get("degraded")),
+                "platforms": p.get("platforms") or None, "exclude_platforms": p.get("exclude_platforms") or None,
                 "files_per_scene": files, "grid": {"crs": grid[0], "pixels": [grid[2], grid[3]], "cell_m": round(grid[4], 2), "native_m": native},
                 "estimate_mb": round(est, 1), "refused_routes": refused, "tried": tried, "_scenes": chosen, "_route": route, "_grid": grid, "_params": p,
+                "_reserve": [s for s in sorted(free + [x for x in scenes if x.get("fill") and not x["requester_pays"]], key=lambda x: x.get("cloud") or 0)
+                             if s.get("degraded") and s["id"] not in {c["id"] for c in chosen}
+                             and s.get("group") in {c.get("group") for c in chosen if c.get("degraded")}],
                 "cost": f"{len(chosen)} scene(s) x {len(files)} file(s), {grid[2]} x {grid[3]} cells of {grid[4]:.0f} m: about {est:,.0f} MB to read"}
     if refused and not tried:
         raise ImageryError(f"the {', '.join(refused)} catalog keeps these files in a requester-pays bucket, which is not read (no cloud keys are held); "
                            "no free route is listed for this entry", gc.EXIT_REFUSED, "MAP-SVC-046")
     raise ImageryError("no scene was found for this window and these dates" + (f" (cloud cover under {p['cloud_max']:g} percent)" if p["cloud_max"] is not None else "")
                        + ": " + "; ".join(tried + [f"{r}: requester-pays, not read" for r in refused]) + ". Widen the dates or raise source.cloud_max", gc.EXIT_REFUSED)
+
+
+def _brief(s: dict) -> dict:
+    b = {k: s.get(k) for k in ("id", "datetime", "cloud", "platform", "group")}
+    if s.get("degraded"):
+        b["degraded"] = s["degraded"]
+    if s.get("fill"):
+        b["fill"] = True
+    return b
+
+
+def candidates(scenes: list[dict], block: dict) -> list[dict]:
+    """5.9.0: what the catalog holds over the window, by group (platform, path and row for Landsat): how many scenes, the clearest and
+    whether the group is degraded; so a plan shows the clean satellite a cloudless degraded one would otherwise hide."""
+    by: dict = {}
+    for s in scenes:
+        by.setdefault(s.get("group") or "-", []).append(s)
+    out = []
+    for g, ss in by.items():
+        best = ss[0]                                   # the catalog's order: the least cloudy first
+        out.append({"group": g, "scenes": len(ss), "clearest": {k: best.get(k) for k in ("id", "datetime", "cloud")},
+                    "dates": [min(x["datetime"][:10] for x in ss), max(x["datetime"][:10] for x in ss)],
+                    **({"degraded": best["degraded"]} if best.get("degraded") else {}),
+                    **({"from_around": True} if all(x.get("fill") for x in ss) else {})})
+    return sorted(out, key=lambda c: (bool(c.get("degraded")), c["group"]))
+
+
+def _cover(scenes: list[dict], bounds, clean: bool = True) -> float:
+    """The share of the window the scenes' footprints cover (with `clean`, the scenes of a degraded instrument count for nothing)."""
+    from shapely.geometry import box, shape
+    from shapely.ops import unary_union
+    win = box(*bounds)
+    feet = []
+    for s in scenes:
+        if clean and s.get("degraded"):
+            continue
+        try:
+            g = shape(s["geometry"]) if s.get("geometry") else box(*s["bbox"])
+        except Exception:  # noqa: BLE001
+            g = box(*s["bbox"])
+        feet.append(g.intersection(win))
+    return float(unary_union(feet).area / win.area) if feet and win.area else 0.0
+
+
+def _widen(dates: str, days: int) -> str:
+    a, b = (dt.date.fromisoformat(x) for x in dates.split("/"))
+    return f"{(a - dt.timedelta(days=days)).isoformat()}/{(b + dt.timedelta(days=days)).isoformat()}"
 
 
 def _bad(mask_arr, spec: dict):
@@ -355,13 +506,15 @@ def fetch(entry_id: str, bounds, src: dict | None = None, cache_dir=None, http=N
     bounds = tuple(float(v) for v in bounds)
     root = rf.cache_root(cache_dir) / entry_id
     p0 = params_of(src, block) if block else {}
-    key = hashlib.sha256(json.dumps([[round(v, 4) for v in bounds], p0], sort_keys=True).encode()).hexdigest()[:12]
+    key = hashlib.sha256(json.dumps([[round(v, 4) for v in bounds], cache_params(p0, block) if block else p0], sort_keys=True).encode()).hexdigest()[:12]
     out = root / f"{p0.get('product', 'x')}_{key}.tif"
     rec_p = out.with_suffix(".json")
     lic = e.get("license") or {}
     if out.is_file() and rec_p.is_file():
         rec = json.loads(rec_p.read_text(encoding="utf-8"))
-        if rec.get("sha256") == rf._sha(out):
+        # 5.9.0: a picture kept from before the scene tiers that holds a degraded scene is read again (a clean scene may now cover it)
+        stale = "tiers" not in rec and p0.get("avoid_degraded", True) and any(degraded(sc, block) for sc in rec.get("scenes") or [])
+        if rec.get("sha256") == rf._sha(out) and not stale:
             return {"path": str(out), "record": {**rec, "cached": True, "request_count": 0, "request_bytes": 0,
                                                  "files": [{**f, "cached": True} for f in rec.get("files", [])]}, "findings": [], "entry": e}
     if rf.offline():
@@ -373,40 +526,33 @@ def fetch(entry_id: str, bounds, src: dict | None = None, cache_dir=None, http=N
     need = PRODUCTS[p["product"]]
     multi = block.get("bands") or {}
     mspec = block.get("mask") or {}
-    total_b = total_r = 0
     stacks, valid, used = [], [], []
-    for s in scenes:
+    tally = {"b": 0, "r": 0}
+
+    def read_scene(s):
         data = {}
-        try:
-            for asset, names in multi.items():                 # one file that holds several bands (aerial photography)
-                want = [r for r in need if r in names]
-                if want and asset in s["assets"]:
-                    a, nd, b, r = read_onto(sign(route, s["assets"][asset], h), f"{s['id']}_{asset}.tif", grid, h, bands=[names.index(x) + 1 for x in want])
-                    total_b, total_r = total_b + b, total_r + r
-                    for i, x in enumerate(want):
-                        data[x] = (a[i].astype("float32"), nd, None)
-            for role in need:
-                if role in data:
-                    continue
-                a, nd, b, r = read_onto(sign(route, s["assets"][role], h), f"{s['id']}_{role}.tif", grid, h)
-                total_b, total_r = total_b + b, total_r + r
-                data[role] = (a[0].astype("float32"), nd, s["scale"].get(role))
-            ok = np.ones((height, width), bool)
-            for role in need:
-                a, nd, sc = data[role]
-                ok &= (a != (nd if nd is not None else 0)) if (nd is not None or sc) else np.ones_like(ok)
-            if not multi:
-                ok &= np.any(np.stack([data[r][0] for r in need]) != 0, axis=0)
-            else:
-                ok &= np.any(np.stack([data[r][0] for r in need]) != 0, axis=0)
-            if p["pick"] == "median" and "mask" in s["assets"] and mspec:
-                m, _nd, b, r = read_onto(sign(route, s["assets"]["mask"], h), f"{s['id']}_mask.tif", grid, h, resampling="nearest")
-                total_b, total_r = total_b + b, total_r + r
-                ok &= ~_bad(m[0], mspec)
-        except ImageryError as ex:
-            if len(scenes) > 1:
-                continue                                        # one scene that cannot be read is left out; the record names those used
-            raise ex
+        for asset, names in multi.items():                     # one file that holds several bands (aerial photography)
+            want = [r for r in need if r in names]
+            if want and asset in s["assets"]:
+                a, nd, b, r = read_onto(sign(route, s["assets"][asset], h), f"{s['id']}_{asset}.tif", grid, h, bands=[names.index(x) + 1 for x in want])
+                tally["b"], tally["r"] = tally["b"] + b, tally["r"] + r
+                for i, x in enumerate(want):
+                    data[x] = (a[i].astype("float32"), nd, None)
+        for role in need:
+            if role in data:
+                continue
+            a, nd, b, r = read_onto(sign(route, s["assets"][role], h), f"{s['id']}_{role}.tif", grid, h)
+            tally["b"], tally["r"] = tally["b"] + b, tally["r"] + r
+            data[role] = (a[0].astype("float32"), nd, s["scale"].get(role))
+        ok = np.ones((height, width), bool)
+        for role in need:
+            a, nd, sc = data[role]
+            ok &= (a != (nd if nd is not None else 0)) if (nd is not None or sc) else np.ones_like(ok)
+        ok &= np.any(np.stack([data[r][0] for r in need]) != 0, axis=0)
+        if p["pick"] == "median" and "mask" in s["assets"] and mspec:
+            m, _nd, b, r = read_onto(sign(route, s["assets"]["mask"], h), f"{s['id']}_mask.tif", grid, h, resampling="nearest")
+            tally["b"], tally["r"] = tally["b"] + b, tally["r"] + r
+            ok &= ~_bad(m[0], mspec)
         vals = []
         for role in need:
             a, _nd, sc = data[role]
@@ -414,8 +560,27 @@ def fetch(entry_id: str, bounds, src: dict | None = None, cache_dir=None, http=N
         stacks.append(np.stack(vals))
         valid.append(ok)
         used.append(s)
-        if total_b > 3 * rf.MAX_BYTES:
+
+    for s in scenes:
+        try:
+            read_scene(s)
+        except ImageryError as ex:
+            if len(scenes) > 1:
+                continue                                        # one scene that cannot be read is left out; the record names those used
+            raise ex
+        if tally["b"] > 3 * rf.MAX_BYTES:
             break
+    # 5.9.0: a degraded scene's stripes left empty: the next passes of a degraded group (other dates) are read until the window is full
+    cap = int(block.get("max_scenes") or MAX_SCENES)
+    if stacks and p["pick"] != "median" and any(s_.get("degraded") for s_ in used):
+        for s in pl.get("_reserve") or []:
+            if len(used) >= cap or tally["b"] > 3 * rf.MAX_BYTES or float(np.logical_or.reduce(valid).mean()) >= 0.98:
+                break
+            try:
+                read_scene(s)
+            except ImageryError:
+                continue
+    total_b, total_r = tally["b"], tally["r"]
     if not stacks:
         raise ImageryError("no scene could be read for this window", gc.EXIT_SERVICE)
     cube = np.stack(stacks)                                      # scenes x bands x rows x cols, in reflectance (0 to 1)
@@ -459,17 +624,25 @@ def fetch(entry_id: str, bounds, src: dict | None = None, cache_dir=None, http=N
     covered = float(okc.mean())
     dates = sorted(s["datetime"][:10] for s in used)
     rec = {"entry": entry_id, "route": route["name"], "collection": route["collection"], "product": p["product"], "pick": p["pick"], "dates_asked": p["dates"] or None,
-           "cloud_max": p["cloud_max"], "scenes": [{k: s[k] for k in ("id", "datetime", "cloud", "platform")} for s in used],
+           "cloud_max": p["cloud_max"], "scenes": [_brief(s) for s in used],
            "scene_dates": [dates[0], dates[-1]] if dates else None, "bands": list(need), "grid": {"crs": crs, "pixels": [width, height], "cell_m": round(cell, 2)},
            "covered": round(covered, 4), "bounds_wgs84": list(bounds), "request_count": total_r, "request_bytes": total_b, "cached": False,
            "retrieved_at": rf.today(), "sha256": rf._sha(out), "path": str(out), "attribution": lic.get("attribution_text"), "license": lic.get("class"),
-           "refused_routes": pl.get("refused_routes") or [], "files": [{"scene": s["id"], "cached": False} for s in used], **stats}
+           "refused_routes": pl.get("refused_routes") or [], "files": [{"scene": s["id"], "cached": False} for s in used], **stats,
+           "tiers": True, "degraded_used": [s["id"] for s in used if s.get("degraded")], "filled_from_around": [s["id"] for s in used if s.get("fill")]}
     rec_p.write_text(json.dumps(rec, indent=2), encoding="utf-8")
     findings = []
     if pl.get("refused_routes"):
         findings.append({"id": "MAP-SVC-046", "severity": "INFO", "detail": pl["refused_routes"],
                          "message": f"the {', '.join(pl['refused_routes'])} catalog keeps these files in a requester-pays bucket, which is not read; "
                                     f"the picture came from {route['name']}, which is free to read"})
+    deg_used = [s for s in used if s.get("degraded")]
+    if deg_used:
+        clean_n = len(used) - len(deg_used)
+        findings.append({"id": "MAP-TER-005", "severity": "WARN" if not clean_n else "INFO", "detail": [s["id"] for s in deg_used],
+                         "message": f"{len(deg_used)} of the {len(used)} scenes are from a degraded instrument ({deg_used[0]['degraded']}); "
+                                    + ("they fill only what the clean scenes leave" if clean_n else
+                                       "no clean scene covers these dates, so the picture may show its stripes; widen source.dates or take pick: median")})
     if covered < 0.98:
         findings.append({"id": "MAP-TER-005", "severity": "WARN", "detail": {"covered": round(covered, 3)},
                          "message": f"the picture covers {covered:.0%} of the window: the scenes chosen ({len(used)}) leave the rest empty; widen source.dates or raise source.cloud_max"})
@@ -479,20 +652,207 @@ def fetch(entry_id: str, bounds, src: dict | None = None, cache_dir=None, http=N
     return {"path": str(out), "record": rec, "findings": findings, "entry": e}
 
 
+# ---------------------------------------------------------------------------------------------------------------- a series (5.9.0)
+def years_of(spec: str, skip=()) -> list[int]:
+    """'1984-2025', '1984,1990,2000' or '1984-1990,2000' -> the years in order, less `skip`."""
+    out = set()
+    for part in str(spec).split(","):
+        part = part.strip()
+        m = re.fullmatch(r"(\d{4})\s*-\s*(\d{4})", part)
+        if m:
+            a, b = int(m[1]), int(m[2])
+            if b < a or b - a > 200:
+                raise ImageryError(f"years '{part}' run backwards or over two centuries", gc.EXIT_USAGE)
+            out.update(range(a, b + 1))
+        elif re.fullmatch(r"\d{4}", part):
+            out.add(int(part))
+        elif part:
+            raise ImageryError(f"years are 1984-2025 or 1984,1990,2000, not '{part}'", gc.EXIT_USAGE)
+    skip_ = {int(x) for x in (skip.split(",") if isinstance(skip, str) else skip or []) if str(x).strip()}
+    ys = sorted(out - skip_)
+    if not ys:
+        raise ImageryError("no years are left to read", gc.EXIT_USAGE)
+    return ys
+
+
+def season_dates(year: int, season: str) -> str:
+    """The dates of one year's season: '06-01/08-31' -> '1990-06-01/1990-08-31'; a season that crosses the new year ends in the next."""
+    m = re.fullmatch(r"(\d{2})-(\d{2})/(\d{2})-(\d{2})", str(season).strip())
+    if not m:
+        raise ImageryError(f"a season is MM-DD/MM-DD (06-01/08-31), not '{season}'", gc.EXIT_USAGE)
+    a = dt.date(year, int(m[1]), int(m[2]))
+    b = dt.date(year, int(m[3]), int(m[4]))
+    if b < a:
+        b = dt.date(year + 1, b.month, b.day)
+    return f"{a.isoformat()}/{b.isoformat()}"
+
+
+def series_dates(years=None, season: str | None = None, dates: dict | None = None, skip=()) -> dict:
+    """{period label: START/END}: one year's season for each year, or the dates given per period (a file of label: dates)."""
+    if dates:
+        out = {}
+        for k, v in dates.items():
+            if str(k) in {str(x) for x in (skip.split(",") if isinstance(skip, str) else skip or [])}:
+                continue
+            d = str(v).strip()
+            if re.fullmatch(r"\d{4}", d):
+                d = f"{d}-01-01/{d}-12-31"
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}/\d{4}-\d{2}-\d{2}", d):
+                raise ImageryError(f"the dates of '{k}' are START/END (1990-06-01/1990-08-31), not '{v}'", gc.EXIT_USAGE)
+            out[str(k)] = d
+        if not out:
+            raise ImageryError("no periods are left to read", gc.EXIT_USAGE)
+        return dict(sorted(out.items()))
+    if not years or not season:
+        raise ImageryError("a series is --years with --season (1984-2025 and 06-01/08-31), or --dates-file with each period's dates", gc.EXIT_USAGE)
+    return {str(y): season_dates(y, season) for y in years_of(years, skip)}
+
+
+def series(entry_id: str, bounds, periods: dict, src: dict | None = None, *, jobs: int = 3, plan_only: bool = False, cache_dir=None, http=None,
+           out=None, progress=None) -> dict:
+    """5.9.0: one picture per period (each period's own dates), read with `jobs` reads at once. Each period is filed in the cache as soon as
+    it is read, under the key a map layer with these bounds and dates reads, so a series cut off part way picks up where it stopped and the
+    builds that follow read every picture from the cache. `plan_only` asks the catalog only. `out` (a path) is written after every period.
+    -> {entry, bounds, periods: [{period, dates, path, covered, scenes, cached, error}], summary}."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    bounds = tuple(float(v) for v in bounds)
+    src = {k: v for k, v in (src or {}).items() if k not in ("type", "id", "dates")}
+    say = progress or (lambda _m: None)
+    rows: dict[str, dict] = {}
+    doc = {"entry": entry_id, "bounds": list(bounds), "params": src, "plan_only": plan_only, "periods": []}
+
+    def one(label: str, dates: str) -> dict:
+        s_ = {**src, "dates": dates}
+        if plan_only:
+            pl = plan(entry_id, bounds, s_, http)
+            return {"period": label, "dates": dates, "scenes": pl["scenes"], "cost": pl["cost"], "estimate_mb": pl["estimate_mb"],
+                    "candidates": len(pl["candidates"]), "degraded_used": pl["degraded_used"], "filled_from_around": pl["filled_from_around"]}
+        r = fetch(entry_id, bounds, s_, cache_dir=cache_dir, http=http)
+        rec = r["record"]
+        return {"period": label, "dates": dates, "path": r["path"], "covered": rec.get("covered"), "cached": bool(rec.get("cached")),
+                "scenes": rec.get("scenes"), "request_bytes": rec.get("request_bytes"), "degraded_used": rec.get("degraded_used") or [],
+                "findings": [f["message"] for f in r["findings"] if f["severity"] in ("WARN", "BLOCK")]}
+
+    def write():
+        if out:
+            doc["periods"] = [rows[k] for k in periods if k in rows]
+            o = Path(out)
+            o.parent.mkdir(parents=True, exist_ok=True)
+            o.with_suffix(".part").write_text(json.dumps(doc, indent=1, default=str), encoding="utf-8")
+            o.with_suffix(".part").replace(o)
+
+    n = max(1, min(int(jobs or 1), 8, len(periods)))
+    with ThreadPoolExecutor(max_workers=n) as ex:
+        futs = {ex.submit(one, k, d): k for k, d in periods.items()}
+        for fu in as_completed(futs):
+            k = futs[fu]
+            try:
+                rows[k] = fu.result()
+            except rio.RasterError as e:
+                rows[k] = {"period": k, "dates": periods[k], "error": str(e)}
+            r_ = rows[k]
+            say(f"{k}: " + (f"error: {r_['error']}" if r_.get("error") else (r_.get("cost") if plan_only else
+                f"{'kept' if r_.get('cached') else 'read'}, {len(r_.get('scenes') or [])} scene(s), {float(r_.get('covered') or 0):.0%} covered")))
+            write()
+    doc["periods"] = [rows[k] for k in periods]
+    bad = [r_["period"] for r_ in doc["periods"] if r_.get("error")]
+    if plan_only:
+        mb = sum(float(r_.get("estimate_mb") or 0) for r_ in doc["periods"])
+        doc["summary"] = f"{len(periods)} period(s) planned, about {mb:,.0f} MB to read" + (f"; {len(bad)} with no scene: {', '.join(bad)}" if bad else "")
+    else:
+        kept = sum(1 for r_ in doc["periods"] if r_.get("cached"))
+        low = [r_["period"] for r_ in doc["periods"] if not r_.get("error") and float(r_.get("covered") or 0) < 0.98]
+        mb = sum(int(r_.get("request_bytes") or 0) for r_ in doc["periods"]) / 1e6
+        doc["summary"] = (f"{len(periods) - len(bad)} of {len(periods)} period(s) ready ({kept} kept from before, {mb:,.0f} MB read)"
+                          + (f"; under 98% covered: {', '.join(low)}" if low else "") + (f"; failed: {', '.join(bad)} (run again to retry them)" if bad else ""))
+    doc["failed"] = bad
+    write()
+    return doc
+
+
+def layer_of_spec(spec_path, layer: str | None = None, template: str | None = None, values: dict | None = None) -> dict:
+    """5.9.0: the library imagery layer of a MapSpec and the window its build reads (map_raster.probe_window: planned, nothing fetched).
+    `values` fills the placeholders of a MapSpec written for an atlas by time ({period}) for the plan."""
+    import map_raster as mr
+    try:
+        got = mr.probe_window(spec_path, layer, template=template, values=values)
+    except mr.RasterLayerError as ex:
+        raise ImageryError(str(ex), gc.EXIT_USAGE) from None
+    if stac_block(got["entry"]) is None:
+        raise ImageryError(f"layer '{got['layer']}' reads {got['entry']}, which is not an imagery entry; name the imagery layer with --layer", gc.EXIT_USAGE)
+    return got
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Satellite or aerial imagery for a window, from a library entry's STAC catalog")
-    ap.add_argument("cmd", choices=("plan", "fetch"))
-    ap.add_argument("entry")
-    ap.add_argument("--bounds", required=True, help="W,S,E,N (write --bounds=-112,33,-111,34)")
+    ap.add_argument("cmd", choices=("plan", "fetch", "series"))
+    ap.add_argument("entry", nargs="?", help="the library entry (series --spec: taken from the layer)")
+    ap.add_argument("--bounds", help="W,S,E,N (write --bounds=-112,33,-111,34)")
+    ap.add_argument("--spec", help="5.9.0, series: a MapSpec; the window its build reads, and its imagery layer's own source settings")
+    ap.add_argument("--layer", help="series --spec: the imagery layer (default the first library raster)")
+    ap.add_argument("--template", help="series --spec: the template(s) the builds are drawn at, comma separated (the pages' and the animation's: "
+                    "16x9-slide,square-social); each has its own window")
+    ap.add_argument("--years", help="series: 1984-2025 or 1984,1990,2000")
+    ap.add_argument("--season", help="series: each year's dates as MM-DD/MM-DD (06-01/08-31)")
+    ap.add_argument("--skip", default="", help="series: periods left out (2012)")
+    ap.add_argument("--dates-file", help="series: a JSON or YAML file of period: START/END, for dates that differ by year")
+    ap.add_argument("--jobs", type=int, default=3, help="series: reads at once (default 3, at most 8)")
+    ap.add_argument("--plan-only", action="store_true", help="series: ask the catalog only; nothing is read")
+    ap.add_argument("--out", help="series: the series file, written after every period (default stdout only)")
     ap.add_argument("--dates", help="START/END (2024-06-01/2024-09-30) or one year")
     ap.add_argument("--cloud", type=float, help="the most cloud cover a scene may have, in percent (default 20)")
     ap.add_argument("--product", choices=list(PRODUCTS))
     ap.add_argument("--pick", choices=list(PICKS))
     ap.add_argument("--scenes", type=int, help="median: how many scenes (default 3)")
     ap.add_argument("--route", help="one of the entry's catalogs by name")
+    ap.add_argument("--platforms", help="5.9.0: only these satellites, as the catalog names them (landsat-5,landsat-8)")
+    ap.add_argument("--exclude-platforms", help="5.9.0: never these satellites (landsat-7)")
+    ap.add_argument("--keep-degraded", action="store_true", help="5.9.0: rank a degraded instrument's scenes with the clean ones (default: last)")
+    ap.add_argument("--fill-days", type=int, help="5.9.0: days before and after the dates a scene may come from to fill an edge (Landsat: 16)")
     a = ap.parse_args(argv)
-    src = {k: v for k, v in {"dates": a.dates, "cloud_max": a.cloud, "product": a.product, "pick": a.pick, "scenes": a.scenes, "route": a.route}.items() if v is not None}
+    src = {k: v for k, v in {"dates": a.dates, "cloud_max": a.cloud, "product": a.product, "pick": a.pick, "scenes": a.scenes, "route": a.route,
+                              "platforms": a.platforms, "exclude_platforms": a.exclude_platforms, "fill_days": a.fill_days,
+                              "avoid_degraded": False if a.keep_degraded else None}.items() if v is not None}
     try:
+        if a.cmd == "series":
+            entry, b, base = a.entry, None, {}
+            temps = [t.strip() for t in (a.template or "").split(",") if t.strip()] or [None]
+            dfile = None
+            if a.dates_file:
+                import yaml
+                dfile = yaml.safe_load(Path(a.dates_file).read_text(encoding="utf-8"))
+                if not isinstance(dfile, dict):
+                    raise ImageryError("--dates-file holds period: START/END lines", gc.EXIT_USAGE)
+            per = series_dates(a.years, a.season, dfile, a.skip)
+            first = {"period": next(iter(per)), "dates": next(iter(per.values()))}
+            if a.spec:
+                lay = layer_of_spec(a.spec, a.layer, temps[0], first)
+                entry, b, base = lay["entry"], lay["bounds"], lay["source"]
+                if a.entry and a.entry != entry:
+                    raise ImageryError(f"the MapSpec's layer reads {entry}, not {a.entry}", gc.EXIT_USAGE)
+            if not entry:
+                raise ImageryError("series needs the library entry, or --spec", gc.EXIT_USAGE)
+            if a.bounds:
+                b = tuple(float(v) for v in a.bounds.split(","))
+            if b is None:
+                raise ImageryError("series needs --bounds or --spec", gc.EXIT_USAGE)
+            r = series(entry, b, per, {**base, **src}, jobs=a.jobs, plan_only=a.plan_only, out=a.out,
+                       progress=lambda m: print(m, file=sys.stderr, flush=True))
+            if a.spec:
+                r["spec"], r["layer"], r["template"] = str(a.spec), lay["layer"], temps[0]
+                r["also"] = []
+                for t in temps[1:]:                         # the same periods for another size's window (an animation's frames)
+                    l2 = layer_of_spec(a.spec, a.layer, t, first)
+                    r2 = series(entry, l2["bounds"], per, {**l2["source"], **src}, jobs=a.jobs, plan_only=a.plan_only,
+                                progress=lambda m, t=t: print(f"[{t}] {m}", file=sys.stderr, flush=True))
+                    r["also"].append({"template": t, "bounds": r2["bounds"], "summary": r2["summary"], "failed": r2["failed"]})
+                    r["failed"] = r["failed"] + [f"{t}:{x}" for x in r2["failed"]]
+                if a.out:
+                    Path(a.out).write_text(json.dumps(r, indent=1, default=str), encoding="utf-8")
+            print(json.dumps({k: v for k, v in r.items() if k != "periods"} | {"periods": len(r["periods"])}, indent=2, default=str))
+            return gc.EXIT_OK if not r["failed"] else gc.EXIT_RUNTIME
+        if not a.entry or not a.bounds:
+            raise ImageryError("plan and fetch need the entry and --bounds", gc.EXIT_USAGE)
         b = tuple(float(v) for v in a.bounds.split(","))
         if a.cmd == "plan":
             r = {k: v for k, v in plan(a.entry, b, src).items() if not k.startswith("_")}

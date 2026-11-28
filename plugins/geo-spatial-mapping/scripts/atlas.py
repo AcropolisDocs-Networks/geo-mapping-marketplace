@@ -92,7 +92,10 @@ def norm_options(opt: dict) -> dict:
             "animate": _list(o.get("animate")), "animate_sizes": _list(o.get("animate_sizes")) or ["square", "slide"],
             "hold": float(o.get("hold") or 1.0), "last_hold": float(o.get("last_hold") or 3.0),
             "contact_sheet": _flag(o.get("contact_sheet"), False),
-            "region": o.get("region"), "resolution": int(o.get("resolution") or 4)}
+            "region": o.get("region"), "resolution": int(o.get("resolution") or 4),
+            # 5.9.0: by time over a picture: each period's dates for the imagery layer, and a table of each period's figures for its text
+            "dates": o.get("dates"), "years": o.get("years"), "season": o.get("season"), "skip": o.get("skip") or [], "dates_from": o.get("dates_from"),
+            "table": o.get("table"), "table_key": o.get("table_key")}
 
 
 SPATIAL_BY = ("admin1", "admin2", "regions", "h3")       # 3.1.0 (G-05): one map per area, whatever the country
@@ -119,6 +122,11 @@ def discover(spec_path, opt: dict) -> dict:
     """Read the data the plan would draw and decide the values and, for shared classes, the edges. Changes nothing."""
     import map_plan as mp
     o = norm_options(opt)
+    if o["by"] == "time":
+        raw = gc.load_mapspec(Path(spec_path))
+        rl = _picture_layer(raw, o)
+        if rl is not None:
+            return _discover_picture_time(Path(spec_path), raw, rl, o)
     try:
         plan = mp.prepare(spec_path)
     except mp.PlanError as ex:
@@ -335,6 +343,113 @@ def _discover_time(plan, lay, o: dict) -> dict:
                      "cumulative_counts": {v: sum(1 for k in per.keys if k is not None and k <= v) for v in values}}}
 
 
+# ---------------------------------------------------------------------------------------------------------------- by time over a picture (5.9.0)
+def _picture_layer(spec: dict, o: dict) -> dict | None:
+    """The imagery layer an atlas by time steps through: the layer named, when it is a library picture; or, when the periods' dates are
+    given (dates, years and season, dates_from), the MapSpec's first library picture."""
+    import imagery
+    pics = [ly for ly in spec.get("layers") or [] if ly.get("role") == "raster" and (ly.get("source") or {}).get("type") == "ref"
+            and imagery.stac_block(str((ly.get("source") or {}).get("id"))) is not None]
+    if o.get("layer"):
+        return next((ly for ly in pics if ly.get("id") == o["layer"]), None)
+    if o.get("dates") or o.get("years") or o.get("dates_from"):
+        if not pics:
+            raise AtlasError("the periods' dates are given, but the MapSpec has no library imagery layer (role: raster, source type ref) to give them to")
+        return pics[0]
+    return None
+
+
+def _num(v):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return v
+    return int(f) if f.is_integer() and "." not in str(v) else f
+
+
+def fill_text(obj, values: dict):
+    """Every {name} and {name:format} in the MapSpec's text that names a period's value, filled (gmap_common.fill_text)."""
+    try:
+        return gc.fill_text(obj, values)
+    except ValueError as ex:
+        raise AtlasError(str(ex)) from None
+
+
+def _discover_picture_time(spec_path: Path, spec: dict, ly: dict, o: dict) -> dict:
+    """5.9.0: by time over a library picture. The pages are the periods, each with its own dates for the imagery layer (dates:, years: with
+    season:, or dates_from: the file imagery.py series wrote); every page keeps the MapSpec's frame. With table: and table_key: each period's
+    row fills the MapSpec's text ({area_km2:,.0f}), with {period}, and with dates_from {scene_date} and {scene_month} of its main scene."""
+    import imagery
+    if o["cumulative"]:
+        raise AtlasError("cumulative pages stack features; a picture is one per period, so an atlas by time over imagery is not cumulative")
+    fs, scenes = [], {}
+    try:
+        if o.get("dates_from"):
+            sp = Path(o["dates_from"])
+            sp = sp if sp.is_absolute() else spec_path.parent / sp
+            doc = json.loads(sp.read_text(encoding="utf-8"))
+            rows = [r for r in doc.get("periods") or [] if not r.get("error")]
+            bad = [str(r.get("period")) for r in doc.get("periods") or [] if r.get("error")]
+            if bad:
+                fs.append(finding("MAP-ATL-003", "WARN", f"{len(bad)} period(s) of the series failed and get no page: {', '.join(bad)}", bad))
+            skip = {str(x) for x in _list(o.get("skip"))}
+            dates = {str(r["period"]): str(r["dates"]) for r in rows if str(r["period"]) not in skip}
+            scenes = {str(r["period"]): r.get("scenes") or [] for r in rows}
+            if doc.get("bounds"):
+                fs.append(finding("MAP-ATL-009", "INFO", f"the periods' dates come from the series in {sp.name} (read for {', '.join(f'{v:.3f}' for v in doc['bounds'])})"))
+        else:
+            dates = imagery.series_dates(o.get("years"), o.get("season"), o.get("dates") if isinstance(o.get("dates"), dict) else None, o.get("skip") or [])
+    except (OSError, ValueError, KeyError) as ex:
+        raise AtlasError(f"dates_from: {ex}") from None
+    except imagery.ImageryError as ex:
+        raise AtlasError(str(ex)) from None
+    if not dates:
+        raise AtlasError("no period is left to draw")
+    values = list(dates)
+    if o["values"]:
+        want = [str(v) for v in o["values"]]
+        values = [v for v in values if v in want]
+        if not values:
+            raise AtlasError(f"none of the periods asked for are among {', '.join(list(dates)[:6])}")
+    if len(values) > o["max_maps"]:
+        raise AtlasError(f"{len(values)} periods would make {len(values)} maps, more than max_maps={o['max_maps']}; name the periods with values= or raise max_maps", "MAP-ATL-002")
+    table = {}
+    if o.get("table"):
+        import csv
+        tp = Path(o["table"])
+        tp = tp if tp.is_absolute() else spec_path.parent / tp
+        key = o.get("table_key") or "period"
+        try:
+            with tp.open(encoding="utf-8-sig", newline="") as f:
+                rd = list(csv.DictReader(f))
+        except OSError as ex:
+            raise AtlasError(f"table: {ex}") from None
+        if rd and key not in rd[0]:
+            raise AtlasError(f"table {tp.name} has no column '{key}' (table_key; columns: {', '.join(rd[0])})")
+        table = {str(r[key]).strip(): {k: _num(v) for k, v in r.items()} for r in rd}
+        miss = [v for v in values if v not in table]
+        if miss:
+            raise AtlasError(f"table {tp.name} has no row for {', '.join(miss[:8])}: every period's text needs its figures")
+    tvars = {}
+    for v in values:
+        sc = scenes.get(v) or []
+        main = sc[0] if sc else None
+        when = (main or {}).get("datetime") or ""
+        extra = {}
+        if when:
+            import datetime as _dt
+            d0 = _dt.date.fromisoformat(when[:10])
+            extra = {"scene_date": d0.isoformat(), "scene_month": d0.strftime("%B"), "scene_year": d0.year}
+        tvars[v] = {**table.get(v, {}), **extra, "period": v, "dates": dates[v]}
+    unit = "year" if all(re.fullmatch(r"\d{4}", v) for v in values) else "period"
+    tiles = (spec.get("basemap") or {}).get("provider") not in (None, "none", "bundled")
+    return {"options": o, "layer": ly["id"], "role": "raster", "kind": "raster", "field": "dates", "values": values, "counts": {v: 1 for v in values},
+            "shared": None, "findings": fs, "tiles": tiles, "base_title": text_lint.title_text(spec), "base_id": str(spec["id"]), "gdf": None,
+            "picture": {"dates": {v: dates[v] for v in values}, "vars": tvars, "entry": (ly.get("source") or {}).get("id")},
+            "time": {"unit": unit, "word": unit, "labels": {v: v for v in values}, "at": {v: [v] for v in values}, "upto": {v: values[:i + 1] for i, v in enumerate(values)},
+                     "bbox": None, "cumulative_counts": {v: i + 1 for i, v in enumerate(values)}}}
+
+
 def _gaps(values: list[str], unit: str) -> list[str]:
     """The months, quarters or years between the first and the last period that hold nothing."""
     def idx(k):
@@ -509,6 +624,10 @@ def _time_specs(base_spec: dict, spec_path: Path, disc: dict, out_dir: Path) -> 
         s["id"] = f"{base_spec['id']}-{slug(lab)}"
         idx = next(i for i, l in enumerate(s["layers"]) if l["id"] == disc["layer"])
         ly = s["layers"][idx]
+        if disc.get("picture"):                           # 5.9.0: the period's own dates for the picture, and its figures in the text
+            ly["source"] = {**(ly.get("source") or {}), "dates": disc["picture"]["dates"][v]}
+            s = fill_text(s, disc["picture"]["vars"][v])
+            ly = s["layers"][idx]
         prior = ly.get("filter")
         prior = [prior] if isinstance(prior, dict) else list(prior or [])
 
@@ -543,7 +662,7 @@ def _time_specs(base_spec: dict, spec_path: Path, disc: dict, out_dir: Path) -> 
             nw["legend"] = {"label": labels["period"].format(word=tm_["word"], period=lab)}
             parts.append(nw)
             s["layers"][idx:idx + 1] = parts
-        else:
+        elif not disc.get("picture"):
             with_filter(ly, tm_["at"][v])
             _apply_shared(ly, disc["shared"])
         if tm_["bbox"] and (base_spec.get("extent") or {}).get("mode", "fit_layers") == "fit_layers":
@@ -839,8 +958,11 @@ def package_time(d: dict, results: list[dict], dest: Path, meta: dict, add_file)
         add_file(sd_ / Path(r["spec"]).name, "spec")
     o = d["options"]
     meta.update({"by": "time", "time_field": d["field"], "unit": d["time"]["unit"], "cumulative": o["cumulative"], "base_id": d["base_id"], "title": d["base_title"],
-                 "periods": [{"period": r.get("period"), "label": r["value"], "features": r["features"], "new": r.get("new"), "spec": f"specs/{Path(r['spec']).name}"}
+                 "periods": [{"period": r.get("period"), "label": r["value"], "features": r["features"], "new": r.get("new"), "spec": f"specs/{Path(r['spec']).name}",
+                              **({"dates": d["picture"]["dates"].get(r.get("period"))} if d.get("picture") else {})}
                              for r in results]})
+    if d.get("picture"):
+        meta.update({"picture_layer": d["layer"], "picture_entry": d["picture"]["entry"]})
 
 
 def stage_animate(c) -> dict:
@@ -1011,11 +1133,19 @@ def main(argv=None) -> int:
     ap.add_argument("--cumulative", action="store_true", help="by time: each map shows everything up to its period, the period's own features larger")
     ap.add_argument("--no-planned", action="store_true", help="by time, cumulative: leave out the features still planned")
     ap.add_argument("--animate", help="by time: gif,mp4 written after the atlas (map_export --animate)")
+    ap.add_argument("--years", help="5.9.0, by time over imagery: 1984-2025 (with --season)")
+    ap.add_argument("--season", help="5.9.0, by time over imagery: each year's dates as MM-DD/MM-DD")
+    ap.add_argument("--skip", help="5.9.0, by time over imagery: periods left out (2012)")
+    ap.add_argument("--dates-from", help="5.9.0, by time over imagery: the series file imagery.py series wrote (its periods and dates)")
+    ap.add_argument("--table", help="5.9.0, by time over imagery: a CSV of each period's figures for the MapSpec's {placeholders}")
+    ap.add_argument("--table-key", help="5.9.0: the table's period column (default period)")
     a = ap.parse_args(argv)
     opt = {"layer": a.layer, "field": a.field, "mode": a.mode, "values": a.values, "max_maps": a.max_maps,
            "shared_classes": False if a.no_shared_classes else True, "index_page": False if a.no_index else True,
            "by": a.by, "unit": a.unit, "cumulative": a.cumulative, **({"planned": False} if a.no_planned else {}), **({"animate": a.animate} if a.animate else {}),
-           **({"region": a.region} if a.region else {}), "resolution": a.resolution}
+           **({"region": a.region} if a.region else {}), "resolution": a.resolution,
+           **{k: v for k, v in {"years": a.years, "season": a.season, "skip": a.skip, "dates_from": a.dates_from, "table": a.table,
+                                "table_key": a.table_key}.items() if v}}
     try:
         d = discover(a.spec, opt)
     except AtlasError as ex:

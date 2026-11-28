@@ -669,9 +669,9 @@ entries:
   file: entries/data/ref.context.world.imagery.landsat-c2-l2.yaml
   type: context
   status: active
-  rev: 1
+  rev: 2
   tags_digest: bae3e7d1833e
-  entry_digest: bd8a6f16ec93
+  entry_digest: 733e1d48dfaf
 - id: ref.context.world.imagery.sentinel-2-l2a
   file: entries/data/ref.context.world.imagery.sentinel-2-l2a.yaml
   type: context

@@ -1,6 +1,6 @@
 id: ref.context.world.imagery.landsat-c2-l2
 type: context
-rev: 1
+rev: 2
 status: active
 title: 'Landsat imagery (Collection 2 Level-2 surface reflectance), 30 m, the whole world since 1982'
 summary: 'Forty years of satellite pictures of any place on land at 30 m, from Landsat 4, 5, 7, 8 and 9 (USGS and NASA). The map''s window is read from the least
@@ -25,7 +25,9 @@ use_when:
 - 'A region a few hundred kilometres wide is shown; it is read to 2,400 cells across, from up to twelve scenes.'
 avoid_when:
 - 'A date since 2017 at city scale: Sentinel-2 (ref.context.world.imagery.sentinel-2-l2a) is 10 m and passes more often.'
-- 'Landsat 7 between 2003 and 2013 is the only choice: its pictures carry stripes of missing data; take pick: median over several scenes.'
+- 'Summer 2012 is asked for: Landsat 5 ended in November 2011 and Landsat 8 began in April 2013, so only Landsat 7 flew, and since its scan line
+  corrector failed on 31 May 2003 its pictures carry stripes of missing data. The reader puts Landsat 7 after that date last (it fills only what a
+  clean scene leaves, and two more of its passes fill each other''s stripes); for 2012 widen the dates or take pick: median.'
 - 'Bright ground (salt flats, snow, desert) is the subject: say source.stretch [0, 0.5] or the picture burns out to white.'
 distinct_from:
 - id: ref.context.world.imagery.sentinel-2-l2a
@@ -53,9 +55,15 @@ delivery:
     max_scenes: 12
     max_px: 2400
     max_span_deg: 12
+    group_by: [platform, 'landsat:wrs_path', 'landsat:wrs_row']
+    degraded:
+    - {platform: landsat-7, from: '2003-05-31', why: 'Landsat 7 after its scan line corrector failed on 31 May 2003: about a fifth of each picture is missing in stripes'}
+    fill_days: 16
   note: 'Earth Search lists Landsat too, but its files are in a requester-pays bucket (storage:requester_pays): that route is refused and said, and the
     picture is read from Planetary Computer, which is free to read (decision D5: no cloud keys are held). In a MapSpec: source: {type: ref, id:
-    ref.context.world.imagery.landsat-c2-l2, dates: 1989-06-01/1989-09-30, product: true-color, cloud_max: 10, stretch: [0, 0.5]}.'
+    ref.context.world.imagery.landsat-c2-l2, dates: 1989-06-01/1989-09-30, product: true-color, cloud_max: 10, stretch: [0, 0.5]}. 5.9.0: a scene of
+    the next path a few days away fills an edge the dates leave (fill_days: 16, one revisit); platforms: [landsat-5] or exclude_platforms:
+    [landsat-7] say which satellites; imagery.py plan lists the candidates by satellite, path and row.'
 style:
   titles: {true-color: Satellite picture, false-color: False colour picture, ndvi: Vegetation index (NDVI)}
   raster:
@@ -78,7 +86,7 @@ license:
   attribution_text: 'Imagery: Landsat, courtesy of the U.S. Geological Survey.'
 maintenance:
   owner: acropolisdocs
-  reviewed_on: '2026-11-25'
+  reviewed_on: '2026-11-27'
   verify_by: '2027-11-25'
   check:
     kind: http_get
@@ -90,3 +98,9 @@ maintenance:
     note: 'New (5.3.0, open data portals P3.3 and P3.4). Read from the build workspace on 2026-11-25: the Aral Sea in 1989 (five Landsat 4 and 5 scenes of 7 August to
       2 September, 77.6 MB in 74 requests) and in 2024 (Landsat 8 and 9 scenes of 23 to 25 August), each 1,981 by 2,400 cells of 124 m, through Planetary Computer; the
       Earth Search route was refused as requester-pays both times.'
+  - rev: 2
+    date: '2026-11-27'
+    note: 'Scenes in tiers (5.9.0, from Day 27): Landsat 7 after 31 May 2003 is read last, a pass of the next path within 16 days fills the edges, and the
+      plan lists the candidates by satellite, path and row. The guidance on Landsat 7 now names summer 2012 as the one stretch it is the only choice
+      (Landsat 5 to November 2011, Landsat 8 from April 2013). Checked from the build workspace on 2026-11-27: Planetary Computer lists platform
+      landsat-7 and landsat:wrs_path 038 and 039 over Lake Mead for June 2012.'

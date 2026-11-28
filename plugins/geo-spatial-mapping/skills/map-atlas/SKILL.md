@@ -86,6 +86,18 @@ python3 "$GMAP_ROOT/scripts/atlas.py" plan MAP.yaml --layer sites --by time --cu
 For an animation, start the pipeline with `animate=gif,mp4` (and `animate_sizes=square,slide`); the plan counts the frames (one render per period
 and size) before anything runs. `map-export` explains the GIF and MP4.
 
+**A picture that changes per period (5.9.0).** When the layer is a library satellite picture (`role: raster`, Landsat or Sentinel-2), each
+page is the same frame with that period's picture: give the periods' dates with `years=1984-2025 season=06-01/08-31` (`skip=2012`), a `dates`
+map, or `dates_from=series.json`. Read the pictures first with `imagery.py series --spec MAP.yaml` (several at once, resumable, at the very
+window the pages read; add `--template 16x9-slide,square-social` for the animation's sizes), then the atlas reads them all from the cache.
+`table=areas.csv table_key=year` fills each page's text from that period's row: `{area_km2:,.0f}`, `{period}`, and with `dates_from`
+`{scene_month}` of its main scene; write the placeholders in the MapSpec (a filter can take `in: ['{period}']`).
+
+```bash
+python3 "$GMAP_ROOT/scripts/imagery.py" series --spec MAP.yaml --years 1984-2025 --season 06-01/08-31 --skip 2012 --out series.json
+python3 "$GMAP_ROOT/scripts/atlas.py" plan MAP.yaml --by time --dates-from series.json --table areas.csv --table-key year
+```
+
 ## Rules
 
 - **Same classes everywhere.** The class edges come from all the data, so a color means the same thing on every page. Turn it off (`--no-shared-classes`) only if the person wants each map to stand alone, and then say the index page will tell readers the colors are not comparable.
