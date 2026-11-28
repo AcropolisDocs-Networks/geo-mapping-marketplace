@@ -356,7 +356,7 @@ def png_bytes(rgba: np.ndarray) -> bytes:
     from PIL import Image
     a = np.ascontiguousarray(np.moveaxis(np.asarray(rgba, dtype=np.uint8), 0, -1))
     buf = io.BytesIO()
-    Image.fromarray(a, "RGBA").save(buf, format="PNG", optimize=True)
+    Image.fromarray(a, "RGBA").save(buf, format="PNG", compress_level=6)      # 5.8.0: not optimize (0.3% smaller, three times the time)
     return buf.getvalue()
 
 

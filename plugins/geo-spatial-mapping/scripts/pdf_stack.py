@@ -450,3 +450,26 @@ def render_png(pdf_bytes: bytes, dpi: float, alpha: bool = False) -> bytes:
         return buf.getvalue()
     finally:
         doc.close()
+
+
+def render_pages_rgb(pdf_bytes: bytes, dpi: float) -> list:
+    """5.8.0: every page of a PDF as an RGB PIL image at `dpi`, each sized like render_png's (ceil of the MediaBox points x dpi / 72). One
+    pdfium document for all pages: the attention measure draws its three pictures as three pages of one PDF."""
+    import math
+    import pypdfium2 as pdfium
+    from PIL import Image
+    sizes = page_sizes_pt(read_pdf(pdf_bytes))
+    doc = pdfium.PdfDocument(pdf_bytes)
+    out = []
+    try:
+        for i, (w_pt, h_pt) in enumerate(sizes):
+            tw, th = max(1, math.ceil(w_pt * dpi / 72.0)), max(1, math.ceil(h_pt * dpi / 72.0))
+            img = doc[i].render(scale=max(tw / w_pt, th / h_pt)).to_pil().convert("RGB")
+            if img.size != (tw, th):
+                canvas = Image.new("RGB", (tw, th), (255, 255, 255))
+                canvas.paste(img.crop((0, 0, min(tw, img.width), min(th, img.height))), (0, 0))
+                img = canvas
+            out.append(img)
+    finally:
+        doc.close()
+    return out

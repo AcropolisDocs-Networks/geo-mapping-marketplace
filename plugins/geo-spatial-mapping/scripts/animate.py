@@ -16,6 +16,11 @@ frame's bottom edge (the period's share of the run; 5.7.0: inside the map's bord
 found through imageio-ffmpeg (pip install imageio-ffmpeg) or on the PATH: H.264, `-preset veryfast`, yuv420p, even dimensions, 25 fps,
 +faststart. Without ffmpeg the GIF is still written and the report says how to get the MP4. Nothing reaches the network.
 
+5.8.0 (Day 27): `--timeline T.yaml` with a `chart:` draws the timeline's chart on every period's frame, inside the map frame and clear of the
+legend, locator, title and logo (the plugin's own chart panel, heat_anim.paint_chart). Its rows follow the periods: by label when the atlas
+names its periods, else in order. A chart with `source: table.csv, label: year, bar: col, baseline: first, reveal: true` shows each period's
+change from the first, bar by bar. Only the chart is drawn on an atlas animation; a timeline's story lines and counters are noted as left out.
+
 The hidden accreditation goes into the GIF comment and the MP4 metadata (comment, copyright), never into a frame. output_lint.check_gif and
 check_mp4 read both files back (MAP-OUT-013): frame count, size, timing, codec and pixel format.
 """
@@ -128,7 +133,8 @@ def render_frames(specs: list[Path], size: str, work: Path, *, brand: str | None
     frame's provenance records and the text it shows, for the video's terms register. 1.11.0: the frames share one ground and one read of
     every library layer (map_plan.frame_session), since only the data changes from period to period."""
     import map_plan as mp
-    with mp.frame_session():
+    with mp.frame_session() as sess:
+        sess["frames"] = True                      # 5.8.0: a frame's PNG is read back into the video, not kept: no slow optimize pass
         return _render_frames(specs, size, work, brand, collect, frame_out)
 
 
@@ -157,6 +163,8 @@ def _render_frames(specs: list[Path], size: str, work: Path, brand: str | None, 
         if frame_out is not None and win.get("rect_mm") and "rect_px" not in frame_out:
             ppm = float(cfg["dpi"]) / 25.4                 # 5.7.0: the map frame in the frame's pixels, for the progress bar inside it
             frame_out["rect_px"] = [v * ppm for v in win["rect_mm"]]
+            frame_out["report"] = res.get("report") or {}  # 5.8.0: the elements' boxes, which a timeline chart keeps clear of
+            frame_out["ppm"] = ppm
         if collect is not None:
             import terms_register as tr
             collect.setdefault("records", []).extend(obj.get("records") or [])
@@ -219,9 +227,61 @@ def specs_of(atlas_dir: Path) -> tuple[list[Path], dict]:
     return specs, meta
 
 
+def load_timeline_chart(timeline, specs: list[Path], meta: dict) -> tuple[dict | None, list[int], list[str]]:
+    """5.8.0 (Day 27): the timeline's chart for an atlas animation and, for each period, the row that is current. -> (chart, rows, notes)."""
+    if not timeline:
+        return None, [], []
+    import timeline as tlm
+    try:
+        tl = tlm.load(timeline)
+    except tlm.TimelineError as ex:
+        raise AnimateError(f"the timeline: {ex}") from None
+    ch = tl.get("chart")
+    if not ch:
+        raise AnimateError("an atlas animation draws a timeline's chart: give the timeline a chart: block")
+    if ch.get("kind") == "profile":
+        raise AnimateError("a profile chart runs along a flow; an atlas animation takes a bars chart")
+    notes = []
+    left_out = [k for k in ("story", "counters", "keyframes", "features") if tl.get(k)]
+    if left_out:
+        notes.append(f"the timeline's {', '.join(left_out)} are not drawn on an atlas animation (its chart is)")
+    labels = [r["label"] for r in ch["rows"]]
+    periods = [str(p) for p in (meta.get("periods") or [])]
+    if periods and len(periods) == len(specs) and all(p in labels for p in periods):
+        cur = [labels.index(p) for p in periods]
+    elif len(labels) == len(specs):
+        cur = list(range(len(specs)))
+    else:
+        raise AnimateError(f"the chart has {len(labels)} rows and the atlas {len(specs)} periods; name the periods in atlas.json (periods: [...]) "
+                           "with the rows' labels, or give one row per period")
+    for i, r in enumerate(ch["rows"]):
+        r["start"] = float(i)                        # the row current at chart time i; each period's frame is painted at its row's time
+    return ch, cur, notes
+
+
+def paint_chart_frames(frames, chart: dict, cur: list[int], tokens: dict, fr: dict) -> tuple[list, list[dict]]:
+    """5.8.0: the chart panel on each period's frame (the period's row current), kept inside the map frame and clear of its elements."""
+    import events_anim as ev
+    import flythrough as fl
+    import heat_anim as ha
+    font = str(fl._inter_ttf(600))
+    rect = fr.get("rect_px")
+    avoid = ev.frame_avoid(fr.get("report"), fr.get("ppm") or 1.0, frames[0].size, {})
+    out, findings, outside = [], [], None
+    for i, f in enumerate(frames):
+        im, box = ha.paint_chart(f, float(cur[i]), chart, tokens, font_path=font, avoid=avoid, frame=rect)
+        if rect and not ev.inside_frame(box, rect) and outside is None:
+            outside = i + 1
+        out.append(im)
+    if outside:
+        findings.append({"id": "MAP-CART-046", "severity": "WARN", "message": f"the chart leaves the map frame (frame {outside})", "detail": None})
+    return out, findings
+
+
 def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "mp4"), hold: float = 1.0, last_hold: float = 3.0, brand: str | None = None,
-            stem: str | None = None) -> dict:
-    """Frames for every period at every size, then the GIF and the MP4 per size, each read back by the output lint."""
+            stem: str | None = None, timeline=None) -> dict:
+    """Frames for every period at every size, then the GIF and the MP4 per size, each read back by the output lint. 5.8.0: `timeline` (a
+    path, a YAML string or a dict) with a chart: the chart drawn on every frame."""
     import map_brand
     import output_lint
     atlas_dir, out_dir = Path(atlas_dir), Path(out_dir)
@@ -233,6 +293,10 @@ def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "m
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = stem or str(meta.get("base_id") or atlas_dir.name.replace("-atlas", ""))
     rep = {"periods": len(specs), "sizes": sizes, "files": [], "findings": [], "notes": []}
+    chart, chart_cur, cnotes = load_timeline_chart(timeline, specs, meta)
+    rep["notes"] += cnotes
+    if chart:
+        rep["chart"] = {"rows": len(chart["rows"]), "baseline": chart.get("baseline"), "reveal": chart.get("reveal")}
     seen: dict = {}
     with tempfile.TemporaryDirectory() as td:
         for size in sizes:
@@ -240,6 +304,9 @@ def animate(atlas_dir, out_dir, *, sizes=("square", "slide"), formats=("gif", "m
             frames, tokens, fs = render_frames(specs, size, Path(td) / size, brand=brand, collect=seen, frame_out=fr_)
             bar_rect = fr_.get("rect_px")
             rep["findings"] += fs
+            if chart:
+                frames, cfs = paint_chart_frames(frames, chart, chart_cur, tokens, fr_)
+                rep["findings"] += [{**f_, "message": f"[{size}] {f_['message']}"} for f_ in cfs]
             raw = [f.copy() for f in frames]
             frames = [progress_bar(f, i, len(frames), tokens, BAR_PX[size], rect=bar_rect) for i, f in enumerate(frames)]
             slug_ = brand or gc.load_mapspec(specs[0]).get("brand")
@@ -285,10 +352,11 @@ def main(argv=None) -> int:
     ap.add_argument("--hold", type=float, default=1.0)
     ap.add_argument("--last-hold", type=float, default=3.0)
     ap.add_argument("--brand")
+    ap.add_argument("--timeline", help="5.8.0: a timeline with a chart: block, drawn on every period's frame")
     a = ap.parse_args(argv)
     try:
         r = animate(a.atlas, a.out, sizes=[s.strip() for s in a.sizes.split(",") if s.strip()], formats=[s.strip() for s in a.formats.split(",") if s.strip()],
-                    hold=a.hold, last_hold=a.last_hold, brand=a.brand)
+                    hold=a.hold, last_hold=a.last_hold, brand=a.brand, timeline=a.timeline)
     except AnimateError as ex:
         print(f"animate: {ex}", file=sys.stderr)
         return gc.EXIT_USAGE

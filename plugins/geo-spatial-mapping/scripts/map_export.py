@@ -695,7 +695,9 @@ def stamp_png(png: bytes, dpi: float, props: dict, title: str, alt: str) -> byte
     if im.size[0] * im.size[1] > PNG_OPTIMIZE_MAX_PIXELS:
         im.save(out, "PNG", pnginfo=info, dpi=(dpi, dpi), compress_level=6)
     else:
-        im.save(out, "PNG", pnginfo=info, dpi=(dpi, dpi), optimize=True)
+        import map_plan as _mp                     # 5.8.0: a frame of a video is not kept as a file, so it skips the slow optimize pass
+        frames = bool((getattr(_mp, "_SESSION", None) or {}).get("frames"))      # set by animate.render_frames
+        im.save(out, "PNG", pnginfo=info, dpi=(dpi, dpi), **({"compress_level": 6} if frames else {"optimize": True}))
     return out.getvalue()
 
 
@@ -775,6 +777,7 @@ def main(argv=None) -> int:
     ap.add_argument("--hold", type=float, default=1.0, help="--animate: seconds each period stays on screen")
     ap.add_argument("--last-hold", type=float, default=3.0, help="--animate: seconds the last period stays")
     ap.add_argument("--brand")
+    ap.add_argument("--timeline", help="5.8.0, --animate: a timeline with a chart: block, drawn on every period's frame (story and counters stay with --story)")
     ap.add_argument("--flythrough", metavar="PAGE.html", help="1.6.0: a video flown over a 3D web page (flythrough.py); run it through map-run")
     ap.add_argument("--timelapse", metavar="PAGE.html", help="1.14.0: a video of a MapLibre page's time slider played from its own view (flythrough --slider)")
     ap.add_argument("--events", metavar="MAP.yaml", help="1.14.0: an event-timeline video over the map: a point layer's events in time order (events_anim.py)")
@@ -821,7 +824,8 @@ def main(argv=None) -> int:
         import animate as an
         try:
             r = an.animate(a.animate, a.out, sizes=[s.strip() for s in a.sizes.split(",") if s.strip()],
-                           formats=[s.strip() for s in (a.formats or "gif,mp4").split(",") if s.strip()], hold=a.hold, last_hold=a.last_hold, brand=a.brand)
+                           formats=[s.strip() for s in (a.formats or "gif,mp4").split(",") if s.strip()], hold=a.hold, last_hold=a.last_hold, brand=a.brand,
+                           timeline=a.timeline)
         except an.AnimateError as e:
             print(f"map_export: {e}", file=sys.stderr)
             return gc.EXIT_USAGE

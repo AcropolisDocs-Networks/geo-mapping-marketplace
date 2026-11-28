@@ -17,6 +17,7 @@ the low end, so the base map shows through where there is little.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import numpy as np
 
@@ -196,11 +197,49 @@ CHART_KINDS = ("bars", "profile")
 MIN_TEXT_1080 = 20           # 5.5.0 (D26-31): the smallest chart text on a 1080-line frame, in pixels (scaled to the frame's height)
 
 
-def load_chart(c) -> dict | None:
+BASELINES = ("first", "last")
+LABEL_MODES = ("all", "ends")
+
+
+def _rows_from_csv(c: dict, base) -> list[dict]:
+    """5.8.0 (Day 27): bars read from a table, never typed: {source: areas.csv, label: year, bar: area_km2, line: col?}. A relative path is
+    read from the timeline's own folder."""
+    import csv
+    p = Path(str(c["source"]))
+    if not p.is_absolute() and base is not None:
+        p = Path(base) / p
+    if not p.is_file():
+        raise HeatError(f"chart source {p} was not found")
+    lab, bar, line = c.get("label"), c.get("bar"), c.get("line")
+    if not lab or not bar:
+        raise HeatError("a chart with a source names its columns: label: <column>, bar: <column> (line: <column> optional)")
+    with open(p, newline="", encoding="utf-8-sig") as fh:
+        rd = csv.DictReader(fh)
+        cols = rd.fieldnames or []
+        for col in [x for x in (lab, bar, line) if x]:
+            if col not in cols:
+                raise HeatError(f"chart source {p.name} has no column '{col}' (it has {', '.join(cols)})")
+        rows = []
+        for i, r in enumerate(rd):
+            try:
+                rows.append({"label": str(r[lab]), "bar": float(r[bar]), "line": float(r[line]) if line and str(r.get(line, "")).strip() else None})
+            except ValueError:
+                raise HeatError(f"chart source {p.name} row {i + 2}: '{r[bar]}' in {bar} is not a number") from None
+    if not rows:
+        raise HeatError(f"chart source {p.name} has no rows")
+    return rows
+
+
+def load_chart(c, base=None) -> dict | None:
     """A timeline's `chart:` block, checked. Two kinds:
 
     bars (the default): {rows: [{label, bar, line?, start?}], bar_label, line_label, title, position, line_format, bar_format}. `start`
       (seconds) is when a row becomes the current one; a period video fills it in from its periods.
+      5.8.0 (Day 27): the rows may come from a table instead (`source: areas.csv, label: year, bar: area_km2`, read from the timeline's
+      folder); `baseline: first | last | <number>` draws each bar as its difference from that value, rising above a zero line for a gain and
+      hanging below it in the brand's danger colour for a loss (`baseline_label` names the line; the first row's label by default);
+      `reveal: true` draws only the rows up to the current one, on the whole run's scale; `labels: ends` keeps the first, the last and the
+      current row's label (for a long run of years) instead of every label that fits.
     profile (5.5.0, D26-23): a value along the timeline's flow, the marker at the flow's front on every frame (no row times):
       {kind: profile, along: flow, raster: FILE | column: NAME, invert: true, y_label: "Depth (m)", x_label: "Day at sea",
        x_map: {from: 0, to: 64}, samples: 240}
@@ -217,9 +256,13 @@ def load_chart(c) -> dict | None:
     if kind not in CHART_KINDS:
         raise HeatError(f"chart kind is {' or '.join(CHART_KINDS)}, not '{kind}'")
     rows = []
-    if kind == "bars":
+    if kind == "bars" and c.get("source") is not None:
+        if c.get("rows"):
+            raise HeatError("a chart takes rows: or source:, not both")
+        rows = [{**r, "start": None} for r in _rows_from_csv(c, base)]
+    elif kind == "bars":
         if not isinstance(c.get("rows"), list) or not c["rows"]:
-            raise HeatError("chart needs rows: [{label, bar, line, start}, ...]")
+            raise HeatError("chart needs rows: [{label, bar, line, start}, ...] or source: FILE with label: and bar: columns")
         for i, r in enumerate(c["rows"]):
             if not isinstance(r, dict) or "label" not in r or "bar" not in r:
                 raise HeatError(f"chart row {i + 1} needs label and bar")
@@ -244,8 +287,31 @@ def load_chart(c) -> dict | None:
         if v <= 0:
             raise HeatError("chart w and h are above 0")
         return v
+    base_v, base_lab = None, ""
+    bl = c.get("baseline")
+    if bl is not None:
+        if kind != "bars":
+            raise HeatError("baseline is for a bars chart")
+        if bl in BASELINES:
+            r0 = rows[0] if bl == "first" else rows[-1]
+            base_v, base_lab = r0["bar"], r0["label"]
+        else:
+            try:
+                base_v = float(bl)
+            except (TypeError, ValueError):
+                raise HeatError(f"chart baseline is first, last or a number, not '{bl}'") from None
+            base_lab = f"{base_v:,g}"
+        if c.get("invert"):
+            raise HeatError("a chart with a baseline draws gains up and losses down; leave out invert")
+        if any(r.get("line") is not None for r in rows):
+            raise HeatError("a chart with a baseline draws bars only; leave out the line series")
+    labels_mode = str(c.get("labels") or "all")
+    if labels_mode not in LABEL_MODES:
+        raise HeatError(f"chart labels is {' or '.join(LABEL_MODES)}, not '{labels_mode}'")
     return {"kind": kind, "rows": rows, "title": str(c.get("title") or ""), "bar_label": str(c.get("bar_label") or ""),
-            "line_label": str(c.get("line_label") or ""), "position": pos, "bar_format": str(c.get("bar_format") or "{:,.0f}"),
+            "baseline": base_v, "baseline_label": str(c.get("baseline_label") or base_lab), "reveal": bool(c.get("reveal")), "labels": labels_mode,
+            "line_label": str(c.get("line_label") or ""), "position": pos,
+            "bar_format": str(c.get("bar_format") or ("{:+,.0f}" if base_v is not None else "{:,.0f}")),
             "line_format": str(c.get("line_format") or "{:,.0f}"), "key": c.get("key", True) is not False,
             "w": _size(c.get("w"), CHART_W), "h": _size(c.get("h"), CHART_H), "value_label": str(c.get("value_label") or c.get("y_label") or ""),
             "y_axis": bool(c.get("y_axis", kind == "profile")), "invert": bool(c.get("invert")), "min_text_px": float(c.get("min_text_px") or MIN_TEXT_1080),
@@ -356,6 +422,11 @@ def paint_chart(img, t: float, ch: dict, tokens: dict, *, font_path: str, avoid=
         d.text((x0 + pad, top), names, font=f_s, fill=(*ink, 200))
         top += int(f_s.size * 1.35)
     key_h = int(f_s.size * 1.6) if ramp is not None and ch.get("key") else 0
+    if ch.get("baseline") is not None:
+        _paint_diverging(d, t, ch, x0, y0, pw, ph, top, pad, k, f_s, ink, emph, danger, bg, key_h)
+        im = img.convert("RGBA")
+        im.alpha_composite(over)
+        return im.convert("RGB"), [x0, y0, x0 + pw, y0 + ph]
     rows = ch["rows"]
     n = len(rows)
     cur = chart_current(ch, t)
@@ -396,7 +467,7 @@ def paint_chart(img, t: float, ch: dict, tokens: dict, *, font_path: str, avoid=
             lab = ch["bar_format"].format(v)
             d.text((left - 4 * k - d.textlength(lab, font=f_s), yv - f_s.size * 0.6), lab, font=f_s, fill=(*ink, 170))
             d.line([(left - 2 * k, yv), (x0 + pw - pad, yv)], fill=(*ink, 40), width=1)
-    labs = [r["label"][:3] if n > 6 else r["label"] for r in rows]
+    labs = [r["label"][:3] if n > 6 and not r["label"].strip().replace(".", "").isdigit() else r["label"] for r in rows]   # 5.8.0: a year stays whole
     wid = [d.textlength(lb, font=f_s) for lb in labs]
     boxes = [(c - w_ / 2, c + w_ / 2) for c, w_ in zip(centers, wid)]
     ly = (top if inv else base_y + int(2 * k))
@@ -426,6 +497,82 @@ def paint_chart(img, t: float, ch: dict, tokens: dict, *, font_path: str, avoid=
     im = img.convert("RGBA")
     im.alpha_composite(over)
     return im.convert("RGB"), [x0, y0, x0 + pw, y0 + ph]
+
+
+def _signed(fmt: str, v: float) -> str:
+    """A formatted value with a true minus sign (U+2212) for a loss, never a hyphen; zero reads as 0, not +0."""
+    import re
+    s = re.sub(r"^[+\-]0(?=$|[^\d.,])", "0", fmt.format(v))          # +0 and -0 (a rounded small value) read 0
+    return s.replace("-", "−")
+
+
+def diverging_geometry(rows: list[dict], base: float, top: float, bottom: float) -> dict:
+    """5.8.0: where the zero line and each bar's ends fall in a panel from `top` to `bottom` (pixels): the scale runs from the largest loss to
+    the largest gain of the whole run (zero always inside it), so a revealed bar never rescales the chart. -> {zero_y, y(v), lo, hi, diffs}."""
+    diffs = [r["bar"] - base for r in rows]
+    lo, hi = min(0.0, min(diffs)), max(0.0, max(diffs))
+    span = (hi - lo) or 1.0
+    h = max(4.0, bottom - top)
+
+    def y(v: float) -> float:
+        return top + (hi - v) / span * h
+    return {"zero_y": y(0.0), "y": y, "lo": lo, "hi": hi, "diffs": diffs}
+
+
+def _paint_diverging(d, t, ch, x0, y0, pw, ph, top, pad, k, f_s, ink, emph, danger, bg, key_h):
+    """5.8.0 (Day 27): bars from a baseline: a gain rises from the zero line in the emphasis colour, a loss hangs below it in the danger colour;
+    the current row at full strength, the others lighter, the rows after it left out when `reveal` is on; the zero line carries the baseline's
+    name, and the current difference is printed top right."""
+    rows = ch["rows"]
+    n = len(rows)
+    cur = chart_current(ch, t)
+    base = float(ch["baseline"])
+    lab_h = int(f_s.size * 1.4)
+    bottom = y0 + ph - pad - lab_h - key_h
+    top = top + int(f_s.size * 0.4)
+    g = diverging_geometry(rows, base, top, bottom)
+    fmt = ch["bar_format"]
+    ticks = sorted(set([0.0] + (_ticks(g["lo"], g["hi"]) if ch.get("y_axis") else [])))
+    tick_txt = {v: (ch["baseline_label"] if abs(v) < 1e-9 and ch["baseline_label"] else _signed(fmt, v)) for v in ticks}
+    axis_w = int(max(d.textlength(s_, font=f_s) for s_ in tick_txt.values()) + 6 * k)
+    left = x0 + pad + axis_w
+    slot = (pw - 2 * pad - axis_w) / n
+
+    def lighter(c):
+        return tuple(int(bg[i] + (c[i] - bg[i]) * 0.42) for i in range(3))
+    for v in ticks:
+        yv = g["y"](v)
+        s_ = tick_txt[v]
+        d.text((left - 4 * k - d.textlength(s_, font=f_s), yv - f_s.size * 0.6), s_, font=f_s, fill=(*ink, 255 if abs(v) < 1e-9 else 170))
+        if abs(v) >= 1e-9:
+            d.line([(left - 2 * k, yv), (x0 + pw - pad, yv)], fill=(*ink, 40), width=1)
+    centers = []
+    for i, r in enumerate(rows):
+        bx0 = left + i * slot + slot * 0.12
+        bx1 = left + (i + 1) * slot - slot * 0.12
+        centers.append((bx0 + bx1) / 2)
+        if ch.get("reveal") and i > cur:
+            continue
+        dv = g["diffs"][i]
+        col = emph if dv >= 0 else danger
+        ya, yb = sorted((g["zero_y"], g["y"](dv)))
+        if yb - ya < 1:
+            yb = ya + 1
+        d.rectangle([bx0, ya, bx1, yb], fill=(*(col if i == cur else lighter(col)), 255))
+    d.line([(left - 2 * k, g["zero_y"]), (x0 + pw - pad, g["zero_y"])], fill=(*ink, 200), width=max(1, int(1.5 * k)))
+    labs = [r["label"] for r in rows]
+    keep = sorted({0, n - 1, cur}) if ch.get("labels") == "ends" else list(range(n))
+    wid = {i: d.textlength(labs[i], font=f_s) for i in keep}
+    boxes = [(centers[i] - wid[i] / 2, centers[i] + wid[i] / 2) for i in keep]
+    for j in tick_labels_kept(boxes, keep.index(cur), gap=6 * k):
+        i = keep[j]
+        bx = min(max(boxes[j][0], left), x0 + pw - pad - wid[i])
+        d.text((bx, bottom + int(2 * k)), labs[i], font=f_s, fill=(*ink, 255 if i == cur else 170))
+    vals = _signed(fmt, g["diffs"][cur])
+    if ch.get("value_label"):
+        vals = f"{ch['value_label']}: {vals}"
+    tw = d.textlength(vals, font=f_s)
+    d.text((x0 + pw - pad - tw, y0 + pad), vals, font=f_s, fill=(*(danger if g["diffs"][cur] < 0 else ink), 255))
 
 
 def profile_value_at(ch: dict, u: float) -> float:

@@ -93,12 +93,41 @@ def only_layers(svg_text: str, keep: set[str]) -> str:
     return etree.tostring(root, encoding="unicode")
 
 
+def _rgbs(svgs: list[str], dpi: float) -> list:
+    """5.8.0: the pictures as 0..1 RGB arrays from one PDF with a page each: one WeasyPrint call for all of them (each call carries about a
+    second of fixed cost, and the measure drew three a build, six when it boosted). Falls back to a PDF per picture without pypdfium2."""
+    import re
+
+    import map_export as mx
+    import pdf_stack
+    if not pdf_stack.pdfium_available():
+        return [_rgb(_png(s, dpi)) for s in svgs]
+    W, H = mx.svg_size_mm(svgs[0])
+    faces = "\n".join(dict.fromkeys(re.findall(r"@font-face\s*\{.*?\}\s*", svgs[0], re.S)))
+    pages = "".join(f'<div class="p">{s}</div>' for s in svgs)
+    html = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>attention</title><style>{faces}'
+            f"@page{{size:{W}mm {H}mm;margin:0}}html,body{{margin:0;padding:0;font-family:Inter,sans-serif}}"
+            f".p{{width:{W}mm;height:{H}mm;overflow:hidden;page-break-after:always;break-after:page}}.p:last-child{{page-break-after:auto;break-after:auto}}"
+            f"svg{{display:block;width:{W}mm;height:{H}mm}}</style></head><body>{pages}</body></html>")
+    imgs = pdf_stack.render_pages_rgb(pdf_stack.html_to_pdf(html), dpi)
+    if len(imgs) != len(svgs):
+        return [_rgb(_png(s, dpi)) for s in svgs]
+    out = []
+    for im in imgs:                                  # the sheet's nominal pixel size, as rasterize gives it (map_export.nominal_pixels)
+        buf = io.BytesIO()
+        im.save(buf, "PNG")
+        out.append(_rgb(mx.nominal_pixels(buf.getvalue(), W, H, dpi)))
+    return out
+
+
 def layer_share(svg_text: str, ids, dpi: float = DPI) -> float | None:
-    """The share of the whole picture's attention that falls on the marks of the layers `ids`. None when it cannot be measured here."""
+    """The share of the whole picture's attention that falls on the marks of the layers `ids`. None when it cannot be measured here.
+    5.8.0: the three pictures (the map, the subject alone, the bare sheet) are drawn in one pass (_rgbs)."""
     try:
-        sal = saliency(_rgb(_png(svg_text, dpi)))
-        a = lab(_rgb(_png(only_layers(svg_text, set(ids)), dpi)))
-        b = lab(_rgb(_png(only_layers(svg_text, set()), dpi)))
+        full, subj, bare = _rgbs([svg_text, only_layers(svg_text, set(ids)), only_layers(svg_text, set())], dpi)
+        sal = saliency(full)
+        a = lab(subj)
+        b = lab(bare)
         if a.shape != b.shape or a.shape[:2] != sal.shape:
             return None
         mask = de(a, b) > INK_DE

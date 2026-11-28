@@ -147,9 +147,17 @@ def summary_line(res: dict) -> str:
     return head + "".join(f"; {d}" for d in res.get("degraded") or [])
 
 
-def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, brand: str | None = None, template: str | None = None,
-          strict: bool = False, mode: str | None = None, keep: bool = False, export_options: dict | None = None, draft: bool = False,
-          mute: bool = False, spec_edit=None) -> dict:
+def build(spec_path: str, out_dir: str, formats: list[str] | None = None, **kw) -> dict:
+    """One map (see _build). 5.8.0: a build runs inside a frame session, so a second pass (the fit moved the frame, a name found no room, or
+    the subject's attention was under the floor) reads its library layers and ground from the first pass instead of from disk. A caller's own
+    session (an animation, an atlas, a story) is the one used."""
+    with mp.frame_session():
+        return _build(spec_path, out_dir, formats, **kw)
+
+
+def _build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, brand: str | None = None, template: str | None = None,
+           strict: bool = False, mode: str | None = None, keep: bool = False, export_options: dict | None = None, draft: bool = False,
+           mute: bool = False, spec_edit=None) -> dict:
     """`export_options` (M16): transparent, bleed_mm, crop_marks, pdfa, inkscape, outline_text over the MapSpec's `export:` block
     (map_export.options_from); each variant is read back (MAP-OUT-014 to 018). 1.3.0 (R1-PANEL): a file with a top-level `sheet_version` is a
     SheetSpec, built by sheet.build (two to six panels with one shared frame)."""
@@ -188,6 +196,18 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
         except Exception as ex:  # noqa: BLE001 - the rules never stop a build they cannot read
             pol["error"] = type(ex).__name__
     if static or web is None:
+        # 5.8.0: inside a frame session (an atlas animation, a story's frames) the subject's attention is measured on the first frame only;
+        # when that frame needed the stronger boost, every later frame is planned with it from the start (no second pass, no measure)
+        _sess = getattr(mp, "_SESSION", None)
+        _att = (_sess or {}).get("attention") if isinstance(_sess, dict) else None
+        if _att and _att.get("boost") and os.environ.get("GMAP_NO_ATTENTION") != "1":
+            def _boosted(spec_, _prev=spec_edit):
+                if _prev:
+                    _prev(spec_)
+                if not isinstance(spec_.get("style"), dict):
+                    spec_["style"] = {}
+                spec_["style"].setdefault("subject_boost", "strong")
+            spec_edit = _boosted
         # 2.0.0: `spec_edit(spec)` adjusts the loaded MapSpec in memory before it is planned (a story beat: its frame, emphasis and line);
         # the file is never changed, and its folder still resolves the data paths
         plan = mp.prepare(spec_path, mode=mode, brand=brand, template=template, spec_edit=spec_edit)
@@ -216,8 +236,15 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
         # boosted again (wider, and the ground and context step back) and the map drawn once more. The draft says both numbers.
         import map_emphasis as _me
         ids = getattr(plan, "_subject_ids", None)
-        if ids and os.environ.get("GMAP_NO_ATTENTION") != "1" and (plan.spec.get("style") or {}).get("subject_boost") != "strong":
+        if ids and _att is not None and os.environ.get("GMAP_NO_ATTENTION") != "1":
+            rendered.report["subject_attention"] = {"layers": list(ids), "share": None, "first_frame": _att.get("share"),
+                                                    "boosted": bool(_att.get("boost"))}
+            plan.notes.append(f"emphasis: the subject's attention was measured on the session's first frame ({_att.get('share')}) and its "
+                              f"decision reused" + (" (the stronger boost)" if _att.get("boost") else ""))
+        elif ids and os.environ.get("GMAP_NO_ATTENTION") != "1" and (plan.spec.get("style") or {}).get("subject_boost") != "strong":
             share = _me.subject_attention(rendered.svg, ids)
+            if isinstance(_sess, dict):
+                _sess["attention"] = {"share": share, "boost": False}
             rendered.report["subject_attention"] = {"layers": list(ids), "share": share}
             if share is not None and share < _me.ATTENTION_MIN:
                 def stronger(spec_, _prev=(keyed if crowded else spec_edit)):
@@ -230,6 +257,8 @@ def build(spec_path: str, out_dir: str, formats: list[str] | None = None, *, bra
                 rendered2 = mr.render(plan2)
                 share2 = _me.subject_attention(rendered2.svg, ids)
                 if share2 is None or share2 > share:
+                    if isinstance(_sess, dict):
+                        _sess["attention"] = {"share": share, "boost": True}
                     plan, rendered = plan2, rendered2
                     rendered.report["subject_attention"] = {"layers": list(ids), "share": share2, "before": share}
                     plan.notes.append(f"emphasis: the subject ({', '.join(ids)}) held {share:.0%} of the attention, under {_me.ATTENTION_MIN:.0%}; "

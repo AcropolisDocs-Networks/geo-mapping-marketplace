@@ -14,6 +14,15 @@ description: >
   `--hold 1.0` and `--last-hold 3.0` set the seconds per period and on the last one. A thin bar along the bottom shows how far through the
   run each frame is. The MP4 needs ffmpeg (`pip install imageio-ffmpeg`); without it the GIF is still written and the report says so. Each file
   is read back (MAP-OUT-013: frames, size, timing, H.264 in yuv420p). Say how many frames before starting: one render per period per size.
+- **"A chart beside the time-lapse", "change since the first year", "bars up and down from 1984"** (5.8.0): `--timeline T.yaml` on
+  `--animate` draws the timeline's `chart:` on every period's frame, inside the map frame and clear of the legend, locator, title and logo
+  (the panel the events video uses). Its rows follow the periods (by label when `atlas.json` names `periods`, else in order). Read the rows
+  from the data, never type them: `chart: {source: areas.csv, label: year, bar: area_km2}` (the table beside the timeline file).
+  `baseline: first` (or `last`, or a number) draws each bar as its difference from that value: a gain rises from the zero line in the
+  emphasis colour, a loss hangs below it in the danger colour, the current period at full strength and the line named after the baseline's
+  row; the current difference is printed top right with a true minus (`bar_format: "{:+,.0f} km²"`). `reveal: true` adds the bars period
+  by period on the whole run's scale; `labels: ends` keeps the first, last and current labels on a long run of years. Only the chart is drawn
+  on an atlas animation: a timeline's story lines and counters are said to be left out (they stay with `--story` and `--events`).
 - **"Fly through it", "a video of the 3D page", "follow the route"** (1.6.0): always through map-run's `flythrough` pipeline, which shows the
   frame count and the seconds a frame takes from a 10-frame warm-up before anything runs. `--path LAYER` follows a line layer (the camera
   behind a moving marker on the smoothed route, constant speed or a `time_field`), `--chapters` flies the story's chapters, `--orbit` circles
@@ -115,7 +124,7 @@ description: >
   the least clearance, both antenna heights; the source line credits the DEM and says it is bare earth (MAP-TER-006). SVG, PDF and PNG.
 
 ```bash
-python3 "$GMAP_ROOT/scripts/map_export.py" --animate out/rollout-atlas --out out/animation [--sizes square,slide] [--formats gif,mp4]
+python3 "$GMAP_ROOT/scripts/map_export.py" --animate out/rollout-atlas --out out/animation [--sizes square,slide] [--formats gif,mp4] [--timeline chart.yaml]
 python3 "$GMAP_ROOT/scripts/map_export.py" --timelapse out/ferries.html --out out/video --size 1080x1350 [--quality final]
 python3 "$GMAP_ROOT/scripts/map_export.py" --events map.yaml --layer quakes --time-field time --highlight "mag>=7" --out out/video
 python3 "$GMAP_ROOT/scripts/map_export.py" --flythrough out/venue.html --timeline flight.yaml --poster last --out out/video

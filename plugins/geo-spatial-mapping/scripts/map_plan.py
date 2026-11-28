@@ -3631,7 +3631,7 @@ def warp_tiles(item: dict, plan: Plan) -> None:
             reproject(a[:, :, i], dst[i], src_transform=st, src_crs="EPSG:3857", dst_transform=dt_, dst_crs=plan.crs, resampling=Resampling.bilinear)
         reproject(np.full((sh, sw), 255, dtype=np.uint8), dst[3], src_transform=st, src_crs="EPSG:3857", dst_transform=dt_, dst_crs=plan.crs,
                   resampling=Resampling.nearest)
-        Image.fromarray(np.moveaxis(dst, 0, 2), "RGBA").save(out, optimize=True)
+        Image.fromarray(np.moveaxis(dst, 0, 2), "RGBA").save(out, compress_level=6)      # 5.8.0: not optimize (slow, barely smaller)
     im["source_path"], im["path"] = str(src), str(out)
     im["bbox"] = [float(v) for v in win]
     im["warped"] = {"from": "EPSG:3857", "to": plan.crs, "pixels": [w, h], "resampling": "bilinear"}

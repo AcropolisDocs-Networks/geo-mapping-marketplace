@@ -120,12 +120,15 @@ def legend_mix(tl: dict, t: float) -> float:
 def load(src, *, duration: float | None = None) -> dict:
     """A timeline from a path, a YAML/JSON string or a dict, checked and filled in. -> {duration, story, counters, keyframes, features,
     end_hold, poster, poster_hold, poster_dissolve, logo, findings}. Raises TimelineError naming the first problem."""
+    _base_dir = None                                  # 5.8.0: the folder a chart's `source:` table is read from (the timeline file's own)
     if src is None:
         d: dict = {}
     elif isinstance(src, dict):
         d = dict(src)
     else:
         p = Path(str(src))
+        if len(str(src)) < 1024 and p.is_file():
+            _base_dir = p.resolve().parent
         text = p.read_text(encoding="utf-8") if (len(str(src)) < 1024 and p.is_file()) else str(src)
         try:
             import yaml
@@ -173,7 +176,7 @@ def load(src, *, duration: float | None = None) -> dict:
     out["findings"] += caption_repeats(out)
     import heat_anim                                  # 2.1.0 (Day 19 video issue 15): bars and a line, the current row marked
     try:
-        out["chart"] = heat_anim.load_chart(d.get("chart"))
+        out["chart"] = heat_anim.load_chart(d.get("chart"), base=_base_dir)        # 5.8.0: a chart's source table is read beside the timeline
     except heat_anim.HeatError as ex:
         raise TimelineError(str(ex)) from None
     return out
